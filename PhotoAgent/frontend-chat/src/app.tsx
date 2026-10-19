@@ -103,7 +103,7 @@ type PreStep = "start" | "picked" | "settings";
 // url 是這張的識別（drafts、batchRuns 都拿它當 key），也是大圖和裁人臉用的那張；thumb 是格子用的小圖。
 type Source = { kind: "file"; file: File; url: string; thumb?: string } | { kind: "demo"; name: string } | { kind: "remote"; job: string };
 // 一次最多幾張，跟後端 MAX_PHOTOS_PER_SESSION 一樣。
-const MAX_BATCH = 20;
+const MAX_BATCH = 100;
 // A face picked on the upload page: no name yet, so where it stands and its box.
 type PrePerson = FaceRef & { where: string; box: Box; thumbnail_box?: Box; preview_person_id?: string; detection_index?: number; preview_job_id?: string; source_sha256?: string };
 
@@ -560,7 +560,8 @@ function withoutPreviewIdentity({ preview_person_id, detection_index, preview_jo
   return geometry;
 }
 
-const GREETING = `嗨！先選想美化的照片，一次最多 ${MAX_BATCH} 張。要自己上傳，還是從範例照片挑？`;
+// 上限不先講，選超過了再問（見 askOverLimit）。
+const GREETING = "嗨！先選想美化的照片，可以一次選多張。要自己上傳，還是從範例照片挑？";
 
 // 帶著個人化需求按一鍵美化時問的兩條路。僅依需求修改 = overwrite_prompt：修圖
 // 只拿個人化需求當指令；整體美化 = 照分析修完，需求一起加上去（原本的做法）。
@@ -736,6 +737,13 @@ export function App() {
   // 一次選了好幾張：不偵測人臉、不收需求，只讓使用者挑「分析」或「一鍵美化」
   // 套到全部。單張還是走 source 那條（有人物和需求）。
   const [batch, setBatch] = useState<Source[] | null>(null);
+  const batchRef = useRef(batch);
+  batchRef.current = batch;
+  // 選了的照片裡，還在讀縮圖、還沒放進多張頁的張數（見 addAsLoaded）。
+  const batchLoading = useRef(0);
+  // 正在讀的那一輪：總覽那筆上傳的 id、讀好幾張、一共幾張。讀完之前多張頁上什麼都不能按。
+  const [photoLoad, setPhotoLoad] = useState<{ entry: number; done: number; total: number } | null>(null);
+  const loadingPhotos = !!photoLoad;
   const [sourceGeneration, setSourceGeneration] = useState(0);
   const [settings, setSettings] = useState<Settings | null>(null);
   // header 設定裡的對話風格；settings 每次重來都從這裡起跳。
@@ -1236,6 +1244,7 @@ export function App() {
     setVia(null);
     setSource(null);
     setBatch(null);
+    setPhotoLoad(null);
     setNotes([]);
     preDraft.current = "";
     setSegEdits({});
@@ -1389,34 +1398,77 @@ export function App() {
     );
   }
 
+  // 選的張數超過還放得下的：問要先放最前面那幾張，還是重新選。重新選就什麼都不做，讓使用者再選一次。
+  function askOverLimit(message: string, confirmLabel: string): Promise<boolean> {
+    return new Promise<boolean>((resolve) =>
+      setLeaveAsk({
+        message,
+        confirmLabel,
+        cancelLabel: "重新選",
+        answer: (yes) => {
+          setLeaveAsk(null);
+          resolve(yes);
+        },
+      }),
+    );
+  }
+
   // 一次選了好幾張。只有一張就照單張走（有人物、有需求）；兩張以上開一頁
   // 多張的上傳頁，只問要分析還是一鍵美化。
   async function pickFiles(files: File[]) {
     const images = files.filter((f) => f.type.startsWith("image/") || isHeic(f));
     if (images.length <= 1) return pickFile(images[0] || files[0]);
+    if (
+      images.length > MAX_BATCH &&
+      !(await askOverLimit(
+        `你選了 ${images.length} 張照片，一次最多 ${MAX_BATCH} 張。要先上傳最前面的 ${MAX_BATCH} 張，還是重新選？`,
+        `上傳前 ${MAX_BATCH} 張`,
+      ))
+    ) return;
     const pick = ++lastPick.current;
     const taken = images.slice(0, MAX_BATCH);
-    let previews: { full: Blob; thumb: Blob | null }[];
-    try {
-      previews = [];
-      for (const f of taken) {
-        if (pick !== lastPick.current) return;
-        previews.push(await previewBlobs(f));
+    // 讀好前兩張就開多張頁，其他的讀好一張放一張，不等全部讀完才一次出現。
+    const first: Source[] = [];
+    for (const f of taken.slice(0, 2)) {
+      const preview = await previewBlobs(f);
+      if (pick !== lastPick.current) {
+        for (const s of first) dropSource(s);
+        return;
       }
-    } catch (e) {
-      if (pick === lastPick.current) setError(errorText(e));
-      return;
+      first.push(fileSource(f, preview));
     }
-    if (pick !== lastPick.current) return;
-    const sources: Source[] = taken.map((file, i) => fileSource(file, previews[i]));
-    await startBatch(
-      sources,
-      images.length > MAX_BATCH
-        ? notice(`一次最多只能選 ${MAX_BATCH} 張，先放前 ${MAX_BATCH} 張。`)
-        : images.length < files.length
+    const entry = await startBatch(
+      first,
+      images.length < files.length
           ? notice(`有 ${files.length - images.length} 個檔案不是圖片，先略過。`)
           : "",
+      taken.length,
     );
+    if (entry !== null) await addAsLoaded(taken.slice(2), entry);
+  }
+
+  // 剩下的照片一張一張讀縮圖，讀好就接到多張頁後面，總覽那筆上傳的張數跟著長。
+  // 中途換了另一批、整批清掉、回到單張、或已經選滿就停，沒放進去的不留。
+  async function addAsLoaded(files: File[], entry: number) {
+    const bid = batchId.current;
+    let left = files.length;
+    batchLoading.current += left;
+    try {
+      for (const f of files) {
+        const preview = await previewBlobs(f);
+        const b = batchRef.current;
+        if (batchId.current !== bid || !b || b.length >= MAX_BATCH) return;
+        const s = fileSource(f, preview);
+        left--;
+        batchLoading.current--;
+        setBatch((cur) => (cur ? [...cur, s] : cur));
+        setOverview((t) => t.map((x) => (x.id === entry && x.kind === "upload" ? { ...x, srcs: [...x.srcs, sourceSrc(s)] } : x)));
+        setPhotoLoad((p) => (p?.entry === entry ? { ...p, done: p.done + 1 } : p));
+      }
+    } finally {
+      batchLoading.current -= left;
+      setPhotoLoad((p) => (p?.entry === entry ? null : p));
+    }
   }
 
   // 範例照片彈窗送出來的：一張照單張走（換掉上傳頁上的照片），兩張以上跟上傳多張一樣開多張頁。
@@ -1444,10 +1496,12 @@ export function App() {
   }
 
   // 開多張的上傳頁，上傳多張和範例照片多選共用。message 是開好之後要提醒的話。
-  async function startBatch(sources: Source[], message: string) {
+  // 開好了回總覽那筆上傳的 id（之後讀好的照片接在它裡面），沒開（使用者取消）回 null。
+  // total 是這次一共選了幾張，比 sources 多就是後面還在讀，先記成讀取中。
+  async function startBatch(sources: Source[], message: string, total = sources.length): Promise<number | null> {
     if (phase === "chat" && !(await confirmSwap())) {
       for (const s of sources) dropSource(s);
-      return;
+      return null;
     }
     setSession(null);
     setSessionHash(null);
@@ -1463,16 +1517,19 @@ export function App() {
       applyDraft(null, null);
       setSettings(base);
     }
-    setOverview([{ id: nextDisplayOrder(), kind: "upload", srcs: sources.map(sourceSrc) }]);
+    const entry = nextDisplayOrder();
+    setOverview([{ id: entry, kind: "upload", srcs: sources.map(sourceSrc) }]);
+    if (total > sources.length) setPhotoLoad({ entry, done: sources.length, total });
     keepOwn.current = new Set();
     setError(message);
     window.scrollTo(0, 0);
+    return entry;
   }
 
   // 多張上傳頁上的 ×：拿掉一張。剩一張就回單張的流程（有人物、有需求）。
   // 已經開始的那張拿不掉：它已經在對話裡了。
   function removeFromBatch(i: number) {
-    if (!batch || busy || submitting) return;
+    if (!batch || busy || submitting || loadingPhotos) return;
     const gone = batch[i];
     if (!gone) return;
     const key = sourceSrc(gone);
@@ -1480,7 +1537,8 @@ export function App() {
     const rest = batch.filter((_, j) => j !== i);
     delete drafts.current[key];
     dropSource(gone);
-    if (rest.length === 1 && !Object.keys(batchRuns).length) {
+    // 後面還有照片在讀的話不回單張：讀好的會接著放進來。
+    if (rest.length === 1 && !Object.keys(batchRuns).length && !batchLoading.current) {
       // 剩一張就回單張：它在多張頁上講過的話留著。
       const restKey = sourceSrc(rest[0]);
       if (restKey === batchKey) setBatch(null);
@@ -1504,13 +1562,16 @@ export function App() {
   }
 
   // 總覽記一筆新增的照片，一次加的算一輪，不去改最早那次上傳的張數。
-  function logUpload(added: Source[]) {
-    if (added.length) setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "upload", srcs: added.map(sourceSrc) }]);
+  function logUpload(added: Source[]): number | null {
+    if (!added.length) return null;
+    const id = nextDisplayOrder();
+    setOverview((t) => [...t, { id, kind: "upload", srcs: added.map(sourceSrc) }]);
+    return id;
   }
 
   // 多張上傳頁上的「全部清除」：先問一聲，清掉就回到還沒選照片的上傳頁。
   function clearBatch() {
-    if (!batch || busy || submitting) return;
+    if (!batch || busy || submitting || loadingPhotos) return;
     const n = batch.length;
     setLeaveAsk({
       message: `確定要清除這 ${n} 張照片嗎？`,
@@ -1529,39 +1590,40 @@ export function App() {
   // 多張時對話框的上傳鈕和拖進來的照片：接在原本那幾張後面，不取代。
   async function appendFiles(files: File[]) {
     if (!batch) return pickFiles(files);
+    if (loadingPhotos) return;
     const images = files.filter((f) => f.type.startsWith("image/") || isHeic(f));
-    const room = MAX_BATCH - batch.length;
+    // 上一批還在讀的也算進去，不然兩批加起來會超過上限。
+    const room = MAX_BATCH - batch.length - batchLoading.current;
+    if (
+      room > 0 &&
+      images.length > room &&
+      !(await askOverLimit(
+        `你選了 ${images.length} 張照片，一次最多 ${MAX_BATCH} 張，現在還能再加 ${room} 張。要先加最前面的 ${room} 張，還是重新選？`,
+        `加前 ${room} 張`,
+      ))
+    ) return;
+    // 問的時候整批被清掉了就不加。
+    if (!batchRef.current) return;
     const taken = images.slice(0, Math.max(0, room));
     const pick = ++lastPick.current;
-    let previews: { full: Blob; thumb: Blob | null }[];
-    try {
-      previews = [];
-      for (const f of taken) {
-        if (pick !== lastPick.current) return;
-        previews.push(await previewBlobs(f));
-      }
-    } catch (e) {
-      if (pick === lastPick.current) setError(errorText(e));
-      return;
+    // 跟 pickFiles 一樣：讀好第一張就放上去，其他的讀好一張放一張。
+    let entry: number | null = null;
+    if (taken.length) {
+      const preview = await previewBlobs(taken[0]);
+      if (pick !== lastPick.current) return;
+      const s = fileSource(taken[0], preview);
+      setBatch((b) => (b ? [...b, s] : b));
+      entry = logUpload([s]);
+      if (entry !== null && taken.length > 1) setPhotoLoad({ entry, done: 1, total: taken.length });
     }
-    const added: Source[] = taken.map((file, i) => fileSource(file, previews[i]));
-    if (pick !== lastPick.current) {
-      for (const s of added) dropSource(s);
-      return;
-    }
-    setBatch((b) => (b ? [...b, ...added] : b));
-    logUpload(added);
     setError(
-      images.length > taken.length
-        ? notice(
-            taken.length
-              ? `最多只能選 ${MAX_BATCH} 張，先加前 ${taken.length} 張。`
-              : `已經選滿 ${MAX_BATCH} 張了。想新增照片的話，建議先移除幾張，或按「全部清除」重新選，再新增其他照片。`,
-          )
+      images.length && !taken.length
+        ? notice(`已經選滿 ${MAX_BATCH} 張了。想新增照片的話，建議先移除幾張，或按「全部清除」重新選，再新增其他照片。`)
         : images.length < files.length
           ? notice(`有 ${files.length - images.length} 個檔案不是圖片，先略過。`)
           : "",
     );
+    if (entry !== null) await addAsLoaded(taken.slice(1), entry);
   }
 
   // ── 多張上傳頁：一張一段對話 ──
@@ -1790,7 +1852,7 @@ export function App() {
   // 「我的照片」上面的全部分析／全部一鍵美化：還沒開始的每張照它自己的需求和設定送出。
   // 畫面上這張帶著當下的人物預覽；其他張收在草稿裡、沒有當下的預覽，指定的人進對話後再對一次。
   function startAllBatch(mode: "analyze" | "render", confirmed = false) {
-    if (!batch || !caps || busy || preAsk) return;
+    if (!batch || !caps || busy || preAsk || loadingPhotos) return;
     const base = allSettings || settings;
     if (!base) return;
     const pending = batch.map((s, i) => ({ s, i, key: sourceSrc(s) })).filter((x) => unstarted(x.key));
@@ -2698,7 +2760,7 @@ export function App() {
       class={`home-chat${source ? "" : " is-solo"}`}
       sub={batchIndex >= 0 ? `第 ${batchIndex + 1} 張` : "新對話"}
       photo={source ? { src: thumbSrc(source), onOpen: () => setViewing(true) } : undefined}
-      onDropFiles={busy ? undefined : batch ? appendFiles : pickFiles}
+      onDropFiles={busy || loadingPhotos ? undefined : batch ? appendFiles : pickFiles}
       footer={
         <>
           <FootBar
@@ -2717,7 +2779,7 @@ export function App() {
             // 多張頁上這顆是「再加幾張」，一樣問要上傳還是挑範例照片。
             onSample={source ? showSamples : undefined}
             onText={(t) => (preDraft.current = t)}
-            disabled={busy || !!preAsk || preHeld || batchActive}
+            disabled={busy || !!preAsk || preHeld || batchActive || loadingPhotos}
             // Live once a photo is picked: what is typed here is the
             // 個人化需求 the session starts with.
             onSend={
@@ -2851,7 +2913,7 @@ export function App() {
     const lastTurn = overview[overview.length - 1];
     // 一鍵美化正在問怎麼套用：選項就是那兩顆，底下那排先收起來。
     const askOpen = lastTurn?.kind === "ask" && lastTurn.overwrite === undefined;
-    const overviewHeld = busy || !!preAsk;
+    const overviewHeld = busy || !!preAsk || loadingPhotos;
     // 最早那次上傳；從結果頁接回來的一批沒有這筆，就拿現在這幾張當開頭。移除掉的不再畫縮圖。
     const first = overview[0];
     const firstUpload = first?.kind === "upload" ? first.srcs : batch.map(sourceSrc);
@@ -2912,7 +2974,7 @@ export function App() {
       <ChatPanel
         class="home-chat is-overview"
         sub="總覽"
-        onDropFiles={busy ? undefined : appendFiles}
+        onDropFiles={overviewHeld ? undefined : appendFiles}
         footer={
           <Composer
               onFile={(f) => appendFiles([f])}
@@ -2933,11 +2995,14 @@ export function App() {
         }
       >
         <UserMsg>
-          <BatchUploadBubble srcs={uploadThumbs(firstUpload)} text={`上傳了 ${firstUpload.length} 張照片`} />
+          <BatchUploadBubble
+            srcs={uploadThumbs(firstUpload)}
+            text={`上傳了 ${photoLoad && first && photoLoad.entry === first.id ? photoLoad.total : firstUpload.length} 張照片`}
+          />
         </UserMsg>
         {/* 先說收到幾張、這頁是什麼，再說這裡能做的三件事各是什麼，最後才講「只改一張」
             和怎麼回來——使用者第一次看到總覽，要先知道這裡講的話會落到每一張上。 */}
-        <AssistantMsg>
+        {photoLoad && first && photoLoad.entry === first.id ? <PhotoLoadMsg {...photoLoad} /> : <AssistantMsg>
           <p class="chat-text">收到你上傳的 {firstUpload.length} 張照片了。</p>
           <p class="chat-text">這裡是這批照片的總覽，在這裡做的事會一次套用到每一張，不用一張一張來：</p>
           <ul class="chat-list">
@@ -2947,16 +3012,16 @@ export function App() {
           </ul>
           <p class="chat-text">想怎麼修也可以直接打在下面，會套用在所有照片上。</p>
           <p class="chat-text chat-muted">只想調整某一張，就從{photosSpot()}「我的照片」點那張；之後想回來這裡，點最上面的「總覽」。</p>
-        </AssistantMsg>
+        </AssistantMsg>}
         {overview.map((t, i) => {
           const latest = i === overview.length - 1;
           if (t === overview[0] && t.kind === "upload") return null;
           if (t.kind === "upload") return (
             <div key={t.id}>
-              <UserMsg><BatchUploadBubble srcs={uploadThumbs(t.srcs)} text={`新增了 ${t.srcs.length} 張照片`} /></UserMsg>
-              <AssistantMsg>
+              <UserMsg><BatchUploadBubble srcs={uploadThumbs(t.srcs)} text={`新增了 ${photoLoad?.entry === t.id ? photoLoad.total : t.srcs.length} 張照片`} /></UserMsg>
+              {photoLoad?.entry === t.id ? <PhotoLoadMsg {...photoLoad} /> : <AssistantMsg>
                 <p class="chat-text">{`好，加進來了，${t.srcs.length > 1 ? "這幾張" : "這張"}排在「我的照片」最後面。`}</p>
-              </AssistantMsg>
+              </AssistantMsg>}
             </div>
           );
           if (t.kind === "remove") return (
@@ -3087,16 +3152,16 @@ export function App() {
                     failed={batchFailed}
                     pending={pending}
                     renderable={renderableAll}
-                    disabled={!!preAsk || busy}
+                    disabled={!!preAsk || busy || loadingPhotos}
                     onPick={pickBatch}
                     overview={!source}
                     onOverview={openOverview}
                     // 在總覽按的，跟總覽底下那兩顆一樣記進總覽的對話。
                     onStartAll={(m) => (source ? startAllBatch(m) : overviewStart(m))}
-                    onRemove={busy ? undefined : removeFromBatch}
-                    onClear={busy || anyRun ? undefined : clearBatch}
-                    onAdd={busy ? undefined : appendFiles}
-                    onSamples={busy ? undefined : showSamples}
+                    onRemove={busy || loadingPhotos ? undefined : removeFromBatch}
+                    onClear={busy || anyRun || loadingPhotos ? undefined : clearBatch}
+                    onAdd={busy || loadingPhotos ? undefined : appendFiles}
+                    onSamples={busy || loadingPhotos ? undefined : showSamples}
                   />
                   {source ? (
                     <>
@@ -3326,6 +3391,20 @@ function photosSpot() {
 // 列表跟著重來，不記的話每點一張就跳回最上面。記在哪一批（第一張）底下，
 // 換一批就從頭開始。
 let batchListScroll = { batch: "", top: 0 };
+
+// 選了很多張、還在一張一張讀的時候，總覽裡回的那則：讀了幾張、百分之多少。讀完換成平常那段。
+function PhotoLoadMsg({ done, total }: { done: number; total: number }) {
+  const pct = Math.round((done / total) * 100);
+  return (
+    <AssistantMsg atomic>
+      <p class="chat-text">收到你選的 {total} 張照片，正在上傳…</p>
+      <div class="chat-upload-progress" role="progressbar" aria-label="上傳進度" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+        <span style={{ width: `${pct}%` }} />
+      </div>
+      <p class="chat-text chat-muted">{`${done} / ${total} 張 · ${pct}%`}　上傳完就可以開始了，先稍等一下。</p>
+    </AssistantMsg>
+  );
+}
 
 function BatchPreSidebar(props: {
   sources: Source[];
@@ -5546,7 +5625,7 @@ function SessionView(props: {
   // First words, before the server's own messages start.
   const intro = (
     <AssistantMsg>
-      <p class="chat-text">嗨！先選想美化的照片，一次最多 {MAX_BATCH} 張。</p>
+      <p class="chat-text">嗨！先選想美化的照片，可以一次選多張。</p>
     </AssistantMsg>
   );
 

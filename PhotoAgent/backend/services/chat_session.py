@@ -30,7 +30,7 @@ from photo_agent.chat_plan import default_plan, default_settings
 
 SESSION_TTL_SECONDS = 30 * 24 * 3600
 MESSAGES_MAX_LEN = 500
-MAX_PHOTOS_PER_SESSION = 20
+MAX_PHOTOS_PER_SESSION = 100
 
 
 def _client():

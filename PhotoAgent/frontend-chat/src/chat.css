@@ -692,6 +692,10 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .home-chat.is-overview .chat-composer{padding-inline:max(var(--sp-3),calc((100% - 1064px) / 2))}
 .chat-list{margin:0;padding-left:1.2em;font-size:15px;line-height:1.8;color:var(--n84)}
 .chat-list b{font-weight:700;color:var(--n100)}
+/* 多張照片還在讀的時候，總覽裡那則的進度條：細細一條，填色跟其他非文字的面一樣走 --mv-grad。 */
+.chat-upload-progress{height:6px;margin:var(--sp-2) 0 var(--sp-1);border-radius:999px;background:var(--n14);overflow:hidden}
+.chat-upload-progress>span{display:block;height:100%;border-radius:inherit;background:var(--mv-grad);transition:width .25s ease-out}
+@media (prefers-reduced-motion: reduce){.chat-upload-progress>span{transition:none}}
 /* 側欄的「總覽」入口：橫條，不是照片方塊。小小的 2×2 拼圖 + 「總覽」，選中時跟單張方塊一樣
    用 accent 框，底色走 tonal（不用實心深色）。 */
 .batch-overview-entry{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 10px;padding:6px 8px 6px 6px;
