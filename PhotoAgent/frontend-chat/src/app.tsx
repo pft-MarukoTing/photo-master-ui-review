@@ -748,6 +748,9 @@ export function App() {
   const batchKey = source ? sourceSrc(source) : null;
   // 總覽頁（多張、沒有打開哪一張）自己的對話：送出的共用需求、開過的設定、一起開始的紀錄。
   const [overview, setOverview] = useState<OverviewTurn[]>([]);
+  // 總覽裡接在「開始了」「跑完了」後面的下一步：講過就留在那一則，後面有新的對話也不拿掉。
+  const turnHint = useRef<{ id: number; text: string } | null>(null);
+  const keptHints = useRef<Record<number, string>>({});
   // 這一輪總覽設定裡，選了「保留自己的」那幾張：同一輪再改就不再問。
   const keepOwn = useRef(new Set<string>());
 
@@ -1494,7 +1497,6 @@ export function App() {
   };
   // 每張現在跑到哪，總覽的提示和「跑完了」那句照這個算。
   const progress = batch ? batch.map((s) => batchProgress(batchRuns[sourceSrc(s)], livePhoto(sourceSrc(s)), batchFailed[sourceSrc(s)])) : [];
-  const runningCount = progress.filter((x) => x === "running").length;
   // 總覽照時序記進度：有照片開始跑（在總覽按的已經有那句「開始了」，不再記），跑的從有變成沒有就記一句
   // 跑完了；換了一批不算。
   const runningKeys = batch ? batch.map(sourceSrc).filter((_, i) => progress[i] === "running") : [];
@@ -1705,9 +1707,14 @@ export function App() {
           message: `第 ${unasked.map((x) => x.i + 1).join("、")} 張有需求，還沒選要整體美化還是僅依需求修改，會用「整體美化」送出。要繼續嗎？`,
           confirmLabel: "繼續",
           cancelLabel: "先去選",
+          // 先去選：回到總覽，在那裡問一次怎麼套用，選了就接著美化。
           answer: (ok) => {
             setLeaveAsk(null);
             if (ok) startAllBatch(mode, true);
+            else {
+              openOverview();
+              setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "ask" }]);
+            }
           },
         });
         return;
@@ -2707,10 +2714,10 @@ export function App() {
   if (phase === "chat" && batch && batch.length > 1) {
     const anyRun = Object.keys(batchRuns).length > 0;
     const pending = batch.filter((x) => unstarted(sourceSrc(x))).length;
-    // 總覽的對話裡，每張都送出去了、還有在跑的，就等它們跑完再給「全部一鍵美化」，讓對話照著
-    // 一輪一輪走；還有沒開始的照片就照常給。左邊「我的照片」上那顆一律照常給。
+    // 總覽的對話裡，「全部一鍵美化」只算現在沒在跑的：按了全部分析、還在分析的那幾張等跑完再給，
+    // 但沒開始的、分析好還沒美化的照常給。左邊「我的照片」上那顆一律照常給。
     const renderableAll = batch.filter((x) => needsRender(sourceSrc(x))).length;
-    const renderable = runningCount && !pending ? 0 : renderableAll;
+    const renderable = batch.filter((x, i) => progress[i] !== "running" && needsRender(sourceSrc(x))).length;
     const pickBatch = (s: Source) => (batchRuns[sourceSrc(s)]?.sessionId ? openBatchResult(sourceSrc(s)) : openBatchPhoto(s));
     const lastTurn = overview[overview.length - 1];
     // 一鍵美化正在問怎麼套用：選項就是那兩顆，底下那排先收起來。
@@ -2732,6 +2739,9 @@ export function App() {
     if (running) {
       statusHint = notYet
         ? `還有 ${notYet} 張沒開始，可以按「全部分析」先看我打算怎麼修，或按「全部一鍵美化」直接美化，也可以到「我的照片」點一張個別調整。`
+        // 在跑的以外，分析好還沒美化的也給下一步，不用等前面那幾張跑完。
+        : analyzed
+          ? `另外 ${analyzed} 張分析好了，還沒美化，按「全部一鍵美化」就會接著美化，也可以到「我的照片」點一張個別調整。`
         // 剛說完「開始了」，那句已經講過跑完會說、去哪看進度，不再重複一次。
         : lastTurn?.kind === "running" || lastTurn?.kind === "start"
           ? ""
@@ -2755,6 +2765,11 @@ export function App() {
     } else if (overview.length > 1) {
       statusHint = "可以按「全部分析」先看我打算怎麼修，或按「全部一鍵美化」直接美化；想怎麼修也可以打在下面，會套用到每一張。";
     }
+    // 最後一則是「開始了」或「跑完了」時，下一步接在同一句後面講，不另起一則。
+    const hintInTurn = !!statusHint && (lastTurn?.kind === "running" || lastTurn?.kind === "done");
+    if (turnHint.current && turnHint.current.id !== lastTurn?.id) keptHints.current[turnHint.current.id] = turnHint.current.text;
+    turnHint.current = hintInTurn && lastTurn ? { id: lastTurn.id, text: statusHint } : null;
+    const hintFor = (t: OverviewTurn, latest: boolean) => (latest && hintInTurn ? statusHint : keptHints.current[t.id] || "");
     const settingsLine = (x?: Settings) => x && (
       <div class="chat-card chat-settings-history"><span class="chat-meta">當時的設定</span>
         <p>{x.analysis_model} · {x.render_option} · {x.aspect_ratio}</p>
@@ -2781,7 +2796,9 @@ export function App() {
                 return true;
               }}
               clearKey={preClear}
-              placeholder={pending ? ["想怎麼美化這幾張？會套用到每一張", "想怎麼美化這幾張？"] : "每張都開始了，到「我的照片」點一張看結果"}
+              placeholder={pending ? ["想怎麼美化這幾張？會套用到每一張", "想怎麼美化這幾張？"]
+                : renderable ? "要美化分析好的，按「全部一鍵美化」；想個別調整，到「我的照片」點那張"
+                : "每張都開始了，到「我的照片」點一張看結果"}
             />
         }
       >
@@ -2821,7 +2838,7 @@ export function App() {
             const n = t.keys.filter((k) => have.has(k)).length;
             return n ? (
               <AssistantMsg key={t.id}>
-                <p class="chat-text">{`有 ${n} 張開始${t.verb}了，跑完我會在這裡說；想看哪張的進度，到「我的照片」點那張。`}</p>
+                <p class="chat-text">{`有 ${n} 張開始${t.verb}了，跑完我會在這裡說；想看哪張的進度，到「我的照片」點那張。${hintFor(t, latest)}`}</p>
               </AssistantMsg>
             ) : null;
           }
@@ -2833,7 +2850,7 @@ export function App() {
             ].filter(Boolean);
             return (
               <AssistantMsg key={t.id}>
-                <p class="chat-text">{`剛剛送出的都跑完了${parts.length ? `，目前 ${parts.join("、")}` : ""}。${t.failed
+                <p class="chat-text">{`剛剛送出的都跑完了${parts.length ? `，目前 ${parts.join("、")}` : ""}。${hintFor(t, latest).replace(/。$/, "；")}${t.failed
                   ? "沒成功的在「我的照片」會標「失敗」，點那張可以看原因。"
                   : "想看哪張的結果，到「我的照片」點那張。"}`}</p>
               </AssistantMsg>
@@ -2901,7 +2918,7 @@ export function App() {
           );
         })}
         {/* 換一句就換一個節點，才會跟新進來的訊息一樣接在後面打字，不會原地換字。 */}
-        {!askOpen && statusHint && (
+        {!askOpen && statusHint && !hintInTurn && (
           <AssistantMsg key={statusHint}><p class="chat-text">{statusHint}</p></AssistantMsg>
         )}
         {!askOpen && (
