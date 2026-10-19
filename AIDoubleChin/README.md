@@ -79,7 +79,7 @@ python run_inference.py \
     --comfyui-port 8188
 ```
 
-Any size/aspect works (`.jpg/.jpeg/.png/.webp/.bmp/.tif`, EXIF orientation applied). Each image is padded to 1024x1024 like the training data, and the result is un-padded and resized back to the input's resolution. Pass several `--checkpoint`s to compare them.
+Any size/aspect works (`.jpg/.jpeg/.png/.webp/.bmp/.tif`, `.heic/.heif` with `pillow-heif` installed, EXIF orientation applied). Each image is padded to 1024x1024 like the training data, and the result is un-padded and resized back to the input's resolution. Pass several `--checkpoint`s to compare them.
 
 Results in `output_<input-dir-name>_<timestamp>/`:
 - `result/<checkpoint>/<stem>.jpg` -- generated image at the original resolution (`square/` holds the raw 1024 output)
