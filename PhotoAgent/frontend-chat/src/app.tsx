@@ -3,7 +3,7 @@ import { nextDisplayOrder } from "./display-order";
 // photo and settings, and a session (compare canvas + chat timeline built
 // from the server's messages). Every action is one of the chat API calls;
 // typed messages go to /ask, whose replies may carry a plan change to confirm.
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
 import { api, ApiError, setUser, urls, type AskFace, type ReviewTurn, type Screen } from "./api";
 import { isHeic, previewBlob } from "./heic";
@@ -3181,6 +3181,11 @@ function PreStage({ source }: { source: Source }) {
 // 多張上傳頁最左邊那欄「我的照片」：跟進了對話之後那欄同一套 class 和樣子，
 // 點一張就打開那張的對話。最上面兩顆把還沒開始的每張照它自己的需求和設定送出；
 // 標題列那顆 × 全部清除（有一張開始了就不出現），還沒開始的每張右上角也有 × 拿掉。
+// 那批照片列表捲到哪：結果頁換一張就整個重掛（SessionView 以照片為 key），
+// 列表跟著重來，不記的話每點一張就跳回最上面。記在哪一批（第一張）底下，
+// 換一批就從頭開始。
+let batchListScroll = { batch: "", top: 0 };
+
 function BatchPreSidebar(props: {
   sources: Source[];
   runs: Record<string, BatchRun>;
@@ -3207,6 +3212,22 @@ function BatchPreSidebar(props: {
   const { sources, runs, current, pending, live } = props;
   const [open, setOpen] = useState(false);
   const addInput = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const batchKey = sources.length ? sourceSrc(sources[0]) : "";
+  // 重掛時在畫出來之前捲回原本的位置，不會先閃一下最上面。
+  useLayoutEffect(() => {
+    if (list.current && batchListScroll.batch === batchKey) list.current.scrollTop = batchListScroll.top;
+  }, []);
+  // 正在看的那張不在看得到的範圍裡（例如一開就停在後面那張），就把列表捲到
+  // 剛好露出它，跟 BatchSidebar 一樣只動列表自己的 scrollTop。
+  useEffect(() => {
+    const box = list.current;
+    const on = box?.querySelector<HTMLElement>(".batch-sidebar-item.selected");
+    if (!box || !on) return;
+    const top = on.offsetTop - box.offsetTop;
+    if (top < box.scrollTop) box.scrollTop = top;
+    else if (top + on.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = top + on.offsetHeight - box.clientHeight;
+  }, [current, open]);
   // +：跟輸入框那顆一樣先問要自行上傳還是挑範例照片。
   const addWrap = useRef<HTMLDivElement>(null);
   const [addMenu, setAddMenu] = useState(false);
@@ -3354,7 +3375,13 @@ function BatchPreSidebar(props: {
             /> : null}
           </div>
         ) : null}
-        <div class="batch-sidebar-list" role="tablist" aria-label="選好的照片">
+        <div
+          class="batch-sidebar-list"
+          ref={list}
+          role="tablist"
+          aria-label="選好的照片"
+          onScroll={(e) => (batchListScroll = { batch: batchKey, top: (e.currentTarget as HTMLDivElement).scrollTop })}
+        >
           {sources.map((s, i) => {
             const key = sourceSrc(s);
             const r = runs[key];
