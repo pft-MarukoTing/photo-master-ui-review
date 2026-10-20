@@ -2446,11 +2446,13 @@ def prompt_review():
                        and len(x["who"]) <= PROMPT_REVIEW_LABEL_MAX_LEN * PROMPT_REVIEW_PEOPLE_MAX
                        and len(x["text"]) <= USER_PROMPT_MAX_LEN for x in sections)):
         raise _RequestError(f"sections must be a list of at most {PROMPT_REVIEW_SECTIONS_MAX} {{who, text}} strings")
+    batch = _review_batch(body.get("batch"))
     try:
         answer = chat_queue.run({
             "stage": chat_jobs.STAGE_REVIEW, "line": text, "prompt": prompt,
             "sections": [{"who": x["who"], "text": x["text"]} for x in sections],
             "history": history, "people": [p.strip() for p in people],
+            **({"batch": batch} if batch else {}),
             "deadline": time.time() + chat_assistant.TIMEOUT_SECONDS}, wait_seconds=PROMPT_REVIEW_WAIT_SECONDS)
     except Exception:
         current_app.logger.exception("chat prompt review failed")
@@ -2517,6 +2519,29 @@ def prompt_review():
         # so the analysis plans for that shape instead of picking its own.
         out["aspect_ratio"] = answer["aspect_ratio"]
     return jsonify(out)
+
+
+def _review_batch(batch):
+    """The overview of several photos a line was typed on, or None for one
+    photo's upload page: {photos, unrendered} counts plus the labels of the
+    batch's buttons (analyze "" when nothing is left to analyze) and where the
+    photo list is, all short."""
+    if batch is None:
+        return None
+    if not isinstance(batch, dict):
+        raise _RequestError("batch must be an object")
+    out = {}
+    for key in ("photos", "unrendered"):
+        n = batch.get(key)
+        if type(n) is not int or not 0 <= n <= 1000:
+            raise _RequestError(f"batch.{key} must be an integer from 0 to 1000")
+        out[key] = n
+    for key in ("analyze", "render", "where"):
+        label = batch.get(key, "")
+        if not isinstance(label, str) or len(label) > PROMPT_REVIEW_LABEL_MAX_LEN:
+            raise _RequestError(f"batch.{key} must be a string of at most {PROMPT_REVIEW_LABEL_MAX_LEN} characters")
+        out[key] = label.strip()
+    return out
 
 
 def _review_history(history):

@@ -1422,6 +1422,27 @@ KEPT_NEXT = "還有其他想改的地方嗎？沒有的話，可以從下面選�
 OFFER_REPLY = "要不要我先幫你分析這張照片？"
 # 上傳頁的提議只導向這兩件事，不給「先不用」：不想要的話，打字繼續寫需求就好。
 OFFER_OPTIONS = ["幫我分析", "一鍵美化"]
+# 總覽（一批好幾張）講的是「這幾張」；每張都分析過了就只剩美化可以提。
+BATCH_OFFER_REPLY = "要不要我先幫你分析這幾張？分析完會整理出每張可以修的地方給你參考。"
+BATCH_RENDER_OFFER_REPLY = "這幾張都分析好了，要直接美化嗎？"
+
+
+def _batch_text(batch):
+    """What the model is told when the line comes from the overview of a batch
+    of photos rather than from one photo's upload page."""
+    analyze, render, where = batch.get("analyze") or "", batch.get("render") or "", batch.get("where") or "「我的照片」"
+    buttons = "、".join(f"「{b}」" for b in (analyze, render) if b) or "（目前沒有可按的）"
+    return "\n".join([
+        f"The user is on the OVERVIEW of {batch['photos']} photos, not on one photo. A kept line is added to every photo"
+        f" not rendered yet ({batch['unrendered']} of them), so speak of 「這幾張」 and never 「這張照片」.",
+        f"The buttons for the whole batch are {buttons}; name them exactly like that, never 「分析」 or 「一鍵美化」 alone.",
+        f"- A line about only some of the photos (「第二張」「那張海邊的」「其中一張」「左邊那張」) is not for the overview:"
+        f" verdict \"answer\", nothing kept; tell them to pick that photo in {where} and say it there,"
+        f" e.g. 「只想改其中一張的話，請從{where}選那一張，在那裡告訴我。」",
+        "- You cannot see the photos here. A question about which photo needs what, or what a photo shows, is answered by"
+        " pointing them to open that photo from " + where + " (each photo has its own analysis there).",
+        *([] if analyze else ["- Every photo is analyzed already: never offer or mention 分析; offer only 一鍵美化."]),
+    ])
 OPTIONS_MAX = 4
 OPTION_MAX_LEN = 20
 
@@ -1614,7 +1635,7 @@ def _completion_question(result=None):
         question_kind=_review_question_kind(result), answer_mode=result.get('answer_mode', 'choices'), line='', persons=[], options=_options(result.get('options')), aspect_ratio='', merged=[], withdrawn=False)
 
 
-def review_line(line, prompt, history=(), people=(), *, sections=(), model=None, deadline=None):
+def review_line(line, prompt, history=(), people=(), *, sections=(), model=None, deadline=None, batch=None):
     """{kept, start, ask, offer, later, reply, line, persons, options, aspect_ratio, merged} for one line typed on the upload page.
 
     `prompt` is the list as it stands -- the same string the page shows and
@@ -1645,7 +1666,14 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     is [{section, text}] for each section a kept line takes part of (same
     person or part of the scene, cannot both be done): `section` its index in
     `sections`, `text` what is left of it -- the page puts the line itself in
-    its own section -- and [] otherwise."""
+    its own section -- and [] otherwise.
+
+    `batch` is set when the line comes from the overview of several photos
+    ({photos, unrendered, analyze, render, where}: the counts, the labels of
+    the batch's 分析／一鍵美化 buttons -- "" when there is nothing left to
+    analyze -- and where the photo list is). The model is then told it speaks
+    for all of them, sends a line about one photo to that photo, and is never
+    offered 分析 once every photo is analyzed."""
     chip = REVIEW_CHIP_STARTS.get(re.sub(r"[\s，。！？!?、.]+", "", line))
     if chip:
         return {"kept": False, "start": chip, "ask": False, "offer": False, "later": False,
@@ -1672,7 +1700,8 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         REVIEW_SEMANTIC_CONTRACT,
         LITERAL_CHOICE_INSTRUCTION,
     ]) + CACHE_BREAK + "\n\n".join([
-        "PEOPLE IN PHOTO:\n" + ("\n".join(people) if people else "（沒有偵測到人臉）"),
+        *(["BATCH OVERVIEW:\n" + _batch_text(batch)] if batch else []),
+        "PEOPLE IN PHOTO:\n" + ("\n".join(people) if people else "（總覽：好幾張照片，這裡不指定人物）" if batch else "（沒有偵測到人臉）"),
         f"LINES SO FAR:\n{_sections_text(sections) or '（還沒有）'}",
         "CONVERSATION SO FAR:\n" + ("\n".join(_turn_line(t) for t in history) or "（還沒有）"),
         f"NEW LINE:\n{line}",
@@ -1824,15 +1853,19 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         ask, reply, options = True, _ratio_question(asked.strip(), nearest), [f"換成 {nearest}", RATIO_ASK_AI]
     # Only an outright 「幫我分析」 starts it; a guessed intent is asked about first.
     offer = verdict == "offer" or (verdict == "answer" and bool(options))
+    # 總覽每張都分析過了，就只剩一鍵美化可以提。
+    starts = ["一鍵美化"] if batch and not batch.get("analyze") else OFFER_OPTIONS
     if offer:
         # Always both starts and nothing else, the one the model offered first.
-        first = [o for o in options if o in OFFER_OPTIONS]
-        options = first + [o for o in OFFER_OPTIONS if o not in first]
+        first = [o for o in options if o in starts]
+        options = first + [o for o in starts if o not in first]
     if verdict == "offer":
-        reply = reply or OFFER_REPLY
+        reply = reply or (OFFER_REPLY if not batch else BATCH_OFFER_REPLY if batch.get("analyze") else BATCH_RENDER_OFFER_REPLY)
     elif offer:
         reply = _offer_question(reply, options)
-    elif verdict == "answer" and reply and not after_offer and "？" not in reply and "?" not in reply:
+    # 總覽底下本來就接著下一步（全部分析／全部一鍵美化），回答完不用再補一句提議；
+    # 叫人去「我的照片」選某一張的回答，補了反而叫錯地方。
+    elif verdict == "answer" and reply and not after_offer and not batch and "？" not in reply and "?" not in reply:
         # An answer that just stops leaves the user with nothing to tap; 分析
         # is always a next step on this page. One that asks something
         # (「想換成什麼樣的背景？」) already has one. Not after an offer: a

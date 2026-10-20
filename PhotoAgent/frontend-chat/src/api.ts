@@ -118,8 +118,11 @@ export const api = {
   // 是空字串）。`merged`：新的一句跟某幾段衝突時，那幾段拿掉衝突部分後的整段
   // 文字（`section` 是在 `sections` 裡的索引）。`withdrawn`：這句只是把前面那
   // 項撤回（「帽子拿掉」→「帽子留著」），照 `merged` 改完就好，這句不進清單。
+  // `batch`：從好幾張的總覽打的（張數、這批的「分析／美化」鍵名稱、照片清單在哪），
+  // AI 就講「這幾張」、只講某一張的話請人去那張改；單張的上傳頁不帶。
   promptReview: (text: string, prompt: string, history: ReviewTurn[], people: string[],
-    sections: { who: string; text: string }[] = []) =>
+    sections: { who: string; text: string }[] = [],
+    batch?: { photos: number; unrendered: number; analyze: string; render: string; where: string }) =>
     request<{
       accepted: boolean;
       reply: string;
@@ -143,7 +146,7 @@ export const api = {
       withdrawn?: boolean;
     }>(
       `${CHAT}/prompt-review`,
-      { ...json("POST", { text, prompt, history, people, sections }), signal: AbortSignal.timeout(65000) },
+      { ...json("POST", { text, prompt, history, people, sections, ...(batch ? { batch } : {}) }), signal: AbortSignal.timeout(65000) },
     ),
 
   // batchId：多張上傳的同一批，最近照片會把它們合成一格。

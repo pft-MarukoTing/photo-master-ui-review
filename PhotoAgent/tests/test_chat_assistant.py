@@ -509,6 +509,40 @@ class ReviewLineTest(unittest.TestCase):
         self.assertFalse(result["kept"])
         self.assertFalse(result["offer"])
 
+    # 總覽（好幾張）打的：AI 知道是這幾張、一張的事請人去那張；單張的上傳頁不受影響。
+    BATCH = {"photos": 3, "unrendered": 3, "analyze": "全部分析", "render": "全部一鍵美化", "where": "左邊的「我的照片」"}
+
+    def batch_review(self, answer, batch=BATCH, line="這幾張哪張最需要修？"):
+        seen = []
+        result = chat_assistant.review_line(line, "", model=lambda c: seen.append(c) or answer, batch=batch)
+        return result, seen[0]
+
+    def test_the_overview_tells_the_model_it_speaks_for_a_batch(self):
+        _, context = self.batch_review({"verdict": "drop", "reply": "好。", "line": "", "options": []})
+        self.assertIn("BATCH OVERVIEW:", context)
+        self.assertIn("OVERVIEW of 3 photos", context)
+        self.assertIn("「全部分析」、「全部一鍵美化」", context)
+        self.assertIn("選那一張，在那裡告訴我", context)
+        # 單張的上傳頁沒有總覽那段；快取那段（固定的說明）兩邊一字不差，總覽那段在變動的那邊。
+        seen = []
+        chat_assistant.review_line("外套換成藍色", "", model=lambda c: seen.append(c) or {
+            "verdict": "drop", "reply": "好。", "line": "", "options": []})
+        self.assertNotIn("BATCH OVERVIEW", seen[0])
+        self.assertEqual(seen[0].split(chat_assistant.CACHE_BREAK)[0], context.split(chat_assistant.CACHE_BREAK)[0])
+
+    def test_an_overview_with_nothing_left_to_analyze_offers_only_render(self):
+        done = {**self.BATCH, "analyze": ""}
+        result, context = self.batch_review({"verdict": "offer", "reply": "", "line": "", "options": ["幫我分析", "一鍵美化"]}, done)
+        self.assertEqual((result["options"], result["reply"]), (["一鍵美化"], chat_assistant.BATCH_RENDER_OFFER_REPLY))
+        self.assertIn("never offer or mention 分析", context)
+        result, _ = self.batch_review({"verdict": "offer", "reply": "", "line": "", "options": []})
+        self.assertEqual((result["options"], result["reply"]), (chat_assistant.OFFER_OPTIONS, chat_assistant.BATCH_OFFER_REPLY))
+
+    def test_an_overview_answer_sending_them_to_one_photo_is_left_as_it_is(self):
+        reply = "只想改其中一張的話，請從左邊的「我的照片」選那一張，在那裡告訴我。"
+        result, _ = self.batch_review({"verdict": "answer", "reply": reply, "line": "", "options": []}, line="第二張背景換掉")
+        self.assertEqual((result["kept"], result["offer"], result["reply"], result["options"]), (False, False, reply, []))
+
     def test_a_chip_name_needs_no_model(self):
         def model(context):
             raise AssertionError("the model was asked")

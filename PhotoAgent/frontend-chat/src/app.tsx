@@ -529,6 +529,8 @@ type OverviewTurn =
   | { id: number; kind: "settings"; settings?: Settings; model?: boolean }
   | { id: number; kind: "ask"; overwrite?: boolean; label?: string }
   | { id: number; kind: "start"; mode: "analyze" | "render"; count: number; keys: string[]; overwrite?: boolean; label?: string };
+// 總覽裡 AI 提議開始時給的兩個答案，點了就是按總覽的那顆鍵。
+const OVERVIEW_STARTS: Record<string, "analyze" | "render"> = { 幫我分析: "analyze", 一鍵美化: "render" };
 // 總覽說的需求放進每張對話時，AI 在那張裡回的話。
 const OVERVIEW_NOTE_REPLY = "好，這句是在總覽說的，這張也會照著修。只想改這張的話，直接在這裡說。";
 
@@ -2143,9 +2145,20 @@ export function App() {
     ]);
     const done = (x: Partial<Extract<OverviewTurn, { kind: "wish" }>>) =>
       setOverview((t) => t.map((y) => (y.id === id && y.kind === "wish" ? { ...y, ...x, pending: false } : y)));
+    // 跟總覽上那兩顆鍵同一個名字；沒有還沒分析的就不給「分析」，AI 也就不會提。
+    const keys = batch.map(sourceSrc);
+    const pending = keys.filter(unstarted).length;
+    const unrendered = keys.filter(needsRender).length;
+    const scope = {
+      photos: keys.length,
+      unrendered,
+      analyze: pending ? allLabel("analyze", pending, keys.length) : "",
+      render: unrendered ? allLabel("render", unrendered, keys.length) : "",
+      where: drawerLayout ? "上面的照片" : "左邊的「我的照片」",
+    };
     let r: Awaited<ReturnType<typeof api.promptReview>>;
     try {
-      r = await api.promptReview(text, kept.join("；"), history, []);
+      r = await api.promptReview(text, kept.join("；"), history, [], [], scope);
     } catch {
       done(spreadWish(text));
       return;
@@ -3407,14 +3420,15 @@ export function App() {
                 <AssistantMsg atomic><div class="chat-typing" role="status" aria-label="思考中"><span /><span /><span /></div></AssistantMsg>
               ) : t.kept === false ? (
                 // 沒收下：問題、閒聊、撤回只回話；它問回來的就把答案排在底下，點了當成打的下一句。
-                // 開始了的那句由「開始了」那則講。
+                // 「幫我分析」「一鍵美化」就是總覽那兩顆鍵，點了直接按。開始了的那句由「開始了」那則講。
                 t.reply ? (
                   <AssistantMsg>
                     <p class="chat-text">{t.reply}</p>
                     {!!t.options?.length && (
                       <div class="chat-choices">
                         {t.options.map((o) => (
-                          <Chip label={o} settled={!latest} disabled={overviewHeld} onClick={() => void overviewSay(o)} />
+                          <Chip label={o} settled={!latest} disabled={overviewHeld}
+                            onClick={() => (OVERVIEW_STARTS[o] ? overviewStart(OVERVIEW_STARTS[o]) : void overviewSay(o))} />
                         ))}
                       </div>
                     )}

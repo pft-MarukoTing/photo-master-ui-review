@@ -1623,6 +1623,18 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertIn("LINES SO FAR:\n[1] 未指定對象：左側男性的帽子拿掉", seen[0])
         self.assertIn("NEW LINE:\n外套換成藍色", seen[0])
 
+    def test_the_overview_sends_its_batch_along(self):
+        batch = {"photos": 3, "unrendered": 2, "analyze": "", "render": "一鍵美化剩餘 2", "where": "左邊的「我的照片」"}
+        res, seen = self.review("第二張背景換掉", {"verdict": "answer", "reply": "請從左邊的「我的照片」選那一張。",
+                                                   "line": "", "options": []}, batch=batch)
+        self.assertEqual(res.status_code, 200, res.get_json())
+        self.assertFalse(res.get_json()["accepted"])
+        self.assertIn("OVERVIEW of 3 photos", seen[0])
+        self.assertIn("「一鍵美化剩餘 2」", seen[0])
+        for bad in ({"photos": "3"}, {**batch, "unrendered": -1}, {**batch, "where": "x" * 41}, "3"):
+            res, _ = self.review("背景換成海邊", {"verdict": "keep"}, batch=bad)
+            self.assertEqual(res.status_code, 400, bad)
+
     def test_a_line_that_takes_a_wish_back_is_withdrawn(self):
         res, _ = self.review("帽子留著", {"verdict": "keep", "reply": "好，帽子就不拿掉了。", "line": "", "options": [],
                                           "merged": [{"section": 1, "text": "瘦臉"}], "withdraw": True},
