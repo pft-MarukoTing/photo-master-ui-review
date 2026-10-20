@@ -589,6 +589,8 @@ const WITH_ANALYSIS_LABEL = "整體美化";
 // 送出照片時每個請求的時限（單張的 start、多張的 startBatchPhoto）。上傳要等傳完原圖、存進
 // S3（後端一次只存一張，同時有別人在傳就得排），給得寬一點。
 const STEP_TIMEOUT_MS = 30000;
+// 按了「全部…」後兩顆最多定格多久；照片一張張排著傳，抓寬一點。
+const ALL_HOLD_MAX_MS = 60000;
 const UPLOAD_TIMEOUT_MS = 120000;
 // 還沒傳上去就失敗、而且再送一次可能就好的（retriable），自動再試：每次等多久，試完還不行才算失敗。
 const UPLOAD_RETRY_DELAYS_MS = [5000, 15000];
@@ -828,6 +830,12 @@ export function App() {
   const [batchLive, setBatchLive] = useState<Record<string, Photo>>({});
   // 每張最後一次美化有沒有失敗，跟 batchLive 一起從 session 抓回來時更新。
   const [batchFailed, setBatchFailed] = useState<Record<string, boolean>>({});
+  // 按了全部一鍵美化、美化請求還沒回來的那幾張。手上的照片狀態還是舊的（分析好、沒在美化），
+  // 不先記著，「一鍵美化剩餘 N」會跟著請求一張張回來慢慢往下數。
+  const [renderSent, setRenderSent] = useState<ReadonlySet<string>>(new Set());
+  // 剛按了「全部…」：送出的那幾張還沒全部有著落（照片狀態問到了、美化請求回來了）之前，
+  // 兩顆「全部…」停在按下去時的字、不能按，等一起有結果再換成新的（通常就收掉了）。
+  const [allHold, setAllHold] = useState<{ keys: string[]; pending: number; renderable: number } | null>(null);
   // 一張一張排著傳，全部一起按時不會同時塞好幾張給後端。每張各自一段 session。
   const batchQueue = useRef<Promise<unknown>>(Promise.resolve());
   // 每次重來（清掉、換一批、離開）加一，舊的那批還在跑的回呼就不再動畫面。
@@ -1122,6 +1130,8 @@ export function App() {
     setBatchRuns(nextRuns);
     setBatchLive(live);
     setBatchFailed(failed);
+    setRenderSent(new Set());
+    setAllHold(null);
   }
 
   // 從面板模式切過來時，把那邊還沒美化的調整寫進這張照片的 plan（handoff.ts）。
@@ -1281,6 +1291,8 @@ export function App() {
     setBatchRuns({});
     setBatchLive({});
     setBatchFailed({});
+    setRenderSent(new Set());
+    setAllHold(null);
     setAllSettings(null);
     setOverview([]);
     keepOwn.current = new Set();
@@ -1695,13 +1707,34 @@ export function App() {
     const count = (k: BatchProgress) => progress.filter((x) => x === k).length;
     setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "done", rendered: count("done"), analyzed: count("analyzed"), failed: count("error") }]);
   }, [runningSig]);
-  // 照片還在上傳、送的是「分析」：等它進了 session 再補美化。
-  const uploadingForAnalyze = (key: string) => {
+  // 送的是「分析」、照片狀態還沒拿到：還在上傳，或傳好了、背景還沒問到。後者不算進來的話，
+  // 每傳好一張「全部一鍵美化」就會少一張，等問到了又加回去，按了全部分析之後字一直跳。
+  const analyzeNotLoaded = (key: string) => {
     const r = batchRuns[key];
-    return !!r && !r.done && !r.error && r.mode === "analyze";
+    return !!r && !r.error && r.mode === "analyze" && !livePhoto(key);
   };
-  // 「全部一鍵美化」會送到的：沒開始的、分析中或分析好還沒美化的，美化過或正在美化的不算。
-  const needsRender = (key: string) => unstarted(key) || uploadingForAnalyze(key) || !!renderableLive(key);
+  // 「全部一鍵美化」會送到的：沒開始的、分析中或分析好還沒美化的，美化過、正在美化或剛送去美化的不算。
+  const needsRender = (key: string) =>
+    !renderSent.has(key) && (unstarted(key) || analyzeNotLoaded(key) || !!renderableLive(key));
+  // 「全部…」那兩顆顯示的張數：剛按過、還在等的時候用按下去那一刻的。
+  const allPending = allHold ? allHold.pending : batch ? batch.filter((x) => unstarted(sourceSrc(x))).length : 0;
+  const allRenderable = allHold ? allHold.renderable : batch ? batch.filter((x) => needsRender(sourceSrc(x))).length : 0;
+  useEffect(() => {
+    if (!allHold) return;
+    const settled = (k: string) => !!batchRuns[k]?.error || (!!livePhoto(k) && !renderSent.has(k));
+    if (allHold.keys.every(settled)) setAllHold(null);
+  }, [allHold, batchRuns, batchLive, renderSent, session]);
+  // 哪張一直問不到狀態也不要卡著：等一陣子就照現在的算。
+  useEffect(() => {
+    if (!allHold) return;
+    const t = window.setTimeout(() => setAllHold((h) => (h === allHold ? null : h)), ALL_HOLD_MAX_MS);
+    return () => window.clearTimeout(t);
+  }, [allHold]);
+  const markRenderSent = (keys: string[], sent: boolean) => setRenderSent((s) => {
+    const next = new Set(s);
+    for (const k of keys) if (sent) next.add(k); else next.delete(k);
+    return next;
+  });
   // 按了全部一鍵美化時還在上傳的那幾張，傳好就接著美化。
   const renderWhenUploaded = useRef(new Set<string>());
 
@@ -1855,7 +1888,7 @@ export function App() {
           patchRun((r) => ({ ...r, done: true, sessionId: id, photoId: uploaded }));
           thenRender(uploaded);
         } else {
-          renderWhenUploaded.current.delete(p.key);
+          if (renderWhenUploaded.current.delete(p.key) && live()) markRenderSent([p.key], false);
           patchRun((r) => ({ ...r, error: errorText(e) }));
         }
       },
@@ -1884,7 +1917,7 @@ export function App() {
     // 一鍵美化也帶上開始過、還沒美化的那幾張（分析好的、分析中的），直接在它們各自的對話裡美化；
     // 還在上傳的等傳好再接著送。
     const started = mode === "render" ? batch.map(sourceSrc).filter((k) => renderableLive(k)) : [];
-    const uploading = mode === "render" ? batch.map(sourceSrc).filter(uploadingForAnalyze) : [];
+    const uploading = mode === "render" ? batch.map(sourceSrc).filter(analyzeNotLoaded) : [];
     if (!pending.length && !started.length && !uploading.length) return;
     // 在結果頁按的：上傳頁那張已經收進草稿，每張都照草稿送，人留在目前的結果頁。
     const onPage = phase === "chat" ? batchKey : null;
@@ -1921,13 +1954,21 @@ export function App() {
       }
     }
     setError("");
+    setAllHold({ keys: [...pending.map((x) => x.key), ...started, ...uploading], pending: allPending, renderable: allRenderable });
     // 跳到第一張的結果頁，其他張在背景照排傳完。
+    markRenderSent([...started, ...uploading], true);
     for (const key of started) {
       const r = batchRuns[key];
       const p = renderableLive(key);
       if (r?.sessionId && p) void renderStarted(key, r.sessionId, p.photo_id, p.plan);
     }
-    for (const key of uploading) renderWhenUploaded.current.add(key);
+    for (const key of uploading) {
+      // 傳好了、只是狀態還沒問到的那張直接送；還在傳的等傳好再接著送。
+      const r = batchRuns[key];
+      if (r?.done && r.sessionId && r.photoId)
+        void renderStarted(key, r.sessionId, r.photoId, drafts.current[key]?.settings || base);
+      else renderWhenUploaded.current.add(key);
+    }
     follow.current = onPage !== null && pending.length ? pending[0].key : null;
     for (const x of pending) {
       if (x.key === onPage) {
@@ -1951,6 +1992,14 @@ export function App() {
   }
 
   async function renderStarted(key: string, id: string, pid: string, plan: Parameters<typeof renderMeta>[1]) {
+    const epoch = batchEpoch.current;
+    try {
+      await sendRender(key, id, pid, plan);
+    } finally {
+      if (epoch === batchEpoch.current) markRenderSent([key], false);
+    }
+  }
+  async function sendRender(key: string, id: string, pid: string, plan: Parameters<typeof renderMeta>[1]) {
     try {
       const overwrite = liveMode.current[key];
       if (overwrite !== undefined) {
@@ -3026,16 +3075,16 @@ export function App() {
   // 上傳一張時一樣；一進來先到總覽。最上面兩顆把還沒開始的每張一起送出。
   if (phase === "chat" && batch && batch.length > 1) {
     const anyRun = Object.keys(batchRuns).length > 0;
-    const pending = batch.filter((x) => unstarted(sourceSrc(x))).length;
+    const pending = allPending;
     // 總覽的對話裡，「全部一鍵美化」只算現在沒在跑的：按了全部分析、還在分析的那幾張等跑完再給，
     // 但沒開始的、分析好還沒美化的照常給。左邊「我的照片」上那顆一律照常給。
-    const renderableAll = batch.filter((x) => needsRender(sourceSrc(x))).length;
-    const renderable = batch.filter((x, i) => progress[i] !== "running" && needsRender(sourceSrc(x))).length;
+    const renderableAll = allRenderable;
+    const renderable = allHold ? allHold.renderable : batch.filter((x, i) => progress[i] !== "running" && needsRender(sourceSrc(x))).length;
     const pickBatch = (s: Source) => (batchRuns[sourceSrc(s)]?.sessionId ? openBatchResult(sourceSrc(s)) : openBatchPhoto(s));
     const lastTurn = overview[overview.length - 1];
     // 一鍵美化正在問怎麼套用：選項就是那兩顆，底下那排先收起來。
     const askOpen = lastTurn?.kind === "ask" && lastTurn.overwrite === undefined;
-    const overviewHeld = busy || !!preAsk || loadingPhotos;
+    const overviewHeld = busy || !!preAsk || loadingPhotos || !!allHold;
     // 最早那次上傳；從結果頁接回來的一批沒有這筆，就拿現在這幾張當開頭。
     const first = overview[0];
     const firstUpload = first?.kind === "upload" ? first.srcs : batch.map(sourceSrc);
@@ -3091,7 +3140,7 @@ export function App() {
     // 剛按了「全部…」、送出的那幾張還沒換成處理中，或照片還在載入時，進度還不準，先不講也不定下來；
     // 不然會把剛送去美化的那張也算成「分析好了，還沒美化」。
     const at = (k: string) => progress[batch.findIndex((x) => sourceSrc(x) === k)];
-    const settling = loadingPhotos || (lastTurn?.kind === "start" && lastTurn.keys.some((k) =>
+    const settling = loadingPhotos || !!allHold || (lastTurn?.kind === "start" && lastTurn.keys.some((k) =>
       at(k) === "todo" || (lastTurn.mode === "render" && at(k) === "analyzed")));
     const named = statusHint.includes(`「${labels.analyze}」`) || statusHint.includes(`「${labels.render}」`);
     const snap = { text: statusHint, chips: named ? chipsNow : null };
@@ -3351,8 +3400,8 @@ export function App() {
                     onOverview={openOverview}
                     // 在總覽按的，跟總覽底下那兩顆一樣記進總覽的對話。
                     onStartAll={(m) => (source ? startAllBatch(m) : overviewStart(m))}
-                    // 一鍵美化正在問怎麼套用：先回答那一題，「全部…」等一下。
-                    actionsHeld={!source && askOpen}
+                    // 一鍵美化正在問怎麼套用：先回答那一題，「全部…」等一下。剛按過「全部…」也等一下。
+                    actionsHeld={(!source && askOpen) || !!allHold}
                     onSettings={source ? undefined : overviewEditSettings}
                     onRemove={busy || loadingPhotos ? undefined : removeFromBatch}
                     onClear={busy || anyRun || loadingPhotos ? undefined : clearBatch}
@@ -3430,9 +3479,10 @@ export function App() {
                   current={batchHere}
                   live={{ ...batchLive, [batchHere]: photo }}
                   failed={batchFailed}
-                  pending={batch.filter((x) => unstarted(sourceSrc(x))).length}
-                  renderable={batch.filter((x) => needsRender(sourceSrc(x))).length}
+                  pending={allPending}
+                  renderable={allRenderable}
                   disabled={busy}
+                  actionsHeld={!!allHold}
                   onPick={(s) => (batchRuns[sourceSrc(s)]?.sessionId ? openBatchResult(sourceSrc(s)) : backToBatch(s))}
                   onOverview={openOverview}
                   onStartAll={startAllBatch}
