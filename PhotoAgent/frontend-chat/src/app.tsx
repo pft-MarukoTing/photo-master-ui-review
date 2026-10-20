@@ -927,6 +927,7 @@ export function App() {
   // original local-detector path. Neither creates a formal Chat session yet.
   const preFull = !source ? "" : fullSrc(source);
   const previewEnabled = !!caps?.features?.subject_preview;
+  const previewIntroductionEnabled = previewEnabled && caps?.features?.preview_introduction === true;
   const loadSource = async () => {
     if (!source) throw new Error("no source");
     return sourceBlob(source);
@@ -1017,14 +1018,16 @@ export function App() {
     model: settings?.analysis_model || "", history: reviewHistory(notes), historyWithEvents: events => reviewHistory(notes, [...events, ...settingsEvents]), wishes: previewWishes,
     prompt: notesPrompt(notes, segEdits), turns: conversation(notes).length,
     busy: !!preAsk || busy, blocked: !!openAsk(notes)?.asked?.options.length || !!renderAsk,
-    active: phase === "chat" && !submitting && previewEnabled });
-  // A completed presentation opens the picker only for its exact preview generation.
+    active: phase === "chat" && !submitting && previewEnabled, introductionEnabled: previewIntroductionEnabled });
+  // Introduction mode waits for prose; silent mode exposes the ready roster directly.
   // Formal submission never waits for this presentation gate.
   const previewPresentationKey = preview.identity ? `${preview.identity}#${sourceGeneration}` : null;
   const currentPresentation = useRef(previewPresentationKey);
   currentPresentation.current = previewPresentationKey;
   const [presentedGeneration, setPresentedGeneration] = useState<string | null>(null);
-  const prePeopleReady = bridge.peoplePublished && !!previewPresentationKey && presentedGeneration === previewPresentationKey;
+  const prePeopleReady = previewIntroductionEnabled
+    ? bridge.peoplePublished && !!previewPresentationKey && presentedGeneration === previewPresentationKey
+    : preview.ready && !!preview.result?.reusable;
   const preDisplayPeople = !previewEnabled || prePeopleReady ? prePickable : [];
   useEffect(() => {
     const mapped = bridge.result;

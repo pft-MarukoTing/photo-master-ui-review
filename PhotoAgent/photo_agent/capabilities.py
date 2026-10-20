@@ -296,6 +296,8 @@ def describe(*, debug: bool = False) -> dict:
     render_models = {o.image_model for o in render_options}
     return {
         "features": {"subject_preview": bool(getattr(config, "ENABLE_CHAT_SUBJECT_PREVIEW", False)),
+                     "preview_introduction": bool(getattr(config, "ENABLE_CHAT_SUBJECT_PREVIEW", False)
+                                                  and getattr(config, "ENABLE_CHAT_PREVIEW_INTRODUCTION", False)),
                      "subject_preview_format_version": 3,
                      "low_confidence_candidates": bool(getattr(config, "ENABLE_PREVIEW_LOW_CONFIDENCE_CANDIDATES", False))},
         "render": {

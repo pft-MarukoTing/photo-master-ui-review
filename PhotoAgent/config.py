@@ -13,6 +13,9 @@ ENABLE_BODY_RESHAPE = False
 
 # Internal rollout switch; disabling restores the Chat detector/upload path.
 ENABLE_CHAT_SUBJECT_PREVIEW = False
+# Auto-introduce the Stage 2.0 roster in Chat. Off keeps the avatar picker
+# and later request matching, without an unsolicited conversation call.
+ENABLE_CHAT_PREVIEW_INTRODUCTION = False
 # Optional extra visual pass for Chat requests. Enable during rollout to
 # clarify absent/uncertain edit targets; no extra call when disabled or empty.
 ENABLE_CHAT_REQUEST_FEASIBILITY = False

@@ -35,7 +35,7 @@ export function submissionPreviewEvents(events: PreviewReplyEvent[], suppressInt
 }
 
 type Input = { photoKey?: string; people?: PreviewDisplayPerson[]; identity: string | null; preview?: PreviewStatus; model: string; history: ReviewTurn[];
-  historyWithEvents?: (events: PreviewReplyEvent[]) => ReviewTurn[]; wishes: PreviewWish[]; prompt: string; busy: boolean; blocked: boolean; turns: number; active: boolean };
+  historyWithEvents?: (events: PreviewReplyEvent[]) => ReviewTurn[]; wishes: PreviewWish[]; prompt: string; busy: boolean; blocked: boolean; turns: number; active: boolean; introductionEnabled?: boolean };
 
 type State = { key: string | null; photoKey: string | null; context: string; wishesKey?: string; result?: PreviewConversationResult; events: PreviewReplyEvent[] };
 type Committed = { key: string | null; result?: PreviewConversationResult };
@@ -53,6 +53,7 @@ function remember(key: string, entry: { state?: State; committed: Committed; bud
 // A reply is accepted only against the exact source and complete conversation
 // revision that requested it. Draft typing and thumbnail loading are not revisions.
 export function usePreviewConversation(input: Input) {
+  const introductionEnabled = input.introductionEnabled === true;
   const context = JSON.stringify([input.history, input.wishes, input.prompt]);
   const wishesKey = JSON.stringify(input.wishes);
   const key = input.identity;
@@ -62,8 +63,8 @@ export function usePreviewConversation(input: Input) {
   // Only a completed server roster proves zero people. Empty thumbnail slots
   // or absent legacy metadata do not. Keep this current across in-flight replies.
   const emptyRoster = !!input.preview?.reusable && Array.isArray(input.preview.people) && input.preview.people.length === 0;
-  const current = useRef({ key, context, active: input.active, emptyRoster });
-  current.current = { key, context, active: input.active, emptyRoster };
+  const current = useRef({ key, context, active: input.active, emptyRoster, introductionEnabled });
+  current.current = { key, context, active: input.active, emptyRoster, introductionEnabled };
   useEffect(() => () => { current.current.active = false; }, []);
   const [kept, setState] = useState<State>({ key, photoKey, context, events: [] });
   let state = kept;
@@ -91,6 +92,9 @@ export function usePreviewConversation(input: Input) {
     const b = budget.current;
     const preview = input.preview;
     if (!key || !input.active || !preview?.reusable || input.busy || input.blocked || b.flight) return;
+    // Skip the unsolicited roster-only call. Once matching has started, an
+    // empty wish list still needs to clear the previous server-owned bindings.
+    if (!introductionEnabled && !input.wishes.length && !b.lastWishes && !b.completed) return;
     if (!b.completed && b.attempts >= 2) return;
     if (b.lastContext === context || (b.completed && b.lastWishes === wishesKey)) return;
     b.lastWishes = wishesKey;
@@ -98,8 +102,8 @@ export function usePreviewConversation(input: Input) {
     b.flight = true;
     if (!b.completed) b.attempts++;
     const revision = ++b.revision;
-    const initial = !b.published && !emptyRoster;
-    const silentZero = !b.completed;
+    const initial = introductionEnabled && !b.published && !emptyRoster;
+    const silentZero = introductionEnabled && !b.completed;
     // Existing bindings belong to the same exact source clause, not a new
     // wish that happened to occupy its array position after an editor change.
     const previousToken = committed.current.key === key ? committed.current.result?.token : undefined;
@@ -116,8 +120,8 @@ export function usePreviewConversation(input: Input) {
       b.completed = true;
       setState(old => {
         const events = old.photoKey === photoKey ? old.events : [];
-        const introduce = initial && !current.current.emptyRoster;
-        const text = current.current.emptyRoster && silentZero ? "" : ((introduce && result.presentation ? `${result.presentation.opening}\n\n${result.presentation.closing}` : "") || result.question?.text?.trim() || (initial ? result.reply?.trim() : "") || "");
+        const introduce = initial && current.current.introductionEnabled && !current.current.emptyRoster;
+        const text = current.current.emptyRoster && silentZero ? "" : ((introduce && result.presentation ? `${result.presentation.opening}\n\n${result.presentation.closing}` : "") || result.question?.text?.trim() || (introduce ? result.reply?.trim() : "") || "");
         if (text) b.published = true;
         return { key, photoKey, context, wishesKey, result, events: text ? [...events, {
           id: result.token, generation: key, order: nextDisplayOrder(), after: input.turns, text, showPeople: introduce,
@@ -132,7 +136,7 @@ export function usePreviewConversation(input: Input) {
       b.flight = false;
       if (budget.current === b) setTick(n => n + 1);
     });
-  }, [key, context, input.preview?.reusable, input.busy, input.blocked, input.active, tick]);
+  }, [key, context, input.preview?.reusable, input.busy, input.blocked, input.active, introductionEnabled, tick]);
 
   // Late thumbnails may fill an empty slot only for the exact generation and
   // person ID. Names/order and old-model crops remain frozen.
@@ -164,7 +168,7 @@ export function usePreviewConversation(input: Input) {
     const userOrder = nextDisplayOrder();
     try {
       const updated = await api.confirmPreviewConversation(input.preview.preview_job_id, {
-        presentation_requested: !budget.current.published && !emptyRoster, source_sha256: input.preview.source_sha256, analysis_model: input.model,
+        presentation_requested: introductionEnabled && !budget.current.published && !emptyRoster, source_sha256: input.preview.source_sha256, analysis_model: input.model,
         token: result.token, revision: result.revision, question_id: result.question.question_id,
         wish_ids: result.question.wish_ids, target_ids: ids, target_selection, ...(text ? { text } : {}), ...(protection_scope ? { protection_scope } : {}), ...(selected_wish ? { selected_wish } : {}), ...(edit_scope ? { edit_scope } : {}),
       });
@@ -172,8 +176,8 @@ export function usePreviewConversation(input: Input) {
       if (updated.confirmation_handled === false) return false;
       committed.current = { key, result: updated };
       budget.current.revision = Math.max(budget.current.revision, updated.revision);
-      const replyText = (!budget.current.published && !current.current.emptyRoster && updated.presentation ? `${updated.presentation.opening}\n\n${updated.presentation.closing}` : "") || updated.question?.text?.trim() || updated.reply?.trim() || "";
-      const showPeople = !budget.current.published && !current.current.emptyRoster && !!replyText;
+      const replyText = (current.current.introductionEnabled && !budget.current.published && !current.current.emptyRoster && updated.presentation ? `${updated.presentation.opening}\n\n${updated.presentation.closing}` : "") || updated.question?.text?.trim() || updated.reply?.trim() || "";
+      const showPeople = current.current.introductionEnabled && !budget.current.published && !current.current.emptyRoster && !!replyText;
       if (showPeople) budget.current.published = true;
       setState(old => ({ ...old, result: updated, events: [...old.events.map(event => event.questionSnapshot?.token === result.token ? { ...event, questionSnapshot: { ...event.questionSnapshot, answered: true, answer: text || ids.map(id => people.current.find(p => p.preview_person_id === id)?.name || id).join("、") } } : event), { id: `${updated.token}-answer-${old.events.length}`, order: userOrder, after: input.turns,
         text: text || `指定：${ids.map(id => input.preview?.people?.find(p => p.preview_person_id === id)?.label || id).join("、")}`,
@@ -191,7 +195,7 @@ export function usePreviewConversation(input: Input) {
     const nextRevision = ++budget.current.revision;
     const userOrder = nextDisplayOrder();
     const updated = await api.revisePreviewConversation(input.preview.preview_job_id, {
-      presentation_requested: !budget.current.published && !emptyRoster, source_sha256: input.preview.source_sha256, analysis_model: input.model,
+      presentation_requested: introductionEnabled && !budget.current.published && !emptyRoster, source_sha256: input.preview.source_sha256, analysis_model: input.model,
       token: previous.token, revision: previous.revision, next_revision: nextRevision, generation: key, wishes: input.wishes, text, target_ids, selection_source: target_ids.length ? "user_selection" : "none",
     });
     if (current.current.key !== key || current.current.context !== context || !current.current.active) return undefined;
@@ -216,8 +220,8 @@ export function usePreviewConversation(input: Input) {
       return undefined;
     }
     budget.current.revision = Math.max(budget.current.revision, updated.revision);
-    const replyText = (!budget.current.published && !current.current.emptyRoster && updated.presentation ? `${updated.presentation.opening}\n\n${updated.presentation.closing}` : "") || updated.question?.text?.trim() || updated.reply?.trim() || "";
-    const showPeople = !budget.current.published && !current.current.emptyRoster && !!replyText;
+    const replyText = (current.current.introductionEnabled && !budget.current.published && !current.current.emptyRoster && updated.presentation ? `${updated.presentation.opening}\n\n${updated.presentation.closing}` : "") || updated.question?.text?.trim() || updated.reply?.trim() || "";
+    const showPeople = current.current.introductionEnabled && !budget.current.published && !current.current.emptyRoster && !!replyText;
     if (showPeople) budget.current.published = true;
     setState(old => ({ ...old, context, wishesKey, result: updated, events: [...old.events,
       { id: `${updated.token}-user`, order: userOrder, after: input.turns, text, showPeople: false, role: "user" },
