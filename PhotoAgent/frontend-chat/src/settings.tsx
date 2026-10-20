@@ -61,24 +61,27 @@ export function SettingsEditor({
   caps,
   settings,
   onChange,
+  hideModel,
 }: {
   caps: Capabilities;
   settings: Settings;
   onChange: (s: Settings) => void;
+  // 總覽裡每張都分析過了：分析引擎改了也沒有照片用得到，不擺出來。
+  hideModel?: boolean;
 }) {
   const set = (patch: Partial<Settings>) => onChange({ ...settings, ...patch });
   const val = (e: Event) => (e.currentTarget as HTMLSelectElement).value;
   return (
     <div class="chat-card chat-settings-editor">
       <div class="chat-settings-fields">
-        <label class="chat-field">
+        {!hideModel && <label class="chat-field">
           <span class="chat-meta">分析引擎</span>
           <select class="quality-select" value={settings.analysis_model} onChange={(e) => set({ analysis_model: val(e) })}>
             {caps.render.analysis_models.map((m) => (
               <option value={m.id}>{m.label}</option>
             ))}
           </select>
-        </label>
+        </label>}
         <label class="chat-field">
           <span class="chat-meta">美化引擎</span>
           <select class="quality-select" value={settings.render_option} onChange={(e) => set({ render_option: val(e) })}>
