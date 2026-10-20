@@ -2800,7 +2800,8 @@ export function App() {
         setDrawer(true);
       }}
       showHome={phase !== "home"}
-      onNewChat={phase === "session" ? askNewChat : undefined}
+      // 多張上傳的總覽（還在 chat、還沒進哪一張）也是一段對話，一樣能開新的。
+      onNewChat={phase === "session" || (phase === "chat" && batch) ? askNewChat : undefined}
       showHistory={phase !== "home"}
       showChangelog={phase === "home"}
       onSettings={phase === "home" ? undefined : () => setPrefsOpen(true)}
