@@ -207,6 +207,8 @@ function resolvedNotes(notes: Note[], result: PreviewConversationResult, who: (i
 // backend's LISTED_SESSIONS_MAX + HISTORY_MAX_LEN), since 面板模式's 最近照片
 // reaches all of a user's cases too.
 const LISTED_MAX = 300;
+// 這麼久以內抓過的最近照片可以直接沿用，不用再問一次。
+const SESSIONS_FRESH_MS = 5000;
 
 const WHO_ANSWERED_REPLY = "好，這個我記下來了。還有其他想改的地方嗎？沒有的話，可以從下面選「分析」或「一鍵美化」喔！";
 
@@ -807,6 +809,7 @@ export function App() {
   const [caps, setCaps] = useState<Capabilities | null>(null);
   // 開機時打開的 #case= 連結也要用到 caps，那時 state 還沒更新到 closure 裡。
   const capsRef = useRef<Capabilities | null>(null);
+  const lastSessions = useRef<{ at: number; req: Promise<SessionSummary[]> } | null>(null);
   const [debugUi, setDebugUi] = useState(false);
   const [bootError, setBootError] = useState("");
   const [demos, setDemos] = useState<string[] | null>(null);
@@ -1106,12 +1109,15 @@ export function App() {
           .demoImages()
           .then((r) => setDemos(r.images || []))
           .catch(() => setDemos([]));
-        const list = await refreshSessions();
-        if (!list.length) setTab("sample");
+        // 打開連結裡的對話用不到最近照片，兩個一起抓，不用等列表回來。
+        const listed = refreshSessions().then((list) => {
+          if (!list.length) setTab("sample");
+        });
         if (location.hash === "#new") setSessionHash(null);
         const id = sessionHash();
         // Staying undrawn when it hands the case to 面板模式 instead.
         if (id && (await openSession(id)) === "left") return;
+        await listed;
       } catch (e) {
         setBootError(errorText(e));
       }
@@ -1119,16 +1125,29 @@ export function App() {
     })();
   }, []);
 
-  async function refreshSessions(): Promise<SessionSummary[]> {
-    try {
-      const r = await api.listSessions(LISTED_MAX);
-      const list = (r.sessions || []).filter((s) => s.photo_count > 0);
+  function refreshSessions(): Promise<SessionSummary[]> {
+    // 同時有兩次在抓（開機那次和剛建好對話那次）時，只用後發的那次，舊的晚回來不蓋掉。
+    const at = Date.now();
+    const req: Promise<SessionSummary[]> = (async () => {
+      let list: SessionSummary[] = [];
+      try {
+        const r = await api.listSessions(LISTED_MAX);
+        list = (r.sessions || []).filter((s) => s.photo_count > 0);
+      } catch {
+        // 抓不到就當沒有。
+      }
+      const last = lastSessions.current;
+      if (last && last.at > at) return last.req;
       setSessions(list);
       return list;
-    } catch {
-      setSessions([]);
-      return [];
-    }
+    })();
+    lastSessions.current = { at, req };
+    return req;
+  }
+  // 剛抓過（還在抓）的最近照片就直接用，例如開機打開的那張接回同一批時。
+  function recentSessions(): Promise<SessionSummary[]> {
+    const last = lastSessions.current;
+    return last && Date.now() - last.at < SESSIONS_FRESH_MS ? last.req : refreshSessions();
   }
 
   // ── Session loading and polling ───────────────────────────────────────────
@@ -1180,7 +1199,7 @@ export function App() {
     if (Object.values(runs).some((r) => r.sessionId === s.session_id)) return;
     if (batch && batch.some((x) => !runs[sourceSrc(x)]?.done && !runs[sourceSrc(x)]?.error)) return;
     const epoch = ++batchEpoch.current;
-    const ids = (await refreshSessions()).find((r) => r.session_ids?.includes(s.session_id))?.session_ids;
+    const ids = (await recentSessions()).find((r) => r.session_ids?.includes(s.session_id))?.session_ids;
     if (!ids || epoch !== batchEpoch.current) return;
     const [all, saved] = await Promise.all([
       Promise.all(ids.map((id) => (id === s.session_id ? s : api.getSession(id).catch(() => null)))),
@@ -1237,7 +1256,8 @@ export function App() {
     const p = h && c && s.photos.find((x) => x.case_id === caseId);
     if (!h || !c || !p || isBusy(p)) return s;
     try {
-      const r = await api.analysis(s.session_id, p.photo_id).catch(() => null);
+      // 分析只有對修圖建議的勾選才用得到；抓到了就留給這頁，不用再抓一次。
+      const r = h.recipe ? await api.analysis(s.session_id, p.photo_id).catch(() => null) : null;
       const analysis = r?.status === "success" ? (r.result?.analysis as Analysis) : null;
       const patch = handoffPatch(h, p.plan, c, analysis);
       // 引擎在一般帳號可能不給改，被擋就不帶這項，其他照樣帶。
@@ -1245,7 +1265,12 @@ export function App() {
         const { render_option, ...rest } = patch;
         return api.patchPhotoPlan(s.session_id, p.photo_id, rest);
       });
-      return await api.getSession(s.session_id);
+      // 改了 plan 可能開始重新構圖、多一句提問，所以整個對話要重抓。
+      const next = await api.getSession(s.session_id);
+      const q = next.photos.find((x) => x.photo_id === p.photo_id);
+      if (analysis && q && analysisJob(q) === analysisJob(p))
+        setAnalyses((a) => ({ ...a, [p.photo_id]: { job: analysisJob(p), analysis } }));
+      return next;
     } catch {
       return s;
     }
