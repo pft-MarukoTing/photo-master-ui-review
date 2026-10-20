@@ -520,7 +520,12 @@ type OverviewTurn =
   | { id: number; kind: "remove"; count: number; left: number }
   | { id: number; kind: "running"; keys: string[]; verb: string }
   | { id: number; kind: "done"; rendered: number; analyzed: number; failed: number }
-  | { id: number; kind: "wish"; text: string; count: number; skipped: number }
+  // 總覽打的一句。AI 先看過才決定要不要發到每一張：pending 還在看；kept 是收下了，
+  // line 是它整理過的那句（跟打的不一樣才有）；沒收下（問題、閒聊、撤回）就只有 reply，
+  // options 是能點的回答。沒有 kept 的是 AI 沒回應、照原句發出去的。
+  // gone 是之後被撤回或被新的一句取代，已經從每張拿掉了。
+  | { id: number; kind: "wish"; text: string; count: number; skipped: number;
+      pending?: boolean; kept?: boolean; reply?: string; options?: string[]; line?: string; gone?: boolean }
   | { id: number; kind: "settings"; settings?: Settings; model?: boolean }
   | { id: number; kind: "ask"; overwrite?: boolean; label?: string }
   | { id: number; kind: "start"; mode: "analyze" | "render"; count: number; keys: string[]; overwrite?: boolean; label?: string };
@@ -2121,9 +2126,57 @@ export function App() {
   // 總覽說的一句需求：放進每張還沒美化的照片自己的個人化需求，之後點那張還能再改。
   // 還沒開始的寫進草稿，原本選過的一鍵美化方式跟著作廢，下次一鍵美化再問一次；
   // 開始過、還沒美化的（分析中、分析好的）接在它 plan 的需求後面，美化時就照這句。
-  function overviewWish(text: string) {
+  // 總覽打的一句，跟上傳頁一樣先讓 AI 看過（/prompt-review）：是需求才發到每張還沒美化的照片，
+  // 問題、閒聊、撤回只回話；「幫我美化」「幫我分析」照按那兩顆；說了比例就換總覽的長寬比。
+  // AI 沒回應就照原句發出去，不讓一次失敗卡住整批。
+  async function overviewSay(text: string) {
     if (!batch) return;
-    const keys = batch.map(sourceSrc);
+    const id = nextDisplayOrder();
+    const said = overview.filter((t): t is Extract<OverviewTurn, { kind: "wish" }> => t.kind === "wish" && !t.pending);
+    setOverview((t) => [...t, { id, kind: "wish", text, count: 0, skipped: 0, pending: true }]);
+    setError("");
+    const keptTurns = said.filter((t) => t.kept !== false && !t.gone);
+    const kept = keptTurns.map((t) => t.line || t.text);
+    const history: ReviewTurn[] = said.flatMap((t) => [
+      { role: "user" as const, text: t.text },
+      ...(t.reply ? [{ role: "assistant" as const, text: t.reply, ...(t.options?.length ? { question: true, options: t.options } : {}) }] : []),
+    ]);
+    const done = (x: Partial<Extract<OverviewTurn, { kind: "wish" }>>) =>
+      setOverview((t) => t.map((y) => (y.id === id && y.kind === "wish" ? { ...y, ...x, pending: false } : y)));
+    let r: Awaited<ReturnType<typeof api.promptReview>>;
+    try {
+      r = await api.promptReview(text, kept.join("；"), history, []);
+    } catch {
+      done(spreadWish(text));
+      return;
+    }
+    // 撤回、或新的一句取代了前面的：merged 是總覽的需求清單改完剩下的樣子。前面講過、
+    // 已經發到每張的那幾句，不在裡面的就從每張拿掉；只剩一部分的，剩下那部分重新發一次。
+    // 撤回卻沒給剩下的樣子：只當成撤回最近那一句，不把前面講過的全部拿掉。
+    if (r.merged?.length || r.withdrawn) {
+      const left = r.merged?.length ? r.merged[0].text?.trim() || "" : kept.slice(0, -1).join("；");
+      const stay = new Set(keptTurns.filter((t) => left.includes(t.line || t.text)).map((t) => t.id));
+      const gone = keptTurns.filter((t) => !stay.has(t.id));
+      for (const t of gone) unspreadWish(t.line || t.text);
+      const staying = new Set(keptTurns.filter((t) => stay.has(t.id)).map((t) => t.line || t.text));
+      for (const part of left.split(/[；;\n]/).map((x) => x.trim()).filter((x) => x && !staying.has(x))) spreadWish(part);
+      if (gone.length) setOverview((t) => t.map((y) => (gone.some((g) => g.id === y.id) && y.kind === "wish" ? { ...y, gone: true } : y)));
+    }
+    if (r.accepted && !r.withdrawn) {
+      const line = r.line && r.line !== text ? r.line : undefined;
+      done({ ...spreadWish(line || text), kept: true, line });
+      if (r.aspect_ratio && allSettings) overviewSettings({ ...allSettings, aspect_ratio: r.aspect_ratio });
+    } else if (r.start) {
+      // 「幫我美化」就是按那顆：接下來那則「開始了」會講，這裡不多回一句。
+      done({ kept: false, reply: "" });
+    } else {
+      done({ kept: false, reply: r.reply || "好，那就先不加這句。", options: r.ask || r.offer ? r.options || [] : [] });
+    }
+    if (r.start) overviewStart(r.start);
+  }
+  // 一句需求發到每張還沒美化的照片：還沒開始的進它的草稿，開始過、還沒美化的接在它的個人化需求後面。
+  function spreadWish(text: string) {
+    const keys = (batch || []).map(sourceSrc);
     const open = keys.filter(unstarted);
     const live = keys.filter((k) => !unstarted(k) && renderableLive(k));
     for (const k of open) {
@@ -2133,8 +2186,29 @@ export function App() {
     }
     for (const k of live) void wishLive(k, text);
     const count = open.length + live.length;
-    setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "wish", text, count, skipped: keys.length - count }]);
-    setError("");
+    return { count, skipped: keys.length - count };
+  }
+  // spreadWish 的反面：總覽發出去的那句，從還沒開始的草稿裡拿掉，開始過、還沒美化的從個人化需求刪掉那一行。
+  function unspreadWish(text: string) {
+    for (const k of (batch || []).map(sourceSrc)) {
+      const d = drafts.current[k];
+      if (unstarted(k)) {
+        if (d) drafts.current[k] = { ...d, notes: d.notes.filter((n) => !(n.reply === OVERVIEW_NOTE_REPLY && n.text === text)), renderAsk: null };
+        continue;
+      }
+      const r = batchRuns[k];
+      const p = renderableLive(k);
+      if (!r?.sessionId || !p) continue;
+      const before = p.plan.user_prompt || "";
+      const after = before.split("\n").filter((l) => l.trim() !== text).join("\n");
+      if (after === before) continue;
+      const id = r.sessionId;
+      void api.patchPhotoPlan(id, p.photo_id, { user_prompt: after }).then(({ plan }) => {
+        if (session?.session_id === id)
+          setSession((s) => s && s.session_id === id ? { ...s, photos: s.photos.map((x) => (x.photo_id === p.photo_id ? { ...x, plan } : x)) } : s);
+        else setBatchLive((m) => (m[k] ? { ...m, [k]: { ...m[k], plan } } : m));
+      }).catch((e) => setError(notice(errorText(e))));
+    }
   }
   async function wishLive(key: string, text: string) {
     const r = batchRuns[key];
@@ -3107,7 +3181,7 @@ export function App() {
     const lastTurn = overview[overview.length - 1];
     // 一鍵美化正在問怎麼套用：選項就是那兩顆，底下那排先收起來。
     const askOpen = lastTurn?.kind === "ask" && lastTurn.overwrite === undefined;
-    const overviewHeld = busy || !!preAsk || loadingPhotos || !!allHold;
+    const overviewHeld = busy || !!preAsk || loadingPhotos || !!allHold || overview.some((t) => t.kind === "wish" && t.pending);
     // 最早那次上傳；從結果頁接回來的一批沒有這筆，就拿現在這幾張當開頭。
     const first = overview[0];
     const firstUpload = first?.kind === "upload" ? first.srcs : batch.map(sourceSrc);
@@ -3255,7 +3329,7 @@ export function App() {
               disabled={overviewHeld || !(pending || renderable || running)}
               onSend={async (text) => {
                 if (!text) return false;
-                overviewWish(text);
+                void overviewSay(text);
                 return true;
               }}
               clearKey={preClear}
@@ -3329,13 +3403,34 @@ export function App() {
           if (t.kind === "wish") return (
             <div key={t.id} class="note-turn">
               <AskBubble text={t.text} />
-              <AssistantMsg>
-                <p class="chat-text">
-                  {t.count
-                    ? `好，這句會套用在 ${t.count} 張還沒美化的照片上。${t.skipped ? `已經在美化或美化好的 ${t.skipped} 張不會套用。` : ""}只想改某一張，從${where}選取那張調整。`
-                    : "每張都已經在美化或美化好了，這句不會套用；要改哪一張，到那張的結果頁說就好。"}
-                </p>
-              </AssistantMsg>
+              {t.pending ? (
+                <AssistantMsg atomic><div class="chat-typing" role="status" aria-label="思考中"><span /><span /><span /></div></AssistantMsg>
+              ) : t.kept === false ? (
+                // 沒收下：問題、閒聊、撤回只回話；它問回來的就把答案排在底下，點了當成打的下一句。
+                // 開始了的那句由「開始了」那則講。
+                t.reply ? (
+                  <AssistantMsg>
+                    <p class="chat-text">{t.reply}</p>
+                    {!!t.options?.length && (
+                      <div class="chat-choices">
+                        {t.options.map((o) => (
+                          <Chip label={o} settled={!latest} disabled={overviewHeld} onClick={() => void overviewSay(o)} />
+                        ))}
+                      </div>
+                    )}
+                  </AssistantMsg>
+                ) : null
+              ) : (
+                <AssistantMsg>
+                  <p class="chat-text">
+                    {t.line && `好，記下了：${t.line}。`}
+                    {t.count
+                      ? `${t.line ? "" : "好，"}這句會套用在 ${t.count} 張還沒美化的照片上。${t.skipped ? `已經在美化或美化好的 ${t.skipped} 張不會套用。` : ""}只想改某一張，從${where}選取那張調整。`
+                      : "每張都已經在美化或美化好了，這句不會套用；要改哪一張，到那張的結果頁說就好。"}
+                  </p>
+                  {t.gone && <p class="chat-text chat-muted">這句後來撤回或被新的需求取代了，已經從每張拿掉。</p>}
+                </AssistantMsg>
+              )}
             </div>
           );
           if (t.kind === "settings") return (
