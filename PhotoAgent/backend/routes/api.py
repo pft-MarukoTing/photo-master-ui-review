@@ -90,6 +90,22 @@ def _apply_review_selections(analysis, raw_selections):
     return apply_selections(analysis, raw_selections), None
 
 
+# 「只照需求改」的 case 只有 skipped_analysis_stage 的空殼，沒有 subject_category；
+# 面板上改了需求或挑了風格再美化，照樣接著修。空殼沒有任何建議可修，只有照使用者
+# 自己的需求改才修得出東西。
+SKIPPED_NEEDS_PROMPT = "這張照片還沒分析，只能依照個人化需求修圖；要整張美化請先按「幫我分析」。"
+
+
+def _is_skipped_analysis(analysis):
+    return isinstance(analysis, dict) and bool(analysis.get("_skipped_analysis"))
+
+
+def _skipped_without_prompt(analysis, params):
+    """True when a skipped-analysis stub is sent without a prompt-only edit to make."""
+    return _is_skipped_analysis(analysis) and not (
+        params["overwrite_prompt"] and (params.get("user_prompt") or "").strip())
+
+
 def _parse_and_validate_params(form):
     """Returns (params, None) or (None, error_message).
 
@@ -1059,7 +1075,7 @@ def continue_job(job_id):
     body = request.get_json(silent=True) or {}
 
     analysis = body.get("analysis")
-    if not isinstance(analysis, dict) or "subject_category" not in analysis:
+    if not isinstance(analysis, dict) or ("subject_category" not in analysis and not _is_skipped_analysis(analysis)):
         return jsonify({"error": "analysis (from /analyze/result) is required"}), 400
     if not is_compatible(analysis, min_version=get_min_compatible_version()):
         # Authoritative gate: the frontend already checks compatible from
@@ -1074,6 +1090,8 @@ def continue_job(job_id):
     params, error = _parse_and_validate_params(body)
     if error:
         return jsonify({"error": error}), 400
+    if _skipped_without_prompt(analysis, params):
+        return jsonify({"error": SKIPPED_NEEDS_PROMPT}), 400
     params["stage"] = "finish"
     params["analysis"] = analysis
 
@@ -1133,7 +1151,7 @@ def rerun():
         analysis = json.loads(analysis_raw)
     except json.JSONDecodeError:
         return jsonify({"error": "analysis must be valid JSON"}), 400
-    if not isinstance(analysis, dict) or "subject_category" not in analysis:
+    if not isinstance(analysis, dict) or ("subject_category" not in analysis and not _is_skipped_analysis(analysis)):
         return jsonify({"error": "analysis must be the analysis object from a result.json"}), 400
     analysis, error = _apply_review_selections(analysis, request.form.get("selections"))
     if error:
@@ -1142,6 +1160,8 @@ def rerun():
     params, error = _parse_and_validate_params(request.form)
     if error:
         return jsonify({"error": error}), 400
+    if _skipped_without_prompt(analysis, params):
+        return jsonify({"error": SKIPPED_NEEDS_PROMPT}), 400
     params["stage"] = "finish"
     params["analysis"] = analysis
 

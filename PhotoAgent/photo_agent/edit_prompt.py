@@ -2,7 +2,7 @@
 
 from config import PRESET_PROMPTS
 from photo_agent.feature_resolver import build_compact_editor_prompt
-from prompts import build_framing_sections
+from prompts import build_framing_sections, build_style_override_block
 from photo_agent.text_overlay import editor_instruction
 
 
@@ -17,15 +17,17 @@ def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio
                          single_pass_edit, revision_feedback=None):
     """Return (prompt_text, resolution_metadata, prompt_strategy) for one edit call.
 
-    With overwrite_prompt, the user's own text is the whole prompt ("overwrite");
-    otherwise the compact editor prompt is built ("resolved_compact").
+    With overwrite_prompt, the user's own text leads the prompt ("overwrite"),
+    followed only by any style the user picked; otherwise the compact editor prompt is built ("resolved_compact").
     """
     user_instruction = framed_analysis.get("user_instruction") or {}
     user_direction = user_instruction.get("normalized_user_direction") or ""
     from photo_agent.side_reference import editor_instruction as side_instruction
     side_contract=side_instruction(user_instruction.get('original_user_direction') or user_direction)
     if overwrites_prompt(user_instruction):
-        return user_direction.strip() + editor_instruction(framed_analysis) + side_contract, None, "overwrite"
+        style_block = build_style_override_block(framed_analysis, alongside_request=True)
+        prompt_text = user_direction.strip() + (f"\n\n{style_block}" if style_block else "")
+        return prompt_text + editor_instruction(framed_analysis) + side_contract, None, "overwrite"
 
     sections = build_framing_sections(framed_analysis, crop_plan, aspect_ratio, source_size)
     prompt_text, resolution_metadata = build_compact_editor_prompt(

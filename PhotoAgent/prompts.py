@@ -2748,6 +2748,96 @@ def approved_gaze_items(analysis):
     ]
 
 
+def _size_ratio_block(size_override_value):
+    if size_override_value == "wide":
+        return (
+            "Quantified wide-framing target: make the main subject's visible frame ratio about 20% smaller than in the original image. "
+            "Aim for the subject's bounding-box height or dominant dimension to be roughly 80% of its original frame-relative size; "
+            "its area share may become roughly 65% of the original. "
+        )
+    if size_override_value == "wider":
+        return (
+            "Quantified wider-framing target: make the main subject's visible frame ratio about 40% smaller than in the original image. "
+            "Aim for the subject's bounding-box height or dominant dimension to be roughly 60% of its original frame-relative size; "
+            "its area share may become roughly 35% to 40% of the original. "
+        )
+    return ""
+
+
+def build_style_override_block(analysis, alongside_request=False):
+    """The edit prompt's section for the user-selected style_options ("" when none).
+
+    ``alongside_request`` is the overwrite-prompt run: the block follows the
+    user's own request, which wins where both touch the same aspect.
+    """
+    style_lines = [f"- {short_label}: {description}" for short_label, description in style_option_entries(analysis)]
+    if not style_lines:
+        return ""
+    style_options = analysis.get("style_options") or {}
+    size_override_value = style_options.get("size")
+    has_pose_override = bool(style_options.get("pose") and style_options.get("pose") != "default")
+    has_vertical_angle_override = style_options.get("angle") in {"high", "low", "eye"}
+
+    angle_reshoot_line = (
+        "For a selected high, low, or eye-level angle, keep this same photograph and its composition and change only "
+        "the height it is seen from, so it reads as the very same shot viewed from higher or lower, not a minor perspective tweak. "
+        if has_vertical_angle_override else
+        "For a selected angle override, the output should look like a new photograph taken from the selected camera angle, "
+        "not like a minor perspective correction. "
+    )
+    style_block = (
+        ("User-selected styles apply in addition to the request above.\n" if alongside_request else "")
+        + "User-selected style overrides are mandatory same-scene reshoot requirements, not optional retouch suggestions.\n"
+        "Apply every selected item visibly and deliberately. When an override conflicts with default preservation of pose, "
+        "camera angle, lighting, or framing size, the override wins for that selected aspect.\n"
+        + angle_reshoot_line
+        + "For selected pose, lighting, or framing-size overrides, make the change "
+        "clearly visible while keeping it photographically believable.\n"
+        + "\n".join(style_lines)
+        + (
+            "\n\nIf the request above and a selected style touch the same aspect, the request wins for that aspect. "
+            "Apart from the request and these selected styles, keep the result faithful as a reshoot of the same original scene: "
+            "same subject identity, same location, same environment, same clothing, and same props. Do not add new people, "
+            "invent new props, replace the scene, or add other retouching."
+            if alongside_request else
+            "\n\nKeep the result faithful as a reshoot of the same original scene: same subject identity, same location, "
+            "same environment, same clothing, and same props. Do not change unselected aspects, add new people, invent new props, "
+            "or replace the scene."
+        )
+    )
+    if has_pose_override:
+        style_block += (
+            "\n\nPose override requirement: Do not preserve the original pose. "
+            "Replace the original body language with a visibly different pose matching the selected pose style. "
+            "The change must affect posture, gesture, hand placement, body direction, weight shift, or head direction. "
+            "A result with only lighting, color, skin, or minor expression changes and no clear pose change is a failure."
+        )
+    if has_vertical_angle_override:
+        style_block += (
+            "\n\nAngle override requirement (vertical only): Change only the height the shot is seen from, keeping the same horizontal camera direction. "
+            "Every background and scene element stays in its original place, on the same side of the frame as before, just seen from higher or lower, "
+            "and the subject stays in roughly the same part of the frame (any selected pose change still applies to the subject's own body language). "
+            "The result should stay recognizable as the very same framing, only tilted up or down. "
+            "A result where background elements move to the opposite side, or that looks taken from a different horizontal direction, fails this requirement."
+        )
+    if size_override_value in {"wide", "wider"}:
+        style_block += (
+            "\n\nFraming-size override requirement: This is a true wider-framing transformation. "
+            + _size_ratio_block(size_override_value) +
+            "Do not preserve the original image boundaries. Make the subject visibly smaller in the frame and show more surrounding same-scene environment. "
+            "If the original image lacks enough context, extend/outpaint the canvas with plausible continuation of the same location, lighting, perspective, depth, and materials. "
+            "Expanded areas must be photographic scene content, not blank borders, stretched edges, duplicated patterns, or unrelated invented scenery. "
+            "Wide and wider must be visibly different: wide is a moderate pull-back, wider is a much stronger environmental pull-back."
+        )
+    elif size_override_value in {"close", "closer"}:
+        style_block += (
+            "\n\nFraming-size override requirement: This is a true closer-framing transformation. "
+            "Make the subject visibly larger in the frame while preserving essential identity, object form, role cues, and clean breathing room."
+        )
+
+    return style_block
+
+
 def build_framing_sections(analysis, crop_plan, aspect_ratio_pref="auto", source_size=None):
     """The edit prompt's crop and style sections: {"crop_instruction", "style_instruction"}.
 
@@ -2774,82 +2864,12 @@ def build_framing_sections(analysis, crop_plan, aspect_ratio_pref="auto", source
             "original"
         )
 
-    style_lines = [f"- {short_label}: {description}" for short_label, description in style_option_entries(analysis)]
-    has_style_overrides = bool(style_lines)
     style_options = analysis.get("style_options") or {}
     size_override_value = style_options.get("size")
-    has_pose_override = bool(style_options.get("pose") and style_options.get("pose") != "default")
-    has_vertical_angle_override = style_options.get("angle") in {"high", "low", "eye"}
     has_wider_size_override = size_override_value in {"wide", "wider"}
     has_closer_size_override = size_override_value in {"close", "closer"}
-
-    size_ratio_block = ""
-    if size_override_value == "wide":
-        size_ratio_block = (
-            "Quantified wide-framing target: make the main subject's visible frame ratio about 20% smaller than in the original image. "
-            "Aim for the subject's bounding-box height or dominant dimension to be roughly 80% of its original frame-relative size; "
-            "its area share may become roughly 65% of the original. "
-        )
-    elif size_override_value == "wider":
-        size_ratio_block = (
-            "Quantified wider-framing target: make the main subject's visible frame ratio about 40% smaller than in the original image. "
-            "Aim for the subject's bounding-box height or dominant dimension to be roughly 60% of its original frame-relative size; "
-            "its area share may become roughly 35% to 40% of the original. "
-        )
-
-
-    style_block = ""
-    if has_style_overrides:
-        angle_reshoot_line = (
-            "For a selected high, low, or eye-level angle, keep this same photograph and its composition and change only "
-            "the height it is seen from, so it reads as the very same shot viewed from higher or lower, not a minor perspective tweak. "
-            if has_vertical_angle_override else
-            "For a selected angle override, the output should look like a new photograph taken from the selected camera angle, "
-            "not like a minor perspective correction. "
-        )
-        style_block = (
-            "User-selected style overrides are mandatory same-scene reshoot requirements, not optional retouch suggestions.\n"
-            "Apply every selected item visibly and deliberately. When an override conflicts with default preservation of pose, "
-            "camera angle, lighting, or framing size, the override wins for that selected aspect.\n"
-            + angle_reshoot_line
-            + "For selected pose, lighting, or framing-size overrides, make the change "
-            "clearly visible while keeping it photographically believable.\n"
-            + "\n".join(style_lines)
-            + (
-                "\n\nKeep the result faithful as a reshoot of the same original scene: same subject identity, same location, "
-                "same environment, same clothing, and same props. Do not change unselected aspects, add new people, invent new props, "
-                "or replace the scene."
-            )
-        )
-        if has_pose_override:
-            style_block += (
-                "\n\nPose override requirement: Do not preserve the original pose. "
-                "Replace the original body language with a visibly different pose matching the selected pose style. "
-                "The change must affect posture, gesture, hand placement, body direction, weight shift, or head direction. "
-                "A result with only lighting, color, skin, or minor expression changes and no clear pose change is a failure."
-            )
-        if has_vertical_angle_override:
-            style_block += (
-                "\n\nAngle override requirement (vertical only): Change only the height the shot is seen from, keeping the same horizontal camera direction. "
-                "Every background and scene element stays in its original place, on the same side of the frame as before, just seen from higher or lower, "
-                "and the subject stays in roughly the same part of the frame (any selected pose change still applies to the subject's own body language). "
-                "The result should stay recognizable as the very same framing, only tilted up or down. "
-                "A result where background elements move to the opposite side, or that looks taken from a different horizontal direction, fails this requirement."
-            )
-        if has_wider_size_override:
-            style_block += (
-                "\n\nFraming-size override requirement: This is a true wider-framing transformation. "
-                + size_ratio_block +
-                "Do not preserve the original image boundaries. Make the subject visibly smaller in the frame and show more surrounding same-scene environment. "
-                "If the original image lacks enough context, extend/outpaint the canvas with plausible continuation of the same location, lighting, perspective, depth, and materials. "
-                "Expanded areas must be photographic scene content, not blank borders, stretched edges, duplicated patterns, or unrelated invented scenery. "
-                "Wide and wider must be visibly different: wide is a moderate pull-back, wider is a much stronger environmental pull-back."
-            )
-        elif has_closer_size_override:
-            style_block += (
-                "\n\nFraming-size override requirement: This is a true closer-framing transformation. "
-                "Make the subject visibly larger in the frame while preserving essential identity, object form, role cues, and clean breathing room."
-            )
+    size_ratio_block = _size_ratio_block(size_override_value)
+    style_block = build_style_override_block(analysis)
 
     expand_plan = (
         None if has_wider_size_override or has_closer_size_override

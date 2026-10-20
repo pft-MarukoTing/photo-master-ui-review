@@ -31,6 +31,19 @@ class AssembleEditPrompt(unittest.TestCase):
         }}
         self.assertEqual(_assemble(analysis), ("Make the sky pink.", None, "overwrite"))
 
+    def test_overwrite_appends_the_picked_style_after_the_user_text(self):
+        analysis = {**_analysis("3:2"), "style_options": {"lighting": "gold", "pose": "default"},
+                    "user_instruction": {"has_user_direction": True, "overwrite_prompt": True,
+                                         "normalized_user_direction": "Make the sky pink."}}
+        prompt, metadata, strategy = _assemble(analysis)
+        self.assertEqual(strategy, "overwrite")
+        self.assertIsNone(metadata)
+        self.assertTrue(prompt.startswith("Make the sky pink.\n\n"))
+        self.assertIn("the request wins for that aspect", prompt)
+        self.assertIn("- Lighting:", prompt)
+        self.assertNotIn("Pose", prompt)
+        self.assertNotIn("Finish:", prompt)
+
     def test_overwrite_without_text_falls_back_to_compact(self):
         analysis = {**_analysis("3:2"), "user_instruction": {"overwrite_prompt": True, "normalized_user_direction": "  "}}
         self.assertEqual(_assemble(analysis)[2], "resolved_compact")

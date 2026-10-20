@@ -518,7 +518,7 @@ type BatchDraft = {
   segEdits: PromptEdits;
   settings: Settings;
   prePointed: number[];
-  renderAsk: { later: Note | null; log: Note[]; overwrite?: boolean } | null;
+  renderAsk: RenderAsk | null;
   sourceGeneration: number;
   presentedGeneration: string | null;
   events: PreviewReplyEvent[];
@@ -612,6 +612,10 @@ const GREETING = "嗨！先選想美化的照片，可以一次選多張。要�
 // 只拿個人化需求當指令；整體美化 = 照分析修完，需求一起加上去（原本的做法）。
 // 僅依需求修改那條也是 session 裡那張美化卡的標題。按鈕是使用者的話、說明是
 // AI 的話，兩邊都不用「我」，主詞才不會打架。說明的順序跟按鈕一樣，整體美化在前。
+// 一鍵美化前問需求怎麼套用。styling：選了「僅依需求修改」，開始前再問要不要
+// 加風格；style 是那時挑的，上傳後跟著寫進這張照片的設定。
+type RenderAsk = { later: Note | null; log: Note[]; overwrite?: boolean; styling?: boolean; style?: Record<string, string> };
+
 const ONLY_PROMPT_LABEL = "僅依需求修改";
 const WITH_ANALYSIS_LABEL = "整體美化";
 
@@ -852,7 +856,7 @@ export function App() {
   // 帶著個人化需求按一鍵美化：先問要只改使用者說的，還是整體美化再加上需求。
   // 留著按下去那一刻的 later / log，選好之後照原樣開始；`overwrite` 是選了哪
   // 一個，上傳中那排選項定格在它身上，失敗了還能重選。
-  const [renderAsk, setRenderAsk] = useState<{ later: Note | null; log: Note[]; overwrite?: boolean } | null>(null);
+  const [renderAsk, setRenderAsk] = useState<RenderAsk | null>(null);
   // 按了分析／一鍵美化到進 session 之間：建 session、上傳、送出，
   // 前後可以好幾秒。做到哪一步就多講一句，按下去當下畫面就有回應。
   const [starting, setStarting] = useState<StartProgress | null>(null);
@@ -2682,7 +2686,8 @@ export function App() {
       setRenderAsk({ later, log });
       return;
     }
-    setRenderAsk(mode === "render" && overwrite !== undefined ? { later, log, overwrite } : null);
+    const style = mode === "render" && overwrite && renderAsk?.styling ? renderAsk.style || {} : undefined;
+    setRenderAsk(mode === "render" && overwrite !== undefined ? { later, log, overwrite, ...(style ? { styling: true, style } : {}) } : null);
     // 多張裡的一張：自己開始，傳好就跳到它的結果頁，其他張留在上傳頁。
     if (batch && batchKey) {
       const job = unstarted(batchKey) && liveBatchJob(mode, overwrite, later, log);
@@ -2792,7 +2797,12 @@ export function App() {
       setSubmitting(null);
       // On the photo, not the session defaults: a second photo has its own
       // faces and must not inherit these.
-      if (promptFaces.length) await api.patchPhotoPlan(id, added.photo_id, { prompt_faces: promptFaces }, step());
+      // 「僅依需求修改」前挑的風格也一樣寫在這張上。
+      const firstPlan: Plan = {
+        ...(promptFaces.length ? { prompt_faces: promptFaces } : {}),
+        ...(style && Object.keys(style).length ? { style_options: style } : {}),
+      };
+      if (Object.keys(firstPlan).length) await api.patchPhotoPlan(id, added.photo_id, firstPlan, step());
       if (sourceIdentity.current !== selectedSource) return;
       if (mode === "render") {
         try {
@@ -2942,6 +2952,20 @@ export function App() {
     return run(async () => {
       await api.patchPhotoPlan(id, pid, { overwrite_prompt: false });
       await api.analyze(id, pid);
+      setSession(await api.getSession(id));
+    });
+  }
+
+  // 只照需求改完那版的「風格」：開一輪調整，風格面板直接攤開。overwrite_prompt
+  // 不動，下一版還是只照需求改，再加上這輪挑的風格。
+  function openStyle() {
+    if (!session || !photo) return Promise.resolve(false);
+    const id = session.session_id;
+    const pid = photo.photo_id;
+    return run(async () => {
+      const plan = snapshotOf(photo.plan);
+      await api.postMessage(id, { type: "adjust_opened", photo_id: pid, via: "style", plan });
+      await api.postMessage(id, { type: "options_opened", photo_id: pid, category: "style", via: "style", plan });
       setSession(await api.getSession(id));
     });
   }
@@ -3257,10 +3281,21 @@ export function App() {
           setStep("settings");
         }}
         onStart={startSession}
-        renderAsk={renderAsk && { overwrite: renderAsk.overwrite }}
-        onRenderMode={(overwrite) =>
-          renderAsk && startSession("render", renderAsk.later, renderAsk.log, overwrite)
+        renderAsk={renderAsk && { overwrite: renderAsk.overwrite, styling: renderAsk.styling, style: renderAsk.style }}
+        onRenderMode={(overwrite) => {
+          if (!renderAsk) return;
+          // 僅依需求修改：開始前再問一句要不要加風格（多張的照舊直接開始）。
+          if (overwrite && !batch && caps?.style_options.length) {
+            if (!renderAsk.styling) setRenderAsk({ ...renderAsk, overwrite: true, styling: true });
+            return;
+          }
+          startSession("render", renderAsk.later, renderAsk.log, overwrite);
+        }}
+        stylePeople={preFaces.length > 0}
+        onStylePatch={(p) =>
+          setRenderAsk((r) => r && { ...r, style: { ...r.style, ...(p.style_options || {}) } })
         }
+        onStyleStart={() => renderAsk && startSession("render", renderAsk.later, renderAsk.log, true)}
         onAnswer={(text) => void reviewNote(text, [], notes, false)}
         onWho={(where) => answerWho(prePickable.filter((p) => p.where === where).map((p) => p.subjectIndex))}
       />
@@ -3768,6 +3803,7 @@ export function App() {
             onQuietPrompt={quietPrompt}
             onPost={postFromChat}
             onAnalyze={analyzePhoto}
+            onOpenStyle={openStyle}
             panelMode={{ href: urls.oldUi(photo.case_id), busy: isBusy(photo), onLeave: toOldUi }}
             onResolve={resolveProposal}
           />
@@ -4772,8 +4808,13 @@ function PreChat(props: {
   onEdit: () => void;
   onStart: (mode: "analyze" | "render") => void;
   // 一鍵美化前在問需求怎麼套用；`overwrite` 是已經選了的那個（上傳中）。
-  renderAsk: { overwrite?: boolean } | null;
+  // styling：選了僅依需求修改，接著問要不要加風格，style 是挑好的。
+  renderAsk: { overwrite?: boolean; styling?: boolean; style?: Record<string, string> } | null;
   onRenderMode: (overwrite: boolean) => void;
+  // 照片裡有沒有人：決定風格裡給不給「姿勢」。
+  stylePeople: boolean;
+  onStylePatch: (patch: Plan) => void;
+  onStyleStart: () => void;
   // One of the options under the AI's question, tapped.
   onAnswer: (text: string) => void;
   // 問「哪一位」時，對話裡那排頭像點了其中一位（`where` 是那位的位置）。
@@ -4853,6 +4894,11 @@ function PreChat(props: {
   const kept = props.sections.length > 0;
   const hasWishes = kept || !!props.activeTargetQuestion;
   const asking = props.renderAsk;
+  // 「僅依需求修改」之後那句：按了「風格」才攤開風格選項。
+  const [styleOpen, setStyleOpen] = useState(false);
+  useEffect(() => {
+    if (!asking?.styling) setStyleOpen(false);
+  }, [asking?.styling]);
   // 按下去就算選了：這排定格成紀錄，按的那顆維持選取的樣子；失敗了再解開。
   const went = !asking && starting ? starting.mode : null;
   const review = kept && (
@@ -5095,13 +5141,48 @@ function PreChat(props: {
                 <Chip
                   label={o.label}
                   kind={asking.overwrite === o.overwrite ? "picked" : undefined}
-                  settled={busy && asking.overwrite !== undefined}
+                  settled={(busy || !!asking.styling) && asking.overwrite !== undefined}
                   disabled={held}
                   onClick={() => props.onRenderMode(o.overwrite)}
                 />
               ))}
             </div>
           </AssistantMsg>
+          {/* 只照需求改照樣套得上風格，開始前問一句；不挑就維持照片原本的樣子。 */}
+          {asking.styling && (
+            <>
+              <UserMsg>
+                <ClickBubble icon="spark" label={ONLY_PROMPT_LABEL} />
+              </UserMsg>
+              <AssistantMsg>
+                <p class="chat-text">
+                  好，只改你寫到的地方。要順便加個風格嗎？點「{CATEGORIES.style.label}」可以挑光線、角度這些；不用的話，直接按「開始調整」。
+                </p>
+                {styleOpen && (
+                  <>
+                    <OptionsCard
+                      category="style"
+                      analysis={(props.stylePeople ? { subject_category: "人物" } : {}) as Analysis}
+                      plan={{ style_options: asking.style || {} } as Plan}
+                      caps={caps}
+                      faces={{}}
+                      busy={busy}
+                      hot={null}
+                      onPatch={props.onStylePatch}
+                      onQuietPrompt={async () => {}}
+                    />
+                    <p class="chat-text">挑好按「開始調整」我就開始。</p>
+                  </>
+                )}
+                <div class="chat-choices">
+                  {!styleOpen && (
+                    <Chip label={CATEGORIES.style.label} icon={CATEGORIES.style.icon} disabled={held} onClick={() => setStyleOpen(true)} />
+                  )}
+                  <Chip label="開始調整" icon="spark" kind="primary" settled={busy && !!starting} disabled={held} onClick={props.onStyleStart} />
+                </div>
+              </AssistantMsg>
+            </>
+          )}
         </>
       )}
       {starting && (
@@ -5110,7 +5191,7 @@ function PreChat(props: {
             {starting.mode === "analyze" ? (
               <ClickBubble icon="search" label="分析" />
             ) : asking ? (
-              <ClickBubble icon="spark" label={starting.overwrite ? ONLY_PROMPT_LABEL : WITH_ANALYSIS_LABEL} />
+              <ClickBubble icon="spark" label={asking.styling ? "開始調整" : starting.overwrite ? ONLY_PROMPT_LABEL : WITH_ANALYSIS_LABEL} />
             ) : (
               <ClickBubble icon="spark" label="一鍵美化" />
             )}
@@ -5253,6 +5334,7 @@ function SessionView(props: {
   onQuietPrompt: (text: string) => Promise<unknown>;
   onPost: (card: Dict, patch?: Plan, merge?: boolean) => Promise<boolean>;
   onAnalyze: () => Promise<boolean>;
+  onOpenStyle: () => Promise<boolean>;
   panelMode: PanelMode;
   onResolve: (
     proposal: Proposal,
@@ -5345,14 +5427,15 @@ function SessionView(props: {
       }
     });
   }
-  // 只照需求改的那一版再調整：美化只看個人化需求，人像、畫面、風格都碰不到
-  // 結果，所以不給。看的是這一輪開的時候有沒有寫需求，中途清掉也不會突然冒出
-  // 其他項目；「幫我分析」開的那輪會把 overwrite_prompt 關掉，回到完整清單。
+  // 只照需求改的那一版再調整：美化只看個人化需求和挑的風格，人像、畫面建議都
+  // 碰不到結果，所以不給。看的是這一輪開的時候有沒有寫需求，中途清掉也不會突然
+  // 冒出其他項目；「幫我分析」開的那輪會把 overwrite_prompt 關掉，回到完整清單。
   const promptOnlyRound =
     adjusting && !!photo.plan.overwrite_prompt && !!String(roundPlan?.user_prompt || "").trim();
+  const promptOnlyCats: Category[] = caps.style_options.length ? ["prompt", "style"] : ["prompt"];
   // 設定（美化引擎、比例、張數）每次美化都會用到，只照需求改的那一版也是，
   // 所以能改的時候一律排在最後；不然第一輪想換引擎，連 AI 都找不到入口。
-  const cats: Category[] = [...(promptOnlyRound ? ["prompt" as const] : baseCats), "settings"];
+  const cats: Category[] = [...(promptOnlyRound ? promptOnlyCats : baseCats), "settings"];
   const lastOpened = opened.length ? opened[opened.length - 1] : null;
   // 分析後的第一輪用漸進引導：排在最前面、還沒看過也還沒略過的那一項，就是
   // 下一句要談的。（調整後再美化那一輪維持原本的選單。）設定不是分析找到的
@@ -5406,10 +5489,11 @@ function SessionView(props: {
   const promptChanged =
     !!promptNow && (fresh || (adjusting && String(roundPlan?.user_prompt || "").trim() !== promptNow));
   // 美化（第一輪、調整後）都走這裡。需求是這一輪新寫的就先問；沒動需求、
-  // 上一版又是只照需求改的話，這一輪改的是別的項目，要回到整體美化才改得到。
+  // 上一版又是只照需求改的話，這一輪改的是別的項目，要回到整體美化才改得到
+  // -- 只照需求改的那輪除外：那輪能改的風格、設定，只照需求改也照樣套用。
   const renderRound = (label: string, icon: string) => {
     if (promptChanged) return setAskMode({ label, icon });
-    props.onRender(label, icon, photo.plan.overwrite_prompt ? { overwrite_prompt: false } : undefined);
+    props.onRender(label, icon, photo.plan.overwrite_prompt && !promptOnlyRound ? { overwrite_prompt: false } : undefined);
   };
 
   // 上傳頁面選了「只照需求改」：真的沒有分析，只量了尺寸，美化直接照需求修。
@@ -5427,6 +5511,13 @@ function SessionView(props: {
   const scanOrder = [...scan.people].sort((a, b) => a.box.x + a.box.w / 2 - (b.box.x + b.box.w / 2));
   const scanWhere = (i: number) => `照片中從左邊數來第 ${scanOrder.findIndex((q) => q.subjectIndex === i) + 1} 位`;
   const people = localPick ? scan.people : facePeople(analysis);
+  // 風格裡的「姿勢」只給拍到人的照片，平常看分析的 subject_category；沒有分析
+  // 時改看本地偵測有沒有找到人。
+  const styleAnalysis =
+    analysis && localPick && !analysis.subject_category && scan.people.length
+      ? { ...analysis, subject_category: "人物" }
+      : analysis;
+  const analysisOf = (cat: Category) => (cat === "style" ? styleAnalysis : analysis) as Analysis;
   const analysisThumbs = useFaceThumbs(localPick ? null : analysis, source);
   const scanThumbs = useBoxThumbs(scan.people.map((p) => p.box), source);
   const thumbs = localPick ? scanThumbs : analysisThumbs;
@@ -5553,7 +5644,7 @@ function SessionView(props: {
       <>
         <p class="chat-text">
           {said(pre)}
-          {said(topicLead(nextCat, analysis, caps, photo.plan))}
+          {said(topicLead(nextCat, analysisOf(nextCat), caps, photo.plan))}
         </p>
         <div class="chat-choices">
           <Chip
@@ -5940,7 +6031,9 @@ function SessionView(props: {
     !!photo.plan.overwrite_prompt && (skippedAnalysis || !!analysis) &&
     !messages.slice(idx + 1).some(x => x.card?.type === "check_declined" || x.card?.type === "analysis_brief");
   const showActionRow = !!actionChips && !busy && !props.pendingAsk && photo.status === "ready" && !askMode && !confirmRerun && !endAsks && !pendingPerson && !offerCheckAt(endIdx);
-  if (!showActionRow) bar = offerCheckAt(endIdx) ? ["好，幫我分析", "不用了"] : [];
+  // 只照需求改完，除了問要不要分析，也給「風格」：只照需求改照樣套得上風格。
+  const offerStyle = caps.style_options.length > 0;
+  if (!showActionRow) bar = offerCheckAt(endIdx) ? ["好，幫我分析", ...(offerStyle ? [CATEGORIES.style.label] : []), "不用了"] : [];
   const endRow =
     showActionRow ? (
       <div class="chat-choices">{actionChips}</div>
@@ -6035,12 +6128,15 @@ function SessionView(props: {
         const again =
           messages.slice(0, idx).some((x) => /^render_/.test(x.card?.type || "")) &&
           !(startedWith && changedCats(startedWith, shownWith).has(cat));
-        const lead = !answersApply
+        // 只照需求改完按「風格」開的：先講清楚挑了會怎麼套用。
+        const lead = c.via === "style"
+          ? "想加個風格的話，先挑類別再選；下一版會照你的需求改，再加上這裡選的風格。"
+          : !answersApply
           ? introFor(cat, analysis, planAt(idx), again)
           : fromApply
             ? `先看剛套用的${termOf(cat)}，改動的地方已經標起來了。`
             : `好，已套用。這是更新後的${termOf(cat)}，改動的地方已經標起來了。`;
-        const recap = live ? "" : topicRecap(cat, analysis, caps, planAt(idx));
+        const recap = live ? "" : topicRecap(cat, analysisOf(cat), caps, planAt(idx));
         // 後面的話跟著項目和「美化」鍵（回覆、提案、構圖好了都會帶），這張面板就
         // 不再接一次，不然同一排按鈕會連著出現兩次。
         const atEnd = messages.slice(idx + 1).every((x) => x.card?.auto);
@@ -6059,7 +6155,7 @@ function SessionView(props: {
                   <p class="chat-text">{said(lead)}</p>
                   <OptionsCard
                     category={cat}
-                    analysis={analysis}
+                    analysis={analysisOf(cat)}
                     plan={photo.plan}
                     caps={caps}
                     faces={faces}
@@ -6141,7 +6237,8 @@ function SessionView(props: {
         // 套用之後面板馬上就開在下一則訊息裡，那張卡會把這一輪的開場一起講掉。
         // 這裡再講一次就變成兩顆頭像說同一件事，還會問一個自己已經答了的問題。
         const opensPanel = messages[idx + 1]?.card;
-        if (c.via === "proposal" && opensPanel?.type === "options_opened" && opensPanel.via === "proposal") return null;
+        // 「風格」開的那輪也一樣，風格面板那則自己會交代。
+        if ((c.via === "proposal" || c.via === "style") && opensPanel?.type === "options_opened" && opensPanel.via === c.via) return null;
         // 套用完的開場就把下一步問掉：直接美化，還是先改下面這幾項。項目一旦點
         // 開，問句沒了對象，話就收回成單純的一句交代。
         const showChips = live && !opened.length;
@@ -6201,7 +6298,7 @@ function SessionView(props: {
                       建議永遠是看原圖分析的，不會因為已經修過一版就換；開關則是上一版的。 */}
                   {c.via !== "proposal" && !check && promptOnlyRound && (
                     <p class="chat-text chat-muted">
-                      這版只照你的需求改，所以這輪只要改個人化需求就好。想整張一起美化的話，按「幫我分析」。
+                      這版只照你的需求改，所以這輪只能改個人化需求{cats.includes("style") ? "，或加個風格" : ""}。想整張一起美化的話，按「幫我分析」。
                     </p>
                   )}
                   {c.via !== "proposal" && !check && !promptOnlyRound && (
@@ -6307,9 +6404,15 @@ function SessionView(props: {
             {answerIn(idx)}
             {offerCheck && (
               <>
-                <p class="chat-text">這版只照你的需求改，沒有分析整張照片。需要我幫你分析，看看還有哪些地方可以修嗎？</p>
+                <p class="chat-text">
+                  這版只照你的需求改，沒有分析整張照片。需要我幫你分析，看看還有哪些地方可以修嗎？
+                  {offerStyle && "也可以點「風格」，幫這版調整光線、角度之類的風格。"}
+                </p>
                 <div class="chat-choices">
                   <Chip label="好，幫我分析" icon="search" disabled={busy || !ready} onClick={checkOriginal} />
+                  {offerStyle && (
+                    <Chip label={CATEGORIES.style.label} icon={CATEGORIES.style.icon} disabled={busy || !ready} onClick={props.onOpenStyle} />
+                  )}
                   <Chip label="不用了" icon="x" disabled={busy} onClick={() => props.onPost({ type: "check_declined" })} />
                 </div>
               </>

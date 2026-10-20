@@ -498,10 +498,10 @@ Rules
 # 「只照需求改」的那一版：修圖只拿個人化需求當指令，其他地方本來就不該動，
 # 也多半沒有分析。成品跟原圖別處看起來不同，是修圖模型順手改到的，不是這一版
 # 的成果；講成「臉更清楚、層次更明顯」等於把沒答應的事當功勞，使用者會以為
-# 整張都被修過。所以這一版只講需求有沒有做到，別處走樣才當問題講。
-ONLY_WISHES_RULE = """SCOPE: this version follows only the user's own wishes in PLAN.user_prompt. Nothing else in the photo was meant to change, and there may be no real analysis behind it.
-- The note is about those wishes alone: how each shows in AFTER, plus the one clause of recognition. One or two sentences.
-- Never present anything else as an improvement -- no light, colour, skin, sharpness, layering or framing change the user did not ask for, even where AFTER looks different. If something outside the wishes visibly changed for the worse (a face that no longer looks like the person, a colour shift, a smeared detail), make that the one offer, worded as the end result and without naming the flaw (see Offers).
+# 整張都被修過。所以這一版只講需求（和他挑的風格）有沒有做到，別處走樣才當問題講。
+ONLY_WISHES_RULE = """SCOPE: this version follows only the user's own wishes in PLAN.user_prompt, plus any 風格 the user picked (APPLIED SETTINGS 風格 other than 不選). Nothing else in the photo was meant to change, and there may be no real analysis behind it.
+- The note is about those wishes and that 風格 alone: how each shows in AFTER, plus the one clause of recognition. One or two sentences.
+- Never present anything else as an improvement -- no light, colour, skin, sharpness, layering or framing change the user did not ask for or pick as a 風格, even where AFTER looks different. If something outside the wishes visibly changed for the worse (a face that no longer looks like the person, a colour shift, a smeared detail), make that the one offer, worded as the end result and without naming the flaw (see Offers).
 - Ignore ANALYSIS and RECIPE: they say nothing about what this version did.
 - Still never say that a face, a person or the rest of the photo was left as it was: the portrait fixes APPLIED SETTINGS shows on may have run too."""
 

@@ -178,7 +178,8 @@ window.PhotoAgentResults = (() => {
   }
 
   function buildExecutedStyleOptionTagLabels(styleOptions, analysis, pending = false) {
-    if (pending || analysis?.user_instruction?.overwrite_prompt) return [];
+    // 只照需求改也會把挑的風格接在需求後面送出，照樣以實際 prompt 為準。
+    if (pending) return [];
     const prompt = actualEditorPromptText(analysis);
     if (!prompt) return [];
     return Object.entries(styleOptions || {})
@@ -3440,20 +3441,21 @@ window.PhotoAgentResults = (() => {
     // A 「只照需求改」 case has only the stub analysis: nothing to summarize
     // or recommend, so #ap-skip-hint stands in for the 照片總覽 card (its
     // 幫我分析 is app.js's, beside 美化), the
-    // empty 畫面建議 and 風格調整 tabs go, and the panel opens on 個人化需求 -- the
-    // part that still applies. (人像檢查 hides itself: the stub has no faces.)
+    // empty 畫面建議 tab goes, and the panel opens on 個人化需求 -- the
+    // part that still applies. 風格調整 stays: the picked style is sent after
+    // the user's request. (人像檢查 hides itself: the stub has no faces.)
     const skipped = Boolean(analysis?._skipped_analysis);
     if (els.apSkipHint) els.apSkipHint.hidden = !skipped;
     if (els.apPhotoSummary) els.apPhotoSummary.hidden = skipped;
     if (els.apReviewTabRecipe) els.apReviewTabRecipe.hidden = skipped;
-    if (els.apReviewTabStyle) els.apReviewTabStyle.hidden = skipped;
+    if (els.apReviewTabStyle) els.apReviewTabStyle.hidden = false;
     // The shell's heading speaks of AI suggestions this case doesn't have.
     if (els.apAnalysisShellTitleText) {
       els.apAnalysisShellTitleText.textContent = skipped ? "需求與調整" : "分析與調整";
     }
     if (els.apAnalysisShellDesc) {
       els.apAnalysisShellDesc.textContent = skipped
-        ? "這個版本依照你的個人化需求修圖，可以在這裡修改需求或調整設定"
+        ? "這個版本依照你的個人化需求修圖，可以在這裡修改需求、調整風格或設定"
         : "這是 AI 分析後提供的建議，你可依此在這裡進一步調整設定";
     }
     if (skipped) activeReviewTab = "prompt";
