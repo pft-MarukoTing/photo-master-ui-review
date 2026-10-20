@@ -6,6 +6,7 @@ from functools import partial
 from typing import Optional
 
 from compatibility_version import CURRENT_COMPATIBILITY_VERSION
+import config
 from config import MODELS
 from engine_result_code import RESULT_INVALID_PARAMETER
 from image_tools import (
@@ -41,6 +42,7 @@ from prompts import (
     with_reframing_proposal,
 )
 from photo_agent.analysis_skills import ANALYSIS_SKILLS
+from photo_agent.photo_router import ROUTER_INSTRUCTION, run_call0
 from photo_agent.edit_prompt import overwrites_prompt
 from photo_agent import capabilities
 from photo_agent.editor_skills import EDITOR_SKILLS
@@ -259,7 +261,6 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     logger.info("Step 1: image loaded (%d bytes)", len(image_bytes))
 
     # Step 2 — analyze
-    t0 = time.time()
     logger.info("Step 2: analyzing photo (aspect_ratio=%s)", aspect_ratio)
     preview_args = {"precomputed_preview": precomputed_preview} if precomputed_preview is not None else {}
     if analysis_user_requests is not None:
@@ -274,6 +275,16 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
         prepared, preflight = _prepare_analysis_preview(image_bytes, analysis_model, precomputed_preview)
         preview_args['precomputed_preview'] = prepared
         t0 = time.time()  # Stage 2.0 usage/timing is recorded separately.
+    # Call 0 describes the photo first; Call A builds on its facts instead of writing them again.
+    route, route_usage, route_seconds = None, None, 0.0
+    if config.ENABLE_PHOTO_ROUTER:
+        t_route = time.time()
+        route, route_usage = run_call0(image_bytes)
+        route_seconds = time.time() - t_route
+        logger.info("Step 2.0 photo route: %s (%.2fs)", route.get("main_category") or route["state"], route_seconds)
+        if route["state"] == "ready":
+            preview_args["photo_facts"] = route
+    t0 = time.time()
     analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options, analysis_model=analysis_model, **preview_args)
     analysis = sanitize_body_reshape_analysis(analysis)
     if not body_reshape_enabled():
@@ -307,7 +318,8 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
 
     analysis_prompts = {
         "photo_analysis": build_overall_analysis_instruction(
-            aspect_ratio, source_size=get_image_dimensions(image_bytes)),
+            aspect_ratio, source_size=get_image_dimensions(image_bytes),
+            **({"photo_facts": preview_args["photo_facts"]} if "photo_facts" in preview_args else {})),
     }
     for skill in ANALYSIS_SKILLS:
         analysis_prompts.update(skill.prompt_records(analysis))
@@ -324,6 +336,12 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     if preflight is not None:
         analysis['timings']['Stage 2.0 - subject_preview'] = preflight['timing']['worker_seconds']
         analysis['usage']['Stage 2.0 - subject_preview'] = preflight['usage']
+    if route is not None:
+        analysis["photo_route"] = route
+        analysis_prompts["photo_route"] = ROUTER_INSTRUCTION
+        analysis["timings"]["Step 2.0 - photo_route"] = route_seconds
+        if route_usage:
+            analysis["usage"]["Step 2.0 - photo_route"] = route_usage
     # Carry the edit-stage toggles on the analysis so the two-stage flow and
     # debug-UI /rerun both hand them back automatically, with the stored
     # analysis recording which corrections that run allowed.

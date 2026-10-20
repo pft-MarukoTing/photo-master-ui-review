@@ -13308,7 +13308,7 @@
   // pixel is touched) vs 修圖 (the actual edit call plus its repair/QA
   // follow-ups) for #cost-modal. Step 4 (crop_validation) never appears here
   // -- it's deterministic geometry with no model call, so it never has usage.
-  const ANALYSIS_COST_STAGES = ["Step 2 - photo_analysis", "Step 2b - photo_reframe", "Step 3 - user_instruction_review"];
+  const ANALYSIS_COST_STAGES = ["Step 2.0 - photo_route", "Step 2 - photo_analysis", "Step 2b - photo_reframe", "Step 3 - user_instruction_review"];
   const EDIT_COST_STAGES = ["Step 5 - image_edit", "Step 5b - gaze_repair_pass", "Step 6 - quality_check"];
 
   // Raw model ids (MODEL_PRICING/entry.model's own id, e.g. "gpt-5.6-luna")

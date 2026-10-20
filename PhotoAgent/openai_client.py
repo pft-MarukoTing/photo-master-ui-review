@@ -36,6 +36,8 @@ from prompts import (
     REFRAME_RESPONSE_SCHEMA,
     build_reframe_instruction,
     build_overall_analysis_instruction,
+    CALL0_FIELDS,
+    without_call0_fields,
     expand_subject_boxes_to_contain_faces,
     style_option_entries,
 )
@@ -421,10 +423,12 @@ class SubjectRosterError(ValueError):
     """Never send an unvalidated fixed-roster result to person feature passes."""
 
 
-def _analyze_overall_fixed(content, analysis_model, context):
+def _analyze_overall_fixed(content, analysis_model, context, *, photo_facts=None):
     """2.1 fills fixed ID slots; an omission never becomes a smaller roster."""
     from photo_agent import ab_preview
     schema = ab_preview.fixed_schema(context['preview_people'])
+    if photo_facts:
+        schema = without_call0_fields(schema)
     actual = list(content) + [{'type': 'input_text', 'text': ab_preview.FIXED_INSTRUCTION
         + json.dumps(context['preview_people'], ensure_ascii=False, separators=(',', ':'))}]
     usages = []
@@ -493,7 +497,7 @@ def _fixed_person_crop_items(image_bytes, context, crops):
     return items
 
 
-def _analyze_overall_with_roster(content, analysis_model, roster=None, *, preview_people=None):
+def _analyze_overall_with_roster(content, analysis_model, roster=None, *, preview_people=None, photo_facts=None):
     """Original overall schema/prompt, plus roster data; one bounded repair.
 
     The repair returns ONLY model-authored subjects/reviews. All photographic
@@ -520,6 +524,9 @@ def _analyze_overall_with_roster(content, analysis_model, roster=None, *, previe
         diagnostics["schema_unchanged"] = False
         actual_content.append({"type": "input_text", "text": PREVIEW_PERSON_HANDOFF_INSTRUCTION
                                + json.dumps(preview_people, ensure_ascii=False, separators=(",", ":"))})
+    if photo_facts:
+        schema = without_call0_fields(schema)
+        diagnostics["schema_unchanged"] = False
     from photo_agent.subject_preview import validate_preview_person_bindings
     def validate_result(value):
         mapping = validate_fixed_subject_roster(roster, value) if roster is not None else None
@@ -580,7 +587,7 @@ def _analyze_overall_with_roster(content, analysis_model, roster=None, *, previe
     return overall, usages, diagnostics, bindings
 
 
-def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL, *, precomputed_preview=None, analysis_user_requests=None):
+def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL, *, precomputed_preview=None, analysis_user_requests=None, photo_facts=None):
     """The analysis flow for every analysis model. Call A does overall photo
     direction and subject identification; each analysis skill the router
     selects from that result then runs its own passes (see
@@ -621,7 +628,8 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
 
     content_a = [
         {"type": "input_text", "text": build_overall_analysis_instruction(
-            aspect_ratio, source_size=get_image_dimensions(image_bytes))},
+            aspect_ratio, source_size=get_image_dimensions(image_bytes),
+            **({"photo_facts": photo_facts} if photo_facts else {}))},
         {"type": "input_image", "image_url": data_url},
         *face_crop_items,
     ]
@@ -629,13 +637,15 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
         content_a.append({'type':'input_text', 'text':intent_context})
     if fixed_context is not None:
         overall_analysis, overall_usages, handoff_diagnostics, bindings = _analyze_overall_fixed(
-            content_a, analysis_model, fixed_context)
+            content_a, analysis_model, fixed_context, photo_facts=photo_facts)
     else:
         overall_analysis, overall_usages, handoff_diagnostics, bindings = _analyze_overall_with_roster(
-            content_a, analysis_model, roster,
+            content_a, analysis_model, roster, photo_facts=photo_facts,
             **({"preview_people": precomputed_preview["preview_people"]}
                if precomputed_preview is not None and precomputed_preview["format_version"] == 2 else {}))
     overall_analysis = _stamp_local_face_debug_fields(overall_analysis, face_crops, bindings=bindings)
+    if photo_facts:
+        overall_analysis.update({field: photo_facts[field] for field in CALL0_FIELDS})
     if precomputed_preview is not None:
         if precomputed_preview["format_version"] == 2:
             from photo_agent.subject_preview import validate_preview_person_bindings
@@ -718,9 +728,9 @@ def reframe_composition(image_bytes: bytes, analysis: dict, aspect_ratio: str = 
     return reframe, usage, f"{before_photo}\n\n[photo]\n\n{after_photo}"
 
 
-def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL, *, precomputed_preview=None, analysis_user_requests=None):
+def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL, *, precomputed_preview=None, analysis_user_requests=None, photo_facts=None):
     return _analyze_photo_two_pass(image_bytes, aspect_ratio, advanced_options, analysis_model,
-                                   precomputed_preview=precomputed_preview,
+                                   precomputed_preview=precomputed_preview, photo_facts=photo_facts,
                                    **({"analysis_user_requests": analysis_user_requests} if analysis_user_requests else {}))
 
 
