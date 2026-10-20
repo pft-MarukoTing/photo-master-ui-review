@@ -552,6 +552,9 @@ function overviewStartOf(label: string): "analyze" | "render" | undefined {
 }
 // 總覽說的需求放進每張對話時，AI 在那張裡回的話。
 const OVERVIEW_NOTE_REPLY = "好，這句是在總覽說的，這張也會照著修。只想改這張的話，直接在這裡說。";
+// 單張對話裡不重播總覽那幾句，連續的收成這一則；說了什麼看底下的需求卡。
+const OVERVIEW_SUMMARY = "你在總覽提的需求，這張也會照著修，整理在下面。針對這張的改動，可以在這裡說。";
+const fromOverview = (t: Turn) => "ask" in t && t.ask.reply === OVERVIEW_NOTE_REPLY;
 
 // 「我的照片」每張的狀態：開始了照 session 裡真的跑到哪，還沒開始的看有沒有講過需求。
 function batchItemState(r: BatchRun | undefined, p: Photo | null, wished: boolean, failed = false): { key: string; text: string } {
@@ -4815,6 +4818,8 @@ function PreChat(props: {
   const last = log[log.length - 1];
   // 舊偵測流程保留原等待條件；2.0 預覽不阻擋正式分析。
   const held = busy || (scanning && !props.previewActive);
+  // 「照片選好了」那段開場白：舊偵測流程等掃描完才講，2.0 預覽一選好就講。
+  const greeted = !scanning || !!props.previewActive;
   // 送出前的最後一眼。對話往上捲是整段過程——被擋下來的句子、AI 回的話、設定
   // 卡夾在中間；這張只放真的會跟著進 session 的那段字，而且就擺在動作鍵正上方，
   // 要確認的東西跟要按下去的地方是同一處。跟 session 的個人化需求一樣是一整段，
@@ -4936,7 +4941,7 @@ function PreChat(props: {
             />
           </UserMsg>
 
-          {(!scanning || props.previewActive) && (
+          {greeted && (
           <AssistantMsg>
             <p class="chat-text">照片選好了。想怎麼修，直接打在下面的對話框告訴我。</p>
             {/* 底下那三顆鍵都只有兩四個字，差在哪得自己猜。這裡一顆補一句：分
@@ -4956,7 +4961,15 @@ function PreChat(props: {
           件事、AI 又回了什麼，往上捲等於看到一份被修過的紀錄。AI 收不下的那
           句，它自己的回覆就說了為什麼；使用者自己拿掉的，底下接一句 AI 的回
           話。兩種都不動使用者打的字。 */}
-      {log.map((t, i) => {
+      {/* 開場白還在等掃描時，後面的對話也先不出來：總覽發過來的那句會比開場白
+          早到，不擋的話切過來時它先整串出現，開場白掃完才補打在它上面。 */}
+      {greeted && log.map((t, i) => {
+        // 總覽發過來的句子：使用者那句不搬過來，連續幾句只在最後一句的位置總結一次。
+        if (fromOverview(t)) {
+          const shown = log.slice(i + 1).find((x) => !(fromOverview(x) && "part" in x && x.part === "user"));
+          if (("part" in t && t.part === "user") || (shown && fromOverview(shown))) return null;
+          return <AssistantMsg key={`overview-${i}`}><p class="chat-text">{OVERVIEW_SUMMARY}</p></AssistantMsg>;
+        }
         if ("previewReply" in t && t.previewReply.kind === "notes") {
           const latest = displayEvents.filter(e => e.kind === "notes").slice(-1)[0];
           const editable = t.previewReply.id === latest?.id && !pending && kept &&
@@ -5034,7 +5047,7 @@ function PreChat(props: {
           </div>
         );
       })}
-      {source && (!scanning || props.previewActive) && !pending && !(last && "ask" in last && (last.ask.asked || last.ask.offered)) && <div class="prechat-actions">{actions}</div>}
+      {source && greeted && !pending && !(last && "ask" in last && (last.ask.asked || last.ask.offered)) && <div class="prechat-actions">{actions}</div>}
 
       {/* 需求要怎麼套用，只有使用者自己知道：「把背景換成海邊」可能是只想換
           背景，也可能是想順便整張修好。兩條路一樣重，不替人預設。 */}

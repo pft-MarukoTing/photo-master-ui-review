@@ -61,7 +61,10 @@ function typeMessages(msgs: HTMLElement[]): () => void {
     m.classList.add("is-entering");
     m.addEventListener("animationend", () => m.classList.remove("is-entering"), { once: true });
     items = [];
+    blocks = [];
     rowRevealUntil = 0;
+    // 排在 AI 訊息後面的使用者泡泡沒有字要打，輪到時直接進場。
+    if (m.classList.contains("is-user")) return;
     m.querySelectorAll("[data-chat-typewriter-group]:has(.subject-preview-person)").forEach(group => group.classList.add("is-typewriter-pending"));
     m.querySelectorAll(".subject-preview-person").forEach(row => row.classList.add("is-typewriter-pending"));
     const body = m.querySelector(".chat-body");
@@ -270,7 +273,12 @@ export function ChatPanel(props: {
     if (fresh.length && fresh.length < msgs.length && (props.live ?? userActed)) {
       typing.current?.();
       typing.current = null;
-      const ai = fresh.filter((m) => !m.classList.contains("is-user") && (!m.hasAttribute("data-chat-atomic") || m.hasAttribute("data-chat-typewriter"))) as HTMLElement[];
+      const typed = (m: Element) => !m.classList.contains("is-user") && (!m.hasAttribute("data-chat-atomic") || m.hasAttribute("data-chat-typewriter"));
+      // 使用者的泡泡本來不用等；但排在要打字的 AI 訊息後面的（總覽發過來的那
+      // 句，切到這張時跟開場白一起進來）要照順序排，不然它先冒出來，開場白才
+      // 打在它上面。
+      const first = fresh.findIndex(typed);
+      const ai = (first < 0 ? [] : fresh.slice(first).filter((m) => typed(m) || m.classList.contains("is-user"))) as HTMLElement[];
       if (ai.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) typing.current = typeMessages(ai);
       else ai.forEach(finishMessage);
     } else if (fresh.length) {
