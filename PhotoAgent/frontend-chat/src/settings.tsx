@@ -1,7 +1,7 @@
 import { createPortal } from "preact/compat";
-import { useEffect } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { Capabilities, Plan } from "./types";
-import { renderOptionLabel } from "./util";
+import { FIXED_RATIO_RE, renderOptionLabel } from "./util";
 
 export type Settings = Pick<Plan, "analysis_model" | "render_option" | "aspect_ratio" | "advanced_options" | "detailed_explanation">;
 
@@ -74,6 +74,145 @@ export function settingsChanges(caps: Capabilities, from: Settings, to: Settings
   return out;
 }
 
+// 長寬比的選項跟面板模式（frontend/app.js renderAspectRatioList）同一個樣子：「AI 建議」
+// 「原圖比例」兩張卡，下面一排照比例畫出外框、由直到橫排好的固定比例。
+// 選項的說明只有這兩張有；固定比例的用途寫在 capabilities 的名字括號裡。
+const AR_NOTES: Record<string, string> = { auto: "依照片內容自動決定", original: "不改變照片長寬" };
+
+function ratioParts(label: string): { name: string; hint?: string } {
+  const m = /^(.+?)（(.+)）$/.exec(label);
+  return m ? { name: m[1], hint: m[2] } : { name: label };
+}
+
+function RatioIcon({ value, size }: { value?: string; size: number }) {
+  let body;
+  if (value && FIXED_RATIO_RE.test(value)) {
+    const [w0, h0] = value.split(":").map(Number);
+    const k = 18 / Math.max(w0, h0);
+    const w = w0 * k;
+    const h = h0 * k;
+    body = <rect x={(24 - w) / 2} y={(24 - h) / 2} width={w} height={h} rx="2" />;
+  } else if (value === "original") {
+    body = (
+      <>
+        <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+        <circle cx="9" cy="10" r="1.6" />
+        <path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5" />
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <path d="M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7-4.7-1.8 4.7-1.8z" />
+        <path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
+      </>
+    );
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+      {body}
+    </svg>
+  );
+}
+
+// 鈕長得跟旁邊的 select 一樣；選單另開視窗（跟 header「設定」同一個外框），
+// 手機上才有足夠的地方讓每個比例都好點。選了就關。
+export function AspectRatioField({
+  caps,
+  value,
+  onChange,
+  disabled,
+  class: cls,
+}: {
+  caps: Capabilities;
+  value?: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  class?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const isOpen = open && !disabled;
+  useEffect(() => {
+    if (!isOpen) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, [isOpen]);
+  const choices = caps.render.aspect_ratios;
+  const current = choices.find((a) => a.value === value) || choices[0];
+  const option = (a: (typeof choices)[number]) => {
+    const fixed = FIXED_RATIO_RE.test(a.value);
+    const { name, hint } = ratioParts(a.label);
+    const note = fixed ? hint : AR_NOTES[a.value];
+    return (
+      <label class={fixed ? "chat-ar-shape" : "chat-ar-smart"}>
+        <input
+          type="radio"
+          name="chat-aspect-ratio"
+          value={a.value}
+          checked={a.value === current?.value}
+          onChange={() => {
+            onChange(a.value);
+            setOpen(false);
+          }}
+        />
+        <RatioIcon value={a.value} size={fixed ? 30 : 22} />
+        <span class="chat-ar-text">
+          <b>{name}</b>
+          {note && <small>{note}</small>}
+        </span>
+      </label>
+    );
+  };
+  const smart = choices.filter((a) => !FIXED_RATIO_RE.test(a.value));
+  const shapes = choices.filter((a) => FIXED_RATIO_RE.test(a.value));
+  return (
+    <>
+      <div class={cls || "chat-field"}>
+        <span class="chat-meta">長寬比</span>
+        <button
+          type="button"
+          class="quality-select chat-ar-trigger"
+          disabled={disabled}
+          aria-expanded={isOpen}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <RatioIcon value={current?.value} size={15} />
+          <span>{current ? ratioParts(current.label).name : ""}</span>
+        </button>
+      </div>
+      {isOpen &&
+        createPortal(
+          <div class="error-modal" id="chat-aspect-modal">
+            <div class="error-modal-backdrop" onClick={() => setOpen(false)} />
+            <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="chat-aspect-title">
+              <div class="error-modal-hdr">
+                <span id="chat-aspect-title" class="settings-modal-title">長寬比</span>
+                <button class="error-modal-close" type="button" aria-label="關閉" onClick={() => setOpen(false)}>
+                  ×
+                </button>
+              </div>
+              <div class="chat-ar-panel" role="radiogroup" aria-labelledby="chat-aspect-title">
+                {smart.length > 0 && <div class="chat-ar-smart-row">{smart.map(option)}</div>}
+                {shapes.length > 0 && (
+                  <>
+                    <div class="chat-ar-scale" aria-hidden="true">
+                      <span>← 直式</span>
+                      <span>方形</span>
+                      <span>橫式 →</span>
+                    </div>
+                    <div class="chat-ar-shape-row">{shapes.map(option)}</div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 export function SettingsEditor({
   caps,
   settings,
@@ -107,14 +246,7 @@ export function SettingsEditor({
             ))}
           </select>
         </label>
-        <label class="chat-field">
-          <span class="chat-meta">長寬比</span>
-          <select class="quality-select" value={settings.aspect_ratio} onChange={(e) => set({ aspect_ratio: val(e) })}>
-            {caps.render.aspect_ratios.map((a) => (
-              <option value={a.value}>{a.label}</option>
-            ))}
-          </select>
-        </label>
+        <AspectRatioField caps={caps} value={settings.aspect_ratio} onChange={(aspect_ratio) => set({ aspect_ratio })} />
       </div>
       <div class="chat-settings-portrait">
         <span class="chat-meta">人像修正</span>

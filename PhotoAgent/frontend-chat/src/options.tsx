@@ -8,6 +8,7 @@ import { urls } from "./api";
 import { fillNoteBox, noteBoxKeys, promptFaces, promptSections, PromptEditor, readPromptBox, type FaceRef } from "./chat";
 import { FACE_CATEGORIES, faceEntries, LEVEL_OPTIONS, POSE_FACE_RULES, poseFacePatch, type FaceEntry, type FaceIssue, type PoseFaceResult } from "./face";
 import { Icon } from "./icons";
+import { AspectRatioField } from "./settings";
 import type { Analysis, Capabilities, FaceOverride, Plan } from "./types";
 import { aspectLabel, FIXED_RATIO_RE, recipeItems, REFRAME_RE, renderOptionLabel } from "./util";
 
@@ -652,14 +653,13 @@ function SettingsOptions({ plan, caps, busy, hot, onPatch }: Body) {
             ))}
           </select>
         </label>
-        <label class={field("aspect_ratio")}>
-          <span class="chat-meta">長寬比</span>
-          <select class="quality-select" value={plan.aspect_ratio} disabled={busy} onChange={(e) => onPatch({ aspect_ratio: val(e) })}>
-            {caps.render.aspect_ratios.map((a) => (
-              <option value={a.value}>{a.label}</option>
-            ))}
-          </select>
-        </label>
+        <AspectRatioField
+          caps={caps}
+          class={field("aspect_ratio")}
+          value={plan.aspect_ratio}
+          disabled={busy}
+          onChange={(aspect_ratio) => onPatch({ aspect_ratio })}
+        />
       </div>
       <p class="chat-note">換長寬比會馬上依新的長寬比重新構圖，畫面建議裡的構圖也會跟著換。</p>
       {caps.advanced_options.length > 0 && (

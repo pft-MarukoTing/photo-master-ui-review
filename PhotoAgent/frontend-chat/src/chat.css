@@ -545,6 +545,40 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .chat-settings-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-3)}
 .chat-field{display:flex;flex-direction:column;gap:var(--sp-1);min-width:0}
 .chat-field select{width:100%;font-size:var(--chat-fs-md);padding-top:var(--sp-2);padding-bottom:var(--sp-2)}
+/* 長寬比：選項跟面板模式的 .aspect-ratio-picker 同一套（frontend/index.html）。鈕長得
+   跟旁邊的 select 一樣，選單開在 header「設定」那種視窗裡。 */
+.chat-ar-trigger{display:flex;align-items:center;gap:var(--sp-2);width:100%;min-width:0;font-size:var(--chat-fs-md);text-align:left;
+  padding-top:var(--sp-2);padding-bottom:var(--sp-2);padding-right:30px;cursor:pointer}
+.chat-ar-trigger svg{flex-shrink:0;color:var(--accent)}
+.chat-ar-trigger span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#chat-aspect-modal .error-modal-box{width:min(580px,calc(100vw - 24px));max-width:none;box-sizing:border-box}
+.chat-ar-panel{display:flex;flex-direction:column;gap:12px;container-type:inline-size;margin-top:var(--sp-3)}
+.chat-ar-panel label{position:relative;display:flex;cursor:pointer}
+.chat-ar-panel input{position:absolute;opacity:0;width:0;height:0}
+.chat-ar-smart-row,.chat-ar-shape-row{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+.chat-ar-smart-row{gap:8px}
+.chat-ar-shape-row{gap:4px}
+.chat-ar-smart{align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--border-2);border-radius:10px;background:var(--card-2);
+  transition:border-color .15s,background .15s}
+.chat-ar-smart svg{flex-shrink:0;color:var(--accent)}
+.chat-ar-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.chat-ar-text b{font-size:14px;color:var(--text)}
+.chat-ar-text small{font-size:12px;color:var(--text-2)}
+.chat-ar-scale{display:flex;justify-content:space-between;margin-bottom:-6px;padding:0 4px;font-size:12px;font-weight:700;color:var(--text-2)}
+.chat-ar-shape{flex-direction:column;align-items:center;gap:4px;padding:8px 2px 7px;border:1.5px solid transparent;border-radius:10px;color:var(--text-2);
+  transition:border-color .15s,background .15s}
+.chat-ar-shape .chat-ar-text{align-items:center;text-align:center}
+.chat-ar-shape .chat-ar-text b{font-size:13px;font-variant-numeric:tabular-nums}
+.chat-ar-shape .chat-ar-text small{font-size:10.5px;line-height:1.25}
+.chat-ar-smart:hover,.chat-ar-shape:hover{background:rgba(var(--on-surface-rgb),.06)}
+.chat-ar-panel label:has(input:checked){border-color:var(--accent);background:rgba(var(--accent-rgb),.12)}
+.chat-ar-shape:has(input:checked) svg,.chat-ar-panel label:has(input:checked) b{color:var(--accent)}
+.chat-ar-panel label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+@container (max-width:500px){
+  .chat-ar-scale{display:none}
+  .chat-ar-shape-row{grid-auto-flow:row;grid-template-columns:repeat(5,minmax(0,1fr))}
+}
+@container (max-width:340px){.chat-ar-smart-row{grid-auto-flow:row}}
 .chat-settings-portrait{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2) var(--sp-4)}
 .chat-settings-portrait>.chat-meta{width:100%}
 /* Its own row, pulled up under the label it belongs to so the pair reads as
