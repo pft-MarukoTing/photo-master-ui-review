@@ -65,7 +65,7 @@ import {
   type Category,
   type Hot,
 } from "./options";
-import { defaultSettings, loadPrefs, PrefsModal, savePrefs, sameSettings, SettingsEditor, type Prefs, type Settings } from "./settings";
+import { defaultSettings, loadPrefs, PrefsModal, savePrefs, sameSettings, SettingsEditor, settingsChanges, settingsOf, type Prefs, type Settings } from "./settings";
 import type {
   Analysis,
   Capabilities,
@@ -156,10 +156,6 @@ type Note = {
   // (「褲子也是」→「把男孩的褲子也換成白色」).
   // `text` stays what was typed -- that is what the bubble shows.
   wish?: string;
-  // 這句說了比例（「做成限動」），「設定」的長寬比就照它改了。`ratioBack`：這句
-  // 後來不在了，長寬比也已經改回 AI 建議。
-  ratio?: string;
-  ratioBack?: boolean;
 };
 
 // 句子裡指人的那段拿掉，剩下要做的事：「把左側女孩的頭髮染成金髮」→「把頭髮染成金髮」。
@@ -287,14 +283,22 @@ function conversation(ns: Note[], events: PreviewReplyEvent[] = []): Turn[] {
   return chronological.sort((a, b) => a.order - b.order || a.index - b.index).map(x => x.turn);
 }
 
+// 上傳頁／總覽打的一句裡，設定做得到的部分（長寬比、人像修正開關）。
+function withReviewSettings(s: Settings, r: { aspect_ratio?: string; advanced_options?: { [key: string]: boolean } }): Settings {
+  return {
+    ...s,
+    ...(r.aspect_ratio ? { aspect_ratio: r.aspect_ratio } : {}),
+    ...(r.advanced_options ? { advanced_options: { ...s.advanced_options, ...r.advanced_options } } : {}),
+  };
+}
+
 // 使用者從清單裡拿掉需求，AI 就回一句。把使用者打的字劃掉是在改畫面，回話才
 // 是在對話——上面那句「我記下來了」還在原地，是真的講過的；底下這句接著說現在
 // 不算數了，兩句合起來才是完整的經過。
 function goneReply(t: { gone: Note[]; left: number }) {
   const what = `「${t.gone[0].dropped?.text || t.gone[0].withdrawalText || wishText(t.gone[0])}」`;
-  const back = t.gone.some((n) => n.ratioBack) ? "長寬比也改回「AI 建議」了。" : "";
-  if (t.gone.length > 1) return `好，個人化需求都清掉了，美化時就不另外加了。${back}`;
-  return t.left ? `好，${what}就不做了，其他的照舊。${back}` : `好，${what}就不做了，目前沒有其他個人化需求。${back}`;
+  if (t.gone.length > 1) return "好，個人化需求都清掉了，美化時就不另外加了。";
+  return t.left ? `好，${what}就不做了，其他的照舊。` : `好，${what}就不做了，目前沒有其他個人化需求。`;
 }
 
 // How a person is written into plan.user_prompt. Nothing has been analyzed yet,
@@ -526,7 +530,8 @@ type OverviewTurn =
   // gone 是之後被撤回或被新的一句取代，已經從每張拿掉了。
   | { id: number; kind: "wish"; text: string; count: number; skipped: number;
       pending?: boolean; kept?: boolean; reply?: string; options?: string[]; offer?: boolean; line?: string; gone?: boolean }
-  | { id: number; kind: "settings"; settings?: Settings; model?: boolean }
+  // from 是打開時的設定，之後跟 settings 比，講這一輪改了什麼。
+  | { id: number; kind: "settings"; settings?: Settings; from?: Settings; model?: boolean }
   | { id: number; kind: "ask"; overwrite?: boolean; label?: string }
   | { id: number; kind: "start"; mode: "analyze" | "render"; count: number; keys: string[]; overwrite?: boolean; label?: string };
 // 總覽裡 AI 提議開始時給的兩個答案，點了就是按總覽的那顆鍵。
@@ -904,19 +909,6 @@ export function App() {
   const sourceIdentity = useRef(selectionIdentity);
   sourceIdentity.current = selectionIdentity;
   const reviewedSource = useRef(preFull);
-  // 長寬比是跟著說了比例的那句需求改的，那句不在個人化需求裡了（拿掉、清掉，或
-  // 編輯時刪掉），長寬比就回到 AI 建議。之後使用者在「設定」自己改過的不動。
-  useEffect(() => {
-    if (!caps) return;
-    const prompt = notesPrompt(notes, segEdits);
-    const live = (n: Note) => liveNote(n) && noteParts(n).some((x) => !!x.text && prompt.includes(x.text));
-    const gone = notes.filter((n) => n.ratio && !n.ratioBack && !live(n));
-    if (!gone.length) return;
-    const current = settings?.aspect_ratio;
-    const back = gone.some((n) => n.ratio === current) && !notes.some((n) => n.ratio === current && live(n));
-    setNotes((ns) => ns.map((n) => (!gone.includes(n) ? n : back && n.ratio === current ? { ...n, ratioBack: true } : { ...n, ratio: undefined })));
-    if (back) setSettings((s) => s && { ...s, aspect_ratio: caps.render.defaults.aspect_ratio });
-  }, [notes, segEdits]);
   useEffect(() => {
     if (restoring.current !== null && restoring.current === preFull) {
       restoring.current = null;
@@ -1151,6 +1143,14 @@ export function App() {
     setBatchFailed(failed);
     setRenderSent(new Set());
     setAllHold(null);
+    // 總覽的「設定」從這份開：照還沒美化的那張現在的設定，都美化過了就用預設。沒有這份，「設定」按了不會有反應。
+    const open = Object.values(live).find((p) => !p.active_version);
+    const c = capsRef.current;
+    const base = open ? settingsOf(open.plan) : c ? defaultSettings(c, prefs || undefined) : null;
+    if (base) {
+      setAllSettings(base);
+      setSettings(base);
+    }
   }
 
   // 從面板模式切過來時，把那邊還沒美化的調整寫進這張照片的 plan（handoff.ts）。
@@ -1720,7 +1720,8 @@ export function App() {
     if (!batch) return;
     // 換了一批（或剛建好這批）就從零算起，這次才開始跑的照樣記。
     const same = was.epoch === batchEpoch.current;
-    const fresh = runningKeys.filter((k) => !same || !was.keys.includes(k));
+    // 分析好的那張換了長寬比，後端會重新構圖，那段也算在跑，但不是新開始的，不另外講一句「開始分析了」。
+    const fresh = runningKeys.filter((k) => (!same || !was.keys.includes(k)) && livePhoto(k)?.status !== "reframing");
     if (fresh.length) {
       const verbs = new Set(fresh.map((k) => {
         const p = livePhoto(k);
@@ -2183,13 +2184,15 @@ export function App() {
       const line = r.line && r.line !== text ? r.line : undefined;
       // 回話照後端的：先回應這句，再講會套到哪幾張、下一步按哪顆。
       done({ ...spreadWish(line || text), kept: true, line, reply: r.reply || undefined });
-      if (r.aspect_ratio && allSettings) overviewSettings({ ...allSettings, aspect_ratio: r.aspect_ratio });
     } else if (r.start) {
       // 「幫我美化」就是按那顆：接下來那則「開始了」會講，這裡不多回一句。
       done({ kept: false, reply: "" });
     } else {
       done({ kept: false, reply: r.reply || "好，那就先不加這句。", options: r.ask || r.offer ? r.options || [] : [], offer: !!r.offer });
     }
+    // 說了比例、或開關人像修正的（「做成限動」「閉眼不用修」）改總覽的設定；只講這些的不進清單。
+    if (allSettings && (r.aspect_ratio || r.advanced_options))
+      overviewSettings(withReviewSettings(allSettings, r));
     if (r.start) overviewStart(r.start);
   }
   // 一句需求發到每張還沒美化的照片：還沒開始的進它的草稿，開始過、還沒美化的接在它的個人化需求後面。
@@ -2251,7 +2254,7 @@ export function App() {
     keepOwn.current = new Set();
     // 分析引擎只有還沒開始的用得到；開的當下沒有這種照片就不擺，之後回頭看也照當時的。
     const model = !!batch?.some((s) => unstarted(sourceSrc(s)));
-    setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "settings", settings: allSettings, model }]);
+    setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "settings", settings: allSettings, from: allSettings, model }]);
   }
   // 美化用得到的那幾項（分析引擎分析完就用不到了）。人像修正補上預設值，沒寫的跟寫了預設的才算一樣。
   const renderPart = (x: Partial<Settings>) => ({
@@ -2532,7 +2535,6 @@ export function App() {
           // worn-object edits still need the regular identity bridge.
           verbatim: !!r.request_semantics?.length && r.request_semantics.every(s =>
             (s.target_kind === "image" || s.target_kind === "region" || s.feature === "text_overlay") && !s.owner_required) } : {}),
-        ...(r.accepted && r.aspect_ratio ? { ratio: r.aspect_ratio } : {}),
       };
       // 跟前面的需求衝突（同一個人、同一件事不能兩個都做）：模型把衝突的那幾段
       // 拿掉被這句取代的部分，跟使用者手改那段字走同一條路；這句自己接在它那段
@@ -2551,8 +2553,8 @@ export function App() {
           return next;
         });
       }
-      // 「做成限動」這種說了比例的需求，同步改「設定」的長寬比
-      if (r.aspect_ratio) { const ratio = r.aspect_ratio; setSettings((s) => s && { ...s, aspect_ratio: ratio }); }
+      // 「做成限動」「閉眼不用修」這種設定做得到的，同步改「設定」；只講這些的不進清單。
+      if (r.aspect_ratio || r.advanced_options) setSettings((s) => s && withReviewSettings(s, r));
       // 「幫我美化」「幫我分析」就是底下那兩顆鍵，照按：已經收下的需求一起帶進去。
       if (r.start) startSession(r.start, laterNote(base), [...base, settled]);
       return r.accepted ? [...base, settled] : null;
@@ -3227,7 +3229,8 @@ export function App() {
         ? `還有 ${notYet} 張沒開始，可以按${btn}的「${labels.analyze}」先看我打算怎麼修，或按${btn}的「${labels.render}」直接美化，也可以從${where}選取照片個別調整。`
         // 在跑的以外，分析好還沒美化的也給下一步，不用等前面那幾張跑完。
         : analyzed
-          ? `另外 ${analyzed} 張分析好了，還沒美化，按${btn}的「${labels.render}」就會接著美化，也可以從${where}選取照片個別調整。`
+          // 接在「開始了」後面才說「另外」；單獨一則（例如設定改完）先講還有幾張在跑。
+          ? `${lastTurn?.kind === "running" ? "另外 " : `${running} 張還在處理，`}${analyzed} 張分析好了，還沒美化，按${btn}的「${labels.render}」就會接著美化，也可以從${where}選取照片個別調整。`
         // 剛說完「開始了」，那句已經講過跑完會說、去哪看進度，不再重複一次。
         : lastTurn?.kind === "running" || lastTurn?.kind === "start"
           ? ""
@@ -3304,13 +3307,10 @@ export function App() {
     const introPending = intro ? intro.pending : pending;
     const introBtn = (intro ? intro.chips : chipsNow) ? "下面" : spot;
     const introLive = !hint && overview.every((t) => t === first && t.kind === "upload");
-    const settingsLine = (x?: Settings, model = true) => x && (
-      <div class="chat-card chat-settings-history"><span class="chat-meta">當時的設定</span>
-        <p>{model ? `${x.analysis_model} · ` : ""}{x.render_option} · {x.aspect_ratio}</p>
-        <p>詳細解說：{x.detailed_explanation ? "開啟" : "關閉"}</p>
-        {caps && <p>{caps.advanced_options.map((o) => `${o.label}：${x.advanced_options?.[o.key] ?? o.default ? "開啟" : "關閉"}`).join(" · ")}</p>}
-      </div>
-    );
+    const settingsSaid = (t: Extract<OverviewTurn, { kind: "settings" }>) => {
+      const changed = caps && t.from && t.settings ? settingsChanges(caps, t.from, t.settings, t.model) : [];
+      return changed.length ? `好，${changed.join("、")}，會套用到每張還沒美化的照片。` : "設定沒有改動。";
+    };
     // 總覽：沒有中間那格預覽，對話直接佔滿。桌機的照片和「全部…」都在左邊「我的照片」，
     // 對話上面不再擺一份；「我的照片」收成抽屜時，才在對話上面放成果格。
     const overviewPanel = !source && (
@@ -3462,14 +3462,17 @@ export function App() {
           if (t.kind === "settings") return (
             <div key={t.id} class="settings-turn">
               <UserMsg><ClickBubble icon="tune" label="設定" /></UserMsg>
-              <AssistantMsg>
-                <p class="chat-text">{t.model
-                  ? "好，調整下面的設定，會套用到每張還沒美化的照片；分析引擎只有還沒分析的用得到。"
-                  : "好，調整下面的設定，會套用到每張還沒美化的照片。"}</p>
-                {latest && caps && settings
-                  ? <SettingsEditor caps={caps} settings={settings} onChange={overviewSettings} hideModel={!t.model} />
-                  : settingsLine(t.settings, t.model)}
-              </AssistantMsg>
+              {latest && caps && settings ? (
+                <AssistantMsg>
+                  <p class="chat-text">{t.model
+                    ? "好，調整下面的設定，會套用到每張還沒美化的照片；分析引擎只有還沒分析的用得到。"
+                    : "好，調整下面的設定，會套用到每張還沒美化的照片。"}</p>
+                  <SettingsEditor caps={caps} settings={settings} onChange={overviewSettings} hideModel={!t.model} />
+                </AssistantMsg>
+              ) : (
+                // 這輪過了就不再擺設定卡，用一句話講改了什麼。
+                <AssistantMsg><p class="chat-text">{settingsSaid(t)}</p></AssistantMsg>
+              )}
             </div>
           );
           if (t.kind === "ask") return (
@@ -4750,6 +4753,13 @@ function PreChat(props: {
 
   const settingsTurns = displayEvents.filter(e => e.kind === "settings");
   const activeSettingsId = settingsTurns[settingsTurns.length - 1]?.id;
+  // 過了的那輪不再擺設定卡，用一句話講改了什麼：打開時的設定跟下一輪打開時（最後一輪就是現在的）比。
+  const settingsSaid = (id: string, from?: Settings) => {
+    const i = settingsTurns.findIndex(e => e.id === id);
+    const to = settingsTurns[i + 1]?.settings || props.settings;
+    const changed = from && to ? settingsChanges(caps, from, to) : [];
+    return changed.length ? `好，${changed.join("、")}。` : "設定沒有改動。";
+  };
   // 動作鍵跟在目前對話後面；沒有模型回覆的確認文字屬於原本那一輪。
   const last = log[log.length - 1];
   // 舊偵測流程保留原等待條件；2.0 預覽不阻擋正式分析。
@@ -4912,16 +4922,12 @@ function PreChat(props: {
         const asking = "ask" in t && !!(t.ask.asked || t.ask.offered);
         if ("previewReply" in t && t.previewReply.kind === "settings") return <div key={t.previewReply.id} class="settings-turn">
           <UserMsg><ClickBubble icon="tune" label="設定" /></UserMsg>
-          <AssistantMsg>
-            <p class="chat-text">{t.previewReply.text}</p>
-            {t.previewReply.id === activeSettingsId
-              ? <SettingsEditor caps={caps} settings={props.settings} onChange={props.onSettings} />
-              : <div class="chat-card chat-settings-history"><span class="chat-meta">當時的設定</span>
-                  <p>{t.previewReply.settings?.analysis_model} · {t.previewReply.settings?.render_option} · {t.previewReply.settings?.aspect_ratio}</p>
-                  <p>詳細解說：{t.previewReply.settings?.detailed_explanation ? "開啟" : "關閉"}</p>
-                  {t.previewReply.settings && <p>{caps.advanced_options.map(option => `${option.label}：${t.previewReply.settings?.advanced_options?.[option.key] ?? option.default ? "開啟" : "關閉"}`).join(" · ")}</p>}
-                </div>}
-          </AssistantMsg>
+          {t.previewReply.id === activeSettingsId
+            ? <AssistantMsg>
+                <p class="chat-text">{t.previewReply.text}</p>
+                <SettingsEditor caps={caps} settings={props.settings} onChange={props.onSettings} />
+              </AssistantMsg>
+            : <AssistantMsg><p class="chat-text">{settingsSaid(t.previewReply.id, t.previewReply.settings)}</p></AssistantMsg>}
         </div>;
         if ("previewReply" in t && t.previewReply.role === "user") return <AskBubble key={t.previewReply.id} text={t.previewReply.text} faces={[]} />;
         if ("previewReply" in t) return <AssistantMsg key={t.previewReply.id} atomic={t.previewReply.showPeople} animate={t.previewReply.showPeople}

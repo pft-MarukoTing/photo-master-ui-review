@@ -142,6 +142,8 @@ export const api = {
       persons?: string[];
       start?: "render" | "analyze";
       aspect_ratio?: string;
+      // 「閉眼不用修」：要撥的人像修正開關，{key: on}。
+      advanced_options?: { [key: string]: boolean };
       merged?: { section: number; text: string }[];
       withdrawn?: boolean;
     }>(

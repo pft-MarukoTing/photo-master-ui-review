@@ -57,6 +57,23 @@ export function sameSettings(a: Settings, b: Settings) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+// 這一輪改了哪幾項，用畫面上的名字講：「長寬比改成 16:9」「關掉閉眼修正」。
+export function settingsChanges(caps: Capabilities, from: Settings, to: Settings, model = true): string[] {
+  const label = (list: { label: string }[], pick: (x: any) => boolean, v?: string) => list.find(pick)?.label || v || "";
+  const out: string[] = [];
+  if (model && from.analysis_model !== to.analysis_model)
+    out.push(`分析引擎換成 ${label(caps.render.analysis_models, (m) => m.id === to.analysis_model, to.analysis_model)}`);
+  if (from.render_option !== to.render_option) out.push(`美化引擎換成 ${renderOptionLabel(caps, to.render_option)}`);
+  if (from.aspect_ratio !== to.aspect_ratio)
+    out.push(`長寬比改成 ${label(caps.render.aspect_ratios, (a) => a.value === to.aspect_ratio, to.aspect_ratio)}`);
+  for (const o of caps.advanced_options) {
+    const was = from.advanced_options?.[o.key] ?? o.default;
+    const now = to.advanced_options?.[o.key] ?? o.default;
+    if (was !== now) out.push(`${now ? "打開" : "關掉"}${o.label}`);
+  }
+  return out;
+}
+
 export function SettingsEditor({
   caps,
   settings,

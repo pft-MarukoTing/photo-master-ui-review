@@ -2514,10 +2514,16 @@ def prompt_review():
             # The line only took an earlier wish back: the page leaves it out of
             # the list, so the item is simply gone.
             out["withdrawn"] = True
-    if accepted and answer.get("aspect_ratio") in chat_assistant.REVIEW_RATIOS:
-        # A wish that names a shape (「做成限動」) sets the page's 長寬比 to it,
-        # so the analysis plans for that shape instead of picking its own.
+    if answer.get("aspect_ratio") in chat_assistant.REVIEW_RATIOS:
+        # A line that names a shape (「做成限動」) sets the page's 長寬比 to it,
+        # so the analysis plans for that shape instead of picking its own --
+        # also when that was all it said and nothing went into the list.
         out["aspect_ratio"] = answer["aspect_ratio"]
+    switches = {k: v for k, v in (answer.get("advanced_options") or {}).items()
+                if k in chat_assistant.REVIEW_SWITCHES and isinstance(v, bool)}
+    if switches:
+        # 「閉眼不用修」: the 人像修正 switches in 「設定」, not a line in the list.
+        out["advanced_options"] = switches
     return jsonify(out)
 
 

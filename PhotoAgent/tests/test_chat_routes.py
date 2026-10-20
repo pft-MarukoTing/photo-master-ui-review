@@ -1650,6 +1650,16 @@ class ChatRoutesTest(unittest.TestCase):
         res, _ = self.review("外套換成藍色", {"verdict": "keep", "reply": "", "line": "", "options": [], "aspect_ratio": ""})
         self.assertNotIn("aspect_ratio", res.get_json())
 
+    def test_a_line_only_about_settings_changes_them_without_a_wish(self):
+        res, _ = self.review("做成限動，閉眼不用修", {"verdict": "setting", "reply": "", "line": "", "options": [],
+                                                 "aspect_ratio": "9:16",
+                                                 "advanced_options": [{"key": "eye_closed_detection", "on": False}]})
+        out = res.get_json()
+        self.assertFalse(out["accepted"])
+        self.assertEqual(out["aspect_ratio"], "9:16")
+        self.assertEqual(out["advanced_options"], {"eye_closed_detection": False})
+        self.assertIn("關掉「閉眼修正」", out["reply"])
+
     # The sentence the user reads and the fate of the line are one answer, so
     # a model that forgets to say what to do with the line cannot leave it
     # saying 「好，這個我記下來了。」 over a line that was thrown away.
