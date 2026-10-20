@@ -59,6 +59,7 @@ import {
   CATEGORIES,
   categoryOf,
   OptionsCard,
+  pickedStyles,
   PROMPT_MAX,
   termOf,
   topicLead,
@@ -6593,12 +6594,15 @@ function SessionView(props: {
   ) : null;
 
   if (askMode && photo.status === "ready" && editing) {
-    // 跟上傳頁面那一題同一套字，兩邊才不會各講各的。
+    // 跟上傳頁面那一題同一套字，兩邊才不會各講各的。挑過風格的話，只照需求改
+    // 也會套上（見 build_style_override_block），說明裡要講到，不然像是風格會被丟掉。
+    const styles = pickedStyles(analysis, caps, photo.plan);
     working = (
       <AssistantMsg>
         <p class="chat-text">要整體美化，還是僅依你的需求修改？</p>
         <p class="chat-text chat-muted">
-          {WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。{ONLY_PROMPT_LABEL}：只動你寫到的地方，其他保持原樣。
+          {WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。{ONLY_PROMPT_LABEL}：
+          {styles.length ? `只動你寫到的地方，加上你挑的風格（${styles.join("、")}），其他保持原樣。` : "只動你寫到的地方，其他保持原樣。"}
         </p>
         {/* 問題的答案直接接在問題底下。 */}
         <div class="chat-choices">

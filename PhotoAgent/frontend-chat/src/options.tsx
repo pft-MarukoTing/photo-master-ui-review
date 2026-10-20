@@ -130,12 +130,7 @@ export function topicRecap(cat: Category, a: Analysis, caps: Capabilities, plan:
       return n ? `畫面建議會套用 ${n} 項。` : "畫面建議目前都不套用。";
     }
     case "style": {
-      const picked = styleGroups(a, caps)
-        .map((g) => {
-          const v = plan.style_options?.[g.id] || g.default;
-          return v === g.default ? "" : `${g.label}：${g.choices.find((c) => c.value === v)?.label || v}`;
-        })
-        .filter(Boolean);
+      const picked = pickedStyles(a, caps, plan);
       return picked.length ? `風格選了${picked.join("、")}。` : "風格維持照片原本的樣子。";
     }
     case "prompt":
@@ -143,6 +138,17 @@ export function topicRecap(cat: Category, a: Analysis, caps: Capabilities, plan:
     default:
       return "";
   }
+}
+
+// 挑了、跟預設不一樣的風格，一項一句「光線：逆光」。沒分析過（上傳時選只照需求改）
+// 就不分是不是人物，挑過的都算。
+export function pickedStyles(a: Analysis | null, caps: Capabilities, plan: Plan): string[] {
+  return (a ? styleGroups(a, caps) : caps.style_options)
+    .map((g) => {
+      const v = plan.style_options?.[g.id] || g.default;
+      return v === g.default ? "" : `${g.label}：${g.choices.find((c) => c.value === v)?.label || v}`;
+    })
+    .filter(Boolean);
 }
 
 // The category a plan field (a proposal change's `field`) is shown in.
