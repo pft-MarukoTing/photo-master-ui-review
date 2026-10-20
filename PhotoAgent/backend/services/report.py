@@ -25,6 +25,11 @@ REPORT_STATUSES = ("unread", "read", "solved")
 # gone. Keyed by job_id alone: the job is the same whoever reported it.
 REPORT_JOBS_KEY = "yce_ai:photoAgent:report_jobs"
 REPORT_JOB_FIELDS = ("status", "error", "error_message", "stage", "run_count", "runs_done", "0_res0", "srcKeys")
+# What a report filed from the chat UI (/chat/) carries about the conversation
+# on screen, so an admin can open that conversation itself. owner is whose
+# session it is -- the report's own "user" is whatever name the reporter typed
+# into the form, which need not be the account the session lives under.
+REPORT_CHAT_FIELDS = ("owner", "session_id", "photo_id", "batch_id")
 
 _ADMIN_USERS = {
     name.strip().lower()
@@ -33,15 +38,15 @@ _ADMIN_USERS = {
 }
 
 
-def _case_for_report(username, job_id, image_key=None):
+def _case_for_report(username, job_id, image_key=None, include_versions=False):
     """Best-effort history metadata lookup; reporting must stay independent
     from history availability just like screenshot upload already does."""
     try:
         if image_key:
-            # include_versions=False: a report only needs the case's lifecycle
-            # timestamps, and loading every version of it would read a second
-            # key for nothing.
-            case = get_history_entry(username, image_key, include_versions=False)
+            # include_versions=False unless asked: recording a report only
+            # needs the case's lifecycle timestamps, and loading every version
+            # of it would read a second key for nothing.
+            case = get_history_entry(username, image_key, include_versions=include_versions)
             if case:
                 return case
         return get_history_entry_for_job(username, job_id)
@@ -49,11 +54,27 @@ def _case_for_report(username, job_id, image_key=None):
         return None
 
 
+def _history_owner(entry):
+    """Whose history the reported job is under: the chat session's account
+    when the report came from the chat UI, else the name the reporter typed
+    (the panel UI's report form defaults it to the current account)."""
+    return entry.get("owner") or entry.get("user")
+
+
+def _version_params(case, job_id):
+    """The settings the version holding job_id was submitted with
+    (record_history's params: user_prompt, preset, aspect_ratio, models...)."""
+    for version in (case or {}).get("versions") or []:
+        if job_id in (version.get("runs") or []):
+            return version.get("params") or None
+    return None
+
+
 def is_admin(username):
     return normalize_username(username).lower() in _ADMIN_USERS
 
 
-def record_report(username, job_id, path, note=None, user_prompt=None, screenshot_key=None):
+def record_report(username, job_id, path, note=None, user_prompt=None, screenshot_key=None, source=None, chat=None):
     """job_id is optional -- #report-btn is always clickable (app.js), even
     with no result on screen, for a general "something's wrong" report with
     nothing to point at. A job-tied report keys on (job_id, user): re-
@@ -76,7 +97,11 @@ def record_report(username, job_id, path, note=None, user_prompt=None, screensho
     the client ever handling a raw S3 key itself. All three are omitted
     from the stored entry entirely when absent, rather than stored as ""
     (keeps get_reports' output the same shape as before any of them existed
-    for every report that doesn't use them)."""
+    for every report that doesn't use them).
+
+    source is "chat" for a report filed from the chat UI (absent means the
+    panel UI, which is all there was before it); chat holds that UI's
+    REPORT_CHAT_FIELDS, each kept only when present, same as note above."""
     name = normalize_username(username)
     field = f"{job_id}:{name}" if job_id else f"general:{name}:{uuid.uuid4().hex}"
     # Re-reporting an already-triaged entry (dedup key above) resets status
@@ -90,8 +115,13 @@ def record_report(username, job_id, path, note=None, user_prompt=None, screensho
         entry["user_prompt"] = user_prompt
     if screenshot_key:
         entry["screenshot_key"] = screenshot_key
+    if source:
+        entry["source"] = source
+    for key in REPORT_CHAT_FIELDS:
+        if (chat or {}).get(key):
+            entry[key] = chat[key]
     if job_id:
-        case = _case_for_report(name, job_id)
+        case = _case_for_report(_history_owner(entry), job_id)
         if case:
             entry["uploaded_at"] = case.get("uploaded_at")
             entry["modified_at"] = case.get("modified_at")
@@ -194,7 +224,11 @@ def get_reports(limit=50, offset=0):
     can load it on scroll the same way #history-list does. The hash itself
     is unordered, so every entry is still read and sorted to find the page;
     only the per-entry history lookup (_case_for_report, one Redis read per
-    report) is limited to the page actually returned."""
+    report) is limited to the page actually returned.
+
+    Each job-tied entry also gets version_params, the settings its job was
+    actually submitted with, so the admin's 面板模式 shows those rather than
+    defaults: the report itself only knows the job_id."""
     raw_entries = pf_redis_client.hgetall(REPORTS_KEY)
     entries = []
     for field, raw in raw_entries.items():
@@ -211,15 +245,34 @@ def get_reports(limit=50, offset=0):
     entries.sort(key=lambda e: e.get("ts", 0), reverse=True)
     page = entries[offset:offset + limit]
     for entry in page:
-        entry["has_screenshot"] = bool(entry.pop("screenshot_key", None))
-        entry.setdefault("status", "unread")  # entries recorded before this field existed
-        # Backfill reports created before case lifecycle timestamps were
-        # copied onto the report itself. This also keeps an older report in
-        # sync if the user subsequently re-edits the same case.
-        history_image_key = entry.pop("history_image_key", None)
-        if entry.get("job_id"):
-            case = _case_for_report(entry.get("user"), entry["job_id"], history_image_key)
-            if case:
-                entry.setdefault("uploaded_at", case.get("uploaded_at"))
-                entry["modified_at"] = case.get("modified_at")
+        _present_report(entry)
     return page, offset + len(page) < len(entries)
+
+
+def get_report(report_id):
+    """One report in the same shape get_reports hands out -- for the old
+    UI's #report=<id> entry point (openReportFromHash, app.js), which the
+    chat page's read-only report view links to as its 面板 switch."""
+    entry = get_report_by_id(report_id)
+    if entry is None:
+        return None
+    entry["report_id"] = report_id
+    return _present_report(entry)
+
+
+def _present_report(entry):
+    entry["has_screenshot"] = bool(entry.pop("screenshot_key", None))
+    entry.setdefault("status", "unread")  # entries recorded before this field existed
+    # Backfill reports created before case lifecycle timestamps were
+    # copied onto the report itself. This also keeps an older report in
+    # sync if the user subsequently re-edits the same case.
+    history_image_key = entry.pop("history_image_key", None)
+    if entry.get("job_id"):
+        case = _case_for_report(_history_owner(entry), entry["job_id"], history_image_key, include_versions=True)
+        if case:
+            entry.setdefault("uploaded_at", case.get("uploaded_at"))
+            entry["modified_at"] = case.get("modified_at")
+            params = _version_params(case, entry["job_id"])
+            if params:
+                entry["version_params"] = params
+    return entry

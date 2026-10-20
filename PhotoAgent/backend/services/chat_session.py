@@ -212,6 +212,17 @@ def list_sessions(user, limit=20):
     return out
 
 
+def batch_sessions(user, batch_id):
+    """Every live session of one multi-photo upload, oldest first. Read
+    only: unlike list_sessions it leaves expired index entries in place."""
+    out = []
+    for raw_id in _client().zrevrange(_index_key(user), 0, -1):
+        session = load_session(user, _decode(raw_id))
+        if session is not None and session.get("batch_id") == batch_id:
+            out.append(session)
+    return sorted(out, key=lambda s: s.get("created_at") or 0)
+
+
 def delete_session(user, session_id):
     """Drops one session, its messages and its index entry."""
     redis = _client()
@@ -239,13 +250,15 @@ def delete_all_sessions(user):
 OVERVIEW_MAX_BYTES = 256 * 1024
 
 
-def load_batch_overview(user, batch_id):
-    """What save_batch_overview stored for this batch, or None."""
+def load_batch_overview(user, batch_id, touch=True):
+    """What save_batch_overview stored for this batch, or None. touch=False
+    reads without pushing back its expiry (an admin looking at a report)."""
     redis, key = _client(), _overview_key(user, batch_id)
     raw = redis.get(key)
     if raw is None:
         return None
-    redis.expire(key, SESSION_TTL_SECONDS)
+    if touch:
+        redis.expire(key, SESSION_TTL_SECONDS)
     return json.loads(_decode(raw))
 
 

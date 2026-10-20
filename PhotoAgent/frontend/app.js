@@ -41,6 +41,7 @@
     deleteChatSessions,
     getJobStatusOnce,
     reportJob,
+    getReport,
     getReports,
     updateReportStatus,
     deleteReport,
@@ -1040,7 +1041,37 @@
     applyAccountUi();
     checkAdminAccess();
     await openCaseFromHash();
+    await openReportFromHash();
   })();
+
+  // #report=<id>: the 面板 switch on the chat page's read-only report view.
+  // Opened like a click on that report in the reports drawer, so the admin
+  // sees the panel as it was reported. Once it's on screen syncCaseHash
+  // turns the hash into that photo's #case=, so a reload just reopens it.
+  async function openReportFromHash() {
+    const reportId = new URLSearchParams(location.hash.slice(1)).get("report");
+    if (!reportId) return;
+    const reveal = () => document.body.classList.remove("is-opening-case");
+    const onSection = (e) => {
+      if (e.detail?.name === "upload") return;
+      reveal();
+      document.removeEventListener("photoagent:sectionchange", onSection);
+    };
+    document.addEventListener("photoagent:sectionchange", onSection);
+    try {
+      const user = resolveAdminUser();
+      const report = user ? await getReport(user, reportId).catch(() => null) : null;
+      if (!report?.job_id) {
+        showNoticeModal("打不開這筆回報：可能沒有管理者權限，或回報已經刪掉了。");
+        return;
+      }
+      await openReportInPanel(report, els.resultReportStatus);
+    } finally {
+      document.removeEventListener("photoagent:sectionchange", onSection);
+      reveal();
+      if (currentSectionName === "upload") syncCaseHash();
+    }
+  }
 
   // #case=<image_key>: the chat page's 面板模式 link for the photo it has
   // open, or the photo this page had open before a reload (syncCaseHash).
@@ -5029,6 +5060,23 @@
     els.reportModalError.hidden = false;
   }
 
+  // The case on screen, for the admin to open its conversation from /chat
+  // (photo-agent-api.js reportJob). Same lookup as the 對話模式 switch: a
+  // photo uploaded on this page has only its jobs until /case resolves one.
+  async function reportCaseRef(target) {
+    const owner = getCurrentUser();
+    if (!owner) return {};
+    let caseId = currentCaseHistoryImageKey;
+    if (!caseId && target.jobId) {
+      try {
+        caseId = (await getHistoryCase(owner, { jobId: target.jobId }))?.case?.image_key || null;
+      } catch {
+        caseId = null; // not in history yet -- a plain panel report
+      }
+    }
+    return caseId ? { owner, caseId } : {};
+  }
+
   async function handleReportSubmit() {
     if (!reportModalTarget) return;
     const name = normalizeUsername(els.reportModalName ? els.reportModalName.value : "");
@@ -5045,7 +5093,7 @@
       // failed (captureReportScreenshot swallows its own errors, resolving
       // null) -- either way the report still goes through, just without a
       // screenshot attached.
-      await reportJob(name, target.jobId, target.path, note, target.userPrompt, reportModalScreenshotBlob);
+      await reportJob(name, target.jobId, target.path, note, target.userPrompt, reportModalScreenshotBlob, await reportCaseRef(target));
       closeReportModal();
       showNoticeModal("已回報，我們會盡快確認這筆結果。");
     } catch (err) {
@@ -9189,6 +9237,53 @@
   // records job_id/path, not the rest of a real history entry's fields
   // (preset/image_quality/...) -- viewHistoryRecord already falls back to
   // sensible defaults for those when absent.
+  const REPORT_VERSION_PARAM_KEYS = [
+    "preset", "image_quality", "image_model", "analysis_model", "aspect_ratio",
+    "ai_photo_editing", "run_qa", "single_pass_edit", "overwrite_prompt", "advanced_options"
+  ];
+
+  function pickVersionParams(params) {
+    const picked = {};
+    REPORT_VERSION_PARAM_KEYS.forEach((key) => {
+      if (params[key] != null) picked[key] = params[key];
+    });
+    return picked;
+  }
+
+  // Opens a job-tied report's result page -- a row click in the drawer
+  // below, or the chat page's read-only report view through #report=<id>
+  // (openReportFromHash). Resolves to whether the record made it on screen.
+  async function openReportInPanel(r, statusBtn) {
+    // Fire-and-forget -- opening a still-unread report marks it read,
+    // same as any inbox; never awaited since it must not delay
+    // opening the actual result the admin clicked through for.
+    if ((r.status || "unread") === "unread") setReportStatus(r, statusBtn, "read");
+    // revealDetailExtra: true -- an admin checking a flagged case
+    // should see the full QA verdict/recipe-adherence/prompts panel,
+    // normally debug-only, for this specific record. user_prompt:
+    // r.user_prompt -- a real history entry carries its own
+    // job.user_prompt (see restoreReviseSelections), but this
+    // minimal report-derived stand-in has nowhere else to get it
+    // from; without this, #prompt would come back empty even though
+    // the report captured the original 補充指令.
+    //
+    // A report whose results expired leaves the admin where they were
+    // (with viewHistoryRecord's notice) instead of on a stale page.
+    if (!(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return false;
+    // The version's own settings (version_params) fill the panel the
+    // way a real history record would -- picked key by key, never
+    // stage, which isAnalyzedAfterEdits reads off this same object.
+    const versionParams = r.version_params || {};
+    return viewHistoryRecord({
+      path: r.path,
+      runs: [r.job_id],
+      ...pickVersionParams(versionParams),
+      user_prompt: versionParams.user_prompt || r.user_prompt,
+      uploaded_at: r.uploaded_at,
+      modified_at: r.modified_at
+    }, { revealDetailExtra: true, report: r });
+  }
+
   function renderReportsList(reports, { append = false } = {}) {
     if (!els.reportsList) return;
     if (!append) els.reportsList.innerHTML = "";
@@ -9217,18 +9312,35 @@
       userLine.textContent = r.user;
       const metaLine = document.createElement("span");
       metaLine.className = "report-item-meta";
+      // r.source === "chat": filed from the chat UI (/chat/), which only runs
+      // the local path, so its mode says more than "Local" would.
+      const where = r.source === "chat" ? "聊天模式" : r.path === "aipoc" ? "AIPoC" : "Local";
       metaLine.textContent = r.job_id
-        ? `${formatReportTimestamp(r.ts)} · ${r.path === "aipoc" ? "AIPoC" : "Local"}`
-        : `${formatReportTimestamp(r.ts)} · 一般回報`;
+        ? `${formatReportTimestamp(r.ts)} · ${where}`
+        : `${formatReportTimestamp(r.ts)} · 一般回報${r.source === "chat" ? " · 聊天模式" : ""}`;
       info.appendChild(userLine);
       info.appendChild(metaLine);
+      // r.owner is the account the chat session lives under (record_report,
+      // backend/services/report.py); r.user is just the name typed into the
+      // report form, so it only needs saying when the two differ.
+      if (r.owner && r.owner !== r.user) {
+        const ownerLine = document.createElement("span");
+        ownerLine.className = "report-item-note";
+        ownerLine.textContent = `對話帳號：${r.owner}`;
+        info.appendChild(ownerLine);
+      }
       // r.user_prompt (what the original submission actually asked for) is
       // distinct from r.note (the reporter's own description of what's
       // wrong) -- shown as its own labeled line so the two aren't confused.
-      if (r.user_prompt) {
+      // r.version_params: the settings r.job_id's version was made with
+      // (get_reports, backend/services/report.py) -- a chat report rarely
+      // carries its own user_prompt, the version it points at does.
+      const versionParams = r.version_params || {};
+      const userPrompt = versionParams.user_prompt || r.user_prompt;
+      if (userPrompt) {
         const promptLine = document.createElement("span");
         promptLine.className = "report-item-note";
-        promptLine.textContent = `個人化需求：${r.user_prompt}`;
+        promptLine.textContent = `個人化需求：${userPrompt}`;
         info.appendChild(promptLine);
       }
       if (r.note) {
@@ -9255,6 +9367,23 @@
           openReportScreenshotModal(reportScreenshotUrl(r.report_id));
         });
         info.appendChild(screenshotBtn);
+      }
+
+      // A report that knows its conversation (owner + session_id, or just
+      // batch_id when filed from a batch overview; record_report) -- a chat
+      // report, or a panel one whose case has a conversation (api.py's
+      // _panel_case_chat) -- opens it read-only on the chat page, in a new tab
+      // so this list stays where it was. An <a> with the screenshot link's
+      // look: it navigates.
+      if (r.owner && (r.session_id || r.batch_id)) {
+        const chatLink = document.createElement("a");
+        chatLink.className = "report-item-screenshot-link";
+        chatLink.href = `chat/${location.search}#report=${encodeURIComponent(r.report_id)}`;
+        chatLink.target = "_blank";
+        chatLink.rel = "noopener";
+        chatLink.textContent = "查看對話";
+        chatLink.addEventListener("click", (e) => e.stopPropagation());
+        info.appendChild(chatLink);
       }
 
       li.appendChild(thumb);
@@ -9292,31 +9421,7 @@
       // of a dead click target.
       if (r.job_id) {
         li.addEventListener("click", async () => {
-          // Fire-and-forget -- opening a still-unread report marks it read,
-          // same as any inbox; never awaited since it must not delay
-          // opening the actual result the admin clicked through for.
-          if ((r.status || "unread") === "unread") setReportStatus(r, statusBtn, "read");
-          // revealDetailExtra: true -- an admin checking a flagged case
-          // should see the full QA verdict/recipe-adherence/prompts panel,
-          // normally debug-only, for this specific record. user_prompt:
-          // r.user_prompt -- a real history entry carries its own
-          // job.user_prompt (see restoreReviseSelections), but this
-          // minimal report-derived stand-in has nowhere else to get it
-          // from; without this, #prompt would come back empty even though
-          // the report captured the original 補充指令.
-          //
-          // The drawer only closes once the record is actually on screen --
-          // a report whose results expired leaves the admin in the list
-          // (with viewHistoryRecord's notice) instead of on a stale page.
-          if (!(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
-          const opened = await viewHistoryRecord({
-            path: r.path,
-            runs: [r.job_id],
-            user_prompt: r.user_prompt,
-            uploaded_at: r.uploaded_at,
-            modified_at: r.modified_at
-          }, { revealDetailExtra: true, report: r });
-          if (opened) closeReportsDrawer();
+          if (await openReportInPanel(r, statusBtn)) closeReportsDrawer();
         });
       } else {
         li.classList.add("is-static");

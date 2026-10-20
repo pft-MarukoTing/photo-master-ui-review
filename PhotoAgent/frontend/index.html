@@ -4687,11 +4687,12 @@
       if (theme !== "default") document.body.dataset.theme = theme;
       document.body.dataset.themeMode = THEME_MODE[theme];
     } catch (_) { /* never block first paint on a theming failure */ }
-    // A #case= link (the chat page's 面板模式 button) opens that case as
-    // soon as the account resolves -- keep the upload page undrawn until
+    // A #case= link (the chat page's 面板模式 button), or #report= (the 面板
+    // switch on its read-only report view), opens that case as soon as the
+    // account resolves -- keep the upload page undrawn until
     // then (app.js's openCaseFromHash drops the class) so the switch goes
     // straight from the chat's photo to this one.
-    if (/(^#|&)case=/.test(location.hash)) document.body.classList.add("is-opening-case");
+    if (/(^#|&)(case|report)=/.test(location.hash)) document.body.classList.add("is-opening-case");
   })();
 </script>
 

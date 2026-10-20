@@ -1474,7 +1474,7 @@ div.chat-proposal-row{cursor:default}
 /* Header buttons: same compact pill 面板模式 gives its header row
    (index.html <style>: #changelog-btn.btn/#chat-ui-btn.btn/... ), instead of
    the taller, 10px-radius .btn-sm, so switching modes doesn't change them. */
-.header-actions .btn{height:32px;padding:0 14px;gap:6px;font-size:13px;border-radius:999px}
+.header-actions .btn,.report-view-actions .btn{height:32px;padding:0 14px;gap:6px;font-size:13px;border-radius:999px}
 
 /* 回報: 面板模式's #report-btn treatment -- a tinted outline, worth a second
    look without shouting. Its own id: #report-btn is position:fixed there. */
@@ -1640,7 +1640,7 @@ div.chat-proposal-row{cursor:default}
   /* Header：64px 高，按鈕放大到 44px 好按，不收進 ⋯。 */
   html:root{--header-h:64px}
   .site-header .header-inner{padding:0 20px 0 32px}
-  .header-actions .btn{height:44px;padding:0 16px}
+  .header-actions .btn,.report-view-actions .btn{height:44px;padding:0 16px}
 
   /* 首頁的文案：靠左，字級照畫布。 */
   #upload-section .home-hero-copy{align-items:flex-start;text-align:left}
@@ -1971,3 +1971,57 @@ div.chat-proposal-row{cursor:default}
 .photo-reading .chat-typing{background:none}
 @keyframes photo-reading-in{from{opacity:0;transform:translate(-50%,-6px)}}
 @media (prefers-reduced-motion:reduce){.photo-reading{animation:none}}
+
+/* ── 回報的唯讀檢視（report-view.tsx）────────────────────────────────────
+   管理者從回報清單打開的那段對話。header 高度不變（--header-h 撐著整頁的
+   版面），唯讀的標示就放在 header 那一列的右邊；回報的那一刻在時間軸上用一條
+   accent 細線標出來，回報說明跟在線底下。都是 tonal，不用實心色塊。 */
+.report-view-meta{margin-left:auto;display:flex;align-items:center;gap:var(--sp-2);min-width:0}
+.report-view-badge{flex-shrink:0;padding:2px 10px;border-radius:999px;background:var(--tonal);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent);
+  color:var(--accent-text);font-size:12px;font-weight:600;line-height:20px}
+.report-view-owner{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-2);font-size:13px}
+.report-view-status{margin:var(--sp-7) auto;padding:0 var(--sp-4);max-width:30em;text-align:center;color:var(--text-2);font-size:14px;text-wrap:pretty}
+.chat-report-mark{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px}
+.chat-report-mark-line{align-self:stretch;display:flex;align-items:center;gap:var(--sp-3);
+  color:var(--accent-text);font-size:12.5px;font-weight:600;white-space:nowrap}
+.chat-report-mark-line::before,.chat-report-mark-line::after{content:"";flex:1;height:1px;
+  background:color-mix(in srgb,var(--accent) 45%,transparent)}
+.chat-report-mark-note{margin:0;max-width:32em;padding:6px 12px;border-radius:12px;background:var(--tonal-lo);
+  color:var(--text-2);font-size:13px;line-height:1.6;text-align:center;text-wrap:pretty;word-break:break-word}
+/* header 右邊：回報清單 · 回到聊天。窄螢幕只留圖示。 */
+.report-view-actions{display:flex;align-items:center;gap:12px;margin-left:var(--sp-3);flex-shrink:0}
+.site-header .header-inner:not(:has(.report-view-meta)) .report-view-actions{margin-left:auto}
+.report-view-meta .report-item-status{padding:2px 10px;line-height:20px}
+@media (max-width:760px){
+  .report-view-actions .btn{width:auto;aspect-ratio:1;padding:0;justify-content:center}
+  .report-view-actions .btn-label{display:none}
+  .report-view-owner{display:none}
+}
+
+/* ── 回報清單抽屜（reports.tsx）──────────────────────────────────────────
+   舊版 #reports-drawer 的那幾條列樣式寫在舊版 index.html 的 style 裡，這頁讀不到，
+   照搬過來；色彩換成這頁的 tonal。目前打開的那筆用 accent 細框標出來。 */
+.reports-drawer .history-header-top{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2)}
+.reports-refresh-btn.btn{width:28px;height:28px;padding:0;gap:0;flex-shrink:0}
+.reports-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.report-item{display:flex;align-items:center;gap:12px;padding:8px;border-radius:var(--radius);background:var(--card-2);
+  box-shadow:inset 0 0 0 1px transparent;cursor:pointer;transition:background .15s,box-shadow .15s}
+.report-item:hover{background:var(--tonal-lo)}
+.report-item.is-current{background:var(--tonal-lo);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 45%,transparent)}
+.report-item.is-static{cursor:default}
+.report-item.is-static:hover{background:var(--card-2)}
+.report-item.is-static .report-item-thumb,.report-item.is-static .report-item-user{opacity:.6}
+.report-item-thumb{flex-shrink:0;width:44px;height:44px;border-radius:8px;overflow:hidden;background:var(--card)}
+.report-item-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.report-item-info{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.report-item-user{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.report-item-meta{font-size:12px;color:var(--text-3)}
+.report-item-note{font-size:12.5px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.report-item-note.is-muted{color:var(--text-3)}
+.report-item-status{flex-shrink:0;border:none;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap;cursor:pointer;transition:opacity .15s}
+.report-item-status:hover{opacity:.8}
+.report-item-status.status-unread{background:rgba(37,99,235,.18);color:var(--blue)}
+.report-item-status.status-read{background:rgba(var(--on-surface-rgb),.12);color:var(--text-3)}
+.report-item-status.status-solved{background:rgba(1,179,123,.22);color:var(--green)}
+.reports-more-btn.btn{display:flex;margin:var(--sp-3) auto 0}

@@ -49,6 +49,7 @@ from backend.services.account import (
 )
 from backend.services.compatibility import get_min_compatible_version
 from backend.services.put_job import download_bytes, enqueue, get_session_id, lost_job_error
+from backend.services.report import get_report_by_id, is_admin
 from backend.services.template_params import get_engine_params_template
 from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, image_to_data_url
@@ -580,6 +581,58 @@ def get_session(session_id):
     session = _session(user, session_id)
     limit = request.args.get("messages_limit", 100, type=int)
     return jsonify({**session, "messages": store.get_messages(user, session_id, limit=max(1, min(limit, store.MESSAGES_MAX_LEN)))})
+
+
+# What the read-only view shows of the report itself.
+REPORT_VIEW_FIELDS = ("report_id", "user", "owner", "ts", "note", "job_id", "session_id", "photo_id", "batch_id", "status")
+
+
+def _reported_chat():
+    """(owner, sessions, report) for the admin's read-only view of the chat a
+    report was filed from: the session it names and, for a multi-photo
+    upload, every other session of that batch. A report filed from the batch
+    overview names only the batch. Read as-is: get_session's _advance_photos/
+    _sync_from_history write into the owner's session, and an admin looking
+    must not change what the user sees next."""
+    if not is_admin(_user(request.args.get("user"))):
+        raise _RequestError("admin only", 403)
+    report = get_report_by_id(request.args.get("report") or "")
+    owner = (report or {}).get("owner")
+    session_id, batch_id = (report or {}).get("session_id"), (report or {}).get("batch_id")
+    if not owner or not (session_id or batch_id):
+        raise _RequestError("這筆回報沒有對應的對話", 404)
+    sessions = store.batch_sessions(owner, batch_id) if batch_id and SESSION_ID_RE.match(batch_id) else []
+    if session_id and not any(s["session_id"] == session_id for s in sessions):
+        sessions.append(_session(owner, session_id))
+    if not sessions:
+        raise _RequestError("這筆回報沒有對應的對話", 404)
+    return owner, sessions, report
+
+
+@chat_bp.get("/report-session")
+def report_session():
+    owner, sessions, report = _reported_chat()
+    batch_id = report.get("batch_id")
+    overview = store.load_batch_overview(owner, batch_id, touch=False) if batch_id and SESSION_ID_RE.match(batch_id) else None
+    return jsonify({
+        "sessions": [{**s, "messages": store.get_messages(owner, s["session_id"], limit=store.MESSAGES_MAX_LEN)}
+                     for s in sessions],
+        "overview": overview,
+        "report": {key: report.get(key) for key in REPORT_VIEW_FIELDS},
+    })
+
+
+@chat_bp.get("/report-session/analysis")
+def report_session_analysis():
+    _, sessions, _ = _reported_chat()
+    session = next((s for s in sessions if s["session_id"] == request.args.get("session_id")), None)
+    if session is None:
+        raise _RequestError("Session not found", 404)
+    photo = _photo(session, request.args.get("photo_id") or "")
+    analysis, error = _load_analysis(_analysis_job_id(photo))
+    if error:
+        return jsonify({"status": "error" if photo["status"] == "failed" else photo["status"], "error": error})
+    return jsonify({"status": "success", "result": {"analysis": analysis}})
 
 
 def _posted_message(body):

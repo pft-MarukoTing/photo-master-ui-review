@@ -51,6 +51,9 @@ class FakeRedis:
     def hgetall(self, key):
         return dict(self.data.get(key, {}))
 
+    def hget(self, key, field):
+        return self.data.get(key, {}).get(field)
+
     def hsetnx(self, key, field, value):
         h = self.data.setdefault(key, {})
         if field in h:
@@ -1965,3 +1968,163 @@ class CaseAnalysisHistoryTest(unittest.TestCase):
         self.assertEqual(self.redis.hgetall(self.account._case_analysis_key(USER)), {"c2": "z2"})
         self.account.clear_history(USER)
         self.assertEqual(self.redis.hgetall(self.account._case_analysis_key(USER)), {})
+
+
+class ChatReportTest(unittest.TestCase):
+    """回報 from the chat UI records which conversation was on screen, so the
+    admin can open it; the panel UI's reports stay as they were."""
+
+    def setUp(self):
+        self.redis = FakeRedis()
+        report = api.get_reports.__globals__
+        # backend.services.report, as api.py sees it: no history or job to look up.
+        p = patch.dict(report, {"pf_redis_client": self.redis, "get_job_info": lambda job_id, keyToGet=None: None,
+                                "_case_for_report": lambda *a, **k: None})
+        p.start()
+        self.addCleanup(p.stop)
+        self.client = app_module.create_app({"TESTING": True}).test_client()
+
+    def reports(self):
+        response = self.client.get("/api/photo-agent/reports/admin")
+        self.assertEqual(response.status_code, 200)
+        return response.get_json()["reports"]
+
+    def test_a_chat_report_keeps_the_conversation_it_came_from(self):
+        response = self.client.post("/api/photo-agent/report", data={
+            "user": "someone", "job_id": "j1", "path": "local", "note": "怪怪的", "source": "chat",
+            "owner": USER, "session_id": "s1", "photo_id": "p1", "batch_id": "b1"})
+        self.assertEqual(response.status_code, 200)
+        [entry] = self.reports()
+        self.assertEqual({k: entry.get(k) for k in ("user", "source", "owner", "session_id", "photo_id", "batch_id")},
+                         {"user": "someone", "source": "chat", "owner": USER, "session_id": "s1",
+                          "photo_id": "p1", "batch_id": "b1"})
+
+    def test_a_panel_report_has_no_chat_fields(self):
+        # Chat fields without source=chat are not the chat UI's, so they are not kept.
+        self.client.post("/api/photo-agent/report", data={"user": "someone", "job_id": "j1", "session_id": "s1"})
+        [entry] = self.reports()
+        for key in ("source", "owner", "session_id", "photo_id", "batch_id"):
+            self.assertNotIn(key, entry)
+
+    def test_a_report_brings_the_settings_its_job_was_made_with(self):
+        # Looked up under the conversation's account, not the name typed into the form.
+        looked_up = []
+        case = {"uploaded_at": 1, "modified_at": 2, "versions": [
+            {"runs": ["j0"], "params": {"user_prompt": "舊的"}},
+            {"runs": ["j1"], "params": {"user_prompt": "皮膚亮一點", "preset": "vivid", "aspect_ratio": "4:5"}}]}
+
+        def case_for_report(user, job_id, image_key=None, include_versions=False):
+            looked_up.append(user)
+            return case
+        with patch.dict(api.get_reports.__globals__, {"_case_for_report": case_for_report}):
+            self.client.post("/api/photo-agent/report", data={
+                "user": "someone", "job_id": "j1", "source": "chat", "owner": USER, "session_id": "s1"})
+            [entry] = self.reports()
+        self.assertEqual(entry["version_params"], {"user_prompt": "皮膚亮一點", "preset": "vivid", "aspect_ratio": "4:5"})
+        self.assertEqual(set(looked_up), {USER})
+
+
+class ReportSessionTest(unittest.TestCase):
+    """The admin's read-only look at the conversation a chat report came from."""
+
+    def setUp(self):
+        self.redis = FakeRedis()
+        patches = [
+            patch.dict(api.get_reports.__globals__, {"pf_redis_client": self.redis, "get_job_info": lambda job_id, keyToGet=None: None,
+                                                     "_case_for_report": lambda *a, **k: None}),
+            patch.object(chat_session, "_client", lambda: self.redis),
+            # Reading for the admin must leave the owner's session as it was.
+            patch.object(chat, "_advance_photos", MagicMock(side_effect=AssertionError("advanced"))),
+            patch.object(chat, "_sync_from_history", MagicMock(side_effect=AssertionError("synced"))),
+        ]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.client = app_module.create_app({"TESTING": True}).test_client()
+        self.session_id = chat_session.create_session(USER)["session_id"]
+        chat_session.append_messages(USER, self.session_id, [chat_session.make_message("user", "幫我修亮一點")])
+
+    def report(self, **fields):
+        data = {"user": "someone", "job_id": "j1", "source": "chat", **fields}
+        return self.client.post("/api/photo-agent/report", data=data).get_json()["report_id"]
+
+    def open(self, report_id, viewer="admin"):
+        return self.client.get("/api/photo-agent/chat/report-session", query_string={"user": viewer, "report": report_id})
+
+    def test_the_admin_reads_the_owners_conversation(self):
+        report_id = self.report(owner=USER, session_id=self.session_id, note="太暗")
+        response = self.open(report_id)
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual([s["session_id"] for s in body["sessions"]], [self.session_id])
+        self.assertEqual([m["text"] for m in body["sessions"][0]["messages"]], ["幫我修亮一點"])
+        self.assertEqual((body["report"]["owner"], body["report"]["note"]), (USER, "太暗"))
+        self.assertIsNone(body["overview"])
+
+    def batch(self):
+        batch_id = chat_session.new_id("b")
+        ids = [chat_session.create_session(USER, batch_id=batch_id)["session_id"] for _ in range(2)]
+        chat_session.create_session(USER, batch_id=chat_session.new_id("b"))
+        chat_session.save_batch_overview(USER, batch_id, {"turns": [{"id": 1, "kind": "wish", "text": "都亮一點"}], "hints": {}})
+        return batch_id, ids
+
+    def test_a_photo_of_a_batch_brings_the_whole_batch(self):
+        batch_id, ids = self.batch()
+        body = self.open(self.report(owner=USER, session_id=ids[1], batch_id=batch_id)).get_json()
+        self.assertEqual([s["session_id"] for s in body["sessions"]], ids)
+        self.assertEqual(body["overview"]["turns"][0]["text"], "都亮一點")
+        self.assertEqual(body["report"]["session_id"], ids[1])
+
+    def test_a_report_from_the_batch_overview_opens_the_batch(self):
+        batch_id, ids = self.batch()
+        self.redis.ttl.clear()
+        body = self.open(self.report(job_id="", owner=USER, batch_id=batch_id)).get_json()
+        self.assertEqual([s["session_id"] for s in body["sessions"]], ids)
+        self.assertIsNotNone(body["overview"])
+        # Looking doesn't keep the user's overview alive.
+        self.assertEqual(self.redis.ttl, {})
+
+    def test_analysis_only_from_the_reported_batch(self):
+        batch_id, ids = self.batch()
+        report_id = self.report(owner=USER, session_id=ids[0], batch_id=batch_id)
+        response = self.client.get("/api/photo-agent/chat/report-session/analysis", query_string={
+            "user": "admin", "report": report_id, "session_id": self.session_id, "photo_id": "p1"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_only_an_admin_can(self):
+        report_id = self.report(owner=USER, session_id=self.session_id)
+        self.assertEqual(self.open(report_id, viewer=USER).status_code, 403)
+
+    def test_a_report_without_a_conversation_has_nothing_to_open(self):
+        self.assertEqual(self.open(self.report()).status_code, 404)
+
+    def panel_report(self, **fields):
+        data = {"user": "someone", "job_id": "j1", "path": "local", **fields}
+        return self.client.post("/api/photo-agent/report", data=data).get_json()["report_id"]
+
+    def test_a_panel_report_opens_the_conversation_of_its_case(self):
+        # 對話｜面板 switched to the panel, then 回報 there: the case still has its conversation.
+        chat_session.add_photos(USER, self.session_id, chat_session.load_session(USER, self.session_id),
+                                [{"photo_id": "p1", "case_id": "c1"}])
+        response = self.open(self.panel_report(owner=USER, case_id="c1"))
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual([s["session_id"] for s in body["sessions"]], [self.session_id])
+        self.assertEqual((body["report"]["owner"], body["report"]["photo_id"]), (USER, "p1"))
+
+    def test_a_panel_report_of_a_case_without_a_conversation_stays_a_panel_one(self):
+        report_id = self.panel_report(owner=USER, case_id="c9")
+        self.assertEqual(self.open(report_id).status_code, 404)
+        [entry] = self.client.get("/api/photo-agent/reports/admin").get_json()["reports"]
+        for key in ("source", "owner", "session_id"):
+            self.assertNotIn(key, entry)
+
+    def test_the_panel_switch_reads_one_report_like_the_list(self):
+        # 唯讀檢視的「面板」切到舊版 #report=<id>，那邊用這支拿到跟清單同一個樣子的回報。
+        report_id = self.report(owner=USER, session_id=self.session_id, note="太暗")
+        response = self.client.get(f"/api/photo-agent/reports/admin/{report_id}")
+        self.assertEqual(response.status_code, 200)
+        [listed] = self.client.get("/api/photo-agent/reports/admin").get_json()["reports"]
+        self.assertEqual(response.get_json()["report"], listed)
+        self.assertEqual(self.client.get(f"/api/photo-agent/reports/{USER}/{report_id}").status_code, 403)
+        self.assertEqual(self.client.get("/api/photo-agent/reports/admin/nope").status_code, 404)

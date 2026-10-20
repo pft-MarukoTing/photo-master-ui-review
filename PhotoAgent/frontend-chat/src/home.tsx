@@ -3,10 +3,11 @@
 import type { ComponentChildren } from "preact";
 import { createPortal } from "preact/compat";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { api, getUser, urls } from "./api";
+import { api, getUser, urls, type ReportChat } from "./api";
 import heroAfter from "./assets/hero_after.jpg";
 import heroBefore from "./assets/hero_before.jpg";
 import { Icon } from "./icons";
+import { ReportsButton } from "./reports";
 import {
   applyTheme,
   currentTheme,
@@ -51,7 +52,7 @@ function ThemeToggle() {
 // along, see vite.config.ts). No 畫面截圖 row: that one is html2canvas on the
 // old page's own DOM. Without a jobId it files a general report, the same as
 // the old button pressed with nothing on screen.
-function ReportModal(props: { jobId: string | null; onClose: () => void }) {
+function ReportModal(props: { jobId: string | null; chat: ReportChat; onClose: () => void }) {
   const { onClose } = props;
   const [name, setName] = useState(getUser);
   const [note, setNote] = useState("");
@@ -74,7 +75,7 @@ function ReportModal(props: { jobId: string | null; onClose: () => void }) {
     setBusy(true);
     setError("");
     try {
-      await api.report(name.trim(), props.jobId, note.trim());
+      await api.report(name.trim(), props.jobId, note.trim(), props.chat);
       setDone(true);
     } catch (err) {
       setError((err as Error).message || "回報失敗，請稍後再試。");
@@ -271,6 +272,10 @@ export function Header(props: {
   onSettings?: () => void;
   // The edit (or, before one, the analysis) on screen, which 回報 points at.
   jobId?: string | null;
+  // The conversation on screen, so the admin can open it from the report.
+  reportChat?: ReportChat;
+  // 管理者從「回報清單」換到某筆回報前先問一聲（還沒開始美化的照片會清掉）。
+  beforeLeave?: () => Promise<boolean>;
 }) {
   const [reporting, setReporting] = useState(false);
   const [changelog, setChangelog] = useState(false);
@@ -350,6 +355,7 @@ export function Header(props: {
               <span class="btn-label">設定</span>
             </button>
           )}
+          <ReportsButton beforeLeave={props.beforeLeave} />
           <ThemeToggle />
           <button
             id="chat-report-btn"
@@ -363,7 +369,7 @@ export function Header(props: {
           </button>
         </div>
       </div>
-      {reporting && <ReportModal jobId={props.jobId || null} onClose={() => setReporting(false)} />}
+      {reporting && <ReportModal jobId={props.jobId || null} chat={props.reportChat || {}} onClose={() => setReporting(false)} />}
       {changelog && <ChangelogModal onClose={() => setChangelog(false)} />}
     </header>
   );

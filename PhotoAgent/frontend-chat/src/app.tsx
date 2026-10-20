@@ -103,7 +103,7 @@ type PreStep = "start" | "picked" | "settings";
 // remote：已經傳上去的照片（它那批的另一個對話）。重新整理後從最近照片接回整批時用，
 // 檔案本身已經不在瀏覽器裡了。
 // url 是這張的識別（drafts、batchRuns 都拿它當 key），也是大圖和裁人臉用的那張；thumb 是格子用的小圖。
-type Source = { kind: "file"; file: File; url: string; thumb?: string } | { kind: "demo"; name: string } | { kind: "remote"; job: string };
+export type Source = { kind: "file"; file: File; url: string; thumb?: string } | { kind: "demo"; name: string } | { kind: "remote"; job: string };
 // 一次最多幾張，跟後端 MAX_PHOTOS_PER_SESSION 一樣。
 const MAX_BATCH = 100;
 // A face picked on the upload page: no name yet, so where it stands and its box.
@@ -508,7 +508,7 @@ function wishesFor(notes: Note[], segEdits: PromptEdits): PreviewWish[] {
 }
 
 // 多張上傳頁上一張照片按下開始之後的進度；done 是已經送進 session 了。
-type BatchRun = StartProgress & { sessionId?: string; photoId?: string; done?: boolean; error?: string };
+export type BatchRun = StartProgress & { sessionId?: string; photoId?: string; done?: boolean; error?: string };
 // 多張上傳頁切到別張時，這張還沒開始的對話先收在這裡，切回來照原樣接上。
 type BatchDraft = {
   step: PreStep;
@@ -530,7 +530,7 @@ type BatchDraft = {
 // 多張上傳的總覽頁對話，一輪一筆，照發生的順序記：每次上傳／新增／移除的照片、一起送的需求、
 // 開過的設定、一鍵美化時問的那句、一起開始的紀錄、跑完的那一刻。需求本身收進每張自己的草稿，
 // 這裡只留畫面上那句話。
-type OverviewTurn =
+export type OverviewTurn =
   | { id: number; kind: "upload"; srcs: string[] }
   | { id: number; kind: "remove"; count: number; left: number }
   | { id: number; kind: "running"; keys: string[]; verb: string }
@@ -581,7 +581,7 @@ type TurnHint = { text: string; chips: OverviewChips | null; pending?: number; r
 // 總覽的對話存到後端的樣子。照片用那張的 session id 記：本機選的照片接回來後 key 會變成
 // remote 那種，對不上；還沒開始、沒有 session 的那幾張離開就沒了，也不記。
 // hints 照則的 id 記，開場白那句記在 "intro"。
-type SavedOverview = { turns: OverviewTurn[]; hints: Record<string, TurnHint> };
+export type SavedOverview = { turns: OverviewTurn[]; hints: Record<string, TurnHint> };
 function packOverview(turns: OverviewTurn[], hints: Record<string, TurnHint>, introKey: string,
   sidOf: (key: string) => string | undefined): SavedOverview {
   const ids = (keys: string[]) => keys.map(sidOf).filter((x): x is string => !!x);
@@ -731,7 +731,7 @@ function setSessionHash(id: string | null) {
   history.replaceState(null, "", url);
 }
 
-function sourceSrc(s: Source) {
+export function sourceSrc(s: Source) {
   return s.kind === "file" ? s.url : s.kind === "remote" ? urls.sourceThumb(s.job) : urls.demoThumb(s.name);
 }
 
@@ -785,14 +785,14 @@ async function sourceBlob(s: Source, signal?: AbortSignal): Promise<{ blob: Blob
   return { blob: await res.blob(), name: s.kind === "demo" ? s.name : `${s.job}.jpg` };
 }
 
-function activePhoto(s: Session | null): Photo | null {
+export function activePhoto(s: Session | null): Photo | null {
   if (!s || !s.photos.length) return null;
   return s.photos.find((p) => p.photo_id === s.active_photo_id) || s.photos[0];
 }
 
 // 這張最後一次美化沒有成功：失敗只記在對話裡（render_failed），照片本身還是 ready，
 // 跟結果頁一樣看最後一則美化結果。
-function renderFailedIn(s: Session, photoId: string): boolean {
+export function renderFailedIn(s: Session, photoId: string): boolean {
   const last = [...(s.messages || [])].reverse().find((m) =>
     (m.card?.type === "render_done" || m.card?.type === "render_failed") && (!m.card.photo_id || m.card.photo_id === photoId));
   return last?.card?.type === "render_failed";
@@ -3105,6 +3105,9 @@ export function App() {
   const header = (
     <Header
       jobId={phase === "session" ? photo?.active_version?.job_id || photo?.analyze_job_id || null : null}
+      reportChat={phase === "session"
+        ? { sessionId, photoId: photo?.photo_id, batchId: session?.batch_id }
+        : { batchId: phase === "chat" && batch ? batchId.current : null }}
       onHome={async () => {
         if (await confirmLeave("回到首頁")) goHome();
       }}
@@ -3118,6 +3121,7 @@ export function App() {
       showHistory={phase !== "home"}
       showChangelog={phase === "home"}
       onSettings={phase === "home" ? undefined : () => setPrefsOpen(true)}
+      beforeLeave={() => confirmLeave("打開回報")}
     />
   );
   // 還沒進對話的話，上傳頁的設定跟著一起換，這張照片就照新的跑。對話中也當下生效：
@@ -3986,7 +3990,7 @@ function useFreshTiles() {
 // 還在讀的照片先佔好位置，一格一格往後錯開閃，看得出後面還有幾張要來。
 const ghostDelay = (i: number) => ({ animationDelay: `${(i % 6) * 90}ms` });
 
-function BatchPreSidebar(props: {
+export function BatchPreSidebar(props: {
   sources: Source[];
   // 選了還在讀、還沒放上來的張數，先放佔位格。
   loading?: number;
@@ -4576,7 +4580,7 @@ function SidebarRemove({ index, onRemove }: { index: number; onRemove: (i: numbe
 // 跟舊版批次的 .batch-sidebar 同一套 class 和樣子；每張是歷史紀錄那種方塊（.history-cube），
 // 狀態疊在照片左下角。窄螢幕一樣收成從左邊拉出來的抽屜。
 // 上面那顆「全部一鍵美化」（有幾張美化過就叫「一鍵美化其餘 N」）把還沒美化過的每張照它自己目前的設定送出去；全部都美化過就不出現。
-function BatchSidebar(props: {
+export function BatchSidebar(props: {
   photos: Photo[];
   messages: Message[];
   current: string;
@@ -5301,7 +5305,7 @@ function snapshotOf(plan: Plan): Dict {
   return canonical(out) as Dict;
 }
 
-function SessionView(props: {
+export function SessionView(props: {
   onConfirmPeople: (indices: number[], scope?: "features" | "all", selectedWish?: string, editScope?: "visible_hair" | "cancel", selection?: "listed" | "outside_preview", text?: string) => Promise<boolean | "new_message">;
   caps: Capabilities;
   debugUi: boolean;
@@ -5328,7 +5332,12 @@ function SessionView(props: {
   onPost: (card: Dict, patch?: Plan, merge?: boolean) => Promise<boolean>;
   onAnalyze: () => Promise<boolean>;
   onOpenStyle: () => Promise<boolean>;
-  panelMode: PanelMode;
+  // 回報的唯讀檢視沒有「對話｜面板」可切。
+  panelMode?: PanelMode;
+  // 管理者從回報打開的唯讀檢視：不給輸入，呼叫端同時把 busy 設成 true，讓按鈕都停用。
+  // reportAt（秒）是回報當下：時間軸在那之後的第一則前面標出來。同一批裡不是被回報的
+  // 那張就不給，不畫標記。
+  readOnly?: { reportAt?: number; label?: string; note?: string | null };
   onResolve: (
     proposal: Proposal,
     choice: ProposalChoice,
@@ -6663,6 +6672,23 @@ function SessionView(props: {
 
   const sub = [timeLabel(session.created_at), `${session.photos.length} 張照片`, `${versions.length} 個版本`].join(" · ");
 
+  // 唯讀檢視：回報的那一刻落在哪一則之前（都比它早就在最後），打開時捲到那裡。
+  const reportAt = props.readOnly?.reportAt;
+  const markAt = reportAt == null ? -1 : ((i) => (i < 0 ? messages.length : i))(messages.findIndex((m) => m.created_at > reportAt));
+  const reportMark = reportAt != null && props.readOnly && (
+    <div class="chat-report-mark" id="chat-report-mark">
+      <span class="chat-report-mark-line">{props.readOnly.label}</span>
+      {props.readOnly.note && <p class="chat-report-mark-note">{props.readOnly.note}</p>}
+    </div>
+  );
+  useLayoutEffect(() => {
+    if (reportAt == null) return;
+    const mark = document.getElementById("chat-report-mark");
+    const timeline = mark?.closest(".chat-timeline");
+    if (!mark || !timeline) return;
+    timeline.scrollTop += mark.getBoundingClientRect().top - timeline.getBoundingClientRect().top - timeline.clientHeight / 3;
+  }, [reportAt, photo.photo_id, !!analysis]);
+
   return (
     <>
       <StepIndicator step={stepN} state={stepHow} />
@@ -6685,7 +6711,7 @@ function SessionView(props: {
               <div class="results-analysis-slot" id="results-analysis-slot">
                 <SplitGrip />
                 {/* 手機上對話那張不放標頭，「對話｜面板」縮小放在把手那排右邊；桌機收起來，用標頭上那顆。 */}
-                <ModeSwitch mode={props.panelMode} class="sheet-mode-switch" />
+                {props.panelMode && <ModeSwitch mode={props.panelMode} class="sheet-mode-switch" />}
                 <ChatPanel
                   sub={sub}
                   panelMode={props.panelMode}
@@ -6694,7 +6720,7 @@ function SessionView(props: {
                   settling={props.analysisPending}
                   live={live}
                   onDropFile={busy ? undefined : props.onFile}
-                  footer={
+                  footer={props.readOnly ? null : (
                     <>
                       <FootBar
                         faces={
@@ -6711,10 +6737,10 @@ function SessionView(props: {
                         focusKey={composerKey}
                       />
                     </>
-                  }
+                  )}
                 >
                   {intro}
-                  {items}
+                  {markAt < 0 ? items : <>{items.slice(0, markAt)}{reportMark}{items.slice(markAt)}</>}
                   {!placed && endRow && <AssistantMsg>{endRow}</AssistantMsg>}
                   {canShowTargetQuestion(photo) && pendingPerson && !messages.some(m => m.card?.target_question?.question_id === pendingPerson.question_id && m.card?.question_revision === photo.preview_conversation?.revision) &&
                     <AssistantMsg><p class="chat-text">{pendingPerson.text}</p>{formalTargetControls(pendingPerson, true)}</AssistantMsg>}
@@ -6827,7 +6853,7 @@ function AnswerList(props: {
   );
 }
 
-function AskBubble({ text, faces, meta }: { text: string; faces?: FaceRef[]; meta?: string }) {
+export function AskBubble({ text, faces, meta }: { text: string; faces?: FaceRef[]; meta?: string }) {
   return (
     <UserMsg meta={meta}>
       <div class="chat-bubble chat-ask">

@@ -28,6 +28,39 @@ let currentUser = "";
 export function setUser(user: string) {
   currentUser = user;
 }
+// What 回報 records about the chat on screen; any of them may be absent (首頁,
+// the upload page, a batch overview before its sessions exist).
+export interface ReportChat {
+  sessionId?: string | null;
+  photoId?: string | null;
+  batchId?: string | null;
+}
+
+// 回報本身（/chat/report-session 跟對話一起回來的那幾欄）。ts 是秒。
+export interface ReportRef {
+  report_id: string;
+  user: string;
+  owner: string;
+  ts: number;
+  note?: string | null;
+  job_id?: string | null;
+  session_id?: string | null;
+  photo_id?: string | null;
+  batch_id?: string | null;
+  status?: ReportStatus;
+}
+
+// 回報清單（舊版回報抽屜同一支 /reports/<user>）的一筆。source 是 "chat" 才是聊天
+// 模式送的，帶得到對話；version_params 是 job_id 那個版本當時的設定。
+export type ReportStatus = "unread" | "read" | "solved";
+export interface ReportEntry extends ReportRef {
+  source?: string;
+  path?: string;
+  status?: ReportStatus;
+  user_prompt?: string | null;
+  version_params?: Dict;
+}
+
 export function getUser() {
   return currentUser;
 }
@@ -91,13 +124,21 @@ export const api = {
     request<{ user: string }>(`${API}/photo-agent/decrypt-user-id?user_id=${encodeURIComponent(userId)}`),
   // 回報: the same endpoint and fields as the old page's #report-btn
   // (photo-agent-api.js reportJob), minus the screenshot. job_id is left out
-  // for a general report with no photo on screen.
-  report: (name: string, jobId: string | null, note: string) => {
+  // for a general report with no photo on screen. The chat fields point the
+  // admin at the conversation itself: owner is whose session it is (name is
+  // whatever the reporter typed, which may not be), and the ids are what is
+  // on screen.
+  report: (name: string, jobId: string | null, note: string, chat: ReportChat) => {
     const form = new FormData();
     form.append("user", name);
     if (jobId) form.append("job_id", jobId);
     form.append("path", "local");
     if (note) form.append("note", note);
+    form.append("source", "chat");
+    if (currentUser) form.append("owner", currentUser);
+    if (chat.sessionId) form.append("session_id", chat.sessionId);
+    if (chat.photoId) form.append("photo_id", chat.photoId);
+    if (chat.batchId) form.append("batch_id", chat.batchId);
     return request<{ reported: boolean; report_id: string }>(`${API}/photo-agent/report`, { method: "POST", body: form });
   },
   demoImages: () => request<{ images: string[] }>(`${API}/photo-agent/demo-images`),
@@ -225,6 +266,19 @@ export const api = {
   },
   confirmPhotoConversation: (id: string, photoId: string, body: Dict) =>
     request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/conversation-confirm`, { ...json("POST", body), signal: AbortSignal.timeout(PREVIEW_CONVERSATION_TIMEOUT_MS) }),
+  // 管理者從回報打開那段對話（唯讀）：照原樣讀對話主人的 session，不推進、不同步。
+  // 多張上傳的回報帶回同一批的每個 session，和總覽存下來的對話（沒有就是 null）。
+  reportSession: (reportId: string) =>
+    request<{ sessions: Session[]; overview: Dict | null; report: ReportRef }>(`${CHAT}/report-session${q({ report: reportId })}`),
+  // 回報清單，只有管理者讀得到（不是管理者就 403，順便當成「是不是管理者」的判斷）。
+  reports: (offset = 0, limit = 50) =>
+    request<{ reports: ReportEntry[]; has_more: boolean }>(
+      `${API}/photo-agent/reports/${encodeURIComponent(currentUser)}?${new URLSearchParams({ limit: String(limit), offset: String(offset) })}`,
+    ),
+  setReportStatus: (reportId: string, status: ReportStatus) =>
+    request<Dict>(`${API}/photo-agent/reports/${encodeURIComponent(currentUser)}/${encodeURIComponent(reportId)}`, json("PATCH", { status })),
+  reportAnalysis: (reportId: string, sessionId: string, photoId: string) =>
+    request<Dict>(`${CHAT}/report-session/analysis${q({ report: reportId, session_id: sessionId, photo_id: photoId })}`),
   analysis: (id: string, photoId: string) =>
     request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/analysis${q()}`),
   // A typed message about one photo; subjectIndices are the faces the user tapped.
@@ -292,6 +346,8 @@ export const urls = {
   styleThumb: (group: string, value: string) => `${BASE}/assets/optional_style/${group}/thumbs/${styleThumbFile(group, value)}.webp`,
   // With a case, 面板模式 opens straight on it.
   oldUi: (caseId?: string | null) => `${BASE}/${location.search}${caseId ? `#case=${encodeURIComponent(caseId)}` : ""}`,
+  // 回報的唯讀檢視切過去：舊版用管理者身分打開這筆回報，跟在它的回報清單點這筆一樣。
+  oldUiReport: (reportId: string) => `${BASE}/${location.search}#report=${encodeURIComponent(reportId)}`,
 };
 
 const STYLE_FILE_ALIAS: Record<string, Record<string, string>> = {

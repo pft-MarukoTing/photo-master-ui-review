@@ -692,13 +692,20 @@ window.PhotoAgentApi = (() => {
   // (not JSON) is required once a Blob is in the mix; backend/routes/api.py's
   // report_job already falls back to request.form for a non-JSON body, so
   // this needs no change on that side beyond reading request.files too.
-  async function reportJob(user, jobId, path = "local", note = "", userPrompt = "", screenshotBlob = null) {
+  //
+  // owner + caseId: whose case was on screen -- the backend keeps that case's
+  // conversation (if it has one) so the admin can open it from /chat too.
+  async function reportJob(user, jobId, path = "local", note = "", userPrompt = "", screenshotBlob = null, { owner = null, caseId = null } = {}) {
     const form = new FormData();
     form.append("user", user);
     if (jobId) form.append("job_id", jobId);
     form.append("path", path);
     if (note) form.append("note", note);
     if (userPrompt) form.append("user_prompt", userPrompt);
+    if (owner && caseId) {
+      form.append("owner", owner);
+      form.append("case_id", caseId);
+    }
     if (screenshotBlob) form.append("screenshot", screenshotBlob, "report-screenshot.png");
 
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/report`, {
@@ -726,6 +733,19 @@ window.PhotoAgentApi = (() => {
       throw err;
     }
     return data; // { reports: [{ report_id, job_id, user, path, ts, status, note?, user_prompt?, has_screenshot }], has_more }
+  }
+
+  // Admin-only, same is_admin gate as getReports above -- one report in the
+  // list's shape, for the #report=<id> entry point (openReportFromHash, app.js).
+  async function getReport(user, reportId) {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/reports/${encodeURIComponent(user)}/${encodeURIComponent(reportId)}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const err = new Error(data.error || `取得回報失敗：HTTP ${response.status}`);
+      err.status = response.status;
+      throw err;
+    }
+    return data.report;
   }
 
   // Admin-only, same is_admin gate the backend applies to getReports above
@@ -816,6 +836,7 @@ window.PhotoAgentApi = (() => {
     deleteChatSessions,
     getJobStatusOnce,
     reportJob,
+    getReport,
     getReports,
     updateReportStatus,
     deleteReport,

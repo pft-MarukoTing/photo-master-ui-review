@@ -150,6 +150,16 @@ const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
     ),
   },
   // 回報: the old #report-btn's bubble with an exclamation mark.
+  // 回報清單（管理者）：收件匣，跟「回報」那顆對話框分開。
+  inbox: {
+    sw: 2.2,
+    body: (
+      <>
+        <path d="M3 13h5l1.5 3h5l1.5-3h5" />
+        <path d="M5.5 5h13L21 13v6H3v-6z" />
+      </>
+    ),
+  },
   report: {
     sw: 2.5,
     body: (

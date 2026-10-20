@@ -16,11 +16,12 @@ from photo_agent import capabilities
 from photo_agent.param_validation import normalize_advanced_options, validate_photo_agent_request
 from photo_agent.selections import apply_selections, validate_selections
 from pipeline import analyze_stage, reframe_stage
+from backend.services import chat_session
 from backend.services.account import attach_case_analysis, create_account, clear_history, delete_history_entry, delete_version, get_history, get_history_entry, get_history_entry_for_job, HISTORY_MAX_LEN, normalize_username, record_history
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, derive_preview_key, derive_view_key, cache_thumbnail, upload_report_screenshot, lost_job_error
-from backend.services.report import delete_report, get_report_by_id, get_reported_job_info, get_reports, is_admin, record_report, update_report_status
+from backend.services.report import REPORT_CHAT_FIELDS, delete_report, get_report, get_report_by_id, get_reported_job_info, get_reports, is_admin, record_report, update_report_status
 from backend.services.template_params import get_engine_params_template
 
 api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
@@ -406,6 +407,29 @@ def delete_all_history(user):
     return jsonify({"user": name, "deleted": "all"})
 
 
+def _panel_case_chat(body):
+    """The panel UI's report names the case on screen (owner + case_id); when
+    that case still has a conversation -- opened from the chat page's
+    對話｜面板 switch, or ever opened there -- the report keeps it, so the
+    admin can read that conversation as for a chat report. Best effort: a
+    lookup that fails just leaves the report as a plain panel one."""
+    owner, case_id = body.get("owner"), body.get("case_id")
+    if not owner or not case_id:
+        return None
+    try:
+        owner = normalize_username(owner)
+        session_id = chat_session.find_session_for_case(owner, str(case_id))
+        session = chat_session.load_session(owner, session_id) if session_id else None
+    except Exception:
+        current_app.logger.warning("report: no conversation lookup for case %s", case_id, exc_info=True)
+        return None
+    if not session:
+        return None
+    photo = next((p for p in session["photos"] if p.get("case_id") == case_id), None)
+    chat = {"owner": owner, "session_id": session_id, "photo_id": (photo or {}).get("photo_id"), "batch_id": session.get("batch_id")}
+    return {key: str(value)[:128] for key, value in chat.items() if value}
+
+
 @api_bp.post("/report")
 def report_job():
     # A screenshot upload arrives as multipart/form-data (request.files),
@@ -433,9 +457,14 @@ def report_job():
         screenshot_key = f"demo/photoAgent/reports/{job_id or 'general'}/{name}_{int(time.time())}_screenshot.jpg"
         upload_report_screenshot(screenshot.read(), screenshot_key, job_id or "general")
 
+    # The chat UI (/chat/) also says which conversation was on screen, so the
+    # admin can open it (REPORT_CHAT_FIELDS, backend/services/report.py).
+    source = "chat" if body.get("source") == "chat" else None
+    chat = {key: str(body.get(key))[:128] for key in REPORT_CHAT_FIELDS if body.get(key)} if source else _panel_case_chat(body)
     report_id = record_report(
         name, job_id, body.get("path") or "local",
-        note=body.get("note"), user_prompt=body.get("user_prompt"), screenshot_key=screenshot_key
+        note=body.get("note"), user_prompt=body.get("user_prompt"), screenshot_key=screenshot_key,
+        source=source, chat=chat
     )
     return jsonify({"reported": True, "report_id": report_id})
 
@@ -461,6 +490,23 @@ def reports(user):
         return jsonify({"error": "limit and offset must be integers"}), 400
     reports, has_more = get_reports(limit=limit, offset=offset)
     return jsonify({"reports": reports, "has_more": has_more})
+
+
+@api_bp.get("/reports/<user>/<report_id>")
+def report_entry(user, report_id):
+    """Admin-only, same is_admin gate as reports() above -- one report in
+    the list's shape, for the old UI's #report=<id> entry point (the chat
+    page's read-only report view links there as its 面板 switch)."""
+    try:
+        name = normalize_username(user)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not is_admin(name):
+        return jsonify({"error": "not authorized"}), 403
+    entry = get_report(report_id)
+    if entry is None:
+        return jsonify({"error": "report not found"}), 404
+    return jsonify({"report": entry})
 
 
 @api_bp.patch("/reports/<user>/<report_id>")
