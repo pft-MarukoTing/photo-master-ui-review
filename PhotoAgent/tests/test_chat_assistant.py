@@ -533,15 +533,46 @@ class ReviewLineTest(unittest.TestCase):
     def test_an_overview_with_nothing_left_to_analyze_offers_only_render(self):
         done = {**self.BATCH, "analyze": ""}
         result, context = self.batch_review({"verdict": "offer", "reply": "", "line": "", "options": ["幫我分析", "一鍵美化"]}, done)
-        self.assertEqual((result["options"], result["reply"]), (["一鍵美化"], chat_assistant.BATCH_RENDER_OFFER_REPLY))
+        self.assertEqual((result["options"], result["reply"]), (["全部一鍵美化"], chat_assistant.BATCH_RENDER_OFFER_REPLY))
         self.assertIn("never offer or mention 分析", context)
         result, _ = self.batch_review({"verdict": "offer", "reply": "", "line": "", "options": []})
-        self.assertEqual((result["options"], result["reply"]), (chat_assistant.OFFER_OPTIONS, chat_assistant.BATCH_OFFER_REPLY))
+        self.assertEqual((result["options"], result["reply"]), (["全部分析", "全部一鍵美化"], chat_assistant.BATCH_OFFER_REPLY))
 
-    def test_an_overview_answer_sending_them_to_one_photo_is_left_as_it_is(self):
+    def test_an_overview_answer_sending_them_to_one_photo_keeps_its_words_and_gets_the_starts(self):
         reply = "只想改其中一張的話，請從左邊的「我的照片」選那一張，在那裡告訴我。"
         result, _ = self.batch_review({"verdict": "answer", "reply": reply, "line": "", "options": []}, line="第二張背景換掉")
-        self.assertEqual((result["kept"], result["offer"], result["reply"], result["options"]), (False, False, reply, []))
+        self.assertEqual((result["kept"], result["offer"], result["reply"], result["options"]),
+                         (False, True, reply, ["全部分析", "全部一鍵美化"]))
+
+    # 總覽的回答跟單張一樣，答完沒問什麼就接上開始鍵，鍵叫總覽上的名字，問句兩顆都問到；
+    # 都分析過只給美化，都在跑就不給。
+    def test_an_overview_answer_that_just_stops_offers_the_batch_starts(self):
+        answer = {"verdict": "answer", "reply": "1*2+3 等於 5。", "line": "", "options": []}
+        result, _ = self.batch_review(answer, line="1*2+3")
+        self.assertTrue(result["offer"])
+        self.assertEqual(result["options"], ["全部分析", "全部一鍵美化"])
+        self.assertEqual(result["reply"], "1*2+3 等於 5。這幾張要先分析看看，還是直接一鍵美化？")
+        result, _ = self.batch_review(answer, {**self.BATCH, "analyze": "", "render": "一鍵美化剩餘 2"}, line="1*2+3")
+        self.assertEqual((result["options"], result["reply"]), (["一鍵美化剩餘 2"], "1*2+3 等於 5。要不要直接幫你一鍵美化？"))
+        # 模型照總覽的名字給選項，也認得出來是哪一顆。
+        result, _ = self.batch_review({"verdict": "offer", "reply": "要不要直接全部一鍵美化？", "line": "",
+                                       "options": ["全部一鍵美化", "全部分析"]}, line="直接修吧")
+        self.assertEqual((result["options"], result["reply"]),
+                         (["全部一鍵美化", "全部分析"], "這幾張要直接一鍵美化，還是先分析看看？"))
+        result, _ = self.batch_review(answer, {**self.BATCH, "analyze": "", "render": ""}, line="1*2+3")
+        self.assertEqual((result["offer"], result["options"], result["reply"]), (False, [], "1*2+3 等於 5。"))
+
+    # 總覽收下一句：先回應，再講會套到哪幾張，最後指向總覽那兩顆鍵（不是單張的「分析」「一鍵美化」）。
+    def test_an_overview_keep_says_where_it_goes_and_names_the_batch_starts(self):
+        answer = {"verdict": "keep", "reply": "好，這個我記下來了。", "line": "照片清楚一點", "options": []}
+        result, _ = self.batch_review(answer, {**self.BATCH, "photos": 2, "unrendered": 2}, line="照片看起來糊糊的")
+        self.assertTrue(result["kept"])
+        self.assertEqual(result["reply"], "好，這個我記下來了。這 2 張美化時都會照這樣修。"
+                         "還有其他想改的地方嗎？沒有的話，可以按下面的「全部分析」或「全部一鍵美化」。")
+        result, _ = self.batch_review(answer, {**self.BATCH, "photos": 3, "unrendered": 2, "analyze": "",
+                                               "render": "一鍵美化剩餘 2"}, line="照片看起來糊糊的")
+        self.assertEqual(result["reply"], "好，這個我記下來了。還沒美化的 2 張會照這樣修，已經在美化或美化好的 1 張不動。"
+                         "還有其他想改的地方嗎？沒有的話，可以按下面的「一鍵美化剩餘 2」。")
 
     def test_a_chip_name_needs_no_model(self):
         def model(context):

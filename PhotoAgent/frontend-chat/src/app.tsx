@@ -525,12 +525,16 @@ type OverviewTurn =
   // options 是能點的回答。沒有 kept 的是 AI 沒回應、照原句發出去的。
   // gone 是之後被撤回或被新的一句取代，已經從每張拿掉了。
   | { id: number; kind: "wish"; text: string; count: number; skipped: number;
-      pending?: boolean; kept?: boolean; reply?: string; options?: string[]; line?: string; gone?: boolean }
+      pending?: boolean; kept?: boolean; reply?: string; options?: string[]; offer?: boolean; line?: string; gone?: boolean }
   | { id: number; kind: "settings"; settings?: Settings; model?: boolean }
   | { id: number; kind: "ask"; overwrite?: boolean; label?: string }
   | { id: number; kind: "start"; mode: "analyze" | "render"; count: number; keys: string[]; overwrite?: boolean; label?: string };
 // 總覽裡 AI 提議開始時給的兩個答案，點了就是按總覽的那顆鍵。
-const OVERVIEW_STARTS: Record<string, "analyze" | "render"> = { 幫我分析: "analyze", 一鍵美化: "render" };
+// 後端給的是總覽鍵上的名字（「全部分析」「一鍵美化剩餘 N」），舊的對話紀錄裡可能還是單張的名字。
+function overviewStartOf(label: string): "analyze" | "render" | undefined {
+  if (/^(幫我分析|全部分析|分析剩餘 \d+)$/.test(label)) return "analyze";
+  if (/^(一鍵美化|全部一鍵美化|一鍵美化剩餘 \d+)$/.test(label)) return "render";
+}
 // 總覽說的需求放進每張對話時，AI 在那張裡回的話。
 const OVERVIEW_NOTE_REPLY = "好，這句是在總覽說的，這張也會照著修。只想改這張的話，直接在這裡說。";
 
@@ -2141,7 +2145,7 @@ export function App() {
     const kept = keptTurns.map((t) => t.line || t.text);
     const history: ReviewTurn[] = said.flatMap((t) => [
       { role: "user" as const, text: t.text },
-      ...(t.reply ? [{ role: "assistant" as const, text: t.reply, ...(t.options?.length ? { question: true, options: t.options } : {}) }] : []),
+      ...(t.reply ? [{ role: "assistant" as const, text: t.reply, ...(t.options?.length ? { question: true, ...(t.offer ? { offer: true } : {}), options: t.options } : {}) }] : []),
     ]);
     const done = (x: Partial<Extract<OverviewTurn, { kind: "wish" }>>) =>
       setOverview((t) => t.map((y) => (y.id === id && y.kind === "wish" ? { ...y, ...x, pending: false } : y)));
@@ -2177,13 +2181,14 @@ export function App() {
     }
     if (r.accepted && !r.withdrawn) {
       const line = r.line && r.line !== text ? r.line : undefined;
-      done({ ...spreadWish(line || text), kept: true, line });
+      // 回話照後端的：先回應這句，再講會套到哪幾張、下一步按哪顆。
+      done({ ...spreadWish(line || text), kept: true, line, reply: r.reply || undefined });
       if (r.aspect_ratio && allSettings) overviewSettings({ ...allSettings, aspect_ratio: r.aspect_ratio });
     } else if (r.start) {
       // 「幫我美化」就是按那顆：接下來那則「開始了」會講，這裡不多回一句。
       done({ kept: false, reply: "" });
     } else {
-      done({ kept: false, reply: r.reply || "好，那就先不加這句。", options: r.ask || r.offer ? r.options || [] : [] });
+      done({ kept: false, reply: r.reply || "好，那就先不加這句。", options: r.ask || r.offer ? r.options || [] : [], offer: !!r.offer });
     }
     if (r.start) overviewStart(r.start);
   }
@@ -3250,10 +3255,14 @@ export function App() {
     // 剛按了「全部…」、送出的那幾張還沒換成處理中，或照片還在載入時，進度還不準，先不講也不定下來；
     // 不然會把剛送去美化的那張也算成「分析好了，還沒美化」。
     const at = (k: string) => progress[batch.findIndex((x) => sourceSrc(x) === k)];
-    const settling = loadingPhotos || !!allHold || (lastTurn?.kind === "start" && lastTurn.keys.some((k) =>
-      at(k) === "todo" || (lastTurn.mode === "render" && at(k) === "analyzed")));
+    // 打字問的那則還在等回話：先不定下來，不然下一步那句會搶在回話前面冒出來。
+    const settling = loadingPhotos || !!allHold || (lastTurn?.kind === "wish" && !!lastTurn.pending)
+      || (lastTurn?.kind === "start" && lastTurn.keys.some((k) =>
+        at(k) === "todo" || (lastTurn.mode === "render" && at(k) === "analyzed")));
     const named = statusHint.includes(`「${labels.analyze}」`) || statusHint.includes(`「${labels.render}」`);
-    const snap = { text: statusHint, chips: named ? chipsNow : null };
+    // 打字問的那則，下一步跟著回話走：沒收下的，後端回話時就附好選項（答完沒問什麼的也補上開始鍵）；
+    // 收下的，「全部…」那排接在回話底下。不再另起一則講一樣的話——不然每打一句，最底下就又多一句。
+    const snap = lastTurn?.kind === "wish" ? { text: "", chips: chipsNow } : { text: statusHint, chips: named ? chipsNow : null };
     if (lastTurn && !settling && !(lastTurn.id in turnHints.current)) turnHints.current[lastTurn.id] = snap;
     const said = !lastTurn ? (settling ? undefined : snap) : turnHints.current[lastTurn.id];
     const hint = said?.text || "";
@@ -3428,7 +3437,7 @@ export function App() {
                       <div class="chat-choices">
                         {t.options.map((o) => (
                           <Chip label={o} settled={!latest} disabled={overviewHeld}
-                            onClick={() => (OVERVIEW_STARTS[o] ? overviewStart(OVERVIEW_STARTS[o]) : void overviewSay(o))} />
+                            onClick={() => { const m = overviewStartOf(o); return m ? overviewStart(m) : void overviewSay(o); }} />
                         ))}
                       </div>
                     )}
@@ -3437,12 +3446,15 @@ export function App() {
               ) : (
                 <AssistantMsg>
                   <p class="chat-text">
+                    {t.count && t.reply ? t.reply : <>
                     {t.line && `好，記下了：${t.line}。`}
                     {t.count
                       ? `${t.line ? "" : "好，"}這句會套用在 ${t.count} 張還沒美化的照片上。${t.skipped ? `已經在美化或美化好的 ${t.skipped} 張不會套用。` : ""}只想改某一張，從${where}選取那張調整。`
                       : "每張都已經在美化或美化好了，這句不會套用；要改哪一張，到那張的結果頁說就好。"}
+                    </>}
                   </p>
                   {t.gone && <p class="chat-text chat-muted">這句後來撤回或被新的需求取代了，已經從每張拿掉。</p>}
+                  {!t.gone && chipRow(turnHints.current[t.id]?.chips, latest)}
                 </AssistantMsg>
               )}
             </div>

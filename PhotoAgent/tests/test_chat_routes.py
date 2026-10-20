@@ -1684,9 +1684,9 @@ class ChatRoutesTest(unittest.TestCase):
     # Only an outright 「幫我分析」 starts it. A guessed intent is offered first,
     # with the outright commands to tap, and starts nothing.
     def test_a_guessed_start_is_offered_not_started(self):
-        res, _ = self.review("這張要怎麼修？", {"verdict": "offer", "reply": "要不要我先幫你分析這張照片？",
+        res, _ = self.review("這張要怎麼修？", {"verdict": "offer", "reply": "要先幫你分析這張照片，還是直接一鍵美化？",
                                             "line": "", "options": ["幫我分析", "一鍵美化"]})
-        self.assertEqual(res.get_json(), {"accepted": False, "reply": "要不要我先幫你分析這張照片？",
+        self.assertEqual(res.get_json(), {"accepted": False, "reply": "要先幫你分析這張照片，還是直接一鍵美化？",
                                           "offer": True, "options": ["幫我分析", "一鍵美化"]})
         res, _ = self.review("適合什麼風格？", {"verdict": "offer", "reply": "", "line": "", "options": []})
         self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.chat_assistant.OFFER_REPLY,
@@ -1714,22 +1714,22 @@ class ChatRoutesTest(unittest.TestCase):
     def test_an_answer_closes_with_the_offer_its_buttons_answer(self):
         res, _ = self.review("長寬比要選哪個？", {"verdict": "answer", "line": "", "options": ["幫我分析", "一鍵美化"],
                                              "reply": "長寬比可以選 Auto。你想要我再說明其他美化設定嗎？"})
-        self.assertEqual(res.get_json()["reply"], "長寬比可以選 Auto。要不要我先幫你分析看看？")
+        self.assertEqual(res.get_json()["reply"], "長寬比可以選 Auto。要先幫你分析看看，還是直接一鍵美化？")
         res, _ = self.review("一鍵美化是什麼？", {"verdict": "answer", "line": "", "options": ["一鍵美化", "幫我分析"],
                                              "reply": "會直接修好。要不要直接幫你一鍵美化？"})
-        self.assertEqual(res.get_json()["reply"], "會直接修好。要不要直接幫你一鍵美化？")
+        self.assertEqual(res.get_json()["reply"], "會直接修好。要直接幫你一鍵美化，還是先分析看看？")
         res, _ = self.review("分析在做什麼？", {"verdict": "answer", "line": "", "options": ["幫我分析", "一鍵美化"],
                                             "reply": "分析會先看過這張照片。"})
-        self.assertEqual(res.get_json()["reply"], "分析會先看過這張照片。要不要我先幫你分析看看？")
+        self.assertEqual(res.get_json()["reply"], "分析會先看過這張照片。要先幫你分析看看，還是直接一鍵美化？")
         # An offer mid-reply, with the promise after it, is already the offer.
-        promise = "要不要我先幫你分析這張照片？分析或美化好之後就回答你。"
+        promise = "要先幫你分析這張照片，還是直接一鍵美化？分析或美化好之後就回答你。"
         res, _ = self.review("這是在哪裡拍的？", {"verdict": "answer", "line": "", "options": ["幫我分析", "一鍵美化"],
                                              "reply": promise})
         self.assertEqual(res.get_json()["reply"], promise)
         # An answer that just stops gets the offer too, but not right after one.
         res, _ = self.review("美化引擎是什麼？", {"verdict": "answer", "line": "", "options": [],
                                              "reply": "美化引擎是負責修圖的 AI 模型。"})
-        self.assertEqual(res.get_json()["reply"], "美化引擎是負責修圖的 AI 模型。要不要我先幫你分析看看？")
+        self.assertEqual(res.get_json()["reply"], "美化引擎是負責修圖的 AI 模型。要先幫你分析看看，還是直接一鍵美化？")
         self.assertEqual(res.get_json()["options"], ["幫我分析", "一鍵美化"])
         history = [{"role": "assistant", "text": "要不要我先幫你分析？", "question": True, "offer": True,
                     "options": ["幫我分析", "一鍵美化"]}]
@@ -1760,9 +1760,9 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(res.get_json(), {"accepted": False, "reply": "可以喔！想換成什麼樣的背景？直接跟我說就好。"})
         self.assertIn("TOOL GUIDE", seen[0])
         # An answer that ends by offering the next step carries the options.
-        res, _ = self.review("分析在做什麼？", {"verdict": "answer", "reply": "…要不要我先幫你分析看看？",
+        res, _ = self.review("分析在做什麼？", {"verdict": "answer", "reply": "…要先幫你分析看看，還是直接一鍵美化？",
                                             "options": ["幫我分析", "一鍵美化"]})
-        self.assertEqual(res.get_json(), {"accepted": False, "reply": "…要不要我先幫你分析看看？",
+        self.assertEqual(res.get_json(), {"accepted": False, "reply": "…要先幫你分析看看，還是直接一鍵美化？",
                                           "offer": True, "options": ["幫我分析", "一鍵美化"]})
 
     # A model that says nothing still has to say something here.
