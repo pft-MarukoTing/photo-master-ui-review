@@ -300,7 +300,6 @@ export function Header(props: {
       <div class="header-inner">
         <button type="button" class="logo" id="logo-home-btn" onClick={props.onHome}>
           Photo<em>Master</em>
-          <span class="logo-env-badge" id="logo-env-badge" title="開發環境">DEV</span>
         </button>
         {/* 收成 ⋯ 的寬度，新對話跟最近照片不進選單，留在 header 上一鍵就到（寬螢幕不顯示，用攤開的那顆）。 */}
         {props.onNewChat && (
