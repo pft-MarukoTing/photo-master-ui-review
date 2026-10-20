@@ -4392,10 +4392,7 @@
        that page's own layout needs (the column pinned to the viewport
        height, its Chip, the 901-1200 portrait drawer).
        Each photo is a full-width square .history-cube with its badge over
-       the corner; the column narrows to fit them, and the photo count sits
-       beside the title. */
-    .batch-sidebar-count { flex: none; font-size: 12px; color: var(--text-2); }
-    .batch-sidebar-count:empty { display: none; }
+       the corner; the column narrows to fit them. */
     .batch-sidebar-list { scrollbar-width: thin; overscroll-behavior: contain; scroll-padding: 4px 0; }
     /* flex:none -- the list is a scrolling flex column, which would
        otherwise squash the squares. */
@@ -4433,7 +4430,68 @@
       .batch-sidebar-close-btn { top: 12px; right: 8px; }
     }
 
-    .batch-continue-all-btn { width: 100%; justify-content: center; margin-bottom: 12px; }
+    /* ── 面板模式的「我的照片」：跟對話模式那欄（app.tsx 的 BatchPreSidebar）同一個樣子 ──
+       標題不帶張數、「全部美化」是一整條 tonal 膠囊、列表上面一排狀態篩選。沒有總覽那一頁，
+       所以也沒有總覽那格，膠囊直接放在標題下面（跟對話模式 session 裡那欄一樣）。
+       全部掛在 .is-panel 底下：這段也會被帶進對話模式的 build，那邊的 aside 沒有這個 class，
+       碰不到它自己 chat.css 的版本。
+       tonal 的底色跟 chat.css 同一套算法（深色混 --n09、淺色混白），只是宣告在這欄上；
+       字色照這頁自己的慣例用 --accent。 */
+    .batch-sidebar.is-panel {
+      --tonal-base: var(--n09);
+      --tonal: color-mix(in srgb, var(--accent) 8%, var(--tonal-base));
+      --tonal-hi: color-mix(in srgb, var(--accent) 12%, var(--tonal-base));
+    }
+    body[data-theme-mode="light"] .batch-sidebar.is-panel,
+    body[data-theme="paper"] .batch-sidebar.is-panel,
+    body[data-theme="peach"] .batch-sidebar.is-panel {
+      --tonal-base: #fff;
+      --tonal: color-mix(in srgb, var(--accent) 10%, var(--tonal-base));
+      --tonal-hi: color-mix(in srgb, var(--accent) 16%, var(--tonal-base));
+    }
+    .batch-sidebar.is-panel .batch-sidebar-header { margin-bottom: 10px; }
+    .batch-sidebar.is-panel .batch-sidebar-all { flex: none; display: flex; flex-direction: column; }
+    .batch-sidebar-chip {
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; min-height: 32px; margin: 0 0 10px; padding: 4px 12px; box-sizing: border-box;
+      border: 1px solid var(--accent); border-radius: 999px;
+      box-shadow: inset 0 0 0 1px var(--accent);
+      background: var(--tonal); color: var(--accent);
+      font: 700 14px/1.3 Inter, 'Noto Sans TC', system-ui, sans-serif;
+      cursor: pointer;
+    }
+    .batch-sidebar-chip[hidden] { display: none; }
+    .batch-sidebar-chip:hover { background: var(--tonal-hi); }
+    .batch-sidebar-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .batch-sidebar.is-panel .batch-sidebar-filters { display: flex; flex-wrap: wrap; flex: none; gap: 4px; margin: 0 0 8px; }
+    .batch-sidebar.is-panel .batch-sidebar-filters[hidden] { display: none; }
+    .batch-sidebar.is-panel .batch-grid-filter {
+      font: inherit; font-size: 11.5px; padding: 2px 8px; white-space: nowrap;
+      border-radius: 999px; border: 1px solid var(--border);
+      background: transparent; color: var(--text); cursor: pointer;
+    }
+    .batch-sidebar.is-panel .batch-grid-filter:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .batch-sidebar.is-panel .batch-grid-filter.is-on { background: var(--tonal); color: var(--accent); border-color: transparent; font-weight: 700; }
+    /* 「處理中」前面一個轉著的小圈，跟對話模式一樣；減少動態時只留不動的圈。 */
+    .batch-sidebar.is-panel .batch-grid-filter.is-running { display: inline-flex; align-items: center; gap: 6px; }
+    .batch-sidebar.is-panel .batch-grid-filter.is-running::before {
+      content: ""; flex: none; width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%;
+      border: 1.5px solid currentColor; border-top-color: transparent;
+      animation: batch-sidebar-filter-spin .9s linear infinite;
+    }
+    @keyframes batch-sidebar-filter-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .batch-sidebar.is-panel .batch-grid-filter.is-running::before { animation: none; }
+    }
+    .batch-sidebar.is-panel .batch-sidebar-list > .history-cube[hidden] { display: none; }
+    /* 寬度、上緣跟對話模式那欄一樣：桌機 224px、上面只留 7px，關閉鍵跟著貼齊標題列。 */
+    @media (min-width: 901px) {
+      #results-body.batch-mode #batch-sidebar.is-panel { flex: 0 0 224px; max-width: 224px; padding: 7px 14px 14px; }
+    }
+    @media (max-width: 900px) {
+      #results-body.batch-mode #batch-sidebar.is-panel { padding-top: 7px; }
+      .batch-sidebar.is-panel .batch-sidebar-close-btn { top: 7px; }
+    }
     .batch-lock-toggle {
       display: flex;
       align-items: center;
@@ -4583,8 +4641,8 @@
     #photo-viewer .version-viewer-tile { position: relative; }
     #photo-viewer .version-tile-run { top: 2px; bottom: auto; right: 2px; }
   </style>
-  <script type="module" crossorigin src="./static/index-B-AQ61zF.js"></script>
-  <link rel="stylesheet" crossorigin href="./static/index-D3wPPMw-.css">
+  <script type="module" crossorigin src="./static/index-CGh_CPIE.js"></script>
+  <link rel="stylesheet" crossorigin href="./static/index-Cczu468m.css">
 </head>
 <body data-theme="caramel" data-theme-mode="light" class="side-panel-layout">
   <!-- The attributes above are caramel, the fallback, so the common first load
