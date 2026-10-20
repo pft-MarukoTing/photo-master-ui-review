@@ -681,6 +681,12 @@ function fileSource(file: File, preview: { full: Blob; thumb: Blob | null }): So
   return { kind: "file", file, url: URL.createObjectURL(preview.full), thumb: preview.thumb ? URL.createObjectURL(preview.thumb) : undefined };
 }
 
+// 一次選好幾張時打頭的那張：瀏覽器自己畫得出來的直接用原檔，不等縮小圖，選完馬上有畫面；
+// 只有一格放原圖，不會像整批都放原圖那樣吃記憶體。HEIC 畫不出來，還是得先解碼。
+async function firstSource(file: File): Promise<Source> {
+  return fileSource(file, isHeic(file) ? await previewBlobs(file) : { full: file, thumb: null });
+}
+
 function dropSource(s: Source) {
   if (s.kind !== "file") return;
   URL.revokeObjectURL(s.url);
@@ -764,6 +770,8 @@ export function App() {
   // 正在讀的那一輪：總覽那筆上傳的 id、讀好幾張、一共幾張。讀完之前多張頁上什麼都不能按。
   const [photoLoad, setPhotoLoad] = useState<{ entry: number; done: number; total: number } | null>(null);
   const loadingPhotos = !!photoLoad;
+  // 選了好幾張、打頭那張是 HEIC 還在解碼，多張頁還開不出來：先浮一句「正在讀取 N 張照片…」。
+  const [readingFirst, setReadingFirst] = useState(0);
   const [sourceGeneration, setSourceGeneration] = useState(0);
   const [settings, setSettings] = useState<Settings | null>(null);
   // header 設定裡的對話風格；settings 每次重來都從這裡起跳。
@@ -1463,24 +1471,32 @@ export function App() {
     ) return;
     const pick = ++lastPick.current;
     const taken = images.slice(0, MAX_BATCH);
-    // 讀好前兩張就開多張頁，其他的讀好一張放一張，不等全部讀完才一次出現。
-    const first: Source[] = [];
-    for (const f of taken.slice(0, 2)) {
-      const preview = await previewBlobs(f);
-      if (pick !== lastPick.current) {
-        for (const s of first) dropSource(s);
-        return;
-      }
-      first.push(fileSource(f, preview));
-    }
+    // 第一張好了就開多張頁，其他的讀好一張放一張，不等全部讀完才一次出現；還沒好的先放佔位格。
+    const first = await readFirst(taken, pick);
+    if (pick !== lastPick.current) return dropSource(first);
     const entry = await startBatch(
-      first,
+      [first],
       images.length < files.length
           ? notice(`有 ${files.length - images.length} 個檔案不是圖片，先略過。`)
           : "",
       taken.length,
     );
-    if (entry !== null) await addAsLoaded(taken.slice(2), entry);
+    if (entry !== null) await addAsLoaded(taken.slice(1), entry);
+  }
+
+  // 讀打頭那張；要解碼（HEIC）的那段先浮一句提示，一般照片瞬間就好，不閃那一下。
+  // 誰掛上的誰收：中途又選了一批 HEIC，提示留給新的那批。
+  const readingPick = useRef(0);
+  async function readFirst(taken: File[], pick: number): Promise<Source> {
+    if (isHeic(taken[0])) {
+      readingPick.current = pick;
+      setReadingFirst(taken.length);
+    }
+    try {
+      return await firstSource(taken[0]);
+    } finally {
+      if (readingPick.current === pick) setReadingFirst(0);
+    }
   }
 
   // 剩下的照片一張一張讀縮圖，讀好就接到多張頁後面，總覽那筆上傳的張數跟著長。
@@ -1645,9 +1661,8 @@ export function App() {
     // 跟 pickFiles 一樣：讀好第一張就放上去，其他的讀好一張放一張。
     let entry: number | null = null;
     if (taken.length) {
-      const preview = await previewBlobs(taken[0]);
-      if (pick !== lastPick.current) return;
-      const s = fileSource(taken[0], preview);
+      const s = await readFirst(taken, pick);
+      if (pick !== lastPick.current) return dropSource(s);
       setBatch((b) => (b ? [...b, s] : b));
       entry = logUpload([s]);
       if (entry !== null && taken.length > 1) setPhotoLoad({ entry, done: 1, total: taken.length });
@@ -2891,6 +2906,13 @@ export function App() {
       onClearAll={() => removeRows("all")}
     />
   );
+  const readingEl = readingFirst > 0 && (
+    <div class="photo-reading" role="status">
+      <span class="chat-typing" aria-hidden="true"><span /><span /><span /></span>
+      正在讀取 {readingFirst} 張照片…
+    </div>
+  );
+
   const confirmEl = leaveAsk && (
     <ConfirmModal
       message={leaveAsk.message}
@@ -3073,7 +3095,8 @@ export function App() {
 
   // 多張的上傳頁：左邊是「我的照片」，最上面那格是總覽，點一張就是那張自己的對話，跟只
   // 上傳一張時一樣；一進來先到總覽。最上面兩顆把還沒開始的每張一起送出。
-  if (phase === "chat" && batch && batch.length > 1) {
+  // 還在讀後面幾張時，先到的那一張也已經是多張頁，不要先閃一下單張的頁面。
+  if (phase === "chat" && batch && (batch.length > 1 || (batch.length === 1 && loadingPhotos))) {
     const anyRun = Object.keys(batchRuns).length > 0;
     const pending = allPending;
     // 總覽的對話裡，「全部一鍵美化」只算現在沒在跑的：按了全部分析、還在分析的那幾張等跑完再給，
@@ -3202,6 +3225,7 @@ export function App() {
           <BatchOverviewGrid
             key={sourceSrc(batch[0])}
             sources={batch}
+            loading={photoLoad ? photoLoad.total - photoLoad.done : 0}
             runs={batchRuns}
             live={batchLive}
             failed={batchFailed}
@@ -3387,6 +3411,7 @@ export function App() {
                 <div class="upload-content-row is-chat">
                   <BatchPreSidebar
                     sources={batch}
+                    loading={photoLoad ? photoLoad.total - photoLoad.done : 0}
                     runs={batchRuns}
                     wished={batchWished}
                     current={batchKey}
@@ -3425,7 +3450,7 @@ export function App() {
         </main>
         {drawerEl}{prefsEl}
         {samplesEl}
-        {confirmEl}
+        {readingEl}{confirmEl}
         {askEl}
         <PhotoViewer src={viewing && source ? fullSrc(source) : null} onClose={closeViewer} />
       </>
@@ -3456,7 +3481,7 @@ export function App() {
             </div>
           </section>
         </main>
-        {drawerEl}{prefsEl}{confirmEl}{askEl}
+        {drawerEl}{prefsEl}{readingEl}{confirmEl}{askEl}
       </>
     );
   }
@@ -3474,6 +3499,7 @@ export function App() {
               batch && batchHere ? (
                 <BatchPreSidebar
                   sources={batch}
+                  loading={photoLoad ? photoLoad.total - photoLoad.done : 0}
                   runs={batchRuns}
                   wished={batchWished}
                   current={batchHere}
@@ -3544,7 +3570,7 @@ export function App() {
         </main>
         {drawerEl}{prefsEl}
         {samplesEl}
-        {confirmEl}
+        {readingEl}{confirmEl}
         {askEl}
       </>
     );
@@ -3602,7 +3628,7 @@ export function App() {
       </main>
       {drawerEl}{prefsEl}
       {samplesEl}
-      {confirmEl}
+      {readingEl}{confirmEl}
       {askEl}
       <PhotoViewer src={viewing && source ? fullSrc(source) : null} onClose={closeViewer} />
     </>
@@ -3666,8 +3692,26 @@ function PhotoLoadMsg({ done, total }: { done: number; total: number }) {
   );
 }
 
+// 讀好一張放上來的那格淡入一下。看過的記在模組裡：從單張那頁回總覽、側欄重掛時不會整排再閃一次。
+const seenTiles = new Set<string>();
+function useFreshTiles() {
+  const fresh = useRef(new Set<string>()).current;
+  return (key: string) => {
+    if (!seenTiles.has(key)) {
+      seenTiles.add(key);
+      fresh.add(key);
+    }
+    return fresh.has(key);
+  };
+}
+
+// 還在讀的照片先佔好位置，一格一格往後錯開閃，看得出後面還有幾張要來。
+const ghostDelay = (i: number) => ({ animationDelay: `${(i % 6) * 90}ms` });
+
 function BatchPreSidebar(props: {
   sources: Source[];
+  // 選了還在讀、還沒放上來的張數，先放佔位格。
+  loading?: number;
   runs: Record<string, BatchRun>;
   wished: (key: string) => boolean;
   current: string | null;
@@ -3700,6 +3744,7 @@ function BatchPreSidebar(props: {
   reveal?: number;
 }) {
   const { sources, runs, current, pending, live } = props;
+  const isFresh = useFreshTiles();
   const [open, setOpen] = useState(false);
   const [ping, setPing] = useState(false);
   const [home, setHome] = useState(false);
@@ -3874,7 +3919,7 @@ function BatchPreSidebar(props: {
                 role="tab"
                 aria-selected={on}
                 aria-label={`第 ${i + 1} 張，${state.text}`}
-                class={`history-cube batch-sidebar-item${state.key ? ` ${state.key}` : ""}${on ? " selected" : ""}`}
+                class={`history-cube batch-sidebar-item${state.key ? ` ${state.key}` : ""}${on ? " selected" : ""}${isFresh(key) ? " is-fresh" : ""}`}
                 disabled={props.disabled && !on}
                 onClick={() => pick(s)}
               >
@@ -3887,6 +3932,11 @@ function BatchPreSidebar(props: {
               </button>
             );
           })}
+          {filter === "all" && Array.from({ length: props.loading || 0 }, (_, i) => (
+            <span key={`ghost-${i}`} class="history-cube batch-sidebar-item is-ghost" aria-hidden="true">
+              <span class="rc-media" style={ghostDelay(i)} />
+            </span>
+          ))}
         </div>
       </aside>
       <button
@@ -3949,6 +3999,8 @@ function BatchOverviewGrid(props: {
   live: Record<string, Photo>;
   failed: Record<string, boolean>;
   wished: (key: string) => boolean;
+  // 選了還在讀、還沒放上來的張數，先放佔位格。
+  loading?: number;
   pending: number;
   renderable: number;
   disabled: boolean;
@@ -3967,6 +4019,7 @@ function BatchOverviewGrid(props: {
   const [picked, setFilter] = useState<BatchProgress | "all">("all");
   const [open, setOpen] = useState(false);
   const [cols, setCols] = useState(6);
+  const isFresh = useFreshTiles();
   // 成品縮圖載不出來的那幾張（job 的檔案可能比對話先過期）改放原圖，跟最近照片的磚一樣。
   const [broken, setBroken] = useState<Set<string>>(() => new Set());
   const [rows, setRows] = useState(GRID_ROWS);
@@ -4000,8 +4053,14 @@ function BatchOverviewGrid(props: {
     .filter((x) => filter === "all" || x.progress === filter)
     .sort((a, b) => rank(a.progress) - rank(b.progress) || a.no - b.no);
   const cap = cols * rows;
-  const folded = listed.length > cap;
+  // 佔位格只在看全部時放，跟真的照片一起算進收起來的那一兩列。
+  const ghosts = filter === "all" ? props.loading || 0 : 0;
+  const folded = listed.length + ghosts > cap;
   const shown = folded ? listed.slice(0, cap - 1) : listed;
+  const ghostsShown = folded ? Math.max(0, cap - 1 - shown.length) : ghosts;
+  const ghostCells = (n: number) => Array.from({ length: n }, (_, i) => (
+    <span key={`ghost-${i}`} class="batch-grid-cell is-ghost" style={ghostDelay(i)} aria-hidden="true" />
+  ));
   useEffect(() => {
     if (!open) return;
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -4044,7 +4103,7 @@ function BatchOverviewGrid(props: {
       <button
         key={x.key}
         type="button"
-        class={`batch-grid-cell is-${x.progress}`}
+        class={`batch-grid-cell is-${x.progress}${isFresh(x.key) ? " is-fresh" : ""}`}
         aria-label={`第 ${x.no} 張，${badge.text}`}
         disabled={props.disabled}
         onClick={() => {
@@ -4072,9 +4131,10 @@ function BatchOverviewGrid(props: {
       </div>
       <div class="batch-grid-cells" ref={grid} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {shown.map(cell)}
+        {ghostCells(ghostsShown)}
         {folded ? (
           <button type="button" class="batch-grid-more" onClick={() => (props.onMore && matchMedia(DRAWER_MEDIA).matches ? props.onMore() : setOpen(true))}>
-            +{listed.length - shown.length} 張<br />顯示全部
+            +{listed.length + ghosts - shown.length - ghostsShown} 張<br />顯示全部
           </button>
         ) : null}
       </div>
@@ -4090,7 +4150,7 @@ function BatchOverviewGrid(props: {
             </div>
             <div class="sample-modal-body">
               {filters}
-              <div class="batch-grid-cells is-all">{listed.map(cell)}</div>
+              <div class="batch-grid-cells is-all">{listed.map(cell)}{ghostCells(ghosts)}</div>
             </div>
           </div>
         </>
