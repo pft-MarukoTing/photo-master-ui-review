@@ -2,7 +2,7 @@
 // 最近照片 drawer -- old markup and classes throughout.
 import type { ComponentChildren } from "preact";
 import { createPortal } from "preact/compat";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api, getUser, urls } from "./api";
 import heroAfter from "./assets/hero_after.jpg";
 import heroBefore from "./assets/hero_before.jpg";
@@ -610,6 +610,8 @@ function SessionDays(props: {
 }
 
 export type GalleryTab = "recent" | "sample";
+// 首頁最近照片一次畫幾格。
+const GALLERY_PAGE = 12;
 // 範例照片可以多選，names 照點的順序排（多張頁就照這個順序）。
 export type GallerySelection = { kind: "session"; id: string } | { kind: "demo"; names: string[] } | null;
 
@@ -630,6 +632,21 @@ export function Gallery(props: {
   const { tab, selection } = props;
   const recent = tab === "recent";
   const list = recent ? props.sessions : props.demos;
+  // 最近照片一次只畫一段，捲到尾巴附近再接下一段。整份紀錄（最多幾百格、每格最多
+  // 四張縮圖）一起畫出來的話，lazy loading 的預載範圍很大，第一次進首頁就會排隊
+  // 抓上百張縮圖。手機那一排、桌機那一欄都是捲到底才接，不用分版型。
+  const [shown, setShown] = useState(GALLERY_PAGE);
+  const tail = useRef<HTMLSpanElement>(null);
+  const sessions = props.sessions || [];
+  useEffect(() => {
+    const el = tail.current;
+    if (!recent || !el || shown >= sessions.length) return;
+    const io = new IntersectionObserver((seen) => seen.some((e) => e.isIntersecting) && setShown((n) => n + GALLERY_PAGE), {
+      rootMargin: "300px",
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [recent, shown, sessions.length]);
   const names = selection?.kind === "demo" ? selection.names : [];
   // 點一下選、再點一下取消；選滿了再點沒選的不會加。
   const toggle = (name: string) => {
@@ -690,13 +707,16 @@ export function Gallery(props: {
         <div id="demo-images-grid" class="demo-images-grid">
           {recent
             ? (
-                <SessionDays
-                  sessions={props.sessions || []}
-                  gridClass="history-grid"
-                  selectedId={selection?.kind === "session" ? selection.id : null}
-                  onPick={(id) => props.onSelect({ kind: "session", id })}
-                  onRemove={props.onRemove}
-                />
+                <>
+                  <SessionDays
+                    sessions={sessions.slice(0, shown)}
+                    gridClass="history-grid"
+                    selectedId={selection?.kind === "session" ? selection.id : null}
+                    onPick={(id) => props.onSelect({ kind: "session", id })}
+                    onRemove={props.onRemove}
+                  />
+                  {shown < sessions.length && <span ref={tail} class="gallery-more" aria-hidden="true" />}
+                </>
               )
             : (props.demos || []).map((name) => (
                 <Tile
@@ -742,6 +762,10 @@ export function HistoryDrawer(props: {
 }) {
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // 收起來的抽屜只是縮小、透明擺在畫面上，裡面的縮圖照樣會被載入。第一次打開前先不
+  // 畫清單；打開過就留著，收起的動畫和下次打開都不用重畫。
+  const [opened, setOpened] = useState(props.open);
+  if (props.open && !opened) setOpened(true);
   const stopPicking = () => {
     setPicking(false);
     setPicked(new Set());
@@ -833,14 +857,16 @@ export function HistoryDrawer(props: {
           </div>
         </div>
         <div class={`history-list${picking ? " chat-picking" : ""}`}>
-          <SessionDays
-            sessions={props.sessions || []}
-            gridClass="demo-images-grid chat-history-grid"
-            selectedId={props.currentId}
-            onPick={picking ? toggle : props.onOpen}
-            picked={picking ? picked : undefined}
-            onRemove={picking ? undefined : (id) => props.onRemove([id])}
-          />
+          {opened && (
+            <SessionDays
+              sessions={props.sessions || []}
+              gridClass="demo-images-grid chat-history-grid"
+              selectedId={props.currentId}
+              onPick={picking ? toggle : props.onOpen}
+              picked={picking ? picked : undefined}
+              onRemove={picking ? undefined : (id) => props.onRemove([id])}
+            />
+          )}
         </div>
         <p class="history-empty" hidden={!props.sessions || props.sessions.length > 0}>
           目前還沒有照片。

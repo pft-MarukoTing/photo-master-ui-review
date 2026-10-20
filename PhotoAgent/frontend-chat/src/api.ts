@@ -233,8 +233,23 @@ export const api = {
     ),
   setActiveVersion: (id: string, photoId: string, v: { version_id: string; job_id: string; run: number }) =>
     request<Session>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/active-version`, json("PUT", v)),
-  result: (jobId: string) => request<Dict>(`${API}/photo-agent/result/${encodeURIComponent(jobId)}`),
+  result: (jobId: string) => {
+    let pending = results.get(jobId);
+    if (!pending) {
+      pending = request<Dict>(`${API}/photo-agent/result/${encodeURIComponent(jobId)}`).then((r) => {
+        if (r?.status !== "success") results.delete(jobId);
+        return r;
+      });
+      pending.catch(() => results.delete(jobId));
+      results.set(jobId, pending);
+    }
+    return pending;
+  },
 };
+
+// 一版成品的結果做完就不會再變，成品卡、比較檢視、prompt 視窗各自要也只抓一次；
+// 還沒做完或抓失敗的不留，下次照常重抓。
+const results = new Map<string, Promise<Dict>>();
 
 const enc = encodeURIComponent;
 const withRun = (url: string, run?: number) => (run ? `${url}?run=${run}` : url);
