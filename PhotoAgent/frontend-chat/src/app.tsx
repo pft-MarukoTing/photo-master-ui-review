@@ -722,6 +722,23 @@ function dropSource(s: Source) {
   if (s.thumb) URL.revokeObjectURL(s.thumb);
 }
 
+// session 頁的預覽框是原圖撐開的：原圖還在路上時框只有轉圈那塊寬，載到才撐開，
+// 看起來像先跳出一個小框。上傳完就先在背景抓原圖、解碼好，切頁前等它一下
+// （最多 PRIME_WAIT_MS），頁面上那張 <img> 拿到的就是已經有尺寸的圖。
+// 留著 Image 物件，瀏覽器才會把它留在記憶體裡給同一個網址用。
+const primed = new Map<string, { img: HTMLImageElement; done: Promise<void> }>();
+const PRIME_WAIT_MS = 1500;
+function primeImage(url: string): Promise<void> {
+  let hit = primed.get(url);
+  if (!hit) {
+    const img = new Image();
+    img.src = url;
+    hit = { img, done: img.decode().catch(() => void primed.delete(url)) };
+    primed.set(url, hit);
+  }
+  return Promise.race([hit.done, wait(PRIME_WAIT_MS)]).then(() => {});
+}
+
 function fullSrc(s: Source) {
   return s.kind === "file" ? s.url : s.kind === "remote" ? urls.sourceImage(s.job) : urls.demoImage(s.name);
 }
@@ -2740,6 +2757,11 @@ export function App() {
       if (!same()) return;
       say(mode === "analyze" ? "照片傳好了，準備開始分析…" : overwrite ? "照片傳好了，準備開始調整…" : "照片傳好了，準備開始美化…");
       // 上傳頁面已經偵測過這張的人臉，session 頁沒有分析時就直接用，不再偵測一次。
+      // 對話裡「上傳了 1 張照片」那格縮圖也是同一回事，一起先抓。
+      const primedSource = Promise.all([
+        primeImage(urls.sourceImage(added.analyze_job_id)),
+        primeImage(urls.sourceThumb(added.analyze_job_id)),
+      ]);
       if (!previewEnabled && preScan.ready) seedDetectedFaces(urls.sourceImage(added.analyze_job_id), preScan.people.map((p) => p.box));
       // 上傳頁面聊過的接在照片後面。等著回答的那句也在裡面：分析一好，session
       // 的 AI 就回答它，使用者不用再問一次。要在切到 session 頁之前搬好：頁面以
@@ -2752,6 +2774,7 @@ export function App() {
         }
         if (sourceIdentity.current !== selectedSource) return;
         uploadedSession = await api.getSession(id, undefined, step());
+        await primedSource;
       } catch {
         // 照片已經進了 session：跟多張一樣不重傳，直接打開它的結果頁再弄（美化在那裡按）。
         // 沒搬完的上傳頁對話就算了。

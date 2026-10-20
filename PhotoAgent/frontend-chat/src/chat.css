@@ -257,9 +257,11 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 /* 這一層的 z-index 只在照片框裡面比：手機版對話那張（.results-analysis-slot，z-index 3）
    往上蓋住照片底部，處理中這層不能反過來壓到對話上。 */
 .photo-frame:has(> .canvas-busy){isolation:isolate}
-/* .photo-frame 的寬度是跟著圖走的，圖還沒載到時會塌成一條 -- 給這一層一個下限，
-   第一次分析時才不會先閃一條窄的霧玻璃。 */
-.photo-frame:has(> .canvas-busy){min-width:min(100%,320px)}
+/* styles.css 讓 .photo-frame 的寬度跟著圖走，圖還沒載到時框是 0 寬，處理中那層先撐成一個
+   小框，圖到了才跳成大框。這裡跟上傳頁的 .prechat-shot 一樣：框撐滿相框內寬，圖在裡面置中，
+   大小從頭到尾不看圖載好了沒，從上傳頁切過來也不會重排。框不再貼著照片，陰影就拿掉（上傳頁
+   在相框裡的照片也沒有），圓角照舊在 img 自己身上。 */
+.photo-frame{width:100%;box-shadow:none}
 /* 這一層只有轉環和一行字，所以轉環要夠大才撐得住 480px 高的框 -- 上限 156px。
    手機上照片會被對話那張壓到只剩一小段，轉環就跟著這一層的大小（container）縮，
    整圈都要看得到；內圈的 22px/44px 換成同比例的百分比，縮小時三圈才不會擠成一團。
@@ -962,6 +964,9 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   body #results-body.batch-mode #batch-sidebar{flex:0 0 224px;max-width:224px;padding:14px}
   #results-body.batch-mode{gap:40px}
   .results-canvas-row.showing-analysis{gap:40px}
+  /* 對話欄寬也照上傳頁：一半一半，但封頂 780（.upload-content-row>.home-chat），寬螢幕多出來
+     的給照片。少了這條，視窗一寬，按下分析對話就突然變寬、照片被擠窄。 */
+  .results-canvas-row.showing-analysis .results-analysis-slot{max-width:780px}
   .results-analysis-slot>.chat-panel{background:var(--n09);border:0;border-radius:20px;padding-left:0;
     box-shadow:0 10px 30px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)}
   .results-analysis-slot>.chat-panel .chat-panel-head{background:var(--n04)}

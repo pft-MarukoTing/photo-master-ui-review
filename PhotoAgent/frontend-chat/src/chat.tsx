@@ -1325,10 +1325,14 @@ export function Composer(props: {
 
   const send = async () => {
     if (!sendable || disabled || !onSend) return;
-    if (await onSend(text.trim(), who.map((p) => p.subjectIndex))) {
-      write("");
-      props.onPoint?.([]);
-    }
+    // onSend 要等 AI 回完才 resolve；話一送出就已經出現在對話裡，框不該跟著
+    // 留到那時候。先清掉，沒送成再放回去 -- 除非這段時間又打了新的字。
+    const sent = text;
+    const indices = who.map((p) => p.subjectIndex);
+    write("");
+    const ok = await onSend(sent.trim(), indices).catch(() => false);
+    if (ok) props.onPoint?.([]);
+    else if (!field.current?.value) write(sent);
   };
 
   // The subject picker moved out to <FacePicker>, which the caller puts in the
