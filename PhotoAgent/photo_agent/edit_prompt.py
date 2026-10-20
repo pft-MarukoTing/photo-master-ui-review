@@ -1,5 +1,6 @@
 """Step 5's editor prompt, shared by every image-edit client."""
 
+import config
 from config import PRESET_PROMPTS
 from photo_agent.feature_resolver import build_compact_editor_prompt
 from prompts import build_framing_sections, build_style_override_block
@@ -13,12 +14,30 @@ def overwrites_prompt(user_instruction):
                 and (user_instruction.get("normalized_user_direction") or "").strip())
 
 
+def build_overwrite_baseline_block(preset_key):
+    """The light whole-photo retouch an overwrite run still gets after the user's request.
+
+    The editor otherwise only follows the request, so a photo edited from 個人化需求
+    alone came back no better looking than the original everywhere else.
+    """
+    preset = PRESET_PROMPTS.get(preset_key) or PRESET_PROMPTS["natural"]
+    return (
+        "Baseline retouch: beyond the request, give the whole photo a light, natural polish. "
+        f"{preset} "
+        "Keep it to light, color, tone, clarity, and texture, subtle enough that the photo still reads as the same shot. "
+        "The request and any selected styles win wherever they touch the same aspect. This polish itself must not "
+        "change the composition, framing, content, sky, background, pose, expression, or anyone's identity, and must "
+        "not add or remove anything; only the request above and the selected styles may make such changes."
+    )
+
+
 def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio, source_size,
                          single_pass_edit, revision_feedback=None):
     """Return (prompt_text, resolution_metadata, prompt_strategy) for one edit call.
 
     With overwrite_prompt, the user's own text leads the prompt ("overwrite"),
-    followed only by any style the user picked; otherwise the compact editor prompt is built ("resolved_compact").
+    followed by any style the user picked and, with ENABLE_OVERWRITE_BASELINE_RETOUCH, a light
+    baseline retouch; otherwise the compact editor prompt is built ("resolved_compact").
     """
     user_instruction = framed_analysis.get("user_instruction") or {}
     user_direction = user_instruction.get("normalized_user_direction") or ""
@@ -26,7 +45,9 @@ def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio
     side_contract=side_instruction(user_instruction.get('original_user_direction') or user_direction)
     if overwrites_prompt(user_instruction):
         style_block = build_style_override_block(framed_analysis, alongside_request=True)
-        prompt_text = user_direction.strip() + (f"\n\n{style_block}" if style_block else "")
+        prompt_text = "\n\n".join(filter(None, (
+            user_direction.strip(), style_block,
+            build_overwrite_baseline_block(preset_key) if config.ENABLE_OVERWRITE_BASELINE_RETOUCH else "")))
         return prompt_text + editor_instruction(framed_analysis) + side_contract, None, "overwrite"
 
     sections = build_framing_sections(framed_analysis, crop_plan, aspect_ratio, source_size)

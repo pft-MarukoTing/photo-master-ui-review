@@ -24,6 +24,7 @@ import math
 import re
 import time
 
+import config
 from openai_client import OPENAI_RESPONSES_URL, _extract_output_text, _parse_json_from_text, _post_json, _responses_payload
 from photo_agent import capabilities, request_semantics
 from photo_agent.clarification_choices import (LITERAL_CHOICE_INSTRUCTION, validate_selected_literal,
@@ -505,6 +506,13 @@ ONLY_WISHES_RULE = """SCOPE: this version follows only the user's own wishes in 
 - Ignore ANALYSIS and RECIPE: they say nothing about what this version did.
 - Still never say that a face, a person or the rest of the photo was left as it was: the portrait fixes APPLIED SETTINGS shows on may have run too."""
 
+# ENABLE_OVERWRITE_BASELINE_RETOUCH 開著時，這一版還多了一層輕度整體修飾，可以順口帶一句。
+ONLY_WISHES_POLISHED_RULE = """SCOPE: this version follows only the user's own wishes in PLAN.user_prompt, plus any 風格 the user picked (APPLIED SETTINGS 風格 other than 不選), on top of a light overall polish of light and colour. Nothing else in the photo was meant to change, and there may be no real analysis behind it.
+- The note is about those wishes and that 風格: how each shows in AFTER, plus the one clause of recognition. One or two sentences. The overall polish may get at most a few words (e.g. 整體也順手修亮一點), never its own sentence.
+- Never present anything else as a specific fix -- no skin, sharpness, layering or framing change the user did not ask for or pick as a 風格, even where AFTER looks different. If something outside the wishes visibly changed for the worse (a face that no longer looks like the person, a colour shift, a smeared detail), make that the one offer, worded as the end result and without naming the flaw (see Offers).
+- Ignore ANALYSIS and RECIPE: they say nothing about what this version did.
+- Still never say that a face, a person or the rest of the photo was left as it was: the portrait fixes APPLIED SETTINGS shows on may have run too."""
+
 
 def _applied_settings(plan, analysis):
     """What this version was set to, in the panel's words: the note may only
@@ -579,7 +587,8 @@ def write_render_note(analysis, plan, *, before=None, after=None, previous_plan=
     only_wishes = bool(plan.get("overwrite_prompt")) and bool((plan.get("user_prompt") or "").strip())
     context = "\n\n".join([
         RENDER_REVIEW_INSTRUCTION if images else RENDER_NOTE_INSTRUCTION,
-        *([ONLY_WISHES_RULE] if only_wishes else []),
+        *([ONLY_WISHES_POLISHED_RULE if config.ENABLE_OVERWRITE_BASELINE_RETOUCH else ONLY_WISHES_RULE]
+          if only_wishes else []),
         f"ANALYSIS: {_dump(trimmed)}",
         f"FACES: {_dump(_faces_view(analysis))}",
         f"RECIPE: {_dump(recipe)}",

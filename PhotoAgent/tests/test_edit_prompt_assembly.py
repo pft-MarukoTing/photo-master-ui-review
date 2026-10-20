@@ -3,7 +3,9 @@
 import unittest
 from unittest.mock import patch
 
+import config
 import mai_client
+from config import PRESET_PROMPTS
 from photo_agent.edit_prompt import assemble_edit_prompt
 from tests.test_aspect_ratio import _analysis, _image_b64, _image_bytes
 
@@ -41,7 +43,22 @@ class AssembleEditPrompt(unittest.TestCase):
         self.assertTrue(prompt.startswith("Make the sky pink.\n\n"))
         self.assertIn("the request wins for that aspect", prompt)
         self.assertIn("- Lighting:", prompt)
+        self.assertIn("add other retouching", prompt)
+        self.assertNotIn("Baseline retouch:", prompt)
         self.assertNotIn("Pose", prompt)
+        self.assertNotIn("Finish:", prompt)
+
+    def test_overwrite_with_baseline_retouch_adds_the_preset_after_the_styles(self):
+        analysis = {**_analysis("3:2"), "style_options": {"lighting": "gold"},
+                    "user_instruction": {"has_user_direction": True, "overwrite_prompt": True,
+                                         "normalized_user_direction": "Make the sky pink."}}
+        with patch.object(config, "ENABLE_OVERWRITE_BASELINE_RETOUCH", True):
+            prompt, metadata, strategy = _assemble(analysis)
+        self.assertEqual((metadata, strategy), (None, "overwrite"))
+        self.assertTrue(prompt.startswith("Make the sky pink.\n\n"))
+        self.assertLess(prompt.index("- Lighting:"), prompt.index("Baseline retouch:"))
+        self.assertIn(PRESET_PROMPTS["natural"], prompt)
+        self.assertNotIn("add other retouching", prompt)
         self.assertNotIn("Finish:", prompt)
 
     def test_overwrite_without_text_falls_back_to_compact(self):

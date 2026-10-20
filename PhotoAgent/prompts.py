@@ -2798,7 +2798,8 @@ def build_style_override_block(analysis, alongside_request=False):
             "\n\nIf the request above and a selected style touch the same aspect, the request wins for that aspect. "
             "Apart from the request and these selected styles, keep the result faithful as a reshoot of the same original scene: "
             "same subject identity, same location, same environment, same clothing, and same props. Do not add new people, "
-            "invent new props, replace the scene, or add other retouching."
+            "invent new props, or replace the scene"
+            + ("." if _photoagent_config.ENABLE_OVERWRITE_BASELINE_RETOUCH else ", or add other retouching.")
             if alongside_request else
             "\n\nKeep the result faithful as a reshoot of the same original scene: same subject identity, same location, "
             "same environment, same clothing, and same props. Do not change unselected aspects, add new people, invent new props, "

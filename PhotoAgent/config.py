@@ -20,6 +20,9 @@ ENABLE_CHAT_PREVIEW_INTRODUCTION = False
 # Optional extra visual pass for Chat requests. Enable during rollout to
 # clarify absent/uncertain edit targets; no extra call when disabled or empty.
 ENABLE_CHAT_REQUEST_FEASIBILITY = False
+# 「僅依個人化需求」(overwrite_prompt) edits also get a light whole-photo retouch
+# from the picked preset after the request. Off sends the request (and styles) alone.
+ENABLE_OVERWRITE_BASELINE_RETOUCH = False
 SUBJECT_PREVIEW_TIMEOUT_SECONDS = 8.0
 SUBJECT_PREVIEW_MAX_DETECTIONS = 24
 SUBJECT_PREVIEW_MAX_ADDITIONAL_PEOPLE = 8
