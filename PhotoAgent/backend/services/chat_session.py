@@ -12,6 +12,8 @@ the draft plan for each, their in-flight jobs, and the message log.
                                               done:<job or action id>
     <base>:chat:<session_id>:messages   LIST  one JSON message per entry
     <base>:chat:sessions                ZSET  session_id -> updated_at
+    <base>:chat:batch:<batch_id>:overview  STRING  the batch overview's own
+                                              conversation, as the page wrote it
 
 <base> is account.py's per-user prefix, so every key carries the same Redis
 Cluster hash tag as that user's history. A photo's state (written by the
@@ -49,6 +51,10 @@ def _messages_key(user, session_id):
 
 def _index_key(user):
     return f"{_user_base(user)}:chat:sessions"
+
+
+def _overview_key(user, batch_id):
+    return f"{_user_base(user)}:chat:batch:{batch_id}:overview"
 
 
 def _decode(value):
@@ -214,12 +220,41 @@ def delete_session(user, session_id):
 
 
 def delete_all_sessions(user):
-    """Drops every session of the user, live or not, and the index."""
+    """Drops every session of the user, live or not, the overviews of their
+    batches, and the index."""
     redis = _client()
     for raw_id in redis.zrange(_index_key(user), 0, -1):
         session_id = _decode(raw_id)
+        session = load_session(user, session_id)
+        if session and session.get("batch_id"):
+            delete_batch_overview(user, session["batch_id"])
         redis.delete(_session_key(user, session_id), _messages_key(user, session_id))
     redis.delete(_index_key(user))
+
+
+# The overview of a multi-photo upload has a conversation of its own, which
+# none of the batch's sessions holds. The page owns its shape; it is kept
+# here only so leaving the batch and opening it again from the list brings
+# it back. Expires like a session, counted from its last write or read.
+OVERVIEW_MAX_BYTES = 256 * 1024
+
+
+def load_batch_overview(user, batch_id):
+    """What save_batch_overview stored for this batch, or None."""
+    redis, key = _client(), _overview_key(user, batch_id)
+    raw = redis.get(key)
+    if raw is None:
+        return None
+    redis.expire(key, SESSION_TTL_SECONDS)
+    return json.loads(_decode(raw))
+
+
+def save_batch_overview(user, batch_id, overview):
+    _client().set(_overview_key(user, batch_id), json.dumps(overview), ex=SESSION_TTL_SECONDS)
+
+
+def delete_batch_overview(user, batch_id):
+    _client().delete(_overview_key(user, batch_id))
 
 
 def find_session_for_case(user, case_id):

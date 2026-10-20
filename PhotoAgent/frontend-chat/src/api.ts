@@ -173,6 +173,12 @@ export const api = {
     }),
   listSessions: (limit = 30) =>
     request<{ sessions: SessionSummary[] }>(`${CHAT}/sessions${q({ limit })}`),
+  // 多張上傳那一批的總覽對話：每一張的對話各存在自己的 session，總覽那串另外存，
+  // 離開這批再從最近照片打開時接回來。內容的格式前端自己定（app.tsx SavedOverview）。
+  getBatchOverview: (batchId: string) =>
+    request<{ overview: Dict | null }>(`${CHAT}/batches/${encodeURIComponent(batchId)}/overview${q()}`),
+  saveBatchOverview: (batchId: string, overview: Dict) =>
+    request<{ ok: boolean }>(`${CHAT}/batches/${encodeURIComponent(batchId)}/overview`, json("PUT", { overview })),
   // 最近照片的刪除：幾格（對話的 id，或 `case:<case_id>`），或 "all" 全部。
   deleteRows: (rows: string[] | "all") =>
     request<{ deleted: string[] | "all" }>(`${CHAT}/sessions/delete`, json("POST", rows === "all" ? { all: true } : { rows })),

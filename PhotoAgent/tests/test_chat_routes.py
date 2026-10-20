@@ -291,6 +291,39 @@ class ChatRoutesTest(unittest.TestCase):
         res = self.client.post("/api/photo-agent/chat/sessions", json={"user": USER, "batch_id": "bad id!"})
         self.assertEqual(res.status_code, 400)
 
+    def overview_url(self, batch_id):
+        return f"/api/photo-agent/chat/batches/{batch_id}/overview"
+
+    def test_batch_overview_is_kept_for_the_batch(self):
+        """The overview's own conversation comes back when the batch is
+        opened again; it is per user, and nothing is there until saved."""
+        url = self.overview_url("b_1")
+        self.assertEqual(self.client.get(url, query_string={"user": USER}).get_json(), {"overview": None})
+        saved = {"turns": [{"id": 1, "kind": "upload", "srcs": ["sid:s_a"]}], "hints": {"1": {"text": "hi"}}}
+        res = self.client.put(url, json={"user": USER, "overview": saved})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(self.client.get(url, query_string={"user": USER}).get_json(), {"overview": saved})
+        self.assertEqual(self.client.get(url, query_string={"user": "other"}).get_json(), {"overview": None})
+
+    def test_bad_batch_overview(self):
+        self.assertEqual(self.client.put(self.overview_url("bad id!"), json={"user": USER, "overview": {}}).status_code, 400)
+        self.assertEqual(self.client.put(self.overview_url("b_1"), json={"user": USER, "overview": []}).status_code, 400)
+        big = {"turns": ["x" * chat_session.OVERVIEW_MAX_BYTES]}
+        self.assertEqual(self.client.put(self.overview_url("b_1"), json={"user": USER, "overview": big}).status_code, 413)
+
+    def test_deleting_a_batch_drops_its_overview(self):
+        self.patch_history_deletes()
+        ids = [self.client.post("/api/photo-agent/chat/sessions", json={"user": USER, "batch_id": b}).get_json()["session_id"]
+               for b in ("b_1", "b_1", "b_2")]
+        for b in ("b_1", "b_2"):
+            self.client.put(self.overview_url(b), json={"user": USER, "overview": {"turns": []}})
+        self.delete_rows({"rows": ids[:2]})
+        overview = lambda b: self.client.get(self.overview_url(b), query_string={"user": USER}).get_json()["overview"]
+        self.assertIsNone(overview("b_1"))
+        self.assertEqual(overview("b_2"), {"turns": []})
+        self.delete_rows({"all": True})
+        self.assertIsNone(overview("b_2"))
+
     # --- retried requests (client_key) ------------------------------------
 
     def create_keyed(self, key):

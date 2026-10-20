@@ -575,6 +575,35 @@ function batchItemState(r: BatchRun | undefined, p: Photo | null, wished: boolea
 // 總覽算進度用的：還沒開始、還在跑（上傳、分析、美化）、分析好、美化好、失敗。
 type BatchProgress = "todo" | "running" | "analyzed" | "done" | "error";
 type OverviewChips = { pending: boolean; renderable: boolean; labels?: { analyze: string; render: string } };
+// 總覽每一則之後講的下一步（turnHints）。
+type TurnHint = { text: string; chips: OverviewChips | null; pending?: number; renderable?: boolean };
+// 總覽的對話存到後端的樣子。照片用那張的 session id 記：本機選的照片接回來後 key 會變成
+// remote 那種，對不上；還沒開始、沒有 session 的那幾張離開就沒了，也不記。
+// hints 照則的 id 記，開場白那句記在 "intro"。
+type SavedOverview = { turns: OverviewTurn[]; hints: Record<string, TurnHint> };
+function packOverview(turns: OverviewTurn[], hints: Record<string, TurnHint>, introKey: string,
+  sidOf: (key: string) => string | undefined): SavedOverview {
+  const ids = (keys: string[]) => keys.map(sidOf).filter((x): x is string => !!x);
+  const out = turns.flatMap((t): OverviewTurn[] =>
+    t.kind === "upload" ? (ids(t.srcs).length ? [{ ...t, srcs: ids(t.srcs) }] : [])
+      : t.kind === "running" || t.kind === "start" ? [{ ...t, keys: ids(t.keys) }]
+        : [t]);
+  const said: Record<string, TurnHint> = {};
+  for (const t of out) if (t.id in hints) said[t.id] = hints[t.id];
+  if (introKey in hints) said.intro = hints[introKey];
+  return { turns: out, hints: said };
+}
+// 接回來：session id 換回現在的 key。離開時還在等 AI 回話的那句就當沒等到；一鍵美化問到一半的
+// 那則拿掉，回來再按一次會重問。
+function unpackOverview(saved: SavedOverview, keyOf: (sid: string) => string | undefined): OverviewTurn[] {
+  const keys = (ids: string[]) => ids.map(keyOf).filter((x): x is string => !!x);
+  return saved.turns.flatMap((t): OverviewTurn[] =>
+    t.kind === "upload" ? [{ ...t, srcs: keys(t.srcs) }]
+      : t.kind === "running" || t.kind === "start" ? [{ ...t, keys: keys(t.keys) }]
+        : t.kind === "wish" && t.pending ? [{ ...t, pending: false }]
+          : t.kind === "ask" && t.overwrite === undefined ? []
+            : [t]);
+}
 // 「全部…」只送還沒做過的。一張都還沒做時就是真的全部；有幾張做過了，字面就說是剩下幾張，
 // 不會被當成整批重來。
 function allLabel(mode: "analyze" | "render", n: number, total: number) {
@@ -919,7 +948,7 @@ export function App() {
   // 講過的話不會變；有新的進度（開始了、跑完了）會是新的一則，再講新的一句。
   // 桌機上那則底下放了「全部…」那排鍵時，連當時有哪幾顆一起記下來：那則之後不是最新的了，
   // 鍵還在原處當紀錄，只是不能再按。
-  const turnHints = useRef<Record<string, { text: string; chips: OverviewChips | null; pending?: number; renderable?: boolean }>>({});
+  const turnHints = useRef<Record<string, TurnHint>>({});
   // 這一輪總覽設定裡，選了「保留自己的」那幾張：同一輪再改就不再問。
   const keepOwn = useRef(new Set<string>());
   // 開始過、還沒美化的照片在總覽收到一句需求後，下次一鍵美化跟還沒開始的一樣先問怎麼套用：
@@ -1153,7 +1182,10 @@ export function App() {
     const epoch = ++batchEpoch.current;
     const ids = (await refreshSessions()).find((r) => r.session_ids?.includes(s.session_id))?.session_ids;
     if (!ids || epoch !== batchEpoch.current) return;
-    const all = await Promise.all(ids.map((id) => (id === s.session_id ? s : api.getSession(id).catch(() => null))));
+    const [all, saved] = await Promise.all([
+      Promise.all(ids.map((id) => (id === s.session_id ? s : api.getSession(id).catch(() => null)))),
+      s.batch_id ? api.getBatchOverview(s.batch_id).then((r) => r.overview as SavedOverview | null).catch(() => null) : null,
+    ]);
     if (epoch !== batchEpoch.current) return;
     const sources: Source[] = [];
     const nextRuns: Record<string, BatchRun> = {};
@@ -1181,6 +1213,12 @@ export function App() {
     setBatchFailed(failed);
     setRenderSent(new Set());
     setAllHold(null);
+    // 總覽之前講過的話接回來；沒存過（或過期了）就從現在這幾張重新開場。
+    const keyOf = new Map(Object.entries(nextRuns).map(([key, r]) => [r.sessionId, key]));
+    setOverview(saved?.turns ? unpackOverview(saved, (sid) => keyOf.get(sid)) : []);
+    for (const [id, h] of Object.entries(saved?.hints || {})) turnHints.current[id === "intro" ? `intro-${epoch}` : id] = h;
+    savedOverview.current = "";
+    keepOwn.current = new Set();
     // 總覽的「設定」從這份開：照還沒美化的那張現在的設定，都美化過了就用預設。沒有這份，「設定」按了不會有反應。
     const open = Object.values(live).find((p) => !p.active_version);
     const c = capsRef.current;
@@ -1352,6 +1390,7 @@ export function App() {
     setAllHold(null);
     setAllSettings(null);
     setOverview([]);
+    savedOverview.current = "";
     keepOwn.current = new Set();
     batchQueue.current = Promise.resolve();
     batchKeys.current = {};
@@ -1729,6 +1768,20 @@ export function App() {
   // ── 多張上傳頁：一張一段對話 ──
   const batchRunsRef = useRef(batchRuns);
   batchRunsRef.current = batchRuns;
+  // 總覽的對話一有變就存回後端（照順序一個接一個送），離開這批再打開時接得回來。
+  // 要有一張開始過才存：一張都沒開始的話，最近照片裡根本沒有這批可以點回來。
+  const savedOverview = useRef("");
+  const overviewSaving = useRef<Promise<unknown>>(Promise.resolve());
+  useEffect(() => {
+    const id = batchId.current;
+    if (!id || !batch || !overview.length) return;
+    if (!Object.values(batchRuns).some((r) => r.sessionId)) return;
+    const body = packOverview(overview, turnHints.current, `intro-${batchEpoch.current}`, (k) => batchRuns[k]?.sessionId);
+    const text = JSON.stringify(body);
+    if (text === savedOverview.current) return;
+    savedOverview.current = text;
+    overviewSaving.current = overviewSaving.current.then(() => api.saveBatchOverview(id, body).catch(() => {}));
+  }, [overview, batchRuns, batchLive, photoLoad, allHold]);
   const unstarted = (key: string) => {
     const r = batchRunsRef.current[key];
     return !r || !!r.error;

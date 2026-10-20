@@ -366,8 +366,41 @@ def delete_sessions():
         for photo in (session or {}).get("photos", []):
             if photo.get("case_id"):
                 delete_history_entry(user, photo["case_id"])
+        # A batch is deleted as one row, every session of it at once.
+        if (session or {}).get("batch_id"):
+            store.delete_batch_overview(user, session["batch_id"])
         store.delete_session(user, row)
     return jsonify({"deleted": rows})
+
+
+def _batch_id(batch_id):
+    if not SESSION_ID_RE.match(batch_id):
+        raise _RequestError("invalid batch_id")
+    return batch_id
+
+
+@chat_bp.get("/batches/<batch_id>/overview")
+def get_batch_overview(batch_id):
+    """The overview conversation of a multi-photo upload, as the page last
+    saved it ({"overview": null} if it never did, or it expired)."""
+    user = _user(request.args.get("user"))
+    return jsonify({"overview": store.load_batch_overview(user, _batch_id(batch_id))})
+
+
+@chat_bp.put("/batches/<batch_id>/overview")
+def put_batch_overview(batch_id):
+    """{overview: {...}} replaces what is kept for this batch. The page owns
+    its shape; it only has to be a JSON object of bounded size."""
+    body = _body()
+    user = _user(body.get("user"))
+    batch_id = _batch_id(batch_id)
+    overview = body.get("overview")
+    if not isinstance(overview, dict):
+        raise _RequestError("overview must be a JSON object")
+    if len(json.dumps(overview)) > store.OVERVIEW_MAX_BYTES:
+        raise _RequestError("overview too large", 413)
+    store.save_batch_overview(user, batch_id, overview)
+    return jsonify({"ok": True})
 
 
 @chat_bp.post("/sessions/from-case")
