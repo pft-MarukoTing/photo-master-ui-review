@@ -1976,7 +1976,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     ask = semantic_incomplete or (verdict == "clarify" and not who_without_faces)
     if verdict == "clarify" and who_without_faces and not semantic_incomplete:
         verdict, reply = "keep", ""
-    # 總覽的鍵叫「全部分析」「全部一鍵美化」（做過幾張就是「…剩餘 N」），裡面一律照單張的名字算，
+    # 總覽的鍵叫「全部分析」「全部一鍵美化」（做過幾張就是「…其餘 N」），裡面一律照單張的名字算，
     # 回給頁面時再換回總覽的名字。
     labels = {"幫我分析": batch.get("analyze"), "一鍵美化": batch.get("render")} if batch else {}
     named = {v: k for k, v in labels.items() if v}

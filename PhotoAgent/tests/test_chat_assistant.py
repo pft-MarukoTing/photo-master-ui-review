@@ -561,8 +561,8 @@ class ReviewLineTest(unittest.TestCase):
         self.assertTrue(result["offer"])
         self.assertEqual(result["options"], ["全部分析", "全部一鍵美化"])
         self.assertEqual(result["reply"], "1*2+3 等於 5。這幾張要先分析看看，還是直接一鍵美化？")
-        result, _ = self.batch_review(answer, {**self.BATCH, "analyze": "", "render": "一鍵美化剩餘 2"}, line="1*2+3")
-        self.assertEqual((result["options"], result["reply"]), (["一鍵美化剩餘 2"], "1*2+3 等於 5。要不要直接幫你一鍵美化？"))
+        result, _ = self.batch_review(answer, {**self.BATCH, "analyze": "", "render": "一鍵美化其餘 2"}, line="1*2+3")
+        self.assertEqual((result["options"], result["reply"]), (["一鍵美化其餘 2"], "1*2+3 等於 5。要不要直接幫你一鍵美化？"))
         # 模型照總覽的名字給選項，也認得出來是哪一顆。
         result, _ = self.batch_review({"verdict": "offer", "reply": "要不要直接全部一鍵美化？", "line": "",
                                        "options": ["全部一鍵美化", "全部分析"]}, line="直接修吧")
@@ -579,9 +579,9 @@ class ReviewLineTest(unittest.TestCase):
         self.assertEqual(result["reply"], "好，這個我記下來了。這 2 張美化時都會照這樣修。"
                          "還有其他想改的地方嗎？沒有的話，可以按下面的「全部分析」或「全部一鍵美化」。")
         result, _ = self.batch_review(answer, {**self.BATCH, "photos": 3, "unrendered": 2, "analyze": "",
-                                               "render": "一鍵美化剩餘 2"}, line="照片看起來糊糊的")
+                                               "render": "一鍵美化其餘 2"}, line="照片看起來糊糊的")
         self.assertEqual(result["reply"], "好，這個我記下來了。還沒美化的 2 張會照這樣修，已經在美化或美化好的 1 張不動。"
-                         "還有其他想改的地方嗎？沒有的話，可以按下面的「一鍵美化剩餘 2」。")
+                         "還有其他想改的地方嗎？沒有的話，可以按下面的「一鍵美化其餘 2」。")
 
     def test_a_chip_name_needs_no_model(self):
         def model(context):

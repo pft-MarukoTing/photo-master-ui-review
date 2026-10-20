@@ -546,10 +546,11 @@ type OverviewTurn =
   | { id: number; kind: "ask"; overwrite?: boolean; label?: string }
   | { id: number; kind: "start"; mode: "analyze" | "render"; count: number; keys: string[]; overwrite?: boolean; label?: string };
 // 總覽裡 AI 提議開始時給的兩個答案，點了就是按總覽的那顆鍵。
-// 後端給的是總覽鍵上的名字（「全部分析」「一鍵美化剩餘 N」），舊的對話紀錄裡可能還是單張的名字。
+// 後端給的是總覽鍵上的名字（「全部分析」「一鍵美化其餘 N」），舊的對話紀錄裡可能還是單張的名字，
+// 或改名前的「…剩餘 N」。
 function overviewStartOf(label: string): "analyze" | "render" | undefined {
-  if (/^(幫我分析|全部分析|分析剩餘 \d+)$/.test(label)) return "analyze";
-  if (/^(一鍵美化|全部一鍵美化|一鍵美化剩餘 \d+)$/.test(label)) return "render";
+  if (/^(幫我分析|全部分析|分析(?:其餘|剩餘) \d+)$/.test(label)) return "analyze";
+  if (/^(一鍵美化|全部一鍵美化|一鍵美化(?:其餘|剩餘) \d+)$/.test(label)) return "render";
 }
 // 總覽說的需求放進每張對話時，AI 在那張裡回的話。
 const OVERVIEW_NOTE_REPLY = "好，這句是在總覽說的，這張也會照著修。只想改這張的話，直接在這裡說。";
@@ -604,11 +605,11 @@ function unpackOverview(saved: SavedOverview, keyOf: (sid: string) => string | u
           : t.kind === "ask" && t.overwrite === undefined ? []
             : [t]);
 }
-// 「全部…」只送還沒做過的。一張都還沒做時就是真的全部；有幾張做過了，字面就說是剩下幾張，
-// 不會被當成整批重來。
+// 「全部…」只送還沒做過的。一張都還沒做時就是真的全部；有幾張做過了，字面就說是其餘幾張，
+// 不會被當成整批重來。跟面板模式的「美化其餘 N 張」同一個說法。
 function allLabel(mode: "analyze" | "render", n: number, total: number) {
-  if (mode === "analyze") return n >= total ? "全部分析" : `分析剩餘 ${n}`;
-  return n >= total ? "全部一鍵美化" : `一鍵美化剩餘 ${n}`;
+  if (mode === "analyze") return n >= total ? "全部分析" : `分析其餘 ${n}`;
+  return n >= total ? "全部一鍵美化" : `一鍵美化其餘 ${n}`;
 }
 
 function batchProgress(r: BatchRun | undefined, p: Photo | null, failed = false): BatchProgress {
@@ -918,7 +919,7 @@ export function App() {
   // 每張最後一次美化有沒有失敗，跟 batchLive 一起從 session 抓回來時更新。
   const [batchFailed, setBatchFailed] = useState<Record<string, boolean>>({});
   // 按了全部一鍵美化、美化請求還沒回來的那幾張。手上的照片狀態還是舊的（分析好、沒在美化），
-  // 不先記著，「一鍵美化剩餘 N」會跟著請求一張張回來慢慢往下數。
+  // 不先記著，「一鍵美化其餘 N」會跟著請求一張張回來慢慢往下數。
   const [renderSent, setRenderSent] = useState<ReadonlySet<string>>(new Set());
   // 剛按了「全部…」：送出的那幾張還沒全部有著落（照片狀態問到了、美化請求回來了）之前，
   // 兩顆「全部…」停在按下去時的字、不能按，等一起有結果再換成新的（通常就收掉了）。
@@ -4574,7 +4575,7 @@ function SidebarRemove({ index, onRemove }: { index: number; onRemove: (i: numbe
 // 同一段對話裡有好幾張時，最左邊那欄「我的照片」：點哪張就看哪張的對話和結果。
 // 跟舊版批次的 .batch-sidebar 同一套 class 和樣子；每張是歷史紀錄那種方塊（.history-cube），
 // 狀態疊在照片左下角。窄螢幕一樣收成從左邊拉出來的抽屜。
-// 上面那顆「全部一鍵美化」（有幾張美化過就叫「一鍵美化剩餘 N」）把還沒美化過的每張照它自己目前的設定送出去；全部都美化過就不出現。
+// 上面那顆「全部一鍵美化」（有幾張美化過就叫「一鍵美化其餘 N」）把還沒美化過的每張照它自己目前的設定送出去；全部都美化過就不出現。
 function BatchSidebar(props: {
   photos: Photo[];
   messages: Message[];
