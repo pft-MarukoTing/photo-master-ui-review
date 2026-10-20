@@ -6630,7 +6630,7 @@ function AnswerList(props: {
     if (t && !props.busy) (props.onOwn || props.onPick)(t);
   };
   return (
-    <div class="chat-card chat-options">
+    <div class="chat-card chat-options chat-answers">
       <ul class="chat-opt-list">
         {props.options.map((l) => (
           <li>

@@ -1336,6 +1336,9 @@ div.chat-proposal-row{cursor:default}
   display:flex;align-items:center;justify-content:center;color:#fff}
 .chat-opt-row.is-on .chat-opt-box{background:var(--accent);border-color:var(--accent)}
 .chat-opt-box svg{width:11px;height:11px}
+/* 回答都是一句話，卡片撐滿整個對話寬的話，短句後面拖著一大片空白、勾勾也離字太遠。
+   所以給個上限；長一點的文案會折成兩行，比拉成一長條好讀。 */
+.chat-answers{max-width:480px}
 /* AI 想的文案：一列一句，點了就送出，所以不需要勾選框；選過的那列才帶勾。最後一列
    是自己寫的輸入框，長得跟其他列一樣，只是能打字。 */
 .chat-line-row{align-items:center}
