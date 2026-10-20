@@ -1553,6 +1553,9 @@ export function ProposalCard(props: {
   useEffect(() => {
     if (typed && box.current) fillNoteBox(box.current, sectionsOf(typed.after), false);
   }, [!!typed]);
+  // AI 直接套用的開關、選項不畫卡：回話已經念過改了什麼，要改就從底下的美化項目
+  // 改。只有一段個人化需求的那張留著，那是可以就地改字的框。
+  if (proposal.direct && !textChangeOf(proposal)) return null;
   // 只改一項、又不是針對某張臉時，標題直接寫那一項是什麼（例如「個人化需求」），
   // 底下那列就不必再把同一個詞念一次。
   const only = proposal.changes.length === 1 && proposal.changes[0].subject_index == null ? proposal.changes[0] : null;

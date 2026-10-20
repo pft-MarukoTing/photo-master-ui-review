@@ -192,6 +192,15 @@ class AskTest(unittest.TestCase):
         self.assertTrue(result["proposal"]["direct"])
         self.assertTrue(result["reply"].endswith("還想調整其他項目可以點下面的項目，或按「美化」我就開始。"))
 
+    def test_a_switch_change_gets_no_card_so_the_reply_says_where_to_change_it(self):
+        # 開關、選項直接套用不畫卡，要改就點底下的美化項目。
+        model = model_says(patch={"style_options": {"lighting": "soft"}})
+        result = chat_assistant.ask(analysis(), default_plan(), "ready",
+                                    [{"role": "user", "text": "改成柔光", "card": {"type": "ask"}}],
+                                    model=model, screen={"bar": ["美化"], "topics": ["人像", "畫面"]})
+        self.assertEqual(result["reply"],
+                         "好，光線改成「柔光」了。要修改或調整其他項目，可以點下面的美化項目，或按「美化」我就開始。")
+
     def test_after_a_change_the_first_round_button_is_just_render(self):
         # 第一輪動過東西，底下那顆就從「照建議直接美化」變成「美化」。
         model = model_says(patch={"user_prompt": "背景改成室外"})

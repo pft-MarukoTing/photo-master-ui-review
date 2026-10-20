@@ -1031,7 +1031,8 @@ def _applied_reply(changes, screen, wishes=()):
         said = f"好，{only['label']}改成「{only['after']}」了。"
     else:
         said = "好，已經幫你改好了。"
-    return said + _next_step(screen)
+    # 開關、選項不畫卡，要改就是回到美化項目，這句一併說。
+    return said + _next_step(screen, edit=not (only and only["field"] == "user_prompt"))
 
 
 def _judged_reply(reply, screen, prompt_only):
@@ -1040,9 +1041,9 @@ def _judged_reply(reply, screen, prompt_only):
     is already done."""
     reason = re.sub(r"[，,]?\s*確認後(再)?套用[。！!]?", "", reply).strip()
     reason = reason + ("" if not reason or reason[-1] in "。！!？?" else "。")
-    # 只動個人化需求的卡可以直接在卡上改，沒有「修改」鍵。
-    done = "先幫你記進個人化需求了，下面可以直接修改。" if prompt_only else "先幫你套用了，想改的話按「修改」。"
-    return reason + done + _next_step(screen)
+    # 只動個人化需求的卡可以直接在卡上改；其他的不畫卡，要改就到美化項目裡改。
+    done = "先幫你記進個人化需求了，下面可以直接修改。" if prompt_only else "先幫你套用了。"
+    return reason + done + _next_step(screen, edit=not prompt_only)
 
 
 def _dropped_reply(dropped, screen):
@@ -1060,10 +1061,11 @@ ANALYZE_BUTTON = "幫我分析"
 ANALYZE_NUDGE = "想看整張照片還有哪些地方可以修，也可以按「幫我分析」。"
 
 
-def _next_step(screen):
+def _next_step(screen, edit=False):
     """The sentence that sends the user on from a change made: to the render
     button below, and to the topics under the reply while adjusting. "" when
-    SCREEN has no render button to point at."""
+    SCREEN has no render button to point at. `edit`: the change got no card,
+    so the topics are also where to change it back."""
     # 這句跟在剛做的改動後面，回話底下那顆一定已經是「美化」：美化過之後套用會
     # 開新一輪，第一輪動過任何東西也就不再是「照建議直接美化」。
     # 「看美化項目」字面有美化，但它是回頭看項目，不是開始美化。
@@ -1075,6 +1077,8 @@ def _next_step(screen):
     # 還可以請 AI 看整張照片。
     analyze = ANALYZE_NUDGE if ANALYZE_BUTTON in (screen or {}).get("bar") or [] else ""
     # 調整中，回覆底下接著項目按鈕（人像、畫面…），一併指給他看。
+    if (screen or {}).get("topics") and edit:
+        return f"要修改或調整其他項目，可以點下面的美化項目，或按「{label}」我就開始。" + analyze
     if (screen or {}).get("topics"):
         return f"還想調整其他項目可以點下面的項目，或按「{label}」我就開始。" + analyze
     return f"按下面的「{label}」我就開始。" + analyze

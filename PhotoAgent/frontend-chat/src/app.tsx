@@ -5703,7 +5703,13 @@ function SessionView(props: {
           !props.pendingAsk &&
           messages.slice(idx + 1).every((x) => x.card?.auto) && (
             <div class="chat-choices">
-              {catChips(c.proposal.changes.map((ch: Change) => categoryOf(ch.field)).filter((x: Category | null): x is Category => !!x))}
+              {/* 只有個人化需求那張卡還在、能就地改，它那一類才不必再列；其他的不畫卡，
+                  改到的那一類就是要改回來的地方，照樣列出來。 */}
+              {catChips(
+                c.proposal.changes.length === 1 && c.proposal.changes[0].field === "user_prompt"
+                  ? c.proposal.changes.map((ch: Change) => categoryOf(ch.field)).filter((x: Category | null): x is Category => !!x)
+                  : null,
+              )}
             </div>
           )}
         {!c.proposal && (() => {

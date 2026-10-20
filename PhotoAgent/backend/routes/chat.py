@@ -82,7 +82,7 @@ RENDER_BASES = ("original",)
 # The next-step sentence a reply applied without asking ends on
 # (chat_assistant._next_step), and what replaces it while a new 長寬比 is
 # being reframed: nothing can be pressed until reframe_done.
-NEXT_STEP_RE = re.compile(r"(?:還想調整其他項目可以點下面的項目，或按|按下面的)「[^」]+」我就開始。(?:想看整張照片還有哪些地方可以修，也可以按「幫我分析」。)?$")
+NEXT_STEP_RE = re.compile(r"(?:還想調整其他項目可以點下面的項目，或按|要修改或調整其他項目，可以點下面的美化項目，或按|按下面的)「[^」]+」我就開始。(?:想看整張照片還有哪些地方可以修，也可以按「幫我分析」。)?$")
 REFRAMING_NOTE = "正在照新比例重新構圖，好了就可以接著調整或美化。"
 # 「重新構圖：…」, the retouch_recipe item a reframe replaces (util.ts REFRAME_RE).
 REFRAME_ITEM_RE = re.compile(r"^重新構圖\s*[:：]")
