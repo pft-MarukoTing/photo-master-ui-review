@@ -11,7 +11,7 @@ from werkzeug.utils import safe_join
 
 from aiserver_utils.queue import get_job_info
 from compatibility_version import get_compatibility_version, is_compatible
-from image_tools import create_preview_bytes, detect_face_boxes, ensure_jpeg_bytes, sniff_image_mime, HISTORY_THUMBNAIL_MAX_SIDE
+from image_tools import create_preview_bytes, detect_face_boxes, ensure_jpeg_bytes, sniff_image_mime, HISTORY_THUMBNAIL_MAX_SIDE, RESULT_PREVIEW_MAX_SIDE
 from photo_agent import capabilities
 from photo_agent.param_validation import normalize_advanced_options, validate_photo_agent_request
 from photo_agent.selections import apply_selections, validate_selections
@@ -19,7 +19,7 @@ from pipeline import analyze_stage, reframe_stage
 from backend.services.account import attach_case_analysis, create_account, clear_history, delete_history_entry, delete_version, get_history, get_history_entry, get_history_entry_for_job, HISTORY_MAX_LEN, normalize_username, record_history
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
-from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, derive_view_key, cache_thumbnail, upload_report_screenshot, lost_job_error
+from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, derive_preview_key, derive_view_key, cache_thumbnail, upload_report_screenshot, lost_job_error
 from backend.services.report import delete_report, get_report_by_id, get_reported_job_info, get_reports, is_admin, record_report, update_report_status
 from backend.services.template_params import get_engine_params_template
 
@@ -789,6 +789,20 @@ def result_thumbnail(job_id):
     way exactly one thumbnail is ever made: whichever result the history
     list actually asked to see.
     """
+    return _downscaled_result(job_id, derive_thumbnail_key, HISTORY_THUMBNAIL_MAX_SIDE)
+
+
+@api_bp.get("/result/<job_id>/preview")
+def result_preview(job_id):
+    """Mid-size JPEG of the result, for a finished version shown as a card in
+    the chat: the 320px thumbnail is blurry there on 2x screens, and the
+    full result is many times the bytes. Made and cached like the thumbnail."""
+    return _downscaled_result(job_id, derive_preview_key, RESULT_PREVIEW_MAX_SIDE)
+
+
+def _downscaled_result(job_id, derive_key, max_side):
+    """A finished job's result at max_side, served from its cached copy at
+    derive_key(result key) or made on this first request and cached there."""
     info = _readable_job_info(job_id, ["status", "error", "0_res0"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
@@ -800,19 +814,19 @@ def result_thumbnail(job_id):
         return error
 
     image_key = result_keys[0]
-    thumb_key = derive_thumbnail_key(image_key)
+    small_key = derive_key(image_key)
 
-    thumb_bytes, thumb_error = download_bytes(thumb_key, job_id)
-    if not thumb_error and thumb_bytes is not None:
-        return _immutable_image_response(thumb_bytes, "image/jpeg")
+    small_bytes, small_error = download_bytes(small_key, job_id)
+    if not small_error and small_bytes is not None:
+        return _immutable_image_response(small_bytes, "image/jpeg")
 
     image_bytes, download_error = download_bytes(image_key, job_id)
     if download_error or image_bytes is None:
         return jsonify({"error": f"failed to download result image: {download_error}"}), 502
 
-    thumb_bytes = create_preview_bytes(image_bytes, max_side=HISTORY_THUMBNAIL_MAX_SIDE)
-    cache_thumbnail(thumb_bytes, thumb_key, job_id)
-    return _immutable_image_response(thumb_bytes, "image/jpeg")
+    small_bytes = create_preview_bytes(image_bytes, max_side=max_side)
+    cache_thumbnail(small_bytes, small_key, job_id)
+    return _immutable_image_response(small_bytes, "image/jpeg")
 
 
 @api_bp.get("/source/<job_id>/image")

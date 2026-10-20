@@ -52,6 +52,11 @@ VISION_PREVIEW_MAX_SIDE = 1024
 # rendered at a few dozen CSS pixels, not analyzed by a model.
 HISTORY_THUMBNAIL_MAX_SIDE = 320
 
+# Mid-size JPEG for a finished version shown as a card in the chat (about
+# 132x224 CSS pixels): sharp on 2x screens, where the 320px thumbnail is
+# blurry, at a fraction of the full result's size.
+RESULT_PREVIEW_MAX_SIDE = 512
+
 # Quality for the stored, full-resolution result image (job_processor.py's
 # _write_result_artifacts). Higher than _to_jpeg_bytes' own default, which
 # serves downscaled previews/thumbnails: this one is the deliverable the user

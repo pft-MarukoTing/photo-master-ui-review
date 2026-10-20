@@ -259,6 +259,7 @@ export const urls = {
   sourceThumb: (job: string) => `${API}/photo-agent/source/${enc(job)}/thumbnail`,
   resultImage: (job: string, run?: number) => withRun(`${API}/photo-agent/result/${enc(job)}/image`, run),
   resultThumb: (job: string, run?: number) => withRun(`${API}/photo-agent/result/${enc(job)}/thumbnail`, run),
+  resultPreview: (job: string, run?: number) => withRun(`${API}/photo-agent/result/${enc(job)}/preview`, run),
   preEditImage: (job: string) => `${API}/photo-agent/result/${enc(job)}/pre_edit_image`,
   demoImage: (f: string) => `${API}/photo-agent/demo-images/${enc(f)}`,
   demoThumb: (f: string) => `${API}/photo-agent/demo-images/${enc(f)}/thumbnail`,

@@ -5798,6 +5798,7 @@ function SessionView(props: {
               next={idx === endIdx && !!endRow && !adjusting && !offerCheck}
               note={typeof c.note === "string" ? c.note : undefined}
               onOpen={() => openVersion(v)}
+              shown={v.version_id === current?.version_id}
             />
             {answerIn(idx)}
             {offerCheck && (

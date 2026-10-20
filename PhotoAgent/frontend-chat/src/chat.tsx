@@ -787,7 +787,9 @@ const qaCache = new Map<string, { verdict: string; score: string; pass: boolean 
 // next：這是最新的一版、底下正掛著「看美化項目」時才講下一步。舊的結果卡不講，不然
 // 往上捲會看到每一版都在叫人去按一顆已經不在的按鈕。
 // note：開了「詳細解說」時，後端對照原圖與成品寫的點評；沒有就不顯示。
-export function ResultCard({ job, ordinal, failed, next, note, onOpen }: {
+// shown：這一版正顯示在畫布上。是的話跟畫布用同一張大圖，不多抓；其他版只顯示成小卡，
+// 用中尺寸預覽就夠清楚，不必每次打開都把每一版的大圖抓一遍。
+export function ResultCard({ job, ordinal, failed, next, note, onOpen, shown }: {
   job: string;
   ordinal: number;
   failed: number;
@@ -795,7 +797,9 @@ export function ResultCard({ job, ordinal, failed, next, note, onOpen }: {
   note?: string;
   // 手機上旁邊沒有比較卡，成品放大、點了開大圖檢視。
   onOpen?: () => void;
+  shown?: boolean;
 }) {
+  const src = shown ? urls.resultImage(job) : urls.resultPreview(job);
   const [qa, setQa] = useState(qaCache.get(job) || null);
   // 品質評語要抓整份結果（伺服器要讀一陣子），而且多半根本沒跑品質檢查：捲到這張卡
   // 附近才去抓，對話上面那幾版舊的就不用每次打開都抓一輪。
@@ -831,19 +835,18 @@ export function ResultCard({ job, ordinal, failed, next, note, onOpen }: {
   }, [job, near]);
 
   // The finished photo is the moment the whole flow was for, so it gets a
-  // real look at it rather than the 84x66 chip it used to be. Same URL the
-  // canvas on the left already loaded, so this costs no extra fetch.
+  // real look at it rather than the 84x66 chip it used to be.
   return (
     <figure class="chat-result" ref={card}>
       {onOpen ? (
         <button type="button" class="chat-result-shot" aria-label={`看第 ${ordinal} 版大圖`} onClick={onOpen}>
-          <img src={urls.resultImage(job)} alt={`第 ${ordinal} 版美化結果`} />
+          <img src={src} alt={`第 ${ordinal} 版美化結果`} />
           <span class="chat-upload-zoom" aria-hidden="true">
             <Icon name="expand" size={14} />
           </span>
         </button>
       ) : (
-        <img src={urls.resultImage(job)} alt={`第 ${ordinal} 版美化結果`} />
+        <img src={src} alt={`第 ${ordinal} 版美化結果`} />
       )}
       <figcaption class="chat-result-cap">
         <h4>第 {ordinal} 版完成</h4>

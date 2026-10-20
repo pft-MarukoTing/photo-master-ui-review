@@ -84,6 +84,14 @@ def derive_thumbnail_key(key):
     return f"{root}_thumb.jpg"
 
 
+def derive_preview_key(key):
+    """Sibling S3 key for the mid-size JPEG /result/<job_id>/preview serves,
+    e.g. ".../0_res0_thumb_0.jpg" -> ".../0_res0_thumb_0_preview.jpg";
+    made lazily the first time it is asked for, like the thumbnail."""
+    root = os.path.splitext(key)[0]
+    return f"{root}_preview.jpg"
+
+
 def derive_view_key(key):
     """Sibling S3 key for the full-size JPEG /source/<job_id>/image serves,
     e.g. ".../src.jpg" -> ".../src_view.jpg". The stored upload is the raw
