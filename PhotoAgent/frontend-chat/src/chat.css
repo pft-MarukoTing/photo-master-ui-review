@@ -717,36 +717,22 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .batch-overview-mosaic.is-1{grid-template-columns:1fr;grid-template-rows:1fr}
 .batch-overview-mosaic.is-2{grid-template-rows:1fr}
 .batch-overview-mosaic.is-3 img:first-child{grid-row:span 2}
-/* 總覽那格：外框在這層，上面是回總覽那列（高一點、兩行字、拼圖大一號），下面是
-   「全部…」那兩顆。 */
-.batch-overview-card{flex:none;margin:0 0 12px;border:1px solid var(--n24);border-radius:var(--radius);background:var(--n09);overflow:hidden}
+/* 總覽那格：外框在這層，上面整列就是回總覽（小拼圖、「總覽 · N 張」、一條分段進度條），下面是
+   「全部…」那幾顆。篩選不放在這裡，在列表上面另起一排。 */
+/* 「我的照片」標題列：舊版 index.html 給 16px，這欄下面緊接總覽那格，收小一點。 */
+.batch-sidebar-header{margin-bottom:10px}
+.batch-overview-card{flex:none;margin:0 0 10px;border:1px solid var(--n24);border-radius:var(--radius);background:var(--n09);overflow:hidden}
 .batch-overview-card.is-on{background:var(--tonal);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
-.batch-overview-card .batch-overview-entry{margin:0;gap:10px;padding:10px;min-height:72px;border:0;border-radius:0;background:transparent;box-shadow:none}
-/* 只有指到回總覽的那兩塊（標題、拼圖）才亮，指到篩選 pill 不算。 */
-.batch-overview-card .batch-overview-entry:has(.batch-overview-title:not(:disabled):hover,button.batch-overview-mosaic:not(:disabled):hover){background:var(--tonal-lo)}
-.batch-overview-card.is-on .batch-overview-entry:has(.batch-overview-title:hover,button.batch-overview-mosaic:hover){background:transparent}
-.batch-overview-card .batch-overview-mosaic{width:44px;height:44px;border-radius:9px}
-/* 上面一行「總覽 · N 張」和箭頭，下面是拼圖 +「全部」和各狀態一顆 pill（跟總覽照片格的篩選同一種），
-   pill 一顆一行往下排。拼圖跟 pill 那欄一樣高（每顆 18px、間隔 4px，最小 44px），pill 全部在它右側。 */
-.batch-overview-card .batch-overview-entry{flex-direction:column;align-items:stretch;gap:8px}
-.batch-overview-card .batch-overview-entry{cursor:default}
-.batch-overview-title{display:flex;align-items:center;gap:8px;min-width:0;width:100%;margin:0;padding:0;border:0;background:none;
-  font:inherit;color:inherit;text-align:left;cursor:pointer}
-.batch-overview-title:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
-.batch-overview-card button.batch-overview-mosaic{padding:0;border:0;cursor:pointer}
-.batch-overview-title:disabled,.batch-overview-card button.batch-overview-mosaic:disabled{cursor:default;opacity:.55}
-.batch-overview-title b{flex:1 1 auto;min-width:0;font-size:15px;font-weight:700;color:var(--n100);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.batch-overview-title>svg{flex:none;color:var(--n54)}
-.batch-overview-entry.is-on .batch-overview-title>svg{color:var(--accent)}
-.batch-overview-body{display:flex;align-items:flex-start;gap:10px;min-width:0}
-.batch-overview-card .batch-overview-mosaic{--pills:0;width:max(44px,calc(var(--pills) * 22px - 4px));height:auto;aspect-ratio:1/1}
-.batch-overview-pills{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
-.batch-overview-pills .batch-grid-filter{box-sizing:border-box;height:18px;display:inline-flex;align-items:center;padding:0 8px;
-  font-size:11px;line-height:1;white-space:nowrap}
-.batch-overview-pills .batch-grid-filter.is-running::before{width:8px;height:8px}
-/* 外面那排選中時拿掉框、靠 tonal 底色撐；這格在總覽時自己就是 tonal 底，選中那顆會跟底色混在一起，
-   所以這裡留框、改成 accent。 */
-.batch-overview-pills .batch-grid-filter.is-on{border-color:var(--accent)}
+.batch-overview-card .batch-overview-entry{margin:0;gap:10px;padding:10px;border:0;border-radius:0;background:transparent;box-shadow:none}
+.batch-overview-card .batch-overview-entry:not(:disabled):hover{background:var(--tonal-lo)}
+.batch-overview-card.is-on .batch-overview-entry:hover{background:transparent}
+.batch-overview-card .batch-overview-entry:focus-visible{outline-offset:-2px}
+.batch-overview-card .batch-overview-mosaic{width:32px;height:32px;border-radius:7px}
+.batch-overview-card .batch-overview-text b{font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 列表上面的篩選：跟總覽照片格同一種 pill，小一號、可換行，固定在列表上面不跟著捲。 */
+.batch-sidebar-filters{flex:none;gap:4px;margin:0 0 8px}
+.batch-sidebar-filters .batch-grid-filter{font-size:11.5px;padding:2px 8px;white-space:nowrap}
+.batch-sidebar-filters .batch-grid-filter.is-running::before{width:8px;height:8px}
 .batch-overview-card .batch-sidebar-all{margin:0;padding:0 10px 10px}
 /* 對話裡的多張上傳：幾張縮圖並排，多的寫 +N。 */
 .chat-upload-stack{display:flex;gap:4px;flex:none}
@@ -769,10 +755,6 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   #results-body.batch-mode>#batch-sidebar{height:calc(100vh - var(--header-h) - var(--step-indicator-h,54px) - 30px);box-sizing:border-box}
 }
 .batch-sidebar-all{margin:0 0 12px;display:flex;flex-direction:column;gap:6px}
-/* 總覽頁：成果格在對話最上面，左邊（不是抽屜時）就只留「我的照片」的標題和總覽那格。 */
-@media (min-width:1201px),(min-width:901px) and (orientation:landscape){
-  .batch-sidebar.is-overview .batch-sidebar-list{display:none}
-}
 .chat-panel-top{flex:0 0 auto;display:block;padding:12px 16px 0;border-bottom:1px solid var(--border)}
 .batch-grid{display:block;margin:0 0 12px}
 /* 「顯示全部」的照片面板：沿用範例照片的對話框，格子依寬度自己排欄。 */
@@ -811,8 +793,8 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .batch-sidebar-all .chat-chip{width:100%;justify-content:center}
 /* 進到總覽時那兩顆輕輕跳兩下、外圈亮一下，告訴使用者「從這裡一次處理全部」。
    只跳一輪就停，不一直動；系統設定減少動態就不跳。 */
-.batch-sidebar-all.is-nudge .chat-chip:not([disabled]){animation:batch-nudge 1.1s cubic-bezier(.3,.7,.4,1) .35s 1 both}
-.batch-sidebar-all.is-nudge .chat-chip:not([disabled])+.chat-chip:not([disabled]){animation-delay:.5s}
+.batch-sidebar-all.is-nudge .chat-chip.is-primary:not([disabled]){animation:batch-nudge 1.1s cubic-bezier(.3,.7,.4,1) .35s 1 both}
+.batch-sidebar-all.is-nudge .chat-chip.is-primary:not([disabled])+.chat-chip.is-primary:not([disabled]){animation-delay:.5s}
 @keyframes batch-nudge{
   0%,100%{transform:none;box-shadow:0 0 0 0 rgba(var(--accent-rgb),0)}
   18%{transform:translateY(-4px)}
@@ -837,7 +819,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   /* 從最近照片打開一批時跟總覽一樣跳幾下（is-hop 由 App 控制，跳完就拿掉，同一批裡換張不會再跳）。 */
   #results-body.batch-mode>.batch-drawer-trigger.is-hop{animation:drawer-hop 2.4s ease-in-out .4s both}
   /* 抽屜寬度跟舊版共用那段一樣，剛好放得下「我的照片」、張數和全部下載；內距 12，關閉鈕對齊同一條邊。 */
-  #results-body.batch-mode .batch-sidebar-close-btn{display:flex;top:12px;right:8px}
+  #results-body.batch-mode .batch-sidebar-close-btn{display:flex;top:7px;right:8px}
   #results-body.batch-mode>.batch-sidebar-backdrop{top:var(--header-h)}
   #results-body.batch-mode>.batch-sidebar-backdrop.drawer-open{display:block}
   #results-body.batch-mode .batch-sidebar-header{padding-right:36px}
@@ -851,6 +833,8 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    舊版那條高度公式是照 session 頁的標頭＋步驟列算的，這裡用不上，所以用選擇器蓋掉。 */
 #upload-section .upload-content-row>#batch-sidebar{flex:0 0 224px;max-width:224px;padding:14px;position:relative;top:auto;margin:0;
   height:calc(100dvh - 150px);max-height:760px;min-height:480px;box-sizing:border-box;align-self:center}
+/* 「我的照片」上緣留少一點：標題列下面緊接總覽那格，上面空太多整欄像往下掉。抽屜版的 × 跟標題列對齊，一起往上。 */
+#results-body.batch-mode>.batch-sidebar,#upload-section .upload-content-row>#batch-sidebar{padding-top:7px}
 @media (min-width:901px) and (max-width:1200px) and (orientation:landscape){
   #upload-section .upload-content-row>#batch-sidebar{height:100%;max-height:none;min-height:0;align-self:stretch}
   body #results-body.batch-mode #batch-sidebar{flex:0 0 224px;max-width:224px}
@@ -872,7 +856,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   /* 選了照片那顆往下移到 16px，展開的起點跟著。 */
   #upload-section .upload-content-row:has(.chat-panel.has-photo)>#batch-sidebar{--drawer-from:inset(16px calc(100% - 56px) calc(100% - 48px) 16px round 10px)}
   #upload-section .upload-content-row>.batch-drawer-trigger{display:inline-flex;border-radius:0 12px 12px 0}
-  #upload-section .upload-content-row .batch-sidebar-close-btn{display:flex;top:12px;right:8px}
+  #upload-section .upload-content-row .batch-sidebar-close-btn{display:flex;top:7px;right:8px}
   #upload-section .upload-content-row>.batch-sidebar-backdrop{top:var(--header-h)}
   #upload-section .upload-content-row>.batch-sidebar-backdrop.drawer-open{display:block}
   #upload-section .upload-content-row .batch-sidebar-header{padding-right:36px}

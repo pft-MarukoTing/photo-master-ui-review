@@ -507,6 +507,7 @@
   // batchRecords is empty the app behaves exactly as the single-image flow.
   const POLL_CONCURRENCY = 4;
   let batchRecords = [];   // see makeBatchRecord for record shape
+  let batchSidebarFilter = "all"; // 「我的照片」列表上面選的狀態篩選（renderBatchSidebarFilters）
   // Monotonic, never reused even across removals/resets -- batchRecords'
   // array index alone isn't a safe key (records get spliced out, and
   // addFilesToBatch appends more after the initial batch already handed out
@@ -5501,6 +5502,7 @@
     if (els.costBtn) els.costBtn.hidden = true;
     if (els.dzMulti) { els.dzMulti.hidden = true; els.dzMulti.innerHTML = ""; }
     if (els.batchSidebarList) els.batchSidebarList.innerHTML = "";
+    if (els.batchSidebarFilters) { els.batchSidebarFilters.hidden = true; els.batchSidebarFilters.innerHTML = ""; }
     hideCaseGroupSidebar();
     // Undo whatever hideAllBatchMainViews left mid-batch, so a subsequent
     // single-image run (which never touches these) isn't left with the
@@ -7259,13 +7261,59 @@
     // chat page (showCaseGroupSidebar).
     ++caseGroupSidebarToken;
     caseGroupSidebarSession = null;
-    if (els.batchSidebarCount) els.batchSidebarCount.textContent = `${batchRecords.length} 張`;
+    batchSidebarFilter = "all";
     if (els.batchDrawerTriggerCount) {
       els.batchDrawerTriggerCount.textContent = String(batchRecords.length);
       els.batchDrawerTriggerCount.hidden = batchRecords.length === 0;
     }
     els.batchSidebarList.innerHTML = "";
     batchRecords.forEach((record) => els.batchSidebarList.appendChild(buildBatchSidebarItem(record)));
+    renderBatchSidebarFilters();
+  }
+
+  // ── 狀態篩選：列表上面那排 pill ──
+  // 跟對話模式「我的照片」那欄（app.tsx 的 BatchPreSidebar／GRID_GROUPS）同樣的分組、字和順序；
+  // 這頁一上傳就分析，沒有「未開始」。每個方塊帶 data-stage，這裡只數、只藏，
+  // 點擊和逐張更新照舊。兩種以上狀態才出現；選的那組空了就回到全部。
+  const SIDEBAR_STAGES = [
+    { key: "error", label: "失敗" },
+    { key: "analyzed", label: "待美化" },
+    { key: "running", label: "處理中" },
+    { key: "done", label: "美化完成" }
+  ];
+  function sidebarStage(statusKey, running = false) {
+    if (statusKey === "error") return "error";
+    if (running || statusKey === "analyzing" || statusKey === "processing") return "running";
+    if (statusKey === "analyzed") return "analyzed";
+    return "done"; // done, archived（可更新：已經美化過）
+  }
+
+  function renderBatchSidebarFilters() {
+    const row = els.batchSidebarFilters;
+    const list = els.batchSidebarList;
+    if (!row || !list) return;
+    const items = [...list.querySelectorAll(".batch-sidebar-item")];
+    const counts = SIDEBAR_STAGES.map((g) => ({ g, n: items.filter((x) => x.dataset.stage === g.key).length })).filter((x) => x.n);
+    if (!counts.some((x) => x.g.key === batchSidebarFilter)) batchSidebarFilter = "all";
+    const pill = (key, text, cls) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `batch-grid-filter${cls ? ` ${cls}` : ""}${batchSidebarFilter === key ? " is-on" : ""}`;
+      btn.setAttribute("aria-pressed", String(batchSidebarFilter === key));
+      btn.textContent = text;
+      btn.addEventListener("click", () => {
+        batchSidebarFilter = key !== "all" && batchSidebarFilter === key ? "all" : key;
+        renderBatchSidebarFilters();
+      });
+      return btn;
+    };
+    row.innerHTML = "";
+    row.hidden = counts.length < 2;
+    if (!row.hidden) {
+      row.appendChild(pill("all", `全部 ${items.length}`));
+      counts.forEach(({ g, n }) => row.appendChild(pill(g.key, `${g.label} ${n}`, `is-${g.key}`)));
+    }
+    items.forEach((x) => { x.hidden = batchSidebarFilter !== "all" && x.dataset.stage !== batchSidebarFilter; });
   }
 
   // Every status is clickable now (unlike the old grid, which only let you
@@ -7287,6 +7335,7 @@
     img.src = (latestDone && latestDone.imageUrl) || record.imageUrl || record.previewUrl;
     media.appendChild(img);
     const runsRunning = runs.filter((x) => x.status === "processing").length;
+    item.dataset.stage = sidebarStage(record.status, runsRunning > 0);
     if (record.status === "analyzing" || record.status === "processing" || runsRunning) {
       const spinner = document.createElement("div");
       spinner.className = "rc-spinner";
@@ -7323,7 +7372,9 @@
 
   function updateBatchSidebarItem(record) {
     const existing = els.batchSidebarList.querySelector(`[data-id="${record.localId}"]`);
-    if (existing) existing.replaceWith(buildBatchSidebarItem(record));
+    if (!existing) return;
+    existing.replaceWith(buildBatchSidebarItem(record));
+    renderBatchSidebarFilters();
   }
 
   // ── Batches uploaded in 對話模式 ──
@@ -7422,8 +7473,8 @@
   }
 
   function renderCaseGroupSidebar(sessionId, photos, caseKey) {
+    if (caseGroupSidebarSession !== sessionId) batchSidebarFilter = "all";
     caseGroupSidebarSession = sessionId;
-    if (els.batchSidebarCount) els.batchSidebarCount.textContent = `${photos.length} 張`;
     if (els.batchDrawerTriggerCount) {
       els.batchDrawerTriggerCount.textContent = String(photos.length);
       els.batchDrawerTriggerCount.hidden = false;
@@ -7448,6 +7499,7 @@
     const keepScroll = list.scrollTop;
     list.innerHTML = "";
     photos.forEach((photo) => list.appendChild(buildCaseGroupSidebarItem(photo, caseKey)));
+    renderBatchSidebarFilters();
     list.scrollTop = keepScroll;
     els.batchSidebar.hidden = false;
     if (els.resultsBody) els.resultsBody.classList.add("batch-mode");
@@ -7468,6 +7520,7 @@
     const item = document.createElement("div");
     item.className = `history-cube batch-sidebar-item ${state.key}${photo.case_id === caseKey ? " selected" : ""}`;
     item.dataset.caseId = photo.case_id;
+    item.dataset.stage = sidebarStage(state.key);
 
     const media = document.createElement("div");
     media.className = "rc-media";

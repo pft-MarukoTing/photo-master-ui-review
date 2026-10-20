@@ -30,6 +30,7 @@ import {
   PhotoViewer,
   SamplePicker,
   UploadBubble,
+  BatchUploadBubble,
   UserMsg,
   WorkingCard,
   useWorkLog,
@@ -706,6 +707,7 @@ const isBusy = (p: Photo) => p.status === "analyzing" || p.status === "reframing
 const analysisJob = (p: Photo) => p.analysis_job_id || p.analyze_job_id;
 
 export function App() {
+  const drawerLayout = useMedia(DRAWER_LAYOUT);
   const [caps, setCaps] = useState<Capabilities | null>(null);
   // 開機時打開的 #case= 連結也要用到 caps，那時 state 還沒更新到 closure 裡。
   const capsRef = useRef<Capabilities | null>(null);
@@ -2945,6 +2947,10 @@ export function App() {
     const first = overview[0];
     const firstUpload = first?.kind === "upload" ? first.srcs : batch.map(sourceSrc);
     const have = new Set(batch.map(sourceSrc));
+    // 照片在哪：手機和直拿的平板在對話上面那格，桌機在左邊「我的照片」。
+    const spot = drawerLayout ? "上面" : "左邊";
+    const thumbOf = new Map(batch.map((s) => [sourceSrc(s), thumbSrc(s)]));
+    const uploadThumbs = (srcs: string[]) => srcs.filter((s) => have.has(s)).map((s) => thumbOf.get(s) || s);
     // 最底下那句跟著現在的進度，點出接下來能做什麼：還在跑的等它們、沒開始的按哪顆、開始過一些
     // 但還沒做完的是哪幾張。剛上傳什麼都還沒做時，開場白已經講過，不再重複。
     // 只講張數，不列是哪幾張：一批可能很多張，要看哪張在左邊「我的照片」看得到。
@@ -2955,20 +2961,20 @@ export function App() {
     let statusHint = "";
     if (running) {
       statusHint = notYet
-        ? `還有 ${notYet} 張沒開始，可以按上面的「全部分析」先看我打算怎麼修，或按上面的「全部一鍵美化」直接美化，也可以點上面的照片個別調整。`
+        ? `還有 ${notYet} 張沒開始，可以按${spot}的「全部分析」先看我打算怎麼修，或按${spot}的「全部一鍵美化」直接美化，也可以點${spot}的照片個別調整。`
         // 在跑的以外，分析好還沒美化的也給下一步，不用等前面那幾張跑完。
         : analyzed
-          ? `另外 ${analyzed} 張分析好了，還沒美化，按上面的「全部一鍵美化」就會接著美化，也可以點上面的照片個別調整。`
+          ? `另外 ${analyzed} 張分析好了，還沒美化，按${spot}的「全部一鍵美化」就會接著美化，也可以點${spot}的照片個別調整。`
         // 剛說完「開始了」，那句已經講過跑完會說、去哪看進度，不再重複一次。
         : lastTurn?.kind === "running" || lastTurn?.kind === "start"
           ? ""
-          : `還有 ${running} 張處理中，完成後我會在這裡說；想看哪張的進度，點上面那張。`;
+          : `還有 ${running} 張處理中，完成後我會在這裡說；想看哪張的進度，點${spot}那張。`;
     } else if (!untouched) {
       // 剛報完「跑完了」，分析好、失敗幾張那句已經講過，這裡只補它沒提到的、還沒開始的那幾張。
       const afterDone = lastTurn?.kind === "done";
       const next = notYet
-        ? "按上面的「全部一鍵美化」會把還沒美化的都美化好；只想先看分析，按上面的「全部分析」。"
-        : "要接著美化，按上面的「全部一鍵美化」。";
+        ? `按${spot}的「全部一鍵美化」會把還沒美化的都美化好；只想先看分析，按${spot}的「全部分析」。`
+        : `要接著美化，按${spot}的「全部一鍵美化」。`;
       if (afterDone) {
         statusHint = !todo && !analyzed && !failed ? "" : `${todo ? `另外還有 ${todo} 張還沒分析。` : ""}${next}`;
       } else {
@@ -2977,10 +2983,10 @@ export function App() {
           analyzed && `${analyzed} 張分析好了，還沒美化`,
           failed && `${failed} 張沒有成功，可以再送一次`,
         ].filter(Boolean);
-        statusHint = left.length ? `目前${left.join("；")}。${next}` : "每張都美化好了，點上面的照片就能看結果。";
+        statusHint = left.length ? `目前${left.join("；")}。${next}` : `每張都美化好了，點${spot}的照片就能看結果。`;
       }
     } else if (overview.length > 1) {
-      statusHint = "可以按上面的「全部分析」先看我打算怎麼修，或按上面的「全部一鍵美化」直接美化；想怎麼修也可以打在下面，會套用到每一張。";
+      statusHint = `可以按${spot}的「全部分析」先看我打算怎麼修，或按${spot}的「全部一鍵美化」直接美化；想怎麼修也可以打在下面，會套用到每一張。`;
     }
     // 最後一則是「開始了」或「跑完了」時，下一步接在同一句後面講，不另起一則。
     const hintInTurn = !!statusHint && (lastTurn?.kind === "running" || lastTurn?.kind === "done");
@@ -2994,12 +3000,13 @@ export function App() {
         {caps && <p>{caps.advanced_options.map((o) => `${o.label}：${x.advanced_options?.[o.key] ?? o.default ? "開啟" : "關閉"}`).join(" · ")}</p>}
       </div>
     );
-    // 總覽：沒有中間那格預覽，對話直接佔滿；照片都在左邊「我的照片」。
+    // 總覽：沒有中間那格預覽，對話直接佔滿。桌機的照片和「全部…」都在左邊「我的照片」，
+    // 對話上面不再擺一份；「我的照片」收成抽屜時，才在對話上面放成果格。
     const overviewPanel = !source && (
       <ChatPanel
         class="home-chat is-overview"
         sub="總覽"
-        top={
+        top={drawerLayout &&
           <BatchOverviewGrid
             key={sourceSrc(batch[0])}
             sources={batch}
@@ -3037,14 +3044,16 @@ export function App() {
               }}
               clearKey={preClear}
               placeholder={pending ? ["想怎麼美化這幾張？會套用到每一張", "想怎麼美化這幾張？"]
-                : renderable ? "要接著美化，按上面的「全部一鍵美化」"
-                : "每張都開始了，點上面的照片看結果"}
+                : renderable ? `要接著美化，按${spot}的「全部一鍵美化」`
+                : `每張都開始了，點${spot}的照片看結果`}
             />
         }
       >
         <UserMsg>
-          {/* 照片都在上面的格子裡，這裡只說上傳了幾張，不再排一次縮圖。 */}
-          <div class="chat-bubble">{`上傳了 ${photoLoad && first && photoLoad.entry === first.id ? photoLoad.total : firstUpload.length} 張照片`}</div>
+          <BatchUploadBubble
+            srcs={uploadThumbs(firstUpload)}
+            text={`上傳了 ${photoLoad && first && photoLoad.entry === first.id ? photoLoad.total : firstUpload.length} 張照片`}
+          />
         </UserMsg>
         {/* 先說收到幾張、這頁是什麼：一次處理全部的按鈕在上面的照片格底下，這裡只指過去，
             再講怎麼回來——使用者第一次看到總覽，要先知道這裡講的話會落到每一張上。 */}
@@ -3052,8 +3061,8 @@ export function App() {
           <p class="chat-text">收到你上傳的 {firstUpload.length} 張照片了。</p>
           {/* 「設定」只在還有沒開始的照片時才在上面出現，就只在那時候提。 */}
           <p class="chat-text">{pending
-            ? "這裡是這批照片的總覽：上面可以一次分析或美化全部，也可以先按「設定」統一換引擎或長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打在下面，會套用到還沒開始的每一張。"
-            : "這裡是這批照片的總覽：上面可以一次處理全部，也可以點某一張個別調整。"}</p>
+            ? `這裡是這批照片的總覽：${spot}可以一次分析或美化全部，也可以先按「設定」統一換引擎或長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打在下面，會套用到還沒開始的每一張。`
+            : `這裡是這批照片的總覽：${spot}可以一次處理全部，也可以點某一張個別調整。`}</p>
           <p class="chat-text chat-muted">之後想回來這裡，點{photosSpot()}「我的照片」最上面的「總覽」。</p>
         </AssistantMsg>}
         {overview.map((t, i) => {
@@ -3061,9 +3070,9 @@ export function App() {
           if (t === overview[0] && t.kind === "upload") return null;
           if (t.kind === "upload") return (
             <div key={t.id}>
-              <UserMsg><div class="chat-bubble">{`新增了 ${photoLoad?.entry === t.id ? photoLoad.total : t.srcs.length} 張照片`}</div></UserMsg>
+              <UserMsg><BatchUploadBubble srcs={uploadThumbs(t.srcs)} text={`新增了 ${photoLoad?.entry === t.id ? photoLoad.total : t.srcs.length} 張照片`} /></UserMsg>
               {photoLoad?.entry === t.id ? <PhotoLoadMsg {...photoLoad} /> : <AssistantMsg>
-                <p class="chat-text">{`好，加進來了，${t.srcs.length > 1 ? "這幾張" : "這張"}加到上面的照片裡了。`}</p>
+                <p class="chat-text">{`好，加進來了，${t.srcs.length > 1 ? "這幾張" : "這張"}加到${spot}的照片裡了。`}</p>
               </AssistantMsg>}
             </div>
           );
@@ -3076,7 +3085,7 @@ export function App() {
             const n = t.keys.filter((k) => have.has(k)).length;
             return n ? (
               <AssistantMsg key={t.id}>
-                <p class="chat-text">{`有 ${n} 張開始${t.verb}了，完成後我會在這裡說；想看哪張的進度，點上面那張。${hintFor(t, latest)}`}</p>
+                <p class="chat-text">{`有 ${n} 張開始${t.verb}了，完成後我會在這裡說；想看哪張的進度，點${spot}那張。${hintFor(t, latest)}`}</p>
               </AssistantMsg>
             ) : null;
           }
@@ -3089,8 +3098,8 @@ export function App() {
             return (
               <AssistantMsg key={t.id}>
                 <p class="chat-text">{`剛剛送出的都處理完成了${parts.length ? `，目前 ${parts.join("、")}` : ""}。${hintFor(t, latest).replace(/。$/, "；")}${t.failed
-                  ? "沒成功的在上面會標「失敗」，點那張可以看原因。"
-                  : "想看哪張的結果，點上面那張。"}`}</p>
+                  ? `沒成功的在${spot}會標「失敗」，點那張可以看原因。`
+                  : `想看哪張的結果，點${spot}那張。`}`}</p>
               </AssistantMsg>
             );
           }
@@ -3100,7 +3109,7 @@ export function App() {
               <AssistantMsg>
                 <p class="chat-text">
                   {t.count
-                    ? `好，這句會套用在 ${t.count} 張照片上。${t.skipped ? `已經開始的 ${t.skipped} 張不會套用。` : ""}只想改某一張，點上面那張調整。`
+                    ? `好，這句會套用在 ${t.count} 張照片上。${t.skipped ? `已經開始的 ${t.skipped} 張不會套用。` : ""}只想改某一張，點${spot}那張調整。`
                     : "每張都已經開始了，這句不會套用；要改哪一張，到那張的結果頁說就好。"}
                 </p>
               </AssistantMsg>
@@ -3149,7 +3158,7 @@ export function App() {
               {!asked && <UserMsg><ClickBubble icon={t.mode === "analyze" ? "search" : "spark"} label={t.mode === "analyze" ? "全部分析" : "全部一鍵美化"} /></UserMsg>}
               <AssistantMsg>
                 <p class="chat-text">
-                  {`好，${t.count} 張開始${t.mode === "analyze" ? "分析" : t.overwrite ? "調整" : "美化"}了，全部完成後我會在這裡說；想看哪張的進度，點上面那張。`}
+                  {`好，${t.count} 張開始${t.mode === "analyze" ? "分析" : t.overwrite ? "調整" : "美化"}了，全部完成後我會在這裡說；想看哪張的進度，點${spot}那張。`}
                 </p>
               </AssistantMsg>
             </div>
@@ -3190,6 +3199,9 @@ export function App() {
                     onOverview={openOverview}
                     // 在總覽按的，跟總覽底下那兩顆一樣記進總覽的對話。
                     onStartAll={(m) => (source ? startAllBatch(m) : overviewStart(m))}
+                    // 一鍵美化正在問怎麼套用：先回答那一題，「全部…」等一下。
+                    actionsHeld={!source && askOpen}
+                    onSettings={source ? undefined : overviewEditSettings}
                     onRemove={busy || loadingPhotos ? undefined : removeFromBatch}
                     onClear={busy || anyRun || loadingPhotos ? undefined : clearBatch}
                     onAdd={busy || loadingPhotos ? undefined : appendFiles}
@@ -3417,6 +3429,19 @@ function photosSpot() {
   return matchMedia(DRAWER_LAYOUT).matches ? "左上角" : "左邊";
 }
 
+// 跟著視窗變：轉平板或拉寬視窗時，版面和對話裡的「上面／左邊」一起換。
+function useMedia(query: string) {
+  const [on, setOn] = useState(() => matchMedia(query).matches);
+  useEffect(() => {
+    const mq = matchMedia(query);
+    const sync = () => setOn(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [query]);
+  return on;
+}
+
 // 多張上傳頁最左邊那欄「我的照片」：跟進了對話之後那欄同一套 class 和樣子，
 // 點一張就打開那張的對話。最上面兩顆把還沒開始的每張照它自己的需求和設定送出；
 // 標題列那顆 × 全部清除（有一張開始了就不出現），還沒開始的每張右上角也有 × 拿掉。
@@ -3453,6 +3478,10 @@ function BatchPreSidebar(props: {
   onOverview?: () => void;
   overview?: boolean;
   onStartAll: (mode: "analyze" | "render") => void;
+  // 總覽時「全部…」上面那顆「設定」：還有沒開始的才出現，統一換引擎或長寬比。
+  onSettings?: () => void;
+  // 「全部…」暫時不能按，但照片還能點（總覽正在問一鍵美化怎麼套用）。
+  actionsHeld?: boolean;
   onRemove?: (i: number) => void;
   onClear?: () => void;
   onAdd?: (files: File[]) => void;
@@ -3515,8 +3544,8 @@ function BatchPreSidebar(props: {
     props.onPick(s);
   };
   const renderable = props.renderable ?? pending;
-  // 總覽那格拼圖右邊：各張到哪了，跟總覽照片格上面的篩選同一種 pill、同樣的字，照要處理的先後排。
-  // 最前面固定一顆「全部」，跟外面那排一樣；點一顆只列那種狀態的照片，再點一次或點「全部」回來，
+  // 各張到哪了：列表上面的篩選用這份，跟總覽照片格的篩選同樣的字，照要處理的先後排。最前面固定
+  // 一顆「全部」；點一顆只列那種狀態的照片，再點一次或點「全部」回來，
   // 那種一張都不剩時自己回到全部。
   const stage = (s: Source) => batchProgress(runs[sourceSrc(s)], live?.[sourceSrc(s)] || null, !!props.failed?.[sourceSrc(s)]);
   const progress = GRID_GROUPS.map((g) => ({ g, n: sources.filter((x) => stage(x) === g.key).length })).filter((x) => x.n);
@@ -3526,6 +3555,7 @@ function BatchPreSidebar(props: {
     setOpen(false);
     props.onOverview!();
   };
+  const held = props.disabled || !!props.actionsHeld;
   const startAll = (mode: "analyze" | "render") => {
     close();
     props.onStartAll(mode);
@@ -3539,7 +3569,6 @@ function BatchPreSidebar(props: {
         </button>
         <div class="batch-sidebar-header">
           <h2 class="batch-sidebar-title">我的照片</h2>
-          <span class="batch-sidebar-count">{sources.length} 張</span>
           <div class="batch-sidebar-actions">
           {props.onAdd && <BatchAddButton full={full} onAdd={props.onAdd} onSamples={props.onSamples} onBefore={() => setOpen(false)} />}
           {props.onClear && (
@@ -3550,65 +3579,45 @@ function BatchPreSidebar(props: {
           </div>
         </div>
         {/* 「總覽」不是一張照片，所以不做成方塊混在照片裡：一格橫的，放在照片列表上面。
-            整批的東西都收在這格裡：上面那列回總覽、寫著各張到哪了，下面是「全部…」那兩顆，
-            一看就知道是對整批的。 */}
+            整批的東西都收在這格裡：上面整列回總覽，下面是「全部…」那幾顆，一看就知道是對整批的。
+            張數只寫在這裡，標題列不再寫一次。 */}
         <div class={`batch-overview-card${props.overview ? " is-on" : ""}`}>
           {props.onOverview && (
-            // 整格不是一顆按鈕：拼圖右邊的 pill 是篩選，不能包在回總覽的按鈕裡。
-            // 標題那行和拼圖都回總覽，拼圖只是放大點擊範圍，鍵盤和報讀只走標題那顆。
-            <div class={`batch-overview-entry${props.overview ? " is-on" : ""}`}>
-              <button
-                type="button"
-                aria-current={props.overview ? "page" : undefined}
-                title="回到總覽，全部一起分析、美化或調整設定"
-                class="batch-overview-title"
-                disabled={props.disabled && !props.overview}
-                onClick={goOverview}
-              >
-                <b>總覽 · {sources.length} 張</b>
-                <Icon name="next" size={14} />
-              </button>
-              <span class="batch-overview-body">
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  aria-hidden="true"
-                  class={`batch-overview-mosaic is-${Math.min(sources.length, 4)}`}
-                  style={{ "--pills": progress.length + 1 }}
-                  disabled={props.disabled && !props.overview}
-                  onClick={goOverview}
-                >
-                  {sources.slice(0, 4).map((s) => <img key={sourceSrc(s)} src={thumbSrc(s)} alt="" />)}
-                </button>
-                {progress.length > 0 && (
-                  <span class="batch-overview-pills" role="group" aria-label="依狀態篩選">
-                    <button type="button" class={`batch-grid-filter${filter === "all" ? " is-on" : ""}`} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
-                      全部 {sources.length}
-                    </button>
-                    {progress.map((x) => (
-                      <button
-                        key={x.g.key}
-                        type="button"
-                        class={`batch-grid-filter is-${x.g.key}${filter === x.g.key ? " is-on" : ""}`}
-                        aria-pressed={filter === x.g.key}
-                        onClick={() => setFilter(filter === x.g.key ? "all" : x.g.key)}
-                      >
-                        {x.g.label} {x.n}
-                      </button>
-                    ))}
-                  </span>
-                )}
+            <button
+              type="button"
+              aria-current={props.overview ? "page" : undefined}
+              title="回到總覽，全部一起分析、美化或調整設定"
+              class={`batch-overview-entry${props.overview ? " is-on" : ""}`}
+              disabled={props.disabled && !props.overview}
+              onClick={goOverview}
+            >
+              <span class={`batch-overview-mosaic is-${Math.min(sources.length, 4)}`} aria-hidden="true">
+                {sources.slice(0, 4).map((s) => <img key={sourceSrc(s)} src={thumbSrc(s)} alt="" />)}
               </span>
-            </div>
+              <span class="batch-overview-text">
+                <b>總覽 · {sources.length} 張</b>
+              </span>
+              <Icon name="next" size={14} />
+            </button>
           )}
           {pending || renderable ? (
             // 每次進到總覽重新掛一次，那兩顆就再跳一下，提示這裡可以一次處理全部。
-            <div key={props.overview ? "overview" : "single"} class={`batch-sidebar-all${props.overview && !props.disabled ? " is-nudge" : ""}`}>
+            <div key={props.overview ? "overview" : "single"} class={`batch-sidebar-all${props.overview && !held ? " is-nudge" : ""}`}>
+              {pending && props.onSettings ? <Chip
+                label="設定"
+                icon="tune"
+                kind="ghost"
+                disabled={held}
+                onClick={() => {
+                  close();
+                  props.onSettings!();
+                }}
+              /> : null}
               {pending ? <Chip
                 label="全部分析"
                 icon="search"
                 kind="primary"
-                disabled={props.disabled}
+                disabled={held}
                 title="還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送"
                 onClick={() => startAll("analyze")}
               /> : null}
@@ -3616,13 +3625,32 @@ function BatchPreSidebar(props: {
                 label="全部一鍵美化"
                 icon="spark"
                 kind="primary"
-                disabled={props.disabled}
+                disabled={held}
                 title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
                 onClick={() => startAll("render")}
               /> : null}
             </div>
           ) : null}
         </div>
+        {/* 篩的是底下的列表，就貼在列表上面、不跟著捲；只有一種狀態時沒得篩，不出現。 */}
+        {progress.length > 1 && (
+          <div class="batch-grid-filters batch-sidebar-filters" role="group" aria-label="依狀態篩選">
+            <button type="button" class={`batch-grid-filter${filter === "all" ? " is-on" : ""}`} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
+              全部 {sources.length}
+            </button>
+            {progress.map((x) => (
+              <button
+                key={x.g.key}
+                type="button"
+                class={`batch-grid-filter is-${x.g.key}${filter === x.g.key ? " is-on" : ""}`}
+                aria-pressed={filter === x.g.key}
+                onClick={() => setFilter(filter === x.g.key ? "all" : x.g.key)}
+              >
+                {x.g.label} {x.n}
+              </button>
+            ))}
+          </div>
+        )}
         <div
           class="batch-sidebar-list"
           ref={list}
@@ -4075,7 +4103,6 @@ function BatchSidebar(props: {
         </button>
         <div class="batch-sidebar-header">
           <h2 class="batch-sidebar-title">我的照片</h2>
-          <span class="batch-sidebar-count">{photos.length} 張</span>
           <button
             type="button"
             class="batch-download-all-btn"
