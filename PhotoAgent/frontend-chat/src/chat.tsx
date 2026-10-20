@@ -797,8 +797,19 @@ export function ResultCard({ job, ordinal, failed, next, note, onOpen }: {
   onOpen?: () => void;
 }) {
   const [qa, setQa] = useState(qaCache.get(job) || null);
+  // 品質評語要抓整份結果（伺服器要讀一陣子），而且多半根本沒跑品質檢查：捲到這張卡
+  // 附近才去抓，對話上面那幾版舊的就不用每次打開都抓一輪。
+  const card = useRef<HTMLElement>(null);
+  const [near, setNear] = useState(false);
   useEffect(() => {
-    if (qa) return;
+    const el = card.current;
+    if (near || !el) return;
+    const io = new IntersectionObserver((seen) => seen.some((e) => e.isIntersecting) && setNear(true), { rootMargin: "200px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near]);
+  useEffect(() => {
+    if (qa || !near) return;
     let alive = true;
     api
       .result(job)
@@ -817,13 +828,13 @@ export function ResultCard({ job, ordinal, failed, next, note, onOpen }: {
     return () => {
       alive = false;
     };
-  }, [job]);
+  }, [job, near]);
 
   // The finished photo is the moment the whole flow was for, so it gets a
   // real look at it rather than the 84x66 chip it used to be. Same URL the
   // canvas on the left already loaded, so this costs no extra fetch.
   return (
-    <figure class="chat-result">
+    <figure class="chat-result" ref={card}>
       {onOpen ? (
         <button type="button" class="chat-result-shot" aria-label={`看第 ${ordinal} 版大圖`} onClick={onOpen}>
           <img src={urls.resultImage(job)} alt={`第 ${ordinal} 版美化結果`} />

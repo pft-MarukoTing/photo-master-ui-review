@@ -610,8 +610,26 @@ function SessionDays(props: {
 }
 
 export type GalleryTab = "recent" | "sample";
-// 首頁最近照片一次畫幾格。
+// 最近照片一次畫幾格。
 const GALLERY_PAGE = 12;
+
+// 最近照片一次只畫一段，捲到尾巴附近再接下一段。整份紀錄（最多幾百格、每格最多
+// 四張縮圖）一起畫出來的話，lazy loading 的預載範圍很大，一進來就會排隊抓上百張
+// 縮圖。首頁那一排（或那一欄）和抽屜都用這個：tail 掛在清單最後，看得到就再畫一段。
+function usePages(total: number, active: boolean) {
+  const [shown, setShown] = useState(GALLERY_PAGE);
+  const tail = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const el = tail.current;
+    if (!active || !el || shown >= total) return;
+    const io = new IntersectionObserver((seen) => seen.some((e) => e.isIntersecting) && setShown((n) => n + GALLERY_PAGE), {
+      rootMargin: "300px",
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [active, shown, total]);
+  return { shown, tail, more: shown < total };
+}
 // 範例照片可以多選，names 照點的順序排（多張頁就照這個順序）。
 export type GallerySelection = { kind: "session"; id: string } | { kind: "demo"; names: string[] } | null;
 
@@ -632,21 +650,8 @@ export function Gallery(props: {
   const { tab, selection } = props;
   const recent = tab === "recent";
   const list = recent ? props.sessions : props.demos;
-  // 最近照片一次只畫一段，捲到尾巴附近再接下一段。整份紀錄（最多幾百格、每格最多
-  // 四張縮圖）一起畫出來的話，lazy loading 的預載範圍很大，第一次進首頁就會排隊
-  // 抓上百張縮圖。手機那一排、桌機那一欄都是捲到底才接，不用分版型。
-  const [shown, setShown] = useState(GALLERY_PAGE);
-  const tail = useRef<HTMLSpanElement>(null);
   const sessions = props.sessions || [];
-  useEffect(() => {
-    const el = tail.current;
-    if (!recent || !el || shown >= sessions.length) return;
-    const io = new IntersectionObserver((seen) => seen.some((e) => e.isIntersecting) && setShown((n) => n + GALLERY_PAGE), {
-      rootMargin: "300px",
-    });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [recent, shown, sessions.length]);
+  const { shown, tail, more } = usePages(sessions.length, recent);
   const names = selection?.kind === "demo" ? selection.names : [];
   // 點一下選、再點一下取消；選滿了再點沒選的不會加。
   const toggle = (name: string) => {
@@ -715,7 +720,7 @@ export function Gallery(props: {
                     onPick={(id) => props.onSelect({ kind: "session", id })}
                     onRemove={props.onRemove}
                   />
-                  {shown < sessions.length && <span ref={tail} class="gallery-more" aria-hidden="true" />}
+                  {more && <span ref={tail} class="gallery-more" aria-hidden="true" />}
                 </>
               )
             : (props.demos || []).map((name) => (
@@ -766,6 +771,7 @@ export function HistoryDrawer(props: {
   // 畫清單；打開過就留著，收起的動畫和下次打開都不用重畫。
   const [opened, setOpened] = useState(props.open);
   if (props.open && !opened) setOpened(true);
+  const drawn = usePages(props.sessions?.length || 0, props.open);
   const stopPicking = () => {
     setPicking(false);
     setPicked(new Set());
@@ -858,14 +864,17 @@ export function HistoryDrawer(props: {
         </div>
         <div class={`history-list${picking ? " chat-picking" : ""}`}>
           {opened && (
-            <SessionDays
-              sessions={props.sessions || []}
-              gridClass="demo-images-grid chat-history-grid"
-              selectedId={props.currentId}
-              onPick={picking ? toggle : props.onOpen}
-              picked={picking ? picked : undefined}
-              onRemove={picking ? undefined : (id) => props.onRemove([id])}
-            />
+            <>
+              <SessionDays
+                sessions={(props.sessions || []).slice(0, drawn.shown)}
+                gridClass="demo-images-grid chat-history-grid"
+                selectedId={props.currentId}
+                onPick={picking ? toggle : props.onOpen}
+                picked={picking ? picked : undefined}
+                onRemove={picking ? undefined : (id) => props.onRemove([id])}
+              />
+              {drawn.more && <span ref={drawn.tail} class="gallery-more" aria-hidden="true" />}
+            </>
           )}
         </div>
         <p class="history-empty" hidden={!props.sessions || props.sessions.length > 0}>
