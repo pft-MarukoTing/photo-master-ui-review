@@ -591,8 +591,12 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
     data_url = image_to_data_url(preview, "image/jpeg")
     roster = None
     if precomputed_preview is not None:
-        from photo_agent.preview_context import validate_preview_context
-        precomputed_preview = validate_preview_context(precomputed_preview, image_bytes=image_bytes)
+        from photo_agent.preview_context import AnalysisPreview, validate_analysis_preview, validate_preview_context
+        if isinstance(precomputed_preview, AnalysisPreview):
+            precomputed_preview = validate_analysis_preview(precomputed_preview,
+                image_bytes=image_bytes, analysis_model=analysis_model)
+        else:
+            precomputed_preview = validate_preview_context(precomputed_preview, image_bytes=image_bytes)
         face_crops = restore_face_crops(image_bytes, precomputed_preview["detections"])
         roster = build_fixed_subject_roster(precomputed_preview["subject_preview"])
     else:
@@ -637,8 +641,9 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
             from photo_agent.subject_preview import validate_preview_person_bindings
             overall_analysis["_preview_person_bindings"] = validate_preview_person_bindings(
                 precomputed_preview["preview_people"], overall_analysis)
-        overall_analysis["_subject_preview_identity"] = {
-            k: precomputed_preview["binding"][k] for k in ("preview_job_id", "source_sha256")}
+        if 'binding' in precomputed_preview:
+            overall_analysis["_subject_preview_identity"] = {
+                k: precomputed_preview["binding"][k] for k in ("preview_job_id", "source_sha256")}
         overall_analysis["_subject_preview_comparison"] = compare_subject_preview(
             precomputed_preview["subject_preview"], overall_analysis)
     logger.info("Stage 2.1 preview_reused=%s fixed_roster=%s", precomputed_preview is not None, roster is not None)

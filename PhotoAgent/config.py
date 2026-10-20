@@ -11,7 +11,8 @@ EFFECT_NAME = 'photoAgent'
 # the frontend without making it a user-editable setting.
 ENABLE_BODY_RESHAPE = False
 
-# Internal rollout switch; disabling restores the Chat detector/upload path.
+# Enables Chat previews and ensures Stage 2.0 precedes every analyze_stage call.
+# Ready snapshots are reused; disabling retains the legacy Chat/analyze paths.
 ENABLE_CHAT_SUBJECT_PREVIEW = False
 # Auto-introduce the Stage 2.0 roster in Chat. Off keeps the avatar picker
 # and later request matching, without an unsolicited conversation call.

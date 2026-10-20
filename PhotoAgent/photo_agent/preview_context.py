@@ -12,6 +12,7 @@ import os
 import re
 import time
 from functools import lru_cache
+from dataclasses import dataclass
 
 from photo_agent.subject_preview import COORDINATE_SPACE, _valid_subject_box, validate_subject_preview
 
@@ -99,6 +100,39 @@ def validate_preview_context(context, *, image_bytes=None, src_keys=None, bindin
         from image_tools import get_image_dimensions
         if own["source_sha256"] != source_sha256(image_bytes) or list(get_image_dimensions(image_bytes)) != size:
             raise ValueError("preview_image_mismatch")
+    payload = _validate_preview_payload(context, size)
+    return {**payload, "binding": own, "src_keys": list(keys)}
+
+
+@dataclass(frozen=True)
+class AnalysisPreview:
+    """In-process preflight output, never a public/owned Chat snapshot."""
+    context: dict
+    source_sha256: str
+    analysis_model: str
+
+
+def validate_analysis_preview(preview, *, image_bytes, analysis_model):
+    if not isinstance(preview, AnalysisPreview):
+        raise ValueError('invalid_analysis_preview')
+    if preview.source_sha256 != source_sha256(image_bytes) or preview.analysis_model != analysis_model:
+        raise ValueError('analysis_preview_source_mismatch')
+    context = preview.context
+    if not isinstance(context, dict) or type(context.get('format_version')) is not int or context['format_version'] != 3:
+        raise ValueError('invalid_analysis_preview_format')
+    if context.get('coordinate_space') != COORDINATE_SPACE:
+        raise ValueError('invalid_preview_coordinate_space')
+    from image_tools import get_image_dimensions
+    size = list(get_image_dimensions(image_bytes))
+    if context.get('image_size') != size:
+        raise ValueError('preview_image_mismatch')
+    payload = _validate_preview_payload(context, size)
+    if payload['subject_preview']['state'] != 'ready':
+        raise ValueError('analysis_subject_preview_unavailable')
+    return payload
+
+
+def _validate_preview_payload(context, size):
     crops = context.get("detections")
     if not isinstance(crops, list):
         raise ValueError("invalid_preview_detections")
@@ -125,8 +159,7 @@ def validate_preview_context(context, *, image_bytes=None, src_keys=None, bindin
     if context['format_version'] == 3:
         from photo_agent.ab_preview import validate_context_fields
         preview, extra = validate_context_fields(context, crops, preview)
-        return {'format_version': 3, 'binding': own, 'src_keys': list(keys),
-                'coordinate_space': COORDINATE_SPACE, 'image_size': list(size),
+        return {'format_version': 3, 'coordinate_space': COORDINATE_SPACE, 'image_size': list(size),
                 'detections': copy.deepcopy(crops), 'subject_preview': copy.deepcopy(preview), **extra}
     if preview["state"] == "ready":
         classified = preview.get("detections")
@@ -161,7 +194,7 @@ def validate_preview_context(context, *, image_bytes=None, src_keys=None, bindin
     if context["format_version"] == 2:
         people_fields["preview_people"] = _validate_preview_people(context.get("preview_people"), crops, preview)
     # Allowlist the frozen snapshot; API envelopes/raw LLM diagnostics never enter params.
-    return {"format_version": context["format_version"], **people_fields, "binding": own, "src_keys": list(keys),
+    return {"format_version": context["format_version"], **people_fields,
             "coordinate_space": COORDINATE_SPACE, "image_size": list(size),
             "detections": copy.deepcopy(crops), "subject_preview": copy.deepcopy(preview)}
 
