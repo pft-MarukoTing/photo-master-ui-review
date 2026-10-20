@@ -17,9 +17,8 @@ from image_tools import (
 from gemini_client import (
     edit_photo as edit_photo_gemini,
     edit_eye_repair_pass as edit_eye_repair_pass_gemini,
-    NANO_BANANA_LITE_MODEL,
 )
-from mai_client import edit_photo as edit_photo_mai, MAI_IMAGE_26_MODEL
+from mai_client import edit_photo as edit_photo_mai
 from openai_client import (
     analyze_photo,
     review_user_instruction,
@@ -51,18 +50,18 @@ from prompts import (
     with_reframing_proposal,
 )
 from photo_agent.feature_resolver import build_blink_pass_targets
+from photo_agent import capabilities
 
 BLINK_REPAIR_IMAGE_MODEL = "gpt-image-2.5-sunburst"
 BLINK_REPAIR_QUALITY = "high"
 
+# Step 5's editor per image_model, built from the registry's provider /
+# api_model. Plain module-level dicts so tests can patch.dict an entry.
+_EDITOR_BY_PROVIDER = {"openai": edit_photo, "gemini": edit_photo_gemini, "mai": edit_photo_mai}
+_EYE_REPAIR_EDITOR_BY_PROVIDER = {"openai": edit_eye_repair_pass_openai, "gemini": edit_eye_repair_pass_gemini}
+
 EDIT_PHOTO_BY_MODEL = {
-    "gpt-image-2": edit_photo,
-    "gpt-image-1.5": partial(edit_photo, model="gpt-image-1.5"),
-    "gpt-image-2.5-sunburst": partial(edit_photo, model="gpt-image-2.5-sunburst"),
-    "gpt-image-2.5-flare": partial(edit_photo, model="gpt-image-2.5-flare"),
-    "nano-banana-2": edit_photo_gemini,
-    "nano-banana-lite": partial(edit_photo_gemini, model=NANO_BANANA_LITE_MODEL),
-    "MAI-Image-2.6": partial(edit_photo_mai, model=MAI_IMAGE_26_MODEL),
+    m.id: partial(_EDITOR_BY_PROVIDER[m.provider], model=m.api_model) for m in capabilities.IMAGE_MODELS
 }
 
 # Step 5b's model is a separate choice from Step 5's (config.MODELS["gaze_repair"],
@@ -71,13 +70,21 @@ EDIT_PHOTO_BY_MODEL = {
 # EDIT_PHOTO_BY_MODEL for the same reason: a one-line config swap between
 # providers while comparing which one repairs gaze more reliably.
 EYE_REPAIR_PASS_BY_MODEL = {
-    "gpt-image-2": edit_eye_repair_pass_openai,
-    "gpt-image-1.5": partial(edit_eye_repair_pass_openai, model="gpt-image-1.5"),
-    "gpt-image-2.5-sunburst": partial(edit_eye_repair_pass_openai, model="gpt-image-2.5-sunburst"),
-    "gpt-image-2.5-flare": partial(edit_eye_repair_pass_openai, model="gpt-image-2.5-flare"),
-    "nano-banana-2": edit_eye_repair_pass_gemini,
-    "nano-banana-lite": partial(edit_eye_repair_pass_gemini, model=NANO_BANANA_LITE_MODEL),
+    m.id: partial(_EYE_REPAIR_EDITOR_BY_PROVIDER[m.provider], model=m.api_model)
+    for m in capabilities.IMAGE_MODELS if m.gaze_repair
 }
+if MODELS["gaze_repair"] not in EYE_REPAIR_PASS_BY_MODEL:
+    raise RuntimeError(f'config.MODELS["gaze_repair"] = {MODELS["gaze_repair"]!r} has no eye-repair editor')
+if BLINK_REPAIR_IMAGE_MODEL not in EYE_REPAIR_PASS_BY_MODEL:
+    raise RuntimeError(f"BLINK_REPAIR_IMAGE_MODEL = {BLINK_REPAIR_IMAGE_MODEL!r} has no eye-repair editor")
+
+
+def _editor_for(image_model):
+    try:
+        return EDIT_PHOTO_BY_MODEL[image_model]
+    except KeyError:
+        raise RuntimeError(f"Unknown image_model: {image_model!r}", RESULT_INVALID_PARAMETER) from None
+
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +162,7 @@ def _run_eye_repair_pass(image_b64: str, analysis: dict, quality: str):
         model, quality = BLINK_REPAIR_IMAGE_MODEL, BLINK_REPAIR_QUALITY
     else:
         model = MODELS["gaze_repair"]
-    run_eye_repair_pass = EYE_REPAIR_PASS_BY_MODEL.get(model, edit_eye_repair_pass_gemini)
+    run_eye_repair_pass = EYE_REPAIR_PASS_BY_MODEL[model]
     prompt = build_eye_repair_pass_prompt(gaze_items, blink_targets, blink_rules)
     result_bytes = base64.b64decode(image_b64)
     edited_bytes, prompt_text, usage = run_eye_repair_pass(result_bytes, prompt, quality=quality)
@@ -491,7 +498,7 @@ def finish_stage(
                 and approved_blink_items(analysis)):
             edit_quality = BLINK_REPAIR_QUALITY
         logger.info("Step 5: editing photo (preset=%s quality=%s model=%s)", preset_key, edit_quality, image_model)
-        run_edit_photo = EDIT_PHOTO_BY_MODEL.get(image_model, edit_photo)
+        run_edit_photo = _editor_for(image_model)
         edit_result, edit_prompt = _run_edit_photo_compat(
             run_edit_photo,
             image_bytes,

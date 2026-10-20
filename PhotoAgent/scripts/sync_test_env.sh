@@ -7,15 +7,14 @@ set -e
 CONTAINER="photo-agent"
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-echo "==> Syncing test files into container..."
-for f in "$SCRIPT_DIR"/test_*.py; do
-    docker cp "$f" "$CONTAINER:/app/$(basename "$f")"
-done
+echo "==> Syncing tests/ into container..."
+docker exec "$CONTAINER" rm -rf /app/tests
+docker cp "$SCRIPT_DIR/tests" "$CONTAINER:/app/tests"
 
 echo "==> Installing pytest in container..."
 docker exec "$CONTAINER" python3 -m pip install pytest
 
 echo "==> Running pytest..."
-docker exec "$CONTAINER" python3 -m pytest /app/test_*.py -q
+docker exec "$CONTAINER" sh -c "cd /app && python3 -m pytest tests -q"
 
 echo "==> Done. Connect with: docker exec -it $CONTAINER bash"

@@ -20,39 +20,8 @@ MODELS = {
     "gaze_repair": "nano-banana-2",
 }
 
-# UI-selectable analysis models (Steps 2/6 -- analyze_photo and
-# quality_check_photo share whichever model a
-# request picks), overridable per request via analysis_model the same way
-# image_model overrides "image" above. Each maps to the reasoning.effort sent
-# with its Responses API calls: None omits the "reasoning" field entirely,
-# required for non-reasoning models since the API rejects that field on
-# models that don't support it; a reasoning model needs an explicit effort
-# level instead -- "none" runs reasoning-free, gpt-5.6-luna now runs "low".
-ANALYSIS_MODEL_REASONING_EFFORT = {
-    "gpt-4.1-mini": None,
-    "gpt-5.6-luna": "low",
-    "gpt-5.6-sol": "none",
-}
-
-ANALYSIS_MODEL_LABELS = {
-    "gpt-4.1-mini": "GPT 4.1 Mini",
-    "gpt-5.6-luna": "GPT 5.6 Luna",
-    "gpt-5.6-sol": "GPT 5.6 Sol",
-}
-
-# UI-selectable image-edit models (Step 5). "gpt-image-2"/"gpt-image-1.5"/
-# "gpt-image-2.5-sunburst"/"gpt-image-2.5-flare" call OpenAI's images/edits
-# API; "nano-banana-2"/"nano-banana-lite" call Gemini's generateContent API;
-# "MAI-Image-2.6" calls Microsoft Foundry's MAI image edits API.
-IMAGE_MODEL_LABELS = {
-    "gpt-image-2": "GPT Image 2",
-    "gpt-image-1.5": "GPT Image 1.5",
-    "gpt-image-2.5-sunburst": "GPT Image 2.5 Sunburst",
-    "gpt-image-2.5-flare": "GPT Image 2.5 Flare",
-    "nano-banana-2": "Nano Banana 2",
-    "nano-banana-lite": "Nano Banana 2 Lite",
-    "MAI-Image-2.6": "MAI-Image-2.6",
-}
+# The selectable image / analysis models (labels, providers, reasoning effort)
+# live in the feature registry, photo_agent/capabilities.py.
 
 PRESETS = {
     "natural": {

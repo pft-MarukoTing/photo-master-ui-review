@@ -25,6 +25,7 @@ except Exception:
     aiutils_logger = _DroppedTelemetry()
 from aspect_ratio_rules import allowed_auto_ratio_labels
 from sdl_face_detector import SDLFaceDetector
+from photo_agent import capabilities
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,79 @@ def _face_detector() -> SDLFaceDetector:
     return _FACE_DETECTOR
 
 
+def _padded_face_box(img, x, y, w, h):
+    """The crop around a detected face: generous headroom and a little room
+    below the chin, clamped to the frame. Shared by the crops sent to the
+    analysis model and by the boxes handed to the UI, so a face thumbnail
+    frames the same way wherever it gets built."""
+    left = min(max(0, x - round(w * 0.6)), img.width)
+    top = min(max(0, y - round(h * 0.6)), img.height)
+    right = max(min(img.width, x + w + round(w * 0.6)), 0)
+    bottom = max(min(img.height, y + h + round(h * 0.4)), 0)
+    return left, top, right, bottom
+
+
+def _normalized_face_entry(img, x, y, w, h):
+    """{"box", "face_box"} for one detected face, both normalized against the
+    original (EXIF-transposed) image -- see detect_face_crops' docstring for
+    what each of the two means."""
+    left, top, right, bottom = _padded_face_box(img, x, y, w, h)
+    return {
+        "box": {
+            "x": left / img.width,
+            "y": top / img.height,
+            "w": (right - left) / img.width,
+            "h": (bottom - top) / img.height,
+        },
+        "face_box": {
+            "x": x / img.width,
+            "y": y / img.height,
+            "w": w / img.width,
+            "h": h / img.height,
+        },
+    }
+
+
+def _detect_faces_px(img, caller):
+    """The detector's own boxes for `img` as (x, y, w, h) in its pixel space,
+    largest first, with the small false positives dropped.
+
+    Best-effort, exactly as detect_face_crops promises: a detector failure or
+    a photo with no face both come back as an empty list, never an error.
+    """
+    t_cvt0 = time.perf_counter()
+    # The detector letterboxes to its own 640px input internally, so it's fed
+    # the full-resolution image directly rather than pre-downscaled here.
+    bgr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+    t_detect0 = time.perf_counter()
+    try:
+        detector = _face_detector()
+        with _FACE_DETECTOR_LOCK:
+            faces = detector.detect(bgr, _FACE_DETECT_CONFIDENCE_THRESHOLD, _FACE_DETECT_NMS_THRESHOLD)
+    except Exception:
+        # Best-effort detection: no crop is a normal, handled outcome (see
+        # docstring), never worth failing the whole analysis over.
+        logger.warning("%s: face detector failed, continuing without face crops", caller, exc_info=True)
+        return []
+    t_detect1 = time.perf_counter()
+    aiutils_logger.log(f'[{caller}] timing', src_dims=f"{img.width}x{img.height}",
+                        cvtcolor_ms=round((t_detect0 - t_cvt0) * 1000, 1),
+                        detect_ms=round((t_detect1 - t_detect0) * 1000, 1))
+    if not faces:
+        return []
+
+    # bbox is [x1, y1, x2, y2] in the original image's pixel space already.
+    boxes = [(x1, y1, x2 - x1, y2 - y1) for x1, y1, x2, y2 in (f["bbox"] for f in faces)]
+    boxes = sorted(boxes, key=lambda b: b[2] * b[3], reverse=True)
+    largest_area = boxes[0][2] * boxes[0][3]
+    # A real face's false-positive companions from background texture/pattern
+    # are usually far smaller than the real thing in the same frame; this
+    # drops those without needing a second model to tell them apart.
+    filtered = [b for b in boxes if b[2] * b[3] >= largest_area * 0.2]
+    logger.info("%s: image=%dx%d raw_boxes=%s filtered=%s", caller, img.width, img.height, boxes, filtered)
+    return filtered
+
+
 def detect_face_crops(image_bytes: bytes) -> list:
     """Zoomed-in JPEG crops of the most confidently detected faces, for
     handing to the analysis model alongside the full-frame preview.
@@ -151,35 +225,10 @@ def detect_face_crops(image_bytes: bytes) -> list:
     if img.width < 1 or img.height < 1:
         return []
 
-    t_cvt0 = time.perf_counter()
-    # The detector letterboxes to its own 640px input internally, so it's fed
-    # the full-resolution image directly rather than pre-downscaled here.
-    bgr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-    t_detect0 = time.perf_counter()
-    try:
-        detector = _face_detector()
-        with _FACE_DETECTOR_LOCK:
-            faces = detector.detect(bgr, _FACE_DETECT_CONFIDENCE_THRESHOLD, _FACE_DETECT_NMS_THRESHOLD)
-    except Exception:
-        # Best-effort detection: no crop is a normal, handled outcome (see
-        # docstring), never worth failing the whole analysis over.
-        logger.warning("detect_face_crops: face detector failed, continuing without face crops", exc_info=True)
-        return []
-    t_detect1 = time.perf_counter()
-    aiutils_logger.log('[detect_face_crops] timing', src_dims=f"{img.width}x{img.height}",
-                        cvtcolor_ms=round((t_detect0 - t_cvt0) * 1000, 1),
-                        detect_ms=round((t_detect1 - t_detect0) * 1000, 1))
-    if not faces:
+    filtered = _detect_faces_px(img, "detect_face_crops")
+    if not filtered:
         return []
 
-    # bbox is [x1, y1, x2, y2] in the original image's pixel space already.
-    boxes = [(x1, y1, x2 - x1, y2 - y1) for x1, y1, x2, y2 in (f["bbox"] for f in faces)]
-    boxes = sorted(boxes, key=lambda b: b[2] * b[3], reverse=True)
-    largest_area = boxes[0][2] * boxes[0][3]
-    # A real face's false-positive companions from background texture/pattern
-    # are usually far smaller than the real thing in the same frame; this
-    # drops those without needing a second model to tell them apart.
-    filtered = [b for b in boxes if b[2] * b[3] >= largest_area * 0.2]
     # Only the first _FACE_CROP_MAX_COUNT faces get an actual cropped image
     # sent to the analysis model (token-cost cap). A photo can legitimately
     # have more locally-detected faces than that -- those still get a
@@ -187,63 +236,47 @@ def detect_face_crops(image_bytes: bytes) -> list:
     # against subjects[] and surface them in the UI, just without a zoomed
     # crop or "Local face detector reference" text ever reaching the model.
     kept, extra = filtered[:_FACE_CROP_MAX_COUNT], filtered[_FACE_CROP_MAX_COUNT:]
-    logger.info("detect_face_crops: image=%dx%d raw_boxes=%s kept=%s extra=%s", img.width, img.height, boxes, kept, extra)
-
-    def _padded_box(x, y, w, h):
-        left = min(max(0, x - round(w * 0.6)), img.width)
-        top = min(max(0, y - round(h * 0.6)), img.height)
-        right = max(min(img.width, x + w + round(w * 0.6)), 0)
-        bottom = max(min(img.height, y + h + round(h * 0.4)), 0)
-        return left, top, right, bottom
+    logger.info("detect_face_crops: kept=%s extra=%s", kept, extra)
 
     t_crop0 = time.perf_counter()
     crops = []
     for x, y, w, h in kept:
-        left, top, right, bottom = _padded_box(x, y, w, h)
+        left, top, right, bottom = _padded_face_box(img, x, y, w, h)
         logger.info("detect_face_crops: raw_box=(%d,%d,%d,%d) crop_box=(left=%d,top=%d,right=%d,bottom=%d)", x, y, w, h, left, top, right, bottom)
         crop = img.crop((left, top, right, bottom))
         longest = max(crop.width, crop.height)
         if longest < _FACE_CROP_MAX_SIDE:
             scale = _FACE_CROP_MAX_SIDE / longest
             crop = crop.resize((round(crop.width * scale), round(crop.height * scale)), Image.LANCZOS)
-        crops.append({
-            "box": {
-                "x": left / img.width,
-                "y": top / img.height,
-                "w": (right - left) / img.width,
-                "h": (bottom - top) / img.height,
-            },
-            "face_box": {
-                "x": x / img.width,
-                "y": y / img.height,
-                "w": w / img.width,
-                "h": h / img.height,
-            },
-            "bytes": _to_jpeg_bytes(crop),
-        })
+        crops.append({**_normalized_face_entry(img, x, y, w, h), "bytes": _to_jpeg_bytes(crop)})
     aiutils_logger.log('[detect_face_crops] crop timing', crop_count=len(kept),
                         crop_total_ms=round((time.perf_counter() - t_crop0) * 1000, 1))
 
     # Cheap (arithmetic only, no PIL crop/resize/encode) entries for the
     # locally-detected faces beyond the crop cap -- never sent to the model.
     for x, y, w, h in extra:
-        left, top, right, bottom = _padded_box(x, y, w, h)
-        crops.append({
-            "box": {
-                "x": left / img.width,
-                "y": top / img.height,
-                "w": (right - left) / img.width,
-                "h": (bottom - top) / img.height,
-            },
-            "face_box": {
-                "x": x / img.width,
-                "y": y / img.height,
-                "w": w / img.width,
-                "h": h / img.height,
-            },
-            "bytes": None,
-        })
+        crops.append({**_normalized_face_entry(img, x, y, w, h), "bytes": None})
     return crops
+
+
+def detect_face_boxes(image_bytes: bytes) -> list:
+    """The locally-detected faces of `image_bytes` as [{"box", "face_box"}],
+    largest first -- detect_face_crops without any of the cropping.
+
+    Same detector, same ordering and the same false-positive filter, so the
+    faces the chat's upload page can offer before a session exists are the
+    same ones, in the same order, that the analysis will later report in
+    _local_face_boxes. None of the per-face JPEG work, though: the browser
+    already holds the photo and crops its own thumbnails from it, so the
+    bytes would be paid for twice and thrown away once.
+
+    Best-effort, like every other caller of the detector: an empty list is a
+    normal answer for plenty of photos, not an error.
+    """
+    img = _open_rgb(image_bytes)
+    if img.width < 1 or img.height < 1:
+        return []
+    return [_normalized_face_entry(img, *b) for b in _detect_faces_px(img, "detect_face_boxes")]
 
 
 def ensure_png_bytes(image_bytes: bytes) -> bytes:
@@ -832,11 +865,11 @@ _GEMINI_ASPECT_RATIO_CHOICES = [
 ]
 
 # gpt-image-2 and the gpt-image-2.5 family (unlike gpt-image-1.5) accept an
-# arbitrary "WIDTHxHEIGHT" `size` instead of a fixed enum, so the source
-# photo's exact aspect ratio can be requested directly rather than snapped.
+# arbitrary "WIDTHxHEIGHT" `size` instead of a fixed enum (the registry's
+# ImageModel.arbitrary_size), so the source photo's exact aspect ratio can be
+# requested directly rather than snapped.
 # The API still requires both edges divisible by 16 and the ratio within
 # 1:3..3:1.
-_OPENAI_ARBITRARY_SIZE_MODELS = {"gpt-image-2", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare"}
 _OPENAI_SIZE_GRID = 16
 _OPENAI_SIZE_MIN_RATIO = 1 / 3
 _OPENAI_SIZE_MAX_RATIO = 3.0
@@ -862,7 +895,7 @@ def nearest_openai_edit_size(image_width: int, image_height: int) -> str:
 
 
 def supports_arbitrary_openai_size(model: str) -> bool:
-    return model in _OPENAI_ARBITRARY_SIZE_MODELS
+    return capabilities.supports_arbitrary_openai_size(model)
 
 
 def openai_edit_size_for_ratio(image_width: int, image_height: int) -> str:

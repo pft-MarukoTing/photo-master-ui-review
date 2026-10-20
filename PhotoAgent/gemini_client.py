@@ -1,23 +1,15 @@
 import base64
-import copy
 import math
 import os
 from typing import Optional, Tuple
 
-import backoff
 import requests
 
 from aiserver_utils.aescipher import AESCipher
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
-from image_tools import (
-    get_image_dimensions,
-    resolve_crop_box_with_report,
-    apply_framing_size,
-    apply_aspect_ratio_preference,
-    output_geometry_warnings,
-    ensure_png_bytes,
-)
-from photo_agent.edit_prompt import assemble_edit_prompt
+from image_tools import get_image_dimensions, ensure_png_bytes
+from photo_agent.providers.http import checked_json, retry_transient
+from photo_agent.providers.image_edit import EditGeometry, run_image_edit
 
 GEMINI_GENERATE_CONTENT_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -123,22 +115,6 @@ def _gemini_api_key() -> str:
         ) from e
 
 
-def _safe_json(resp) -> dict:
-    try:
-        return resp.json()
-    except Exception:
-        return {}
-
-
-class _RetryableApiError(RuntimeError):
-    """A transient Gemini API failure (5xx) -- distinct from a 4xx rejection,
-    which will fail identically on retry since the problem is the request's
-    content, not the network. Mirrors openai_client.py's same distinction."""
-
-
-_RETRYABLE_EXCEPTIONS = (requests.exceptions.Timeout, requests.exceptions.ConnectionError, _RetryableApiError)
-
-
 def _extract_inline_image(data: dict) -> Optional[str]:
     for candidate in data.get("candidates") or []:
         for part in (candidate.get("content") or {}).get("parts") or []:
@@ -161,41 +137,37 @@ def edit_photo(
     single_pass_edit: bool = False,
 ):
     """Returns (result, prompt) -- same contract as openai_client.edit_photo."""
-    img_w, img_h = get_image_dimensions(image_bytes)
 
-    # See openai_client.edit_photo: framing size (close/closer) drives the crop
-    # geometry, not just the style-hint text.
-    size = (analysis.get("style_options") or {}).get("size")
-    framed_analysis = apply_framing_size(analysis, size)
-    # User's explicit aspect-ratio choice overrides the analysis's own
-    # recommendation ("original" only -- "auto" passes through unchanged).
-    # Work on a deep copy because this function writes the effective provider
-    # ratio back into the crop/prompt context. The original analysis is shared
-    # by QA and by every independent RUN.
-    framed_analysis = copy.deepcopy(apply_aspect_ratio_preference(framed_analysis, aspect_ratio))
-    # Resolve one effective ratio and reuse it for crop and output canvas.
-    image_config = {"imageSize": _image_size_for_model(quality, model)}
-    api_ratio_label = _effective_aspect_ratio_label(framed_analysis, img_w, img_h)
-    geometry_ratio_label = _output_geometry_label(api_ratio_label)
-    framed_analysis["recommended_aspect_ratio"] = geometry_ratio_label
-    if framed_analysis.get("crop_box"):
-        framed_analysis["crop_box"]["aspect_ratio"] = geometry_ratio_label
-    crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
-    prompt_text, resolution_metadata, prompt_strategy = assemble_edit_prompt(
-        framed_analysis, crop_plan, preset_key=preset_key, aspect_ratio=aspect_ratio,
-        source_size=(img_w, img_h), single_pass_edit=single_pass_edit,
-        revision_feedback=revision_feedback,
+    def resolve_geometry(framed_analysis, img_w, img_h):
+        api_ratio_label = _effective_aspect_ratio_label(framed_analysis, img_w, img_h)
+        return EditGeometry(
+            # The physical ratio, not api_ratio_label: Gemini's named ratios
+            # are approximate on its own pixel grid (4:3 rasters as 1200x896),
+            # so that is what the output can actually be held to.
+            ratio_label=_output_geometry_label(api_ratio_label),
+            request={"imageConfig": {"imageSize": _image_size_for_model(quality, model), "aspectRatio": api_ratio_label}},
+        )
+
+    def send(png_bytes, prompt_text, geometry):
+        data = _post_generate_content(model, _generate_content_payload(prompt_text, png_bytes, geometry.request["imageConfig"]))
+        b64 = _extract_inline_image(data)
+        if not b64:
+            raise RuntimeError("Gemini 回應沒有包含圖片資料。")
+        return b64, {"model": model, "usage": data.get("usageMetadata")}
+
+    return run_image_edit(
+        image_bytes, analysis, preset_key=preset_key, revision_feedback=revision_feedback,
+        aspect_ratio=aspect_ratio, single_pass_edit=single_pass_edit,
+        resolve_geometry=resolve_geometry, send=send,
     )
-    image_config["aspectRatio"] = api_ratio_label
 
-    # Converted once, outside the retry-wrapped call, so a retry doesn't
-    # needlessly re-encode the same bytes.
-    png_b64 = base64.b64encode(ensure_png_bytes(image_bytes)).decode()
-    payload = {
+
+def _generate_content_payload(prompt_text: str, png_bytes: bytes, image_config: dict) -> dict:
+    return {
         "contents": [{
             "parts": [
                 {"text": prompt_text},
-                {"inlineData": {"mimeType": "image/png", "data": png_b64}},
+                {"inlineData": {"mimeType": "image/png", "data": base64.b64encode(png_bytes).decode()}},
             ],
         }],
         "generationConfig": {
@@ -204,22 +176,6 @@ def edit_photo(
         },
     }
 
-    data = _post_generate_content(model, payload)
-
-    b64 = _extract_inline_image(data)
-    if not b64:
-        raise RuntimeError("Gemini 回應沒有包含圖片資料。")
-
-    return {
-        "image_b64": b64,
-        "usage": {"model": model, "usage": data.get("usageMetadata")},
-        # geometry_ratio_label, not api_ratio_label: Gemini's named ratios are
-        # approximate on its own pixel grid (4:3 rasters as 1200x896), so the
-        # physical ratio is what the output can actually be held to.
-        "geometry_warnings": output_geometry_warnings(b64, geometry_ratio_label, crop_plan, img_w, img_h),
-        "prompt_resolution": resolution_metadata,
-        "prompt_strategy": prompt_strategy,
-    }, prompt_text
 
 
 # ── Step 5b: eye repair pass (Gemini / "Nano Banana") ─────────────────────────
@@ -245,21 +201,7 @@ def edit_eye_repair_pass(image_bytes: bytes, prompt: str, quality: str = "low", 
     img_w, img_h = get_image_dimensions(image_bytes)
     api_ratio_label = _nearest_ratio_label(img_w / img_h if img_w and img_h else 1.0)
     image_config = {"imageSize": _image_size_for_model(quality, model), "aspectRatio": api_ratio_label}
-
-    png_b64 = base64.b64encode(ensure_png_bytes(image_bytes)).decode()
-    payload = {
-        "contents": [{
-            "parts": [
-                {"text": prompt_text},
-                {"inlineData": {"mimeType": "image/png", "data": png_b64}},
-            ],
-        }],
-        "generationConfig": {
-            "responseModalities": ["IMAGE"],
-            "imageConfig": image_config,
-        },
-    }
-
+    payload = _generate_content_payload(prompt_text, ensure_png_bytes(image_bytes), image_config)
     data = _post_generate_content(model, payload)
     b64 = _extract_inline_image(data)
     if not b64:
@@ -267,7 +209,7 @@ def edit_eye_repair_pass(image_bytes: bytes, prompt: str, quality: str = "low", 
     return base64.b64decode(b64), prompt_text, {"model": model, "usage": data.get("usageMetadata")}
 
 
-@backoff.on_exception(backoff.expo, _RETRYABLE_EXCEPTIONS, max_tries=3, jitter=backoff.full_jitter)
+@retry_transient
 def _post_generate_content(model: str, payload: dict) -> dict:
     resp = requests.post(
         GEMINI_GENERATE_CONTENT_URL.format(model=model),
@@ -275,10 +217,4 @@ def _post_generate_content(model: str, payload: dict) -> dict:
         json=payload,
         timeout=300,
     )
-    data = _safe_json(resp)
-    if not resp.ok:
-        msg = (data.get("error") or {}).get("message") or f"HTTP {resp.status_code}"
-        if resp.status_code >= 500:
-            raise _RetryableApiError(f"Image edit failed (Gemini): {msg}")
-        raise RuntimeError(f"Image edit failed (Gemini): {msg}")
-    return data
+    return checked_json(resp, "Image edit failed (Gemini)")

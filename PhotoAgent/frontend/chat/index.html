@@ -1,0 +1,4346 @@
+<!doctype html>
+<html lang="zh-Hant" style="--scrollbar-accent-rgb: 185,81,27">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Photo master · 對話</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Inter carries the Latin; Noto Sans TC carries the CJK (Inter has no CJK
+       glyphs, so it used to fall through to whatever the OS had). Noto Serif TC
+       is the display face -- headline and panel titles only. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css">
+  <style>
+    [hidden] { display: none !important; }
+
+    /* ── Upload left column: holds drop zone OR preview ── */
+    .upload-left {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      /* Grows to fill .upload-main-col's remaining space (see
+         .upload-container/.upload-grid/.upload-main-col in
+         styles.css) -- without this, only .upload-zone below flexed, but its
+         own parent stayed auto-height and never actually offered it anything
+         to grow into. */
+      flex: 1 1 auto;
+      min-height: 0;
+      /* Narrower than the full main column now that the example-photo
+         gallery sits beside it instead of only .upload-below-zone's pills
+         underneath -- centered so it doesn't hug the gallery's edge. */
+      width: 100%;
+      max-width: 760px;
+      margin: 0 auto;
+      /* Safety net for narrow+short combos (e.g. a phone in landscape) that
+         fall between the max-height/max-width breakpoints in styles.css:
+         once .upload-zone's min-height floor genuinely doesn't fit the
+         space .upload-left was assigned, this scrolls that overflow inside
+         .upload-left instead of letting it paint past its own box and
+         overlap .upload-below-zone (.upload-grid's other child, positioned
+         right after .upload-left). */
+      overflow-y: auto;
+    }
+    .upload-left .upload-zone {
+      flex: 1;
+    }
+    /* Floating top-right of #dz-multi (both are #dz-multi's own siblings --
+       drop-zone/preview are hidden whenever the multi-thumbnail strip is
+       shown, so this still lands in the strip's own corner). Same icon-
+       button look as .canvas-btn on the results page. Hidden by default,
+       :has() shows it only while #dz-multi itself is visible -- avoids
+       needing a matching hidden-toggle at every place app.js already
+       shows/hides #dz-multi. */
+    .dz-clear-all-btn {
+      display: none;
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 5;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border: 1px solid rgba(var(--on-surface-rgb),.16);
+      border-radius: 50%;
+      background: rgba(9,9,11,.55);
+      backdrop-filter: blur(16px) saturate(1.4);
+      -webkit-backdrop-filter: blur(16px) saturate(1.4);
+      color: #fff;
+      cursor: pointer;
+      transition: background .2s, border-color .2s, transform .2s;
+    }
+    .upload-left:has(#dz-multi:not([hidden])) .dz-clear-all-btn { display: flex; }
+    .dz-clear-all-btn:hover {
+      background: rgba(255,38,0,.4);
+      border-color: rgba(255,38,0,.55);
+      transform: translateY(-1px);
+    }
+    #dz-preview {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      /* Was a flat 360px floor -- taller than the space .upload-left (a
+         sibling flex chain, see .upload-container/.upload-grid in
+         styles.css) can actually offer on a short/narrow viewport, so a
+         selected photo rendered past .upload-left's own bottom edge and
+         spilled over .upload-below-zone's pills below it. Matches
+         .upload-zone's own floor instead (280px desktop / 160px under the
+         existing 900px width breakpoint, see styles.css), since this and
+         the empty drop zone are mutually-exclusive views of the same slot. */
+      min-height: 280px;
+      /* var(--card) alone is a flat, opaque fill -- it was blocking the
+         page's own ambient glow (body's fixed-position radial-gradient,
+         and #upload-section .upload-main-col's own one further down)
+         wherever a selected photo doesn't fully cover this box (a
+         narrower/shorter image leaves letterboxed margin on the sides or
+         bottom). Against peach's n09==n04 (this card's fill is literally
+         the same hex as the page), that flatness was the only thing left
+         making the margins read as a different, flat "white" patch instead
+         of continuing the same warm glow the empty drop zone shows through
+         to (it's transparent, see .upload-zone below). farthest-corner,
+         not a fixed pixel ellipse -- guarantees the glow actually reaches
+         every corner of this box instead of leaving them a visible harder
+         edge once it runs out. */
+      background:
+        radial-gradient(ellipse farthest-corner at 50% 38%, rgba(var(--accent-rgb),.11) 0%, rgba(var(--accent-2-rgb),.05) 45%, transparent 75%),
+        var(--card);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      cursor: pointer;
+      transition: box-shadow .25s, transform .25s;
+    }
+    #dz-preview:hover {
+      box-shadow: var(--shadow-accent);
+      transform: translateY(-2px);
+    }
+    /* Mirrors .upload-zone's own narrow-width floor (styles.css) -- has to
+       live here too, not just there, since this ID rule's base min-height
+       above sits in a later stylesheet (this inline block loads after
+       styles.css) and would otherwise keep winning over an equal-specificity
+       override placed only in styles.css regardless of the media query. */
+    @media (max-width: 900px) {
+      #dz-preview { min-height: 160px; }
+    }
+
+    .proc-container {
+      max-width: 1425px;
+    }
+
+    /* ── proc-visual done state ── */
+    .proc-visual {
+      transition: width .5s ease, height .5s ease;
+    }
+    .proc-visual.done .think-ring {
+      opacity: 0;
+      pointer-events: none;
+      animation-play-state: paused;
+      transition: opacity .4s ease;
+    }
+    .proc-visual.done .think-center {
+      inset: 0;
+      border-radius: 14px;
+      background: none;
+      transition: inset .5s ease, border-radius .5s ease;
+    }
+    .proc-visual.done .proc-thumb {
+      border-radius: 14px;
+      /* Base .proc-thumb uses object-fit:cover to fill the circular
+         thinking-state thumb -- once done, show the whole photo instead of
+         cropping it to the box, so it keeps its own aspect ratio. */
+      object-fit: contain;
+      transition: border-radius .5s ease;
+    }
+
+    /* ── Step rich detail ──
+       Neutral (not accent-tinted) so it doesn't fight with the green
+       checked state below or whatever accent-colored controls sit inside
+       it (style-option pills, etc.) -- just a faint highlight + hairline
+       border to read as a grouped sub-panel, nothing more. */
+    .step-list-frame {
+      margin-top: 14px;
+      background: rgba(var(--on-surface-rgb),.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+    .step-inline-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .step-inline-list li label { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+    .step-inline-list li label:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+    .step-cb { position: relative; width: 20px; height: 20px; flex-shrink: 0; margin-top: 1px; }
+    .step-cb input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .step-cb-box {
+      display: block; width: 20px; height: 20px;
+      border-radius: 4px; border: 1.5px solid var(--n44);
+      background: var(--card-2);
+      transition: border-color .15s, background .15s;
+    }
+    .step-cb input:checked + .step-cb-box {
+      border-color: var(--accent);
+      background: rgba(var(--accent-rgb),.18);
+    }
+    .step-cb-box::after {
+      content: '';
+      display: block;
+      position: absolute; left: 6px; top: 3px;
+      width: 6px; height: 10px;
+      border: 2px solid var(--accent);
+      border-top: none; border-left: none;
+      transform: rotate(45deg) scale(0);
+      transition: transform .15s;
+    }
+    .step-cb input:checked + .step-cb-box::after { transform: rotate(45deg) scale(1); }
+    .step-cb-label { font-size: 16.25px; color: var(--text-3); line-height: 1.5; font-weight: 500; }
+    .adherence-divider { height: 1px; background: var(--border); margin: 2px 0; }
+    .step-tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .step-tag {
+      display: inline-flex; align-items: center;
+      padding: 4px 12px; border-radius: 20px;
+      font-size: 15px; font-weight: 600;
+      background: var(--card-2);
+      border: 1px solid var(--border-2);
+      color: var(--text-4);
+    }
+
+    /* ── Processing Time (Screen 3) ── */
+    .timing-list {
+      padding: 14px 20px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+    .timing-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 16.25px;
+      color: var(--text-2);
+    }
+    .timing-row.timing-sub {
+      padding-left: 22px;
+      font-size: 13.75px;
+      color: var(--text-3);
+    }
+    .timing-row.timing-sub .timing-value { font-weight: 400; }
+    .timing-value {
+      font-weight: 700;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .timing-total {
+      border-top: 1px solid var(--border);
+      padding-top: 9px;
+      margin-top: 3px;
+      color: var(--text);
+    }
+    .timing-total .timing-value { color: var(--accent); }
+
+    /* ── Analysis preview (shown mid-processing, before "continue") ── */
+    .analysis-preview {
+      container-type: inline-size;
+      container-name: ap-panel;
+      margin-top: 32px;
+      padding: 26px 28px;
+      background:
+        var(--card-sheen),
+        var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      animation: fadeUp .5s ease both;
+      /* max-height is set from JS (updateAnalysisPreviewMaxHeight) -- same
+         "avoid making the user scroll the window" policy as .batch-sidebar's
+         own max-height, capping to the viewport instead of pushing the page
+         taller when the recipe/options content is long. */
+      overflow-y: auto;
+    }
+    /* Cancel (left) / continue (right) -- only unhidden for the inline
+       results-page flow (see openInlineAnalysisPanel in app.js). Normal
+       flow, not absolutely positioned, so it pushes the title down instead
+       of risking an overlap with it. */
+    .inline-analysis-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .analysis-preview-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 34px;
+      padding: 0 16px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -.1px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, color .15s, transform .15s, box-shadow .15s;
+    }
+    .analysis-preview-action-left {
+      border: 1px solid var(--border-2);
+      background: var(--card-2);
+      color: var(--text-2);
+    }
+    .analysis-preview-action-left:hover {
+      background: rgba(255,38,0,.12);
+      border-color: rgba(255,38,0,.35);
+      color: var(--red);
+    }
+    .analysis-preview-action-right {
+      border: none;
+      background: var(--mv-grad);
+      color: #fff;
+      box-shadow: none;
+    }
+    /* Pushes .ap-settings-run-row (Run) to the far right of .ap-actions-row
+       -- used to also carry #ap-advanced-settings-btn as a pair before
+       人像修正設定 folded into 設定 instead (see #advanced-settings-fold),
+       margin-left:auto stayed on the wrapper rather than moving onto Run
+       itself since there's no upside to churning it now that it's a single
+       child. */
+    .ap-actions-row .ap-settings-run-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-left: auto;
+      /* Two children now (the settings icon + 美化), and this row sits inside
+         a panel that can be as narrow as the side-panel layout allows -- let
+         the icon drop onto its own line rather than pushing 美化 out of the
+         panel. Right-aligned on both lines so 美化 stays where it has always
+         been. */
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    /* #ap-case-settings-btn -- the case's own settings, one icon. It shares a
+       row with 美化, whose job is to be pressed; spelling the values out here
+       competed with that for width and attention, so they live in the button's
+       title/aria-label instead (updateApCaseSettingsTrigger, app.js) and the
+       button itself stays the size of the gear it replaces. A plain <button>
+       opening a modal rather than a <details> dropdown: the pickers inside are
+       themselves <details> with absolutely-positioned panels, and nesting those
+       would have them spill out of their own container -- the same reason
+       setupCompactUploadSelectors sends the upload page's compact selectors to
+       #upload-selector-modal instead of into its menu panel. */
+    /* Sliders rather than the header's own gear (#header-settings-btn) or the
+       sparkle on every model picker: with no label on the button the glyph is
+       the only thing naming it, and it must not read as either of the two
+       things it deliberately isn't -- the app-wide 設定, or one more model
+       picker. */
+    .ap-case-settings-trigger {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),.28), rgba(var(--accent-2-rgb),.16));
+      border: 1px solid rgba(var(--accent-rgb),.52);
+      border-radius: 50%;
+      color: var(--text-1);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.18);
+      cursor: pointer;
+      transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s;
+    }
+    .ap-case-settings-trigger:hover {
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),.4), rgba(var(--accent-2-rgb),.24));
+      border-color: rgba(var(--accent-rgb),.72);
+      color: var(--text-1);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.16);
+      transform: translateY(-2px);
+    }
+    .ap-case-settings-trigger:active { transform: translateY(0) scale(.96); }
+    .ap-case-settings-trigger:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+    /* Shown by updateApCaseSettingsTrigger once the settings no longer match
+       what this case actually ran with -- i.e. the moment they stop describing
+       the image on screen and start describing the next edit. Cornered on the
+       icon like a notification dot, with a ring in the row's own background so
+       it reads as attached to the button rather than floating over it. */
+    .ap-case-settings-dirty {
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 2px var(--card);
+    }
+    .ap-case-settings-trigger:has(.ap-case-settings-dirty:not([hidden])) {
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),.36), rgba(var(--accent-2-rgb),.22));
+      border-color: rgba(var(--accent-rgb),.68);
+      color: var(--text-1);
+    }
+    /* Leading note in #ap-case-settings-modal-body -- .option-desc's own color
+       and size, just not squeezed into an .option-row's right-hand column. */
+    .ap-case-settings-note {
+      margin: 0 0 4px;
+      line-height: 1.6;
+    }
+    .analysis-preview-action-right:hover {
+      box-shadow: none;
+      transform: translateY(-1px);
+    }
+    .analysis-preview-action:active { transform: scale(.96); }
+    /* #inline-analysis-continue-btn's "nothing changed yet" state
+       (updateInlineAnalysisContinueBtnState, app.js) still toggles
+       .is-blocked, but a click here now opens waitForInlineAnalysisAction's
+       confirm modal rather than truly blocking -- so the button keeps its
+       normal look (color, cursor, hover) in this state too; .is-blocked is
+       intentionally styleless. */
+    .ap-row p { margin: 6px 0 0; }
+
+    /* ── Analysis-preview label hierarchy ──
+       .ap-label   = section header (修圖建議 / 修圖風格選項 / 分析結果)
+       .ap-sub-label = sub-header nested one level in (Pose / Angle / 照片總覽 / 診斷與建議)
+       Sub-labels must read as clearly subordinate to their section's .ap-label. */
+    .ap-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 17.5px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -.14px;
+    }
+    /* Plain (non-toggle) section labels get an accent dot; toggle summaries
+       already get a leading marker from their own chevron ::before below. */
+    label.ap-label::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+    .ap-sub-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-2);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      margin: 16px 0 6px;
+    }
+    .ap-sub-label:first-child { margin-top: 0; }
+
+    /* ── Step indicator (#ap-step-indicator) ──
+       Lives in #step-indicator-slot, directly inside <main> and above all
+       three screens (see its markup comment there) -- never inside the
+       screen it happens to be describing, so no screen can hide it along
+       with itself or give it its own spacing. setFlowStage (app.js) lights
+       the current step; showSection (dom.js) shows/hides the slot. */
+    .ap-step-indicator {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      margin-bottom: 4px;
+    }
+    /* padding-top mirrors .results-container's own (styles.css) so the
+       indicator sits exactly as far below the header as it did back when it
+       was #results-detail's first child -- and that spacing is now the only
+       one there is, for every screen. Declared after .container's
+       `padding: 0 28px` shorthand (styles.css loads before this block), so
+       this wins for the top edge while the 28px sides stay.
+       --step-indicator-h is this slot's full laid-out height (20px padding +
+       30px .ap-step-num + .ap-step-indicator's own 4px margin-bottom). The
+       screens that size themselves against the viewport subtract it
+       (styles.css: .proc-wrap, and the side-panel #results-detail rule),
+       since the slot now takes that height off the top of all of them. */
+    :root { --step-indicator-h: 54px; }
+    .step-indicator-slot {
+      padding-top: 20px;
+    }
+    .ap-step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-2);
+      font-weight: 600;
+      font-size: 16px;
+    }
+    /* Ring drawn as an inset box-shadow, not a border -- a border at this
+       1.5px (sub-pixel) width toggled to transparent for the active state
+       (below) left a faint crescent where the circle's rounded corner
+       rasterized slightly differently for the border layer vs. the
+       background fill, most visible at higher zoom/DPI. box-shadow doesn't
+       carve its own separately-anti-aliased edge the way a border does, so
+       switching it off entirely for the active state (rather than just
+       recoloring it transparent) leaves a clean gradient-filled circle. */
+    .ap-step-num {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      background: transparent;
+      box-shadow: inset 0 0 0 1.5px var(--border-2);
+      color: var(--text-2);
+    }
+    /* No digits anymore -- an untouched future step is just an empty ring.
+       The current step (.ap-step--active) fills in with a spinner while its
+       work is still running, swapping to a check the moment it's marked
+       done (.ap-step--checked, added alongside --active); a step that's
+       already behind us (.ap-step--done) goes straight to a check, but
+       stays in this same muted ring/color as a future step -- only the
+       current step gets the highlighted gradient fill below, so at most one
+       step reads as "highlighted" at a time. */
+    .ap-step-num-check { display: none; }
+    .ap-step-num-spinner {
+      display: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, .35);
+      border-top-color: #fff;
+      animation: ap-step-spin .7s linear infinite;
+    }
+    @keyframes ap-step-spin {
+      to { transform: rotate(360deg); }
+    }
+    .ap-step--active:not(.ap-step--checked) .ap-step-num-spinner { display: block; }
+    .ap-step--active.ap-step--checked .ap-step-num-check,
+    .ap-step--done .ap-step-num-check { display: block; }
+    .ap-step--active { color: var(--text); }
+    .ap-step--active .ap-step-num {
+      background: var(--mv-grad);
+      box-shadow: none;
+      color: #fff;
+    }
+    .ap-step-line {
+      flex: 1;
+      height: 2px;
+      margin: 0 12px;
+      background: var(--border-2);
+    }
+    .ap-step-line--active {
+      background: linear-gradient(90deg, var(--accent), var(--border-2));
+    }
+    /* Narrow phones: .ap-step's row layout (num circle + name side by side)
+       has nowhere near enough width for 4 steps' worth of circle+label pairs
+       plus their connecting lines, so labels wrapped/collided with the next
+       step's circle. Stacking num-over-name per step keeps every step's own
+       footprint narrow (just the circle's width) instead of circle+text.
+       align-items:flex-start (overriding the row layout's own center) plus a
+       matching margin-top on .ap-step-line keeps the connecting line level
+       with the circles' own vertical center, rather than centering against
+       each step's full two-line height (which would sit the line low). */
+    @media (max-width: 560px) {
+      /* Two-line steps here (circle stacked over name), so the slot is
+         taller than the base 54px (measured: 73px box + the same 4px
+         margin) -- kept in sync so the viewport-height screens subtract the
+         right amount at this breakpoint too. */
+      :root { --step-indicator-h: 77px; }
+      .ap-step-indicator { align-items: flex-start; }
+      .ap-step {
+        flex-direction: column;
+        gap: 4px;
+        text-align: center;
+      }
+      .ap-step-name { font-size: 15px; }
+      .ap-step-line { margin: 14px 14px 0; }
+    }
+
+    /* ── Shared collapsible-card shell for #ap-review-panel, the merged
+       修圖建議 + 人像檢查 box -- replaces the old #ap-recipe-picker button +
+       #ap-recipe-modal, the old per-person face-thumb-row + #ap-face-modal,
+       and later the two separate #ap-recipe-inline/#ap-face-review cards
+       once those were themselves merged into this one, switched by a
+       top-level tab row instead of stacked on top of each other. One
+       continuous box (background+border on the <details> itself) instead of
+       a summary pill sitting above a separately-framed .step-list-frame --
+       those used to read as two stacked, unrelated cards instead of one
+       header-plus-body block. The summary is just this box's own top edge
+       (padding only, no background/border of its own); a hairline
+       border-top appears on it only once open, marking where the header
+       ends and the body begins instead of a visible gap between two boxes.
+       #ap-*-count (below) gives each tab something to say ("N 項"/"N 人")
+       instead of just a plain label, which on its own read as plain text
+       rather than a control on a first visit.
+       Scoped to this one id rather than the shared .ap-options-toggle base
+       rule, which other collapsible sections (Workflow Report, Technical
+       Details, ...) still use plain. ── */
+    /* No top border -- with it, #ap-review-panel's :has()-colored border
+       (further down) drew a second line spanning the full row above every
+       tab, floating disconnected above the active tab's own colored border
+       instead of reading as one continuous outline. Leaving the top open
+       means the active tab's own border is the only thing marking the top
+       of the whole shape, and the card's left/right/bottom borders just
+       pick up right where that tab's own bottom corners are.
+       border-color falls back to var(--active-hue, var(--border-2)) --
+       #ap-review-panel is the only element using this class, so the
+       fallback is purely defensive, but it means the color source lives on
+       the one box that actually owns border-radius. Drawing it here (not on
+       .ap-toggle-card-body, which sits flush just inside this same edge)
+       lets the browser's own border+radius rendering sweep the color
+       smoothly around all 4 rounded corners -- a border drawn on a
+       square-cornered inner box instead left the two bottom corners looking
+       like they broke right where the outer rounded mask clipped them. */
+    .ap-toggle-card {
+      background: var(--card-2);
+      border: 1px solid var(--active-hue, var(--border-2));
+      border-top: none;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .ap-toggle-card > summary {
+      padding: 10px 14px;
+      transition: background .15s;
+    }
+    .ap-toggle-card > summary:hover { background: var(--card-3); }
+    .ap-toggle-card[open] > summary { border-bottom: 1px solid var(--border-2); }
+    .ap-toggle-card > summary::before { font-size: 13px; }
+    /* No border of its own -- this box has no auto width, so it already
+       fills .ap-toggle-card's inner edge exactly; drawing a second border
+       here (an inset version, outline/negative-offset, was tried and
+       reverted -- see git history) just stacked a square-cornered line
+       immediately inside that outer rounded one, breaking at the two bottom
+       corners where the overflow:hidden mask clipped it. The outer card's
+       own border (above, colored via --active-hue) is the only line now. */
+    /* overflow:hidden, not auto -- JS (syncAnalysisPanelHeights, app.js)
+       sets this element's real height directly, and giving it its OWN
+       scrollbar on top of each tab's already-independently-scrollable
+       list/grid (#ap-recipe-list/#ap-face-detail/.ap-style-option-grid,
+       each already capped + scrollable, see their own comments) produced
+       two nested scrollbars at once. The rules on those elements make each
+       fill this element's real height instead, so there's ever only one
+       scrollable layer, and overflow:hidden here is purely a safety net
+       for anything that still doesn't fit. */
+    .ap-toggle-card-body {
+      padding: 14px;
+      overflow: hidden;
+    }
+    .ap-toggle-card .step-inline-list { gap: 10px; }
+    /* #ap-review-panel's summary holds an extra row (the per-person avatar
+       tabs, #ap-face-tabs -- visible even while the whole box is collapsed,
+       but only when 人像檢查 is the active tab, see its own markup comment)
+       below the top-level tab row. align-items:flex-start (overriding
+       .ap-label's own center) pins this row to the top instead of centering
+       against the taller two-row block below it. .ap-review-summary-inner
+       is the sibling that actually stacks tab-row-then-avatar-row in a
+       column. */
+    .ap-review-summary { align-items: flex-start; }
+    /* Zeroes out .ap-toggle-card > summary's own top+bottom padding (10px
+       each) just for this summary -- id selector so it actually beats that
+       rule's own specificity. Bottom: closes the gap between the tab row's
+       bottom edge and the shoulder hairline below it (#ap-review-panel[open]
+       > summary's own border-bottom, see its :has() coloring further down)
+       so the active tab's own bottom sits flush against that line instead of
+       floating 10px above it with a border-less stretch in between. Top:
+       #ap-review-panel now sits nested inside #ap-analysis-shell's own
+       padded body (14px, see .ap-analysis-shell-body below) instead of
+       sitting directly on .options-card-inline, so its own extra 10px on
+       top of that stacked into a 24px gap under the shell's divider --
+       zeroed so the shell body's 14px is the only top spacing left. */
+    #ap-review-panel > summary { padding: 0 14px; }
+    /* .ap-options-toggle's shared chevron (▸, below) doubles up with the
+       browser-style tab strip itself as an "expand this" cue here -- the
+       tabs already read as clickable controls on their own, so the chevron
+       just adds visual noise beside them. Higher specificity than
+       .ap-options-toggle > summary::before (adds the .ap-review-summary
+       class into the match) so this reliably wins regardless of source
+       order. */
+    .ap-options-toggle > summary.ap-review-summary::before { content: none; }
+
+    /* ── #ap-analysis-shell: the outer title+collapse frame wrapping
+       #ap-review-panel (see its own markup comment for why). Its own full
+       card (background+4-sided border+radius), not the shared
+       .ap-toggle-card class -- that class's border-top:none relies on
+       #ap-review-panel's own tab strip to supply the top edge's only
+       visible line (see that class's doc comment); this plain title
+       summary has no tab strip, so reusing it verbatim would leave the top
+       edge with no border at all. Giving the title row its own enclosing
+       box (instead of floating loose above #ap-review-panel's separately
+       framed one) is what makes the whole area read as one block instead
+       of two disconnected pieces stacked with a gap between them --
+       #ap-review-panel keeps its own border/background nested inside,
+       reading as a highlighted sub-card rather than a second competing
+       outer box (same fill color, just its own border). ── */
+    /* ── #ap-photo-summary: quick-read badges+sentence sitting directly
+       above #ap-analysis-shell (markup above). Its own small card (background
+       +border, same --card-2/--border pair #ap-analysis-shell itself uses)
+       instead of bare floating text -- a plain pill+sentence with no
+       enclosing shape read as loose/monotonous next to the card below it.
+       Accent-tinted badges (.ap-photo-summary-tags span, mirrors .mvp-badge's
+       rgba(--accent-rgb) recipe) instead of .tag-row's plain gray pills, so
+       subject/scene read as the headline facts they are rather than blending
+       into muted metadata. ── */
+    .ap-photo-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      /* Full width of #ap-options-card-inline, matching #ap-analysis-shell
+         directly below it -- without this it was the only child of that
+         flex-wrap row without a width of its own, so it sized to its own
+         content and came out narrower than the card below.
+         width, deliberately NOT #ap-analysis-shell's flex-basis:100%: that
+         row turns into flex-direction:column under body.side-panel-layout
+         (styles.css), where flex-basis stops meaning width and starts
+         meaning HEIGHT -- which is why the shell needs its own explicit
+         `flex: 1 1 494px` override there. width:100% is the cross-axis
+         size in that column and is what align-items:stretch already gives
+         this card anyway, so it aligns the width in the row layout without
+         touching the height in either. */
+      width: 100%;
+      position: relative;
+    }
+    /* Synced with .ap-analysis-shell-title (same icon+text pairing just
+       below this card) instead of a small uppercase kicker -- reads as the
+       same label style, not a competing typographic system. */
+    .ap-photo-summary-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      font-size: 17.5px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -.14px;
+    }
+    .ap-photo-summary-label svg { flex-shrink: 0; color: var(--accent); }
+    .ap-photo-summary-tags {
+      display: flex;
+      flex-wrap: wrap;
+      flex: 1 1 auto;
+      justify-content: flex-end;
+      min-width: 0;
+      gap: 6px;
+    }
+    .ap-photo-summary-tags span {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      background: rgba(var(--accent-rgb),.12);
+      border: 1px solid rgba(var(--accent-rgb),.25);
+      border-radius: 20px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -.05px;
+    }
+    .ap-photo-summary-text {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text-2);
+    }
+    .ap-photo-summary-text:empty { display: none; }
+    .ap-photo-summary-toggle[hidden] { display: none; }
+    .ap-photo-summary-toggle {
+      position: absolute;
+      right: 0;
+      left: 0;
+      bottom: 8px;
+      z-index: 2;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: max-content;
+      max-width: calc(100% - 20px);
+      padding: 3px 11px;
+      margin-inline: auto;
+      background: rgba(var(--accent-2-rgb),.16);
+      border: 1px solid rgba(var(--accent-2-rgb),.22);
+      border-radius: 999px;
+      box-shadow: 0 2px 8px rgba(var(--on-surface-rgb),.12);
+      color: var(--text-2);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.3;
+      opacity: .78;
+      cursor: pointer;
+      text-align: center;
+      white-space: nowrap;
+      transition: opacity .15s, background .15s, color .15s;
+    }
+    .ap-photo-summary-toggle::before {
+      /* A +/- rather than a chevron: everywhere else in the app a chevron
+         means "scroll that way" (.ap-style-scroll-hint, #page-scroll-hint),
+         and this toggle moves nothing -- it opens and closes a block in
+         place, which is what 展開/收合 name. Drawn from two gradient bars
+         instead of a '+' / '−' glyph, for the same reason the chevron it
+         replaces was drawn from border corners: a glyph's own metrics decide
+         where it sits in its box, and next to a 13px label it lands low and
+         off-centre. Collapsing shrinks the upright bar to nothing from its
+         own centre, so the mark performs 收合 rather than just labelling it. */
+      content: '';
+      display: inline-block;
+      flex-shrink: 0;
+      width: 9px;
+      height: 9px;
+      margin-right: 4px;
+      background:
+        linear-gradient(currentColor, currentColor) center / 9px 1.6px no-repeat,
+        linear-gradient(currentColor, currentColor) center / 1.6px 9px no-repeat;
+      transition: background-size .15s;
+    }
+    .ap-photo-summary-toggle[aria-expanded="true"]::before {
+      background-size: 9px 1.6px, 1.6px 0;
+    }
+    .ap-photo-summary-toggle:hover {
+      background: rgba(var(--accent-2-rgb),.24);
+      color: var(--text);
+      opacity: 1;
+    }
+    /* The toggle is position:absolute (bottom:8px, ~25px tall) so it doesn't
+       take up flow space -- fine when --compact's fade gradient sits behind
+       it, but once fully expanded the real text now reaches the card's own
+       bottom edge with nothing behind the pill, so it lands on top of the
+       last line. Reserve that room instead of overlapping it. */
+    .ap-photo-summary.ap-photo-summary--expanded {
+      padding-bottom: 40px;
+    }
+    .ap-photo-summary.ap-photo-summary--compact {
+      max-height: var(--ap-photo-summary-compact-height, 280px);
+      padding-bottom: 40px;
+      overflow: hidden;
+    }
+    .ap-photo-summary.ap-photo-summary--compact .ap-photo-secondary-sections {
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .ap-photo-summary.ap-photo-summary--compact::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 48px;
+      background: linear-gradient(to bottom, rgba(var(--on-surface-rgb),0), var(--card-2));
+      pointer-events: none;
+    }
+
+    /* ── 照片總覽's header row: title left, category chips right.
+       The issue-count badge uses a fixed off-family orange (not var(--accent)) so it reads
+       the same "worth reviewing" signal in every theme, including the ones
+       whose own accent already lives in the green/purple/cyan family --
+       same fixed-color approach as .adherence-icon's --green/--red. ── */
+    .ap-photo-summary-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .ap-photo-summary-badge {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      background: rgba(249,115,22,.14);
+      border: 1px solid rgba(249,115,22,.28);
+      border-radius: 20px;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #F97316;
+      white-space: nowrap;
+    }
+    .ap-photo-summary-badge[hidden] { display: none; }
+    .ap-photo-summary-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 15px 0;
+    }
+    .ap-photo-secondary-sections {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    /* 照片亮點 / 優先改善 share this label style -- same title treatment as
+       .ap-photo-summary-label just smaller, so they read as sub-sections of
+       the same card rather than a competing heading level. */
+    .ap-photo-highlights-label,
+    .ap-photo-issues-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -.1px;
+    }
+    .ap-photo-issues-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .ap-photo-highlights-label svg { flex-shrink: 0; color: var(--green); }
+    .ap-photo-issues-label svg { flex-shrink: 0; color: #F97316; }
+    .ap-photo-highlights-box {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      margin-top: 10px;
+      padding: 12px;
+      background: rgba(1,179,123,.08);
+      border-radius: 10px;
+    }
+    .ap-photo-highlight-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .ap-photo-highlight-key {
+      flex: 0 0 auto;
+      min-width: 60px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--green);
+    }
+    .ap-photo-highlight-value {
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text);
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+    .ap-photo-issues-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .ap-photo-issues-list-frame {
+      position: relative;
+      margin-top: 10px;
+      padding: 0;
+      background: rgba(249,115,22,.07);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .ap-photo-issue-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+    }
+    .ap-photo-issue-row + .ap-photo-issue-row {
+      border-top: 1px solid rgba(249,115,22,.14);
+    }
+    .ap-photo-issue-num {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 20px;
+      margin-top: 1px;
+      border-radius: 6px;
+      background: rgba(249,115,22,.16);
+      color: #D5670F;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    .ap-photo-issue-text {
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text);
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+    /* Narrower right panel (batch mode's sidebar eating into the canvas
+       column, or a plain narrow viewport): stack 照片亮點's label/value
+       instead of keeping them side by side, same container-query hook
+       #ap-options-card-inline already uses for .ap-review-tab above. Issue
+       rows stay number+text side by side at any width per spec. */
+    @container options-card-inline (max-width: 520px) {
+      .ap-photo-highlight-row { flex-direction: column; gap: 2px; }
+      .ap-photo-highlight-key { min-width: 0; }
+      .ap-photo-summary-tags { justify-content: flex-end; }
+    }
+    /* On a desktop-width right panel, keep the two semantic groups in one
+       row. The divider switches from each section's horizontal rule to a
+       single vertical rule between the columns. If either group is hidden,
+       the :has() guard leaves the remaining group full-width and keeps its
+       normal horizontal divider. */
+    @container options-card-inline (min-width: 560px) {
+      .ap-photo-secondary-sections:has(> .ap-photo-highlights:not([hidden])):has(> .ap-photo-issues:not([hidden])) {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 15px;
+        margin-top: 15px;
+      }
+      .ap-photo-secondary-sections:has(> .ap-photo-highlights:not([hidden])):has(> .ap-photo-issues:not([hidden])) > .ap-photo-summary-divider,
+      .ap-photo-secondary-sections:has(> .ap-photo-highlights:not([hidden])):has(> .ap-photo-issues:not([hidden])) .ap-photo-summary-divider {
+        display: none;
+      }
+      .ap-photo-secondary-sections:has(> .ap-photo-highlights:not([hidden])):has(> .ap-photo-issues:not([hidden])) > .ap-photo-issues {
+        min-width: 0;
+        border-left: 1px solid var(--border);
+        padding-left: 15px;
+      }
+    }
+    .ap-analysis-shell {
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .ap-analysis-shell > summary {
+      padding: 10px 14px;
+      cursor: default;
+      transition: none;
+    }
+    .ap-analysis-shell[open] > summary { border-bottom: 1px solid var(--border-2); }
+    /* Fixed, not auto -- without this, switching 人像檢查/修圖建議/修圖風格/
+       補充指令 (whichever tab has more or less content) reflowed this whole
+       card to a different height each time, shifting Run and everything
+       below it. 494px matches side-panel-layout's own #ap-analysis-shell[open]
+       target (styles.css) -- same inner content (#ap-review-panel's tab
+       strip + each tab's own 260px-capped list), just sized via `height`
+       here instead of `flex-basis` there, since this element is a
+       flex-wrap ROW item (cross-axis = height) rather than a column one
+       (main-axis = flex-basis). Shorter tabs just leave blank space below
+       instead of shrinking the card -- see syncAnalysisPanelHeights (app.js)
+       for how that space actually gets distributed down through
+       #ap-review-panel/.ap-toggle-card-body. */
+    #ap-analysis-shell[open] { height: 494px; }
+    /* Stacked column, not .ap-label's own single row -- title+description
+       block on top (left-aligned, untouched), the expand chevron in its own
+       full-width row underneath, centered -- same "arrow centered below the
+       label" idiom as a typical 載入更多/show-more control, just keeping
+       this card's own icon+title+description intact above it instead of
+       replacing them with that control's usual centered-text-plus-dividers
+       look. align-items:stretch (the flex default, restated here since
+       .ap-label's own center would otherwise win) lets both the title block
+       and the chevron row size to the summary's full width -- the title
+       block still reads left-aligned since its own content just sits at
+       that width's left edge, and the chevron row needs the full width for
+       justify-content:center to center against the card, not just against
+       the title text above it. */
+    .ap-analysis-shell-summary {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+    }
+    /* The outer analysis shell is informational and stays open; its summary
+       has no collapse affordance. */
+    .ap-options-toggle > summary.ap-analysis-shell-summary::before { content: none; }
+    .ap-analysis-shell-summary-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    /* Small sparkle icon ahead of the title text -- a quick "this came from
+       the model" cue, same reasoning as the title/description text
+       themselves (see the markup comment above #ap-analysis-shell): this
+       whole area reads as AI-generated analysis the user can still adjust,
+       not just another plain section label. Accent-colored (the same hue
+       used for .ap-label's own dot elsewhere) so it doesn't read as a
+       generic bullet. */
+    .ap-analysis-shell-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .ap-analysis-shell-icon { color: var(--accent); flex-shrink: 0; }
+    .ap-analysis-shell-desc {
+      /* The description belongs to the summary's title block, directly below
+         the title and above the selector body. */
+      margin: 0;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text-3);
+      letter-spacing: 0;
+    }
+    /* min-height:0 so JS (syncAnalysisPanelHeights, app.js) can force this
+       shorter than its own content's natural size, not just taller --
+       needed once #ap-analysis-shell[open]'s own height is fixed (above)
+       rather than however tall this body happens to want to be. */
+    .ap-analysis-shell-body { padding: 14px; min-height: 0; }
+
+    .ap-review-summary-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+    }
+    /* The two top-level tabs (修圖建議/人像檢查) that switch which of
+       #ap-recipe-list / #ap-face-detail (+ #ap-face-tabs) is visible
+       (applyActiveReviewTab, results.js) -- plain buttons rather than a
+       second nested <details>, since only one side needs to show at a time
+       instead of each independently collapsible. Each stops its own click
+       from bubbling to the summary's native click-to-toggle and force-opens
+       the box instead (same reasoning as the per-person avatar tabs below),
+       so picking a tab always reveals its content rather than sometimes
+       just collapsing the box. */
+    /* Browser-tab style (rounded top corners, active tab's background
+       matching the panel body so it reads as "merged" with the content
+       below, inactive tabs a visibly separate muted chip sitting behind
+       it) -- replaces both the earlier pill-button look and an underline
+       variant tried in between. */
+    /* align-items:flex-end (not the flex default, stretch) keeps every
+       tab's bottom edge on the same shared baseline -- the active tab's own
+       extra padding-top (below) then makes it grow taller upward only,
+       poking up above its neighbors like a real 凸-shaped tab, instead of
+       stretch forcing every tab to the same height. */
+    /* gap:0 (not a visible gutter) -- a gap here left a bare stretch of the
+       card's own background between every pair of tabs with no border
+       crossing it at all, breaking the colored outline right where two
+       tabs meet. Flush neighbors let each tab's own border (gray sides,
+       active-hue bottom) touch its neighbor's directly instead.
+       margin:0 -14px bleeds this row out of <summary>'s own 14px side
+       padding, same trick as #ap-face-tabs below -- without it, whichever
+       tab sits first or last had its own colored side border sitting a
+       flat 14px inside the card's own colored edge (above), reading as two
+       parallel lines with a dark gap between them instead of one. No
+       compensating padding needed here (unlike #ap-face-tabs, whose
+       children are fixed-size avatars) since the scroll row itself fills
+       the available width and the tabs keep their intrinsic widths. */
+    .ap-review-tabs {
+      display: flex;
+      align-items: flex-end;
+      flex-wrap: nowrap;
+      gap: 0;
+      margin: 0 -14px;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      overscroll-behavior-x: contain;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+    .ap-review-tabs::-webkit-scrollbar { height: 4px; }
+    .ap-review-tabs::-webkit-scrollbar-thumb {
+      background: var(--border-2);
+      border-radius: 999px;
+    }
+    /* Keep every tab at its natural width. On a narrow phone the row itself
+       scrolls horizontally, so labels stay readable instead of shrinking or
+       wrapping inside a tab. */
+    .ap-review-tab {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1 0 auto;
+      min-width: max-content;
+      gap: 6px;
+      padding: 7px 10px;
+      border: 1px solid var(--border-2);
+      border-radius: 10px 10px 0 0;
+      background: var(--card-3);
+      color: var(--text-2);
+      font-size: 16px;
+      font-weight: 700;
+      font-family: inherit;
+      line-height: 1;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    /* The label stays intrinsic-width so the scroll container, rather than
+       the tab, owns any overflow on narrow screens. */
+    .ap-review-tab-label {
+      flex: 0 0 auto;
+      min-width: max-content;
+      white-space: nowrap;
+      text-align: center;
+    }
+    /* line-height:1 above (not the default "normal") -- CJK glyphs pull in a
+       fallback font (Inter above has no CJK coverage), and "normal"'s
+       reserved leading for that fallback varies a lot by platform/OS font --
+       comfortable on this codebase's own dev/test environment, tight enough
+       on some real phones to visibly crowd the active tab's larger label
+       against its own bottom border. A fixed 1 makes the line box just the
+       font-size itself everywhere, so the padding around it (below) means
+       the same thing on every device instead of guessing at extra leading. */
+    /* Icon size is set via width/height attributes on the <svg> itself
+       (index.html markup, 14x14) -- CSS width/height here still wins over
+       those (presentational attributes sit at the bottom of the cascade),
+       bumping the base size up to match the tab label's own larger
+       font-size above. */
+    .ap-review-tab .ic { width: 16px; height: 16px; }
+    .ap-review-tab:hover { color: var(--text); }
+    /* Every tab's own bottom border picks up the currently active tab's hue
+       (--active-hue, set on #ap-review-panel via :has() below) instead of
+       staying neutral -- this is the "shoulder" that visually connects the
+       card's colored sides across to the active tab, without needing one
+       shared border-bottom on the summary itself (which has no way to skip
+       just the segment under whichever tab happens to be active, see git
+       history). The active tab itself overrides this back to none just
+       below -- it's meant to blend straight into the card, not look boxed
+       in on all 4 sides. */
+    .ap-review-tab { border-bottom-color: var(--active-hue, var(--border-2)); }
+    .ap-review-tab.is-active { border-bottom: none; }
+    /* Matches #ap-review-panel's own background (.ap-toggle-card, above) --
+       the active tab visually fuses with the body content beneath it
+       instead of reading as a separate chip like the inactive tab beside it.
+       padding-top/bottom close to the same 7px every tab uses (the colored
+       border/bottom-hairline system, further down, already answers "which
+       tab is active" on its own, so this no longer needs to poke up taller
+       than its neighbors to say the same thing) -- just a couple more px on
+       both sides than that 7px, since this tab's own font-size is larger
+       than its neighbors' and 7px alone left its label sitting right up
+       against the bottom border instead of clear of it. */
+    .ap-review-tab.is-active {
+      background: var(--card-2);
+      color: var(--text);
+      padding-top: 9px;
+      padding-bottom: 9px;
+      font-size: 17px;
+    }
+    /* Grows further still than the base .ic bump above -- the active tab's
+       icon ends up a little larger than every inactive one's, same as its
+       label text. Only 1px over each -- a real phone's own CJK fallback
+       font still ran this right up against the tab's own border even after
+       line-height:1 and the extra padding above, so the gap between active
+       and inactive sizing is deliberately small now, not the earlier
+       18px/19px. */
+    .ap-review-tab.is-active .ic { width: 17px; height: 17px; }
+    /* Give the next tab a little more visibility on narrow panels without
+       changing the label size or wrapping it. This is count-independent:
+       whichever tab follows the last fully visible one gets the exposed
+       sliver naturally from the scroll row. */
+    @container options-card-inline (max-width: 520px) {
+      .ap-review-tab {
+        gap: 4px;
+        padding-left: 8px;
+        padding-right: 8px;
+      }
+      .ap-review-tab .ic { width: 15px; height: 15px; }
+      .ap-review-tab.is-active .ic { width: 16px; height: 16px; }
+    }
+    /* Each tab carries its own hue (--hue, set per id below) instead of one
+       shared gray/purple -- the icon shows that hue at low opacity even at
+       rest (some color identity before you've touched anything), full
+       saturation once active, and the active tab's whole border picks up
+       the same color -- "which tab is active" and "what kind of tab this
+       is" answered by one color instead of two separate cues. The four raw
+       values live once on #ap-review-panel itself (inherited down to every
+       tab) so the :has() rule below can reuse them for the card's own
+       border instead of repeating the hex literals a second time.
+       One coordinated pink -> fuchsia -> violet -> indigo sweep (an early
+       version mixed in an amber/gold for 修圖建議, which read as an odd
+       warm outlier against the other three cool/magenta tones) -- violet
+       stays the app's own --accent, the other three are evenly spaced
+       around it on the same wheel so the set reads as one family. */
+    #ap-review-panel {
+      --hue-face: #F472B6;
+      --hue-recipe: #E879F9;
+      --hue-style: var(--accent);
+      --hue-prompt: #818CF8;
+    }
+    /* Floor, not the actual size -- JS (syncAnalysisPanelHeights, app.js)
+       sets this panel's real height directly from #ap-analysis-shell's own
+       fixed height (above), this is just a fallback so it never collapses
+       to something unusably small before that first runs. */
+    #ap-review-panel[open] { min-height: 160px; }
+    #ap-review-tab-face   { --hue: var(--hue-face); }
+    #ap-review-tab-recipe { --hue: var(--hue-recipe); }
+    #ap-review-tab-style  { --hue: var(--hue-style); }
+    #ap-review-tab-prompt { --hue: var(--hue-prompt); }
+    .ap-review-tab .ic { color: var(--hue); opacity: .5; flex-shrink: 0; transition: opacity .15s; }
+    .ap-review-tab.is-active .ic { opacity: 1; }
+    .ap-review-tab.is-active {
+      border-color: var(--hue);
+    }
+    /* --active-hue mirrors whichever tab is currently .is-active -- read by
+       .ap-toggle-card-body's own border (below), #ap-face-tabs's border,
+       and every inactive tab's own border-bottom (above), so all of them
+       stay in sync off one source instead of separate copies of the same
+       4-way mapping. :has() (already used elsewhere in this file, see
+       .option-pill-group:has(...) below) reads straight off the DOM, no JS
+       needed. */
+    #ap-review-panel:has(#ap-review-tab-face.is-active)   { --active-hue: var(--hue-face); }
+    #ap-review-panel:has(#ap-review-tab-recipe.is-active) { --active-hue: var(--hue-recipe); }
+    #ap-review-panel:has(#ap-review-tab-style.is-active)  { --active-hue: var(--hue-style); }
+    #ap-review-panel:has(#ap-review-tab-prompt.is-active) { --active-hue: var(--hue-prompt); }
+    /* .ap-review-tab/.ap-face-tabs/#ap-recipe-list/
+       .ap-style-option-grid/.ap-style-scroll-hint each set their own display
+       (flex/grid) unconditionally -- an author rule for the same property
+       always beats the browser's own [hidden]{display:none} UA rule
+       regardless of specificity (the exact bug .ap-recipe-inline's stale
+       selector caused once already, see git history), so each gets its own
+       explicit [hidden] override here instead. */
+    .ap-review-tab[hidden],
+    .ap-face-tabs[hidden],
+    #ap-recipe-list[hidden],
+    .ap-style-option-grid[hidden],
+    .ap-style-scroll-hint[hidden] { display: none; }
+
+    /* Hairline divider between each top-level section of the panel */
+    .analysis-preview > .ap-row + .ap-row {
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+
+    /* .options-card-inline is a plain flex-wrap row whose visual order is
+       driven entirely by these order: integers (not DOM position) -- two
+       full-width (flex-basis:100%) blocks, top to bottom: the merged
+       4-tab (人像檢查/修圖建議/修圖風格/補充指令) review panel (0), then the
+       operational controls (order:3, below) -- read the review tabs first,
+       adjust portrait settings and run last.
+       #ap-step-indicator is no part of this element at all any more (it used
+       to be a sibling that travelled alongside it) -- it lives in
+       #step-indicator-slot above every screen now, see its markup comment
+       inside <main>. */
+    /* ID, not the shared .ap-toggle-card class -- when that class was
+       introduced (unifying the two review cards' look, before they were
+       themselves merged into this single panel) a same-named rule was once
+       left keyed to a stale per-section class instead, silently dropping
+       its flex-basis:100%. Keeping this one keyed to the id avoids
+       repeating that.
+       Keyed to #ap-analysis-shell (the outer title+collapse frame), not
+       #ap-review-panel any more -- #ap-review-panel is now nested one level
+       inside it, so #ap-analysis-shell is the actual flex child of
+       .options-card-inline that needs the order/flex-basis. */
+    #ap-analysis-shell { order: 0; flex-basis: 100%; }
+    /* Holds .ap-settings-run-row (人像修正設定/Run) on its own full-width block,
+       last -- 修圖風格/補充指令 used to sit here too (a trigger button and a
+       textarea) before both became tabs of #ap-review-panel above.
+       Sticky, not static -- #analysis-preview (this row's scrolling
+       ancestor, see its own max-height/overflow-y comment) caps the whole
+       panel to the viewport, and #ap-review-panel's content (e.g. the 修圖
+       風格 tab's own option grid) can grow taller than that on its own.
+       Pinning this row to the scroll container's own bottom edge keeps Run
+       reachable without scrolling past it whenever that happens, instead of
+       it just sliding out of view under a tall tab body. No background:
+       an earlier version had one here (matching #analysis-preview's solid
+       layer) to stop sticky content bleeding through underneath it, but
+       that read as a stray extra box behind the Run pill, so it was
+       dropped in favor of a plain border-top divider instead. padding-top:
+       0 to match -- 16px of top padding only made sense stacked against
+       that same background box. */
+    .ap-actions-row {
+      order: 3;
+      flex-basis: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+      padding-top: 0;
+      border-top: 1px solid var(--border);
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+    }
+
+    .ap-options-toggle > summary {
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+    }
+    .ap-options-toggle > summary::-webkit-details-marker { display: none; }
+    .ap-options-toggle > summary::before {
+      content: '▸';
+      display: inline-block;
+      font-size: 14px;
+      color: var(--text-2);
+      transition: transform .15s;
+      margin-right: -2px;
+    }
+    .ap-options-toggle[open] > summary::before { transform: rotate(90deg); }
+    .ap-options-toggle > summary:hover { color: var(--accent); }
+    .ap-options-toggle > summary:hover::before { color: var(--accent); }
+    .ap-analysis-shell > summary.ap-analysis-shell-summary:hover {
+      color: inherit;
+      background: transparent;
+    }
+
+    /* ── Style-option pickers (Pose/Angle/Lighting/Size): a row of pill
+       buttons, each a <details> whose panel pops over the content below
+       instead of expanding it -- picking an option closes the panel and
+       shows the pick on the pill itself, e.g. "Pose · Playful". ── */
+    .ap-style-item { position: relative; }
+    .ap-style-trigger {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 41px;
+      /* Explicit height (not just padding + line-height) -- some triggers
+         here (模型/生成張數) are <summary>, others (Pose/Angle/Lighting/Size)
+         are plain <button>; padding alone happened to compute to the same
+         height for both, but pinning it directly guarantees they never
+         drift out of line with each other regardless of any
+         button-vs-summary UA quirk. */
+      padding: 0 16px;
+      background: var(--card-2);
+      border: 1px solid var(--border-2);
+      border-radius: 20px;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      font-size: 15px;
+      white-space: nowrap;
+      transition: border-color .15s, background .15s, box-shadow .15s, transform .15s;
+    }
+    .ap-style-trigger::-webkit-details-marker { display: none; }
+    .ap-style-trigger:hover { border-color: rgba(var(--accent-rgb),.4); transform: translateY(-1px); }
+    .ap-style-trigger::after {
+      content: '▾';
+      font-size: 22px;
+      color: var(--text-2);
+      transition: transform .15s;
+    }
+    .ap-style-item[open] > .ap-style-trigger {
+      border-color: var(--accent);
+      background: rgba(var(--accent-rgb),.14);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.14);
+    }
+    .ap-style-item[open] > .ap-style-trigger::after { transform: rotate(180deg); }
+    /* Tab row of every detected person's thumbnail (renderFaceTabs, results.js)
+       -- keeps the compact "縮圖" look the old #ap-face-thumb-row avatar row
+       had, but the click target now switches which person's detail shows in
+       #ap-face-detail below instead of opening #ap-face-modal. Only one
+       person's detail renders at a time, so there's no per-card expand/
+       collapse state to keep visually aligned across a row of neighbors. */
+    /* Only ever visible when 人像檢查 is the active tab (see its own
+       applyActiveReviewTab hidden-toggle, results.js). No border of its own
+       -- the outer card's own colored sides (above) already run past this
+       row on their way down to .ap-toggle-card-body, so a second colored
+       border here was redundant, not connective. */
+    /* nowrap + horizontal scroll instead of flex-wrap, so a photo with many
+       faces never pushes this row to a second/third line -- same idea as
+       .ap-review-tabs above. padding-top/bottom (not just the original
+       left/right) is load-bearing here in a way it isn't for
+       .ap-review-tabs: setting overflow-x forces overflow-y to compute to
+       "auto" too (a paired-axis CSS rule, not a bug), so without it the
+       active tab's own ring and the issue badge -- both of which already
+       painted a few px past their own box on purpose (see is-active and
+       .ap-face-tab-badge below) -- would get clipped top/bottom by this
+       row's own new scroll box instead of just overlapping whatever used to
+       sit harmlessly above/below it. */
+    .ap-face-tabs {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px;
+      /* This row's own parent (.ap-review-summary-inner, a column flex box)
+         stretches it to full width, but a flex item's default min-width is
+         its content's min-content size, not 0 -- without overriding that,
+         this row would rather grow past the stretch target to fit every
+         avatar unbroken than actually shrink and let overflow-x do
+         anything, and it'd get silently clipped by an ancestor's own
+         overflow:hidden (.ap-toggle-card-body) with no scrollbar ever
+         appearing. Same reason .ap-review-tabs above has this too. */
+      min-width: 0;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+    .ap-face-tabs::-webkit-scrollbar { height: 4px; }
+    .ap-face-tabs::-webkit-scrollbar-thumb {
+      background: var(--border-2);
+      border-radius: 999px;
+    }
+    /* Separate wrapper around the button + badge, NOT overflow:hidden itself
+       -- .ap-face-tab below needs overflow:hidden to clip its square
+       thumbnail image into a circle, but that same property would just as
+       readily clip .ap-face-tab-badge's corner (positioned to hang slightly
+       outside the circle) if the badge were its child instead of its
+       sibling here. The active-state ring lives on this wrapper for the
+       same reason -- a box-shadow drawn on the clipped button would itself
+       get clipped right at the circle's own edge. */
+    .ap-face-tab-wrap {
+      position: relative;
+      display: inline-flex;
+      flex-shrink: 0;
+      border-radius: 50%;
+    }
+    /* A translucent ring alone blended into the thumbnail's own border at
+       this size, so the selected face was easy to miss at a glance. A solid
+       --card-2 gap plus a solid --accent ring (an opaque "target" outline,
+       not a soft glow) reads clearly regardless of what's in the photo
+       behind it. */
+    .ap-face-tab-wrap.is-active {
+      box-shadow: 0 0 0 2px var(--card-2), 0 0 0 4px var(--accent);
+    }
+    /* Everyone starts a notch below the row's old 44px so the active one has
+       somewhere to grow into (below) without the row itself getting any
+       taller. This is real width/height, not a transform -- a transform
+       paints outside the element's box without the flex row ever finding
+       out, which is exactly what made the row look like it was overflowing
+       when the active tab was scaled up instead. Growing the actual box
+       means the row's height is (once again) just "however tall its
+       tallest child really is", same as it's always been, and the active
+       tab's 44px real size is that original tallest size -- so the row's
+       own height never changes from what it was before any of this.
+       Width/height deliberately aren't in the transition below -- animating
+       them smoothly means for ~150ms BOTH the old and new active tab sit at
+       some in-between size, so the row's "tallest child" briefly dips below
+       44px and springs back once the swap finishes: the exact bounce this
+       was meant to fix. Swapping the size instantly keeps exactly one tab
+       at 44px on every single rendered frame, so the row's height never
+       moves at all. */
+    .ap-face-tab {
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      border: 1.5px solid var(--border-2);
+      border-radius: 50%;
+      background: var(--card-3);
+      cursor: pointer;
+      overflow: hidden;
+      transition: border-color .15s, transform .15s;
+    }
+    .ap-face-tab:hover { transform: translateY(-1px); }
+    .ap-face-tab-wrap.is-active .ap-face-tab {
+      width: 44px;
+      height: 44px;
+      border-color: var(--accent);
+    }
+    .ap-face-tab-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    /* A face beyond the local crop cap, or a subjects[] entry the model found
+       on its own with no backing local detection (results.js's sentToModel
+       !== true) -- no zoomed close-up ever reached the model for this one, so
+       dim it a touch; #ap-face-detail's own note (buildPersonIssueItems)
+       spells out the same caveat in words once this tab is selected. */
+    .ap-face-tab--local-only { opacity: .6; outline: 1.5px dashed var(--border-2); outline-offset: 1px; }
+    /* Lets the user spot which people have a flagged issue without stepping
+       through every tab -- reflects the model's own should_fix/adjust_safe
+       verdict, not the allow/deny toggle in #ap-face-detail, so it stays put
+       even after a flagged fix is turned off (still something the analysis
+       found, just no longer approved). A sibling of .ap-face-tab (see
+       .ap-face-tab-wrap above), not its child, so .ap-face-tab's own
+       overflow:hidden circle-clip doesn't cut it off. */
+    .ap-face-tab-badge {
+      /* Same subtle tinted-not-solid treatment the very first version of
+         this hint used (the old #ap-face-thumb-row avatar badge) -- a solid
+         opaque red circle read as a notification/alert bubble, more
+         attention-grabbing than this is meant to be (just "worth a look",
+         not "something's wrong"). */
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, .18);
+      color: var(--red);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      /* Separates the badge from whatever photo/color sits directly behind
+         it (the avatar thumbnail) without reading as its own hard outline --
+         a dark ring (var(--card-2), then a translucent black) both read as
+         a heavier outline than the badge's own translucent red fill. Same
+         light, barely-there border-2 tone the tab avatars themselves use,
+         instead of a dark one, keeps it consistent with the rest of the
+         panel's subtle-border language. */
+      box-shadow: 0 0 0 1.5px var(--border-2);
+    }
+    .ap-face-detail-name {
+      font-weight: 700;
+      color: var(--text);
+      font-size: 15px;
+      margin: 0 0 10px;
+    }
+    /* Debug-only: the analysis model's own reasoning for a flagged item
+       (buildPersonIssueItems, results.js) -- its own line under the verdict
+       label, smaller/muted so it reads as supporting detail, not another
+       checklist row. */
+    .ap-face-issue-reason {
+      margin: 4px 0 0 30px;
+      font-size: 12.5px;
+      line-height: 1.4;
+      color: var(--text-2);
+    }
+    /* Capped + scrollable, same "小視窗" treatment as .ap-style-option-grid
+       (below) -- 修圖建議/人像檢查 can each run long (many recipe items, or a
+       person with several flagged issues + reasons), and #analysis-preview
+       (this pair's own scrolling ancestor) only caps to the viewport as a
+       whole, not per-tab. Without their own cap, a long tab body reads the
+       same as the style grid used to: it just keeps growing until Run
+       (#analysis-preview's sticky-bottom .ap-actions-row) is many scrolls
+       away instead of one short scroll inside the tab itself.
+       max-height:100%, not a flat px value -- fills .ap-toggle-card-body's
+       real, JS-computed height (syncAnalysisPanelHeights, app.js) exactly,
+       so .ap-toggle-card-body itself never needs its own second scrollbar,
+       while still capping+scrolling internally whenever a tab's content is
+       actually longer than that. */
+    #ap-recipe-list,
+    #ap-face-detail {
+      max-height: 100%;
+      overflow-y: auto;
+    }
+    /* Same has-more-above/has-more-below inset-shadow cue as
+       .ap-style-option-grid (below), driven by the same generic
+       updateListScrollCue (app.js) -- without it, content actually cut off
+       by the max-height cap above read as a layout bug (a flush edge with
+       no visual sign there's more below), not "this scrolls". */
+    #ap-recipe-list.has-more-below,
+    #ap-face-detail.has-more-below {
+      box-shadow: inset 0 -24px 16px -18px rgba(0,0,0,.45);
+    }
+    #ap-recipe-list.has-more-above,
+    #ap-face-detail.has-more-above {
+      box-shadow: inset 0 24px 16px -18px rgba(0,0,0,.45);
+    }
+    #ap-recipe-list.has-more-above.has-more-below,
+    #ap-face-detail.has-more-above.has-more-below {
+      box-shadow: inset 0 24px 16px -18px rgba(0,0,0,.45), inset 0 -24px 16px -18px rgba(0,0,0,.45);
+    }
+    .ap-style-name {
+      font-weight: 700;
+      color: var(--text-2);
+    }
+    .ap-style-value {
+      font-weight: 600;
+      color: var(--text);
+    }
+    .ap-style-item .ap-style-panel {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      z-index: 20;
+      margin-top: 0;
+      /* width:max-content (capped) instead of a flat min-width -- some of
+         these lists hold much longer labels than the original short
+         Pose/Angle/Lighting/Size words (e.g. "GPT Image 2 · Standard" in the
+         upload page's model picker), which wrapped onto a second line at a
+         plain 200px. */
+      width: max-content;
+      min-width: 200px;
+      max-width: 320px;
+      /* Override .step-list-frame's faint inline tint -- this now floats
+         over unrelated content (e.g. the prompt textarea) below it, so it
+         needs a solid, opaque surface (a shade lighter than the surrounding
+         card so it visibly lifts off the page) instead of a barely-there
+         background that wouldn't read as its own layer at all once
+         detached and overlapping other content. */
+      background: var(--card-3);
+      border-color: var(--border-2);
+      box-shadow: 0 16px 40px rgba(0,0,0,.55);
+      animation: fadeUp .2s ease both;
+    }
+    /* The model picker's longest label ("GPT Image 2.5 Sunburst · Standard" /
+       "GPT Image 2.5 Flare · Enhanced", config.js imageModelQualityOptions)
+       outgrew the general 320px cap above once the ".5"/tier suffixes were
+       added, wrapping "· Enhanced"/"· Standard" onto their own line -- widen
+       just these two pickers' panel and keep their labels on one line. */
+    #image-model-quality-picker .ap-style-panel,
+    #ap-image-model-quality-picker .ap-style-panel {
+      max-width: 380px;
+    }
+    #image-model-quality-picker .step-cb-label,
+    #ap-image-model-quality-picker .step-cb-label {
+      white-space: nowrap;
+    }
+    .aspect-ratio-picker .ap-style-panel {
+      box-sizing: border-box;
+      width: min(460px, calc(100vw - 32px));
+      max-width: none;
+    }
+    .aspect-ratio-picker .ap-style-panel:has(.ar-shape-row) { width: min(580px, calc(100vw - 32px)); }
+    .settings-modal-body .ap-style-item.aspect-ratio-picker .ap-style-panel,
+    .settings-modal-body .ap-style-item.aspect-ratio-picker .ap-style-panel.open-upward {
+      position: static;
+      width: 100%;
+      max-height: none;
+      margin-top: 8px;
+      padding: 12px;
+      box-shadow: none;
+    }
+    .aspect-ratio-picker .step-inline-list { gap: 12px; container-type: inline-size; }
+    .aspect-ratio-picker .step-inline-list label { position: relative; }
+    .aspect-ratio-picker .step-inline-list label input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .aspect-ratio-picker .ar-smart-row {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
+      gap: 8px;
+    }
+    .aspect-ratio-picker .ar-smart-option {
+      align-items: center;
+      padding: 10px 12px;
+      border: 1.5px solid var(--border-2);
+      border-radius: 10px;
+      background: var(--card-2);
+      transition: border-color .15s, background .15s;
+    }
+    .aspect-ratio-picker .ar-smart-option svg { flex-shrink: 0; color: var(--accent); }
+    .aspect-ratio-picker .ar-option-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .aspect-ratio-picker .ar-option-text b { font-size: 14px; color: var(--text); }
+    .aspect-ratio-picker .ar-option-text small { font-size: 12px; color: var(--text-2); }
+    .aspect-ratio-picker .ar-scale {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: -6px;
+      padding: 0 4px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-2);
+    }
+    .aspect-ratio-picker .ar-shape-row {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
+      gap: 4px;
+    }
+    .aspect-ratio-picker .ar-shape-option {
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 2px 7px;
+      border: 1.5px solid transparent;
+      border-radius: 10px;
+      color: var(--text-2);
+      transition: border-color .15s, background .15s;
+    }
+    .aspect-ratio-picker .ar-shape-option .ar-option-text { align-items: center; text-align: center; }
+    .aspect-ratio-picker .ar-shape-option .ar-option-text b {
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+    .aspect-ratio-picker .ar-shape-option .ar-option-text small { font-size: 10.5px; line-height: 1.25; }
+    .aspect-ratio-picker .ar-smart-option:hover,
+    .aspect-ratio-picker .ar-shape-option:hover { background: rgba(var(--on-surface-rgb), .06); }
+    .aspect-ratio-picker .ar-smart-option:has(input:checked),
+    .aspect-ratio-picker .ar-shape-option:has(input:checked) {
+      border-color: var(--accent);
+      background: rgba(var(--accent-rgb), .12);
+    }
+    .aspect-ratio-picker .ar-shape-option:has(input:checked) svg,
+    .aspect-ratio-picker label:has(input:checked) .ar-option-text b { color: var(--accent); }
+    .aspect-ratio-picker label:has(input:focus-visible) {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    @container (max-width: 500px) {
+      .aspect-ratio-picker .ar-scale { display: none; }
+      .aspect-ratio-picker .ar-shape-row {
+        grid-auto-flow: row;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }
+    }
+    @container (max-width: 340px) {
+      .aspect-ratio-picker .ar-smart-row { grid-auto-flow: row; }
+    }
+    /* Applied by wireOptionPicker (app.js) when there isn't enough room
+       below the trigger -- flips the panel to open upward instead of
+       spilling past the viewport bottom. */
+    .ap-style-item .ap-style-panel.open-upward {
+      top: auto;
+      bottom: calc(100% + 8px);
+    }
+    /* On a wide upload page, keep every home-page picker above its trigger
+       so opening one does not cover the controls below it. Narrow layouts
+       retain the normal downward behavior to use the available upper space. */
+    @media (min-width: 901px) {
+      #upload-section .ap-style-item .ap-style-panel {
+        top: auto;
+        bottom: calc(100% + 8px);
+      }
+    }
+    /* Selector panels inside the standalone upload modal always open below
+       their trigger. The modal has its own scroll container, so a long list
+       can scroll inside the window instead of escaping above the header. */
+    .upload-selector-modal-body .ap-style-item .ap-style-panel,
+    .upload-selector-modal-body .ap-style-item .ap-style-panel.open-upward {
+      position: fixed;
+      z-index: 2005;
+      max-height: calc(100vh - 32px);
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+    /* 生成張數 (up to 20 options)
+       -- unlike every other picker here (a handful of options at most),
+       these lists are tall enough to run past the viewport/window
+       regardless of open-upward. Cap them to about 4 rows
+       (.step-cb-label's 16.25px/1.5 line-height ~= 24px,
+       .step-inline-list's own 10px gap between rows: 4*24 + 3*10 = 126px,
+       rounded up) and let them scroll internally instead of resizing the
+       whole picker panel around however many options happen to exist.
+       Scoped to just these pickers (upload page + analysis-preview page) --
+       every other .ap-style-panel list stays exactly as tall as its
+       content, unconstrained. */
+    #image-run-count-picker .step-inline-list,
+    #ap-run-count-picker .step-inline-list {
+      max-height: 150px;
+      overflow-y: auto;
+    }
+    .ap-style-intro {
+      margin: 0 0 12px;
+      font-size: 12.5px;
+      color: var(--text-2);
+    }
+    .ap-prompt-intro {
+      margin: 0;
+      font-size: 12.5px;
+      color: var(--text-2);
+    }
+    /* Fill the review body's content box so the prompt textarea can extend
+       all the way to its bottom instead of stopping at its rows="4"
+       intrinsic height and leaving unused space below. */
+    #ap-review-prompt {
+      height: 100%;
+      min-height: 0;
+    }
+    #ap-review-prompt .field-ta {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .ap-style-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 12px;
+    }
+    .ap-style-card-wrap { position: relative; min-width: 0; }
+    .ap-style-card {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px 10px;
+      border: 1.5px solid var(--border-2);
+      border-radius: var(--radius);
+      background: var(--card-2);
+      cursor: pointer;
+      text-align: left;
+      transition: border-color .15s, background .15s, transform .15s;
+    }
+    .ap-style-card:hover { border-color: rgba(var(--accent-rgb),.4); transform: translateY(-1px); }
+    .ap-style-card:disabled { cursor: not-allowed; opacity: .7; transform: none; }
+    .ap-style-card.is-picked {
+      border-color: var(--accent);
+      background: rgba(var(--accent-rgb),.1);
+    }
+    .ap-style-card-name { font-size: 13px; font-weight: 700; color: var(--text); }
+    .ap-style-card-value {
+      font-size: 12px;
+      color: var(--text-2);
+      text-align: center;
+      word-break: break-word;
+    }
+    .ap-style-card.is-picked .ap-style-card-value { color: var(--accent); font-weight: 700; }
+    /* Vertical padding absorbs .ap-style-card-back's offset, so the tilted
+       back photo never pokes into the name above or the label below. */
+    .ap-style-card-thumbs {
+      display: flex;
+      justify-content: center;
+      padding: 4px 0;
+    }
+    .ap-style-card-stack {
+      position: relative;
+      width: 96px;
+      max-width: 100%;
+      aspect-ratio: 2 / 3;
+      /* Gives the carousel step below a real vanishing point, so the top
+         photo swings away rather than just sliding flat. */
+      perspective: 700px;
+    }
+    .ap-style-card-deep,
+    .ap-style-card-back,
+    .ap-style-card-front {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 8px;
+      border: 1px solid var(--border-2);
+      background: var(--card);
+      /* Only the carousel step animates these -- a pick or a re-render just
+         sets src, which no transition applies to. */
+      transition: transform .62s cubic-bezier(.22,.61,.36,1), opacity .62s ease;
+      backface-visibility: hidden;
+    }
+    /* All three need this: `display: block` above beats the browser's own
+       [hidden] { display: none }, so setting .hidden in JS does nothing
+       without it -- including on the front layer, which syncStylePicks
+       hides when a category has no example image to show at all. */
+    .ap-style-card-deep[hidden],
+    .ap-style-card-back[hidden],
+    .ap-style-card-front[hidden] { display: none; }
+    .ap-style-card-back {
+      transform: rotate(5deg) translate(4px, -3px) scale(.97);
+      opacity: .75;
+    }
+    /* Invisible at rest -- the card still shows exactly two photos. This
+       layer exists only so a step has somewhere to bring the third photo in
+       FROM: it holds whatever comes after the back one, parked further out
+       and fully transparent until the step below moves it in. */
+    .ap-style-card-deep {
+      transform: rotate(8deg) translate(9px, -7px) scale(.9);
+      opacity: 0;
+    }
+    /* One carousel step (advanceStyleCarousel, results.js): the front photo
+       swings off to the left in 3D while the tilted one behind it rises
+       into its place. The JS then moves both srcs one forward under
+       .no-anim, so the snap back to the resting state above is invisible.
+       The transition duration set above is the single source of truth for
+       how long a step takes -- results.js reads it back with
+       getComputedStyle rather than keeping its own copy, so retuning it
+       here is enough and the two cannot drift apart. */
+    .ap-style-card-stack.is-advancing .ap-style-card-front {
+      transform: rotateY(-20deg) rotateZ(-5deg) translateX(-16%) scale(.92);
+      opacity: 0;
+    }
+    .ap-style-card-stack.is-advancing .ap-style-card-back {
+      transform: rotate(0deg) translate(0, 0) scale(1);
+      opacity: 1;
+    }
+    /* ...and the deep layer takes over the back photo's resting spot in the
+       same breath, so the whole pile advances as one motion instead of the
+       incoming photo waiting for the other two to finish first. */
+    .ap-style-card-stack.is-advancing .ap-style-card-deep {
+      transform: rotate(5deg) translate(4px, -3px) scale(.97);
+      opacity: .75;
+    }
+    /* Every layer the commit snaps back to rest has to be listed here --
+       .ap-style-card-deep especially: left out, it animates that snap
+       instead of taking it instantly, which shows up as a third photo
+       drifting out and fading away behind the stack after the step. */
+    .ap-style-card-stack.no-anim .ap-style-card-front,
+    .ap-style-card-stack.no-anim .ap-style-card-back,
+    .ap-style-card-stack.no-anim .ap-style-card-deep { transition: none; }
+    @media (prefers-reduced-motion: reduce) {
+      .ap-style-card-deep,
+      .ap-style-card-back,
+      .ap-style-card-front { transition: none; }
+    }
+    .ap-style-card.is-picked .ap-style-card-front { border-color: var(--accent); }
+    .ap-style-card-clear {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 50%;
+      background: var(--card-3);
+      color: var(--text-3);
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .ap-style-card-clear:hover { background: rgba(255,38,0,.14); color: var(--red); }
+
+    /* ── #ap-style-modal: the full-size example cards, opened by clicking a
+       category's card in the 修圖風格 tab. ── */
+    .ap-review-style { height: 100%; overflow-y: auto; }
+    .error-modal-box.ap-style-modal-box {
+      width: min(560px, calc(100vw - 40px));
+      /* Same --header-h + 36px trim as .error-modal's own padding-top comment
+         further down (index.html) -- this override replaces the shared
+         .error-modal-box max-height, so it has to account for that reserved
+         space itself instead of inheriting it. */
+      max-height: calc(100vh - var(--header-h) - 76px);
+      display: flex;
+      flex-direction: column;
+      padding: 14px 16px;
+    }
+    .ap-style-modal-box .error-modal-hdr {
+      flex: 0 0 auto;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .ap-style-modal-box #ap-style-options-frame {
+      height: auto;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+      margin-top: 12px;
+      padding: 12px 14px;
+    }
+    .ap-style-modal-box #ap-style-options-frame[hidden],
+    .ap-style-modal-box .ap-style-option-grid[hidden] { display: none; }
+    .ap-style-modal-box .ap-style-option-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .ap-style-modal-box .ap-style-option-btn {
+      width: 100%;
+      max-width: 140px;
+      padding: 10px;
+      border: 1.5px solid var(--border-2);
+      border-radius: var(--radius);
+      background: var(--card-2);
+    }
+    .ap-style-modal-box .ap-style-option-btn:has(.ap-style-option-input:checked) {
+      border-color: var(--accent);
+      background: rgba(var(--accent-rgb),.14);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.14);
+    }
+    .ap-style-modal-box .ap-style-option-thumb { width: 100%; }
+    .ap-style-modal-box .ap-style-scroll-hint { bottom: 10px; }
+    /* Header row for #ap-style-options-frame: category name followed by its
+       parenthetical caveat (both set from showStyleGroup, app.js, since the
+       category row is hidden while this frame is open). */
+    .ap-style-options-hdr {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0 4px;
+      margin-bottom: 10px;
+    }
+    .ap-style-options-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .ap-style-options-note {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+    .ap-style-options-note[hidden] { display: none; }
+    /* Positioning root for #ap-style-scroll-hint, which pins to this frame's
+       own bottom edge rather than #ap-style-options-frame's scrollable child
+       list -- see that element's own markup comment. Flex column filling
+       .ap-review-style's own 100% (above), so the header stays a fixed-size
+       anchor (its own natural height, never scrolled away) and the grid --
+       flex:1, not a flat max-height guess -- takes exactly whatever's left
+       under it instead. */
+    #ap-style-options-frame {
+      position: relative;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    /* Spelled-out fallback for the option grid's own inset-shadow scroll cue
+       (too subtle on its own to register as "this scrolls" at a glance) --
+       a small pill anchored over the bottom edge of whichever category list
+       is currently showing. hidden/shown by updateStyleOptionScrollCue
+       (app.js) in lockstep with that list's own has-more-below state, so it
+       only ever appears while there's actually more to scroll to. */
+    .ap-style-scroll-hint {
+      position: absolute;
+      left: 50%;
+      bottom: 10px;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: var(--card-3);
+      border: 1px solid var(--border-2);
+      color: var(--text-2);
+      font-size: 11.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,.25);
+      animation: apStyleScrollHintBob 1.4s ease-in-out infinite;
+    }
+    @keyframes apStyleScrollHintBob {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(3px); }
+    }
+    /* auto-fit, not a fixed column count -- a fixed repeat(2, 1fr) left this
+       panel's own #ap-options-card-inline column (wide on a PC-width
+       screen, since nothing here caps it the way .ap-style-option-btn caps
+       each card) mostly empty beside two 140px cards. auto-fit instead grows
+       the column count to whatever the actual available width fits, so a
+       wide viewport spreads the same cards out across it (minmax(140px, ...)
+       collapsing any surplus track's space into the ones that exist keeps
+       them centered and evenly spaced, not stretched past their own
+       max-width). Below the 560px breakpoint this reverts to the old fixed
+       repeat(2, 1fr) instead (see the media query further down) -- by that
+       width, everything nested above this grid (.container/.analysis-preview/
+       .ap-analysis-shell-body/.ap-toggle-card-body/.step-list-frame's own
+       paddings) leaves well under 2*140px+gap to work with, so auto-fit's
+       140px floor would collapse to a single column instead of the
+       side-by-side pair a phone used to get -- fixed 2 columns lets the
+       cards themselves shrink below 140px instead, same as before. */
+    .ap-style-option-grid {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      justify-items: center;
+      gap: 12px;
+      /* Scrollable, capped by flex, not a flat max-height guess -- a
+         category with enough options to fill 3+ rows of these
+         (portrait-thumbnail) cards used to push the whole #ap-review-panel
+         tab open that far, growing the page instead of staying put.
+         #ap-style-options-hdr (title + exit button) sits above this as this
+         grid's own sibling, outside the scroll area, so it stays put as the
+         anchor while only the cards scroll under it. flex:1/min-height:0
+         (#ap-style-options-frame, above) fills exactly whatever's left under
+         that header inside .ap-toggle-card-body's own JS-computed height
+         (syncAnalysisPanelHeights, app.js), instead of a flat px guess that
+         doesn't track the real available space. */
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+      overflow-y: auto;
+      /* An inset shadow, not a background-colored fade -- this grid has no
+         solid background of its own (its parent .step-list-frame's tint
+         shows through), so a color-matched fade gradient would need to
+         duplicate that translucent tint exactly. A shadow reads as "more
+         content this way" regardless of what's behind it, and (unlike a
+         gradient overlay) it's painted on the box itself, not the scrolling
+         content, so it never moves as the grid scrolls. */
+      transition: box-shadow .15s;
+    }
+    /* See .ap-style-option-grid's own doc above -- below this width there
+       just isn't 2*140px+gap of room left once every ancestor wrapper's own
+       padding is subtracted out, so auto-fit would otherwise leave a phone
+       with a single column where it used to get two (if narrower ones). */
+    @media (max-width: 560px) {
+      .ap-style-option-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    /* updateStyleOptionScrollCue (app.js) toggles these on scroll/whenever a
+       category's list becomes the visible one -- max-height alone left a
+       hard, unannounced cut mid-row that read as "that's all of them", not
+       "scroll for more" (the plain OS scrollbar it otherwise relies on can
+       be thin/overlay-only and easy to miss entirely). */
+    .ap-style-option-grid.has-more-below { box-shadow: inset 0 -24px 16px -18px rgba(0,0,0,.45); }
+    .ap-style-option-grid.has-more-above { box-shadow: inset 0 24px 16px -18px rgba(0,0,0,.45); }
+    .ap-style-option-grid.has-more-above.has-more-below {
+      box-shadow: inset 0 24px 16px -18px rgba(0,0,0,.45), inset 0 -24px 16px -18px rgba(0,0,0,.45);
+    }
+    .ap-style-option-btn {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      /* Capped instead of stretching to fill its whole grid column -- at
+         2:3 (portrait) source images, a full-width card in a 2-column grid
+         gets tall enough (2 rows for Pose/Angle/Size) to force scrolling.
+         justify-items:center above keeps the capped card centered in its
+         column rather than flush left with empty space beside it. */
+      width: 100%;
+      max-width: 140px;
+      padding: 10px;
+      border: 1.5px solid var(--border-2);
+      border-radius: var(--radius);
+      background: var(--card-2);
+      cursor: pointer;
+      user-select: none;
+      transition: border-color .15s, background .15s, transform .15s;
+    }
+    .ap-style-option-btn:hover { border-color: rgba(var(--accent-rgb),.4); transform: translateY(-1px); }
+    .ap-style-option-btn:has(.ap-style-option-input:checked) {
+      border-color: var(--accent);
+      background: rgba(var(--accent-rgb),.14);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.14);
+    }
+    .ap-style-option-input { position: absolute; opacity: 0; width: 0; height: 0; }
+    /* Size-only card-level clear "x" (see fillStyleOptionList, results.js) --
+       overlaid on the thumbnail's corner, only shown on whichever card is
+       currently checked. */
+    .ap-style-option-cancel {
+      display: none;
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 20px;
+      height: 20px;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0,0,0,.55);
+      color: #fff;
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 1;
+      transition: background .15s;
+    }
+    .ap-style-option-btn:has(.ap-style-option-input:checked) .ap-style-option-cancel { display: flex; }
+    .ap-style-option-cancel:hover { background: rgba(255,38,0,.85); }
+    .ap-style-option-thumb {
+      width: 100%;
+      /* Source images are portrait but not all the same ratio (1024x1536 and
+         1120x1408) -- cover fills the card's 2:3 box to full height and
+         centre-crops the sides, so every thumbnail is the same size. */
+      aspect-ratio: 2 / 3;
+      object-fit: cover;
+      border-radius: calc(var(--radius) - 4px);
+      background: var(--card-3);
+    }
+    .ap-style-option-thumb-default {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-3);
+      font-size: 13px;
+      font-weight: 600;
+      border: 1.5px dashed var(--border-2);
+    }
+    .ap-style-option-label {
+      font-size: 13.75px;
+      font-weight: 600;
+      color: var(--text-2);
+      text-align: center;
+    }
+    .ap-analysis-body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 10px;
+    }
+    .ap-diagnosis-text {
+      font-size: 16.25px;
+      color: var(--text-3);
+      line-height: 1.6;
+      letter-spacing: -.13px;
+    }
+    .ap-analysis-body .ap-composition-text {
+      margin-top: 10px;
+      padding-left: 12px;
+      border-left: 2px solid rgba(var(--accent-rgb),.45);
+      font-size: 15px;
+      color: var(--text-2);
+      line-height: 1.5;
+      letter-spacing: -.12px;
+    }
+    .ap-option-groups {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 16px;
+    }
+    @media (max-width: 900px) {
+      .ap-option-groups { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 560px) {
+      .ap-option-groups { grid-template-columns: 1fr; }
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Photo frame wrapper ── */
+    .photo-frame-wrap { position: relative; }
+
+    /* ── Summary band list ── */
+    .sb-list { margin: 0; padding-left: 1.2em; }
+    .sb-list li { margin-bottom: 2px; }
+
+    /* ── Multi-file upload thumbnail strip ── */
+    .dz-multi {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+      /* Explicit min-content instead of the implicit "auto" default -- on a
+         narrow viewport (auto-fill collapses to a single column) the browser
+         under-measures each row's aspect-ratio-driven height and the square
+         thumbnails end up stacked with overlapping rows instead of a clean
+         list. min-content forces it to size each row off the thumb's real
+         (aspect-ratio) height. */
+      grid-auto-rows: min-content;
+      align-content: flex-start;
+      gap: 12px;
+      padding: 20px;
+      /* flex:1 with no max-height matches #dz-preview/.upload-zone's own
+         "grow/shrink to fill .upload-grid's remaining space" behavior --
+         this and those two are mutually-exclusive views of the same slot
+         (empty drop zone / single preview / this grid), so a flat
+         max-height here (used to be 420px) made this one visibly shorter
+         than the other two even when .upload-left had plenty of room left
+         below it, packing photos into an internal scrollbar that didn't
+         need to be there. overflow:auto stays regardless, as the fallback
+         for whenever the grid's real content (many photo rows) still needs
+         more height than the space it was actually given. min-height:360px
+         (taller than #dz-preview/.upload-zone's 280px floor, see their own
+         comments) is its own floor for short viewports, same idea as
+         those two, just taller since a usable grid needs more than a
+         centered icon/single photo does. */
+      overflow: auto;
+      flex: 1;
+      min-height: 360px;
+      /* Same flat-var(--card) issue as #dz-preview above (see its own
+         comment) -- a few small thumbnails leave most of this grid as bare
+         card color, which read especially flat here since it's the
+         tallest/emptiest of the three .upload-left views. */
+      background:
+        radial-gradient(ellipse farthest-corner at 50% 30%, rgba(var(--accent-rgb),.11) 0%, rgba(var(--accent-2-rgb),.05) 45%, transparent 75%),
+        var(--card);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow .25s, transform .25s;
+    }
+    /* No cursor:pointer -- only #dz-add-more is actually clickable now (see
+       routeSelectedFiles/app.js), so a hand cursor over the whole strip
+       promised something a click on a plain thumbnail didn't deliver. The
+       hover lift/shadow itself is harmless either way, so it stays. */
+    .dz-multi:hover {
+      box-shadow: var(--shadow-accent);
+      transform: translateY(-2px);
+    }
+    .dz-multi .dz-thumb {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      background: var(--card-2);
+      box-shadow: var(--shadow-sm);
+    }
+    .dz-multi .dz-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    /* Trailing tile in the thumbnail strip -- same grid cell size as a real
+       .dz-thumb, but a dashed/shaded placeholder instead of a photo, so the
+       strip itself invites adding more instead of looking like a closed set. */
+    .dz-add-more {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border: 1.5px dashed rgba(var(--on-surface-rgb),.18);
+      border-radius: var(--radius-sm);
+      background: rgba(var(--on-surface-rgb),.02);
+      color: var(--text-2);
+      cursor: pointer;
+      transition: border-color .15s, background .15s, color .15s;
+    }
+    /* Hover on the tile itself, not .dz-multi:hover -- that fired from
+       hovering anywhere in the strip, including thumbnails nowhere near it. */
+    .dz-add-more:hover {
+      border-color: rgba(var(--accent-rgb),.4);
+      color: var(--accent);
+    }
+    .dz-add-more-icon {
+      font-size: 28px;
+      font-weight: 300;
+      line-height: 1;
+    }
+    .dz-add-more-label {
+      font-size: 11px;
+      font-weight: 600;
+    }
+    /* top-LEFT, not top-right -- #dz-clear-all-btn floats top-right of the
+       whole #dz-multi strip (see its own comment above), which lands
+       directly on top of this same corner for the first row's rightmost
+       thumbnail. Top-left has no such conflict. */
+    .dz-thumb-remove {
+      position: absolute;
+      top: 5px;
+      left: 5px;
+      width: 22px;
+      height: 22px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      color: #fff;
+      font-size: 13px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+      transition: background .15s, transform .15s;
+    }
+    .dz-thumb-remove:hover { background: rgba(220,60,60,.85); transform: scale(1.08); }
+    /* Keep the remove button unobtrusive until the thumb is actually being
+       looked at -- but only on pointers that can hover; touch devices have
+       no hover state to reveal it, so it must stay visible there. */
+    @media (hover: hover) {
+      .dz-thumb-remove { opacity: 0; transition: opacity .15s, background .15s, transform .15s; }
+      .dz-thumb:hover .dz-thumb-remove,
+      .dz-thumb-remove:focus-visible { opacity: 1; }
+    }
+
+    /* ── Batch sidebar: one row per image, shown beside the same
+       single-image-mode main content used below (#results-detail) --
+       see selectBatchRecord/renderBatchMain in app.js. ── */
+    /* align-items: stretch (not flex-start) so the sidebar card's own height
+       always matches whichever is taller -- itself or the main content,
+       which swings a lot between the compact "analyzing" placeholder and the
+       full compare-card "done" view -- instead of looking like a
+       short floating card next to a much taller (or shorter) column. */
+    .results-body { display: flex; align-items: stretch; gap: 28px; }
+    .batch-sidebar {
+      flex: 0 0 280px; width: 280px;
+      position: sticky; top: calc(var(--header-h) + 24px);
+      margin-top: 44px;
+      padding: 20px;
+      /* A self-contained card, same language as .options-card/.verdict-card
+         elsewhere -- previously just a border-right hairline, which still
+         read as sharing the page's own background/region with the results
+         column instead of looking like its own distinct block.
+         --card-2 (not --card, unlike those two) -- on the light themes
+         (paper/lilac/caramel) --card is a near-white/pure-white value, and
+         this panel is large enough and plain enough (long list, little
+         content) that reads as the single brightest surface on the page;
+         --card-2 is the same "visibly deeper" step already used for other
+         recessed panels (.field-input/.field-ta, see below). */
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      /* Stretching to match a taller main content (below) is only for visual
+         balance -- it must never itself grow past the viewport and force the
+         whole window to scroll just because a batch has a lot of images (or
+         the main content is simply tall). max-height is set from JS
+         (updateBatchSidebarMaxHeight, app.js) instead of a static calc() here
+         -- a fixed formula can't account for the results-topbar's own actual
+         rendered height, which pushes the sidebar's real starting position
+         well below what "header height + a fixed offset" alone assumes.
+         Only the image list (not the title/bulk controls above it) scrolls
+         internally once content exceeds that cap. */
+      display: flex;
+      flex-direction: column;
+    }
+    #results-detail { flex: 1 1 0%; min-width: 0; }
+    /* Drawer trigger/close/backdrop: no-ops on desktop (sidebar is always
+       inline there); only take effect under the max-width:900px rules
+       further down, which turn .batch-sidebar itself into an off-canvas
+       panel. Declared here since a hidden desktop element still needs a
+       base display rule to toggle from. */
+    .batch-drawer-trigger {
+      display: none; align-items: center; justify-content: center;
+      /* Pinned to the true viewport edge (position:fixed ignores the
+         .container/.results-container ancestors' own padding) instead of
+         sitting inline in #results-detail's flow -- flush against the
+         window's left edge, directly under the sticky .site-header, with
+         no margin/padding of its own. Icon-only (see aria-label for the
+         accessible name) plus a small count badge -- "批次圖片（N）" as
+         visible text read as too dev-facing a label for this. */
+      position: fixed; top: var(--header-h); left: 0; z-index: 999;
+      width: 44px; height: 40px;
+      margin: 0; padding: 0; border-radius: 0;
+      border: 1px solid var(--border); border-left: none;
+      background: var(--card);
+      color: var(--text); cursor: pointer;
+    }
+    .batch-drawer-trigger-count {
+      position: absolute; top: 4px; right: 4px;
+      min-width: 16px; height: 16px; padding: 0 4px;
+      border-radius: 999px; background: var(--accent); color: #fff;
+      font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+    }
+    .batch-drawer-trigger-count[hidden] { display: none; }
+    .batch-sidebar-close-btn {
+      /* top: 20px matches .batch-sidebar's own padding -- same starting
+         edge as .batch-sidebar-header's row (also 30px tall, via
+         .batch-download-all-btn), so the two sit on the same horizontal
+         line instead of this one floating 6px higher. */
+      display: none; position: absolute; top: 20px; right: 14px;
+      align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 999px; border: none;
+      background: var(--card-2); color: var(--text-2); cursor: pointer;
+    }
+    .batch-sidebar-close-btn:hover { color: var(--text); }
+    .batch-sidebar-backdrop {
+      display: none; position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,.55);
+    }
+    .batch-sidebar-header {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; margin: 0 0 16px;
+      /* min-height:30px matches #batch-download-all-btn's own height --
+         without it, the row is only as tall as the title text before that
+         button appears (hidden until the batch has at least one image),
+         so its vertical center shifts once the button shows up, throwing
+         off alignment with .batch-sidebar-close-btn's fixed
+         top:20px/30px-tall box. Keeping the row's height steady keeps both
+         states aligned. */
+      min-height: 30px;
+    }
+    .batch-sidebar-title {
+      font-size: 13px; font-weight: 700; color: var(--text-2);
+      text-transform: uppercase; letter-spacing: .06em;
+      margin: 0;
+      /* min-width:0 so this can actually shrink -- CJK text has no spaces
+         to wrap on, so without this the header row refused to shrink below
+         the title's full text width and instead overflowed past the
+         drawer's own (fixed) edge once #batch-download-all-btn appeared
+         alongside it, which happens as soon as the batch has any image. */
+      flex: 1 1 auto; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .batch-download-all-btn {
+      display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+      width: 30px; height: 30px; padding: 0;
+      border-radius: 999px; border: 1px solid var(--border);
+      background: var(--card-2); color: var(--text-2);
+      cursor: pointer;
+      transition: border-color .15s, color .15s;
+    }
+    .batch-download-all-btn:hover { border-color: var(--border-2); color: var(--text); }
+    .batch-sidebar-list {
+      display: flex; flex-direction: column; gap: 8px;
+      flex: 1 1 auto; min-height: 0; overflow-y: auto;
+      /* Breathing room so the last item isn't flush against the card's edge
+         and so its own scrollbar doesn't overlap the item content. */
+      margin-right: -8px; padding-right: 8px; margin-bottom: -4px;
+    }
+    .batch-sidebar-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px; border-radius: var(--radius);
+      cursor: pointer; transition: background .15s;
+      /* min-width:0 -- as a flex child of .batch-sidebar-list (column,
+         stretch), this row's own automatic minimum size otherwise follows
+         its content's min-content width (thumb + badge), which can exceed
+         the list's stretched width once the badge grows (e.g. "完成" ->
+         "完成 (3/3)" for a multi-RUN image), forcing the row -- and its
+         selected-state background/border -- to overflow past the drawer's
+         own edge instead of staying clipped to it. */
+      min-width: 0;
+    }
+    .batch-sidebar-item:hover { background: var(--card-2); }
+    .batch-sidebar-item.selected { background: var(--card-2); box-shadow: 0 0 0 2px var(--accent) inset; }
+    .batch-sidebar-item .rc-media { width: 52px; height: 52px; flex: 0 0 52px; border-radius: 8px; }
+    .batch-sidebar-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .rc-media { position: relative; aspect-ratio: 1 / 1; background: var(--card-2); overflow: hidden; }
+    .rc-media img { width: 100%; height: 100%; object-fit: cover; }
+    .batch-sidebar-item.processing .rc-media img,
+    .batch-sidebar-item.analyzing .rc-media img { opacity: .35; }
+    /* Transient "opening this record" feedback for a just-clicked history
+       tile (renderHistoryList, app.js) -- same dim treatment as .processing
+       above, kept as its own class since the tile's real done/error status
+       (and badge) must stay untouched underneath it. */
+    .history-cube.opening .rc-media img { opacity: .35; }
+    /* Same spinner as .rc-spinner (analyzing/processing tiles, below) --
+       a plain ::after instead of a real .rc-spinner element since .opening
+       is only ever toggled on li.classList (app.js), never rendered into
+       the DOM, so there's no JS-side moment to insert/remove a node for it. */
+    .history-cube.opening .rc-media::after {
+      content: "";
+      position: absolute; top: 50%; left: 50%;
+      width: 28px; height: 28px; margin: -14px 0 0 -14px;
+      border: 3px solid rgba(var(--on-surface-rgb),.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: rc-spin .8s linear infinite;
+      z-index: 5;
+    }
+    /* Static pill beside the filename (not overlaid on the thumbnail like the
+       old grid card's badge -- the sidebar's thumbnail is too small for that
+       text to fit without wrapping). */
+    .rc-badge {
+      display: inline-flex; align-self: flex-start; max-width: 100%;
+      padding: 3px 10px; border-radius: 20px;
+      font-size: 12px; font-weight: 300; white-space: nowrap;
+      line-height: 1.2; letter-spacing: .01em;
+      overflow: hidden; text-overflow: ellipsis;
+      background: rgba(var(--on-surface-rgb),.12); color: var(--text-2);
+    }
+    .rc-badge::before {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      margin-right: 5px;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .batch-sidebar-item.analyzing .rc-badge::before,
+    .batch-sidebar-item.processing .rc-badge::before { content: "◌"; }
+    .batch-sidebar-item.analyzed .rc-badge::before { content: "✦"; }
+    .batch-sidebar-item.done .rc-badge::before { content: "✓"; }
+    .batch-sidebar-item.error .rc-badge::before { content: "!"; }
+    /* A translucent color wash directly over a photo thumbnail (these
+       badges aren't only shown on a plain card -- .history-cube .rc-badge,
+       further down, overlays one) has no guaranteed contrast against
+       arbitrary photo content: a bright/white patch of photo right behind
+       the badge washes the tint out no matter how saturated the color
+       itself is. A dark glass layer under the tint fixed that but read as
+       a heavy dark chip instead of a light badge. Going back to a single
+       light, mostly-transparent tint + blur, but leaning on a dark
+       text-shadow (not the background) to keep the white text/icon
+       readable -- the same trick captions on photos/video use, since a
+       shadow hugging each glyph's own edge stays legible over any content
+       behind it without needing the background itself to carry the
+       contrast. */
+    /* Unlike .history-cube's .rc-badge (further down), this one never sits
+       over an arbitrary photo -- it's on the flat .batch-sidebar-item row
+       background -- so it doesn't need the white-text-on-glass trick that
+       exists purely for photo-overlay legibility. Kept for the dark themes
+       (default/ocean/forest) below, where white-on-translucent-tint still
+       reads fine against this panel's own dark surface; overridden further
+       down for the light themes, where the same white text washed out. */
+    .batch-sidebar-item.analyzed .rc-badge {
+      background: rgba(var(--accent-rgb),.35);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(var(--accent-soft-rgb),.55);
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,.6);
+    }
+    .batch-sidebar-item.done .rc-badge {
+      background: rgba(1,179,123,.35);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(52,211,153,.55);
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,.6);
+    }
+    .batch-sidebar-item.error .rc-badge {
+      background: rgba(220,60,60,.35);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(220,60,60,.55);
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,.6);
+    }
+    .batch-sidebar-item.archived .rc-badge {
+      background: rgba(75,75,85,.72);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(210,210,220,.5);
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,.6);
+    }
+    /* Light themes: same white text over a light tint reads as washed
+       out/low-contrast, so these use a lighter tint + a solid, darker
+       version of each status color as text instead, same as .field-input's
+       own light-theme treatment elsewhere in this file.
+       :not(.history-cube) -- .batch-sidebar-item is also reused on every
+       .history-cube grid tile (renderHistoryList, app.js), whose .rc-badge
+       overlays an actual photo and still needs the white-on-glass contrast
+       trick; only the real batch-sidebar list rows (never a .history-cube)
+       should get the darker, flat-background treatment below. */
+    body[data-theme-mode="light"] .batch-sidebar-item.analyzed:not(.history-cube) .rc-badge {
+      background: rgba(var(--accent-rgb),.16);
+      border-color: rgba(var(--accent-rgb),.4);
+      /* color-mix, not var(--accent) directly -- some themes' accent (e.g.
+         ocean's cyan, forest's green) is itself too light/bright to read as
+         "dark text", so this forces a darker shade of whatever the theme's
+         accent is instead of assuming it's already dark enough. */
+      color: color-mix(in srgb, var(--accent) 55%, #000);
+      text-shadow: none;
+    }
+    body[data-theme-mode="light"] .batch-sidebar-item.done:not(.history-cube) .rc-badge {
+      background: rgba(1,179,123,.16);
+      border-color: rgba(1,179,123,.4);
+      color: #045c3f;
+      text-shadow: none;
+    }
+    body[data-theme-mode="light"] .batch-sidebar-item.error:not(.history-cube) .rc-badge {
+      background: rgba(220,60,60,.16);
+      border-color: rgba(220,60,60,.4);
+      color: #8a1a1a;
+      text-shadow: none;
+    }
+    .rc-spinner {
+      position: absolute; top: 50%; left: 50%;
+      width: 28px; height: 28px; margin: -14px 0 0 -14px;
+      border: 3px solid rgba(var(--on-surface-rgb),.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: rc-spin .8s linear infinite;
+    }
+    @keyframes rc-spin { to { transform: rotate(360deg); } }
+    /* padding-top reserves .site-header's own height (--header-h) -- #report-btn
+       is position:fixed inside that header row at z-index:2000, above every
+       .error-modal-based popup's own z-index (1000-1002), so a modal box tall
+       enough to reach the very top of the viewport would have its own close
+       button (top of .error-modal-box) sit right where #report-btn floats and
+       get visually covered by it. Keeping the box's flex area entirely below
+       --header-h means the box can never grow into that row in the first
+       place, regardless of which modal or how much content it holds. */
+    .error-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: calc(var(--header-h) + 16px) 20px 20px; }
+    .error-modal[hidden] { display: none; }
+    /* #confirm-modal can be triggered from inside the history drawer (its
+       delete button) -- the drawer itself sits at z-index 1001 (see
+       .history-drawer below), above every other .error-modal-based popup, so
+       this needs its own higher stacking order to actually show on top of it. */
+    #confirm-modal { z-index: 1002; }
+    /* Same reasoning as #confirm-modal above -- a failed history tile's
+       click handler opens this to show its failure reason, from inside the
+       history drawer (z-index 1001), so it needs to win against that too. */
+    #notice-modal { z-index: 1002; }
+    /* The archived-case notice's own two restart actions (#notice-modal,
+       1002 above) each open this to confirm their own cost estimate before
+       actually restarting -- it must win against the notice it was opened
+       from, not sit behind it at the plain .error-modal base of 1000. */
+    #preflight-cost-modal { z-index: 1003; }
+    /* #report-btn itself is position:fixed at z-index:2000 (see its own
+       rule further down) so it stays clickable above any other modal/
+       drawer, dynamically-launched or not -- #report-modal is what it
+       opens, so it needs to win against whatever else might already be
+       open too, not just sit at the plain .error-modal base of 1000. */
+    #report-modal { z-index: 2001; }
+    /* Same reasoning as #confirm-modal above -- opened from inside
+       #reports-drawer (z-index 1001, .history-drawer) on the admin side,
+       or from inside #report-modal itself (z-index 2001, just above) via
+       its own screenshot preview -- needs to beat whichever of those it's
+       actually opened from. */
+    #report-screenshot-modal { z-index: 2002; }
+    .error-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.6); }
+    .error-modal-box {
+      position: relative; width: min(440px, calc(100vw - 40px));
+      background: var(--card); border: 1px solid var(--border-2);
+      border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow-lg);
+      /* Belt-and-suspenders alongside .error-modal's own padding-top above --
+         even wider modals (.report-screenshot-modal-box etc.) that override
+         width still can't outgrow the reserved area and creep back up under
+         #report-btn. Scrolls internally instead. */
+      max-height: 100%; overflow-y: auto;
+    }
+    /* Divider between the header and everything below it -- originally
+       scoped to just #ap-style-modal (its own inner frame border had been
+       removed, too many nested borders alongside .ap-style-modal-box's own,
+       so this hairline took over as the separator there), now promoted onto
+       the shared class so every .error-modal-hdr gets the same divider
+       under its title regardless of which modal it's in. */
+    .error-modal-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    #error-modal-title { font-size: 17px; font-weight: 700; color: var(--red); }
+    .error-modal-close {
+      background: none; border: none; color: var(--text-2);
+      font-size: 24px; line-height: 1; cursor: pointer; padding: 0 4px;
+    }
+    .error-modal-close:hover { color: var(--text); }
+    .error-modal-file { font-size: 13px; color: var(--text-2); margin-bottom: 8px; word-break: break-all; }
+    .error-modal-msg { font-size: 15px; color: var(--text); line-height: 1.5; word-break: break-word; }
+    /* #cost-modal's 分析/修圖/總金額 breakdown -- plain label/value rows, the
+       last one (總金額) set off with a divider + bolder weight since it's
+       the sum of the two above it, not another line item. */
+    .cost-modal-rows { display: flex; flex-direction: column; gap: 10px; }
+    .cost-modal-item { display: flex; flex-direction: column; gap: 3px; }
+    .cost-modal-row { display: flex; align-items: center; justify-content: space-between; font-size: 15px; }
+    .cost-modal-label { color: var(--text-2); }
+    .cost-modal-value { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+    /* Which model(s) actually ran this bucket's stages -- a quiet caption
+       under the number, not another figure competing for attention. */
+    .cost-modal-model { margin: 0; font-size: 12px; color: var(--text-3); }
+    .cost-modal-row-total {
+      margin-top: 4px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 16px;
+    }
+    .cost-modal-row-total .cost-modal-label { color: var(--text); font-weight: 700; }
+    .cost-modal-row-total .cost-modal-value { color: var(--accent); font-size: 18px; }
+    /* #confirm-modal-msg sits right above this (showConfirmModal's costSteps
+       option) -- same divider treatment as .cost-modal-row-total above, so
+       the cost line reads as a separate, set-off block rather than running
+       straight into the message text. */
+    #confirm-modal-cost-rows {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    /* Shared by #settings-modal (upload page) and #ap-settings-modal
+       (results/analysis-preview page): same .option-pill-group rows as the
+       inline pickers they replaced, just stacked instead of side by side.
+       Out in those pages' flex-wrap rows, .ap-style-trigger just sized
+       itself to its content (nowrap) since the row had room to wrap around
+       it -- stacked full-width in this narrow modal column there's nothing
+       to wrap into, so a long value (e.g. "GPT Image 2 · Standard") would
+       instead push the trigger past the modal's own edge. Stretch the
+       trigger to the row and ellipsize the value instead. */
+    /* max-height/overflow-y so an expanded #advanced-settings-fold (人像修正設定,
+       long enough on its own to push this past the viewport) scrolls inside
+       the modal instead of growing .error-modal-box off-screen -- same
+       pattern as .changelog-modal-body below. Only on the outer body, not
+       .settings-fold-body -- nesting a second scroll region inside this one
+       would read as two competing scrollbars for what's really one list. */
+    .settings-modal-body {
+      display: flex; flex-direction: column; gap: 16px;
+      /* -160px was tuned for a modal centered in the full viewport; .error-modal
+         now also reserves --header-h + 36px up top (see its own comment) so
+         this needs the same amount trimmed off, or this inner scroll region
+         alone could still ask for more height than .error-modal-box's own
+         max-height allows and pop a second, redundant scrollbar. */
+      max-height: calc(100vh - var(--header-h) - 196px);
+      overflow-y: auto;
+    }
+    .settings-modal-body .ap-style-item { width: 100%; }
+    .settings-modal-body .ap-style-trigger { width: 100%; box-sizing: border-box; }
+    .settings-modal-body .ap-style-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .settings-modal-body .ap-style-trigger::after { flex-shrink: 0; }
+    /* .settings-modal-title left at the plain <span> default (no explicit
+       size/weight/color) read as barely-there next to #error-modal-title/
+       .notice-modal-title, which both style themselves explicitly -- give
+       it the same treatment. Same reasoning for .option-pill-label here:
+       elsewhere it's a small caption riding along a busy pill row, but as
+       the only label identifying each field in this modal it needs to read
+       as a proper field title, not a caption -- scoped to .settings-modal-body
+       so the shared .option-pill-label style used elsewhere (style-picker
+       pills, analysis-preview pickers) is untouched. */
+    .settings-modal-title { font-size: 17px; font-weight: 800; color: var(--text); }
+    .settings-modal-body .option-pill-label { font-size: 13px; font-weight: 800; color: var(--text); }
+
+    /* 人像修正設定 (#advanced-settings-fold): collapsed by default, folded into
+       whichever 設定 modal is open rather than its own separate modal --
+       same chevron-summary shape as .ap-options-toggle (analysis-preview's
+       分析結果 fold) so a collapsible section reads the same way everywhere,
+       just re-themed for this modal's narrower column -- sized to match
+       .settings-modal-title (this modal's own header) rather than the small
+       uppercase .option-pill-label caption, so it reads as a real section
+       title, not a field label. */
+    /* border-bottom (+ matching padding-bottom), not just border-top --
+       #side-panel-layout-row now normally sits directly after this fold
+       (see its own markup comment) and, unlike #two-stage-edit-row further
+       down, has no border-top of its own to mark that boundary -- without
+       this, the two read as one unbroken block whenever the debug-only rows
+       between them are hidden (the normal case). */
+    .settings-fold {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding-top: 16px;
+      padding-bottom: 16px;
+    }
+    .settings-fold > summary {
+      display: flex; align-items: center; gap: 8px;
+      cursor: pointer; user-select: none; list-style: none;
+      font-size: 17px; font-weight: 800; color: var(--text);
+    }
+    .settings-fold > summary::-webkit-details-marker { display: none; }
+    .settings-fold > summary::before {
+      content: '▸'; display: inline-block; font-size: 16px; color: var(--text-2);
+      transition: transform .15s;
+    }
+    .settings-fold[open] > summary::before { transform: rotate(90deg); }
+    .settings-fold > summary:hover { color: var(--accent); }
+    .settings-fold > summary:hover::before { color: var(--accent); }
+    /* Shared "set all" caveat, once per fold instead of repeated on each row
+       below -- now the first item inside the bordered settings list, where
+       its own divider separates it from the four toggle rows. Smaller than
+       the rows' own descriptions so it reads as a distinct aside. */
+    .settings-fold-note { font-size: 13px; }
+    /* Smaller than .option-label's plain 17.5px default -- scoped to just
+       these four rows so every other .option-row elsewhere is untouched. */
+    .settings-fold-body .option-label { font-size: 15px; }
+    /* One bordered, divided list instead of four separately-gapped rows --
+       reads as a single grouped setting (which these four toggles actually
+       are) rather than floating, unrelated options. */
+    .settings-fold-body {
+      margin-top: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .settings-fold-body .option-row + .option-row { border-top: 1px solid var(--border); }
+    .settings-fold-body .settings-fold-note {
+      margin: 0;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    /* Divider between #advanced-settings-fold and the debug-only 兩階段修圖/
+       Editor prompt 架構 rows below it -- same border-top+padding-top shape
+       as .settings-fold's own separator from the pickers above it, so every
+       section in this modal reads consistently. */
+    #two-stage-edit-row { border-top: 1px solid var(--border); padding-top: 16px; }
+    /* .settings-fold-body is the one column that mixes .option-row
+       switches with a picker (笑容程度), and .option-row carries its own
+       16px side padding -- without matching it here the picker's label
+       and trigger sit flush against the modal edge while every switch
+       above them is inset. */
+    .settings-fold-body .option-pill-group { padding: 0 16px; }
+
+    /* #advanced-settings-fold (人像修正設定) re-themed into a pill -- it's one
+       shared node reparented between three homes now (see
+       ensureAdvancedSettingsFoldIn, app.js): #settings-modal-body/
+       #ap-settings-modal-body (still want .settings-fold's plain section
+       look above, full "人像修正設定" text and all) and, by default,
+       #upload-inline-settings-row-2, sitting inline as the same icon+text
+       pill treatment as 分析模型/生成模型/長寬比 above it. The summary keeps
+       both its icon and "人像修正設定" text in the upload context, while the
+       modal homes retain the same plain-text section title. Scoped
+       to .upload-below-zone (which wraps every inline-on-the-upload-page
+       home this fold could be in) rather than that one specific container
+       id, so nudging exactly where within the row it lands doesn't also
+       require touching this. A live CSS descendant selector (not a class
+       toggled by JS) so it re-themes correctly the moment app.js moves it,
+       in either direction, with no extra JS needed. */
+    .upload-below-zone #advanced-settings-fold {
+      border: none;
+      padding: 0;
+      position: relative;
+    }
+    .upload-below-zone #advanced-settings-fold > summary .fold-summary-text { display: inline; }
+    .upload-below-zone #advanced-settings-fold > summary {
+      height: 41px;
+      min-width: 180px;
+      box-sizing: border-box;
+      padding: 0 16px;
+      background: var(--card-2);
+      border: 1px solid var(--border-2);
+      border-radius: 20px;
+      font-size: 15px;
+      justify-content: center;
+      transition: border-color .15s, background .15s, box-shadow .15s, transform .15s;
+    }
+    .upload-below-zone #advanced-settings-fold > summary:hover {
+      border-color: rgba(var(--accent-rgb),.4);
+      transform: translateY(-1px);
+      color: var(--text);
+    }
+    .upload-below-zone #advanced-settings-fold > summary::before { content: none; }
+    .upload-below-zone #advanced-settings-fold > summary::after {
+      content: '▾'; font-size: 19px; color: var(--text-2); transition: transform .15s;
+    }
+    .upload-below-zone #advanced-settings-fold[open] > summary {
+      border-color: var(--accent);
+      background: rgba(var(--accent-rgb),.14);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.14);
+    }
+    .upload-below-zone #advanced-settings-fold[open] > summary::after { transform: rotate(180deg); }
+    /* Opens upward (bottom-anchored), not down from top:100% like the other
+       three pills default to -- this is the settings block's own bottom row
+       (below 分析模型/生成模型/長寬比), close enough to the viewport's bottom
+       edge in practice that a downward panel this tall (note + 4 toggle
+       rows) regularly ran off the bottom of the window. Unlike those three
+       (wireOptionPicker's own JS measures real available space and only
+       flips up when it has to, app.js), this one isn't built through
+       wireOptionPicker -- simplest fix here is just always opening upward,
+       since it's always the bottom-most pill regardless of viewport size. */
+    .upload-below-zone #advanced-settings-fold .settings-fold-body {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 0;
+      z-index: 20;
+      width: 340px;
+      margin-top: 0;
+      background: var(--card-3);
+      border-color: var(--border-2);
+      box-shadow: 0 16px 40px rgba(0,0,0,.55);
+      padding: 6px;
+    }
+    .upload-below-zone #advanced-settings-fold .settings-fold-body .settings-fold-note {
+      padding: 8px;
+    }
+
+    /* #changelog-modal -- a scrollable list of dated entries, each a
+       <details> (see renderChangelog, app.js) so only the newest one is
+       open by default and older ones fold away instead of piling up.
+       Nowhere near as wide as #prompts-modal's tab+content layout needs.
+       max-height instead of a fixed one (unlike .prompts-modal-box) since
+       entry count/length varies and there's no second pane fighting it
+       for a stable height. */
+    .changelog-modal-box { width: min(480px, calc(100vw - 40px)); }
+    .changelog-modal-body {
+      /* Same --header-h + 36px trim as .settings-modal-body above, and for
+         the same reason -- keeps this the only scrollbar inside the modal. */
+      max-height: calc(100vh - var(--header-h) - 196px);
+      overflow-y: auto;
+    }
+    .changelog-entry + .changelog-entry {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+    }
+    .changelog-entry-date {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 8px;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+    .changelog-entry-date::-webkit-details-marker { display: none; }
+    .changelog-entry-date::before {
+      content: "▸";
+      display: inline-block;
+      font-size: 16px;
+      width: 1em;
+      transition: transform 0.15s ease;
+    }
+    .changelog-entry[open] > .changelog-entry-date::before {
+      transform: rotate(90deg);
+    }
+    .changelog-entry:not([open]) > .changelog-entry-date {
+      margin-bottom: 0;
+    }
+    .changelog-entry-list {
+      margin: 0;
+      padding-left: 1.2em;
+      font-size: 14.5px;
+      line-height: 1.7;
+      color: var(--text-2);
+    }
+    .changelog-entry-list li + li { margin-top: 4px; }
+    /* #prompts-modal (see index.html comment above it) -- a left-hand tab
+       strip (one tab per pipeline stage) plus a single content pane that
+       only ever shows whichever one tab is currently selected. */
+    /* Fixed height (not just max-height) -- .prompts-modal-content's own
+       length varies a lot from one tab to the next, and without a pinned
+       height the whole box would resize to fit whichever tab is selected
+       instead of just scrolling internally. Sized as large as the viewport
+       reasonably allows (same 40px margin every other full-size modal here
+       leaves), since this is meant to be read at length, not glanced at. */
+    .prompts-modal-box {
+      width: min(1200px, calc(100vw - 40px));
+      /* Same --header-h + 36px trim as .settings-modal-body's comment above --
+         .error-modal-box's own max-height:100% would otherwise still clip
+         this to a shorter box than the height set here asks for. */
+      height: calc(100vh - var(--header-h) - 76px);
+      display: flex;
+      flex-direction: column;
+    }
+    .prompts-modal-body {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .prompts-modal-tabs {
+      flex: 0 0 200px;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      background: var(--card-2);
+      border-right: 1px solid var(--border);
+    }
+    .prompts-modal-tab {
+      padding: 12px 14px;
+      text-align: left;
+      background: none;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 14.5px;
+      font-weight: 600;
+      color: var(--text-2);
+    }
+    .prompts-modal-tab:last-child { border-bottom: none; }
+    .prompts-modal-tab:hover { color: var(--text); }
+    .prompts-modal-tab.is-active {
+      color: var(--text);
+      background: var(--card);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    /* A stage the pipeline never called GPT for (e.g. crop_validation, which
+       no longer exists as a separate call at all -- see pipeline.py) still
+       gets a tab (so its absence is visible, not just missing), just muted. */
+    .prompts-modal-tab.is-empty { opacity: .5; }
+    .prompts-modal-content {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+      padding: 16px;
+      overflow-y: auto;
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--text-2);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    /* #prompts-modal-image-wrap: the one tab (stage 1 image) that isn't
+       text -- shares .prompts-modal-content's flex slot, toggled via
+       [hidden] instead of sitting side by side with it (see
+       loadPromptsModalImageTab, app.js). position:relative so the two
+       stacked <img> layers and the compare button can lay on top of each
+       other, same idea as .compare-card/.compare-img on the results page. */
+    .prompts-modal-image-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+      background: var(--card-2);
+    }
+    /* object-fit: contain since the source photo's aspect ratio varies per
+       job. Only one layer is ever visible -- .showing-original on the wrap
+       (toggled by #prompts-modal-image-compare-btn) swaps which. */
+    .prompts-modal-image-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .prompts-modal-image-original { display: none; }
+    .prompts-modal-image-wrap.showing-original .prompts-modal-image-layer:not(.prompts-modal-image-original) { display: none; }
+    .prompts-modal-image-wrap.showing-original .prompts-modal-image-original { display: block; }
+    .prompts-modal-image-compare-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 2;
+      height: 30px;
+      padding: 0 12px;
+      font-size: 13px;
+    }
+    /* Single column now that this lives inline in .upload-gallery-col (a
+       narrow sidebar beside the drop zone) instead of #demo-images-modal's
+       wide 3-column grid -- flex:1 (not a fixed max-height) so it fills
+       whatever height .upload-gallery-col actually has (matching the drop
+       zone + settings + Run column beside it) and scrolls internally past
+       that. */
+    .demo-images-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-content: flex-start;
+      gap: 10px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      flex: 1 1 auto;
+      min-height: 0;
+      /* Room for the scrollbar itself so it doesn't sit flush against the
+         tiles (browsers that don't reserve this, e.g. macOS overlay
+         scrollbars, just see a harmless bit of empty space instead). */
+      padding-right: 8px;
+    }
+    /* Square tile via the classic padding-percentage trick (height:0 +
+       padding-top:100%), not aspect-ratio:1/1 -- confirmed against real
+       Safari (Playwright's WebKit build) that its CSS Grid implicit
+       (grid-auto-rows:auto) row-track sizing doesn't correctly measure an
+       aspect-ratio-derived item's block size: the row track undersized
+       itself well below the item's own actual (aspect-ratio-correct) height,
+       so each tile overflowed past its own row into whatever sat below it --
+       every tile individually still measured as a perfect square via
+       getBoundingClientRect(), the rows just didn't leave enough space for
+       that square, so they visually overlapped/spilled into each other.
+       Percentage padding is always resolved against the containing block's
+       WIDTH regardless of axis, a much older and more reliably-implemented
+       piece of the box model than aspect-ratio -- sidesteps the buggy
+       interaction entirely instead of working around it. */
+    .demo-image-tile {
+      position: relative;
+      width: 100%;
+      height: 0;
+      padding-top: 100%;
+      border-radius: var(--radius);
+      overflow: hidden;
+      cursor: pointer;
+      background: var(--card-2);
+      border: 1px solid var(--border-2);
+      transition: border-color .15s, transform .15s;
+    }
+    /* position:absolute + inset:0, not width/height:100% in normal flow --
+       same pattern .history-cube .rc-media already relies on, and required
+       here anyway since the tile's own "content box" is deliberately
+       height:0 above. .demo-image-tile-bg is the same photo again, blurred
+       and scaled up behind it, so a non-square photo's letterbox bars fill
+       with a soft glow of the image itself instead of flat --card-2.
+       The filter/opacity below is the single place this letterbox
+       treatment is defined -- .history-cube-bg (styles.css) carries the
+       same values, and every layout (desktop mosaic, narrow peek strip,
+       and both of those under 卡片散落排列) inherits it rather than
+       overriding it per skin. It deliberately BRIGHTENS past 1 and pulls
+       saturation down before blending: an earlier version darkened to
+       brightness(.65), which is a thin sliver in the mosaic's cover-cropped
+       tiles but becomes real letterbox bars wherever the main image is
+       object-fit: contain -- often a third of the tile on each side -- and
+       a dim, blurred, still fairly saturated photo mixed at partial opacity
+       with a pale grey-blue --card-2 lands on a murky brown-grey with no
+       clean source. Lightening it first means the blend is pale-on-pale, so
+       the opacity is free to tune purely for how much of the theme's own
+       tone shows through. */
+    .demo-image-tile-bg {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; filter: blur(22px) brightness(1.25) saturate(.75);
+      opacity: .5; transform: scale(1.15); display: block;
+    }
+    .demo-image-tile img:not(.demo-image-tile-bg) { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+    .demo-image-tile:hover { border-color: var(--accent); transform: translateY(-2px); }
+    /* Multi-select state (toggleDemoImageSelection, app.js) -- accent border
+       + a translucent tint over the photo itself, same accent-colored
+       treatment .demo-image-tile:hover already uses so "selected" reads as
+       an extension of that, not an unrelated style. */
+    .demo-image-tile.selected { border-color: var(--accent); }
+    .demo-image-tile.selected::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(var(--accent-rgb), .25);
+      pointer-events: none;
+    }
+    /* Checkmark badge -- always in the DOM (so it can transition), only
+       opaque once .selected is added to its own tile. */
+    .demo-image-tile-check {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(9,9,11,.55);
+      border: 1.5px solid rgba(var(--on-surface-rgb),.6);
+      color: #fff;
+      opacity: 0;
+      transition: opacity .15s, background-color .15s, border-color .15s;
+    }
+    .demo-image-tile.selected .demo-image-tile-check {
+      opacity: 1;
+      background: var(--mv-grad);
+      border-color: transparent;
+    }
+    /* Disabled while #demo-images-confirm-btn's own fetch-then-use is in
+       flight (confirmDemoImageSelection, app.js) -- blocks toggling more
+       tiles mid-fetch instead of letting the selection change out from
+       under a request that's already in progress. */
+    .demo-images-grid.is-loading { pointer-events: none; opacity: .6; }
+    /* Tinted with the same accent purple as .demo-image-tile.selected's own
+       border/checkmark (#A855F7, --accent) instead of .btn-secondary's plain
+       gray -- ties the confirm action back to the selection it's acting on,
+       without going all the way to .btn-grad's full CTA treatment (that
+       read as competing with the page's actual primary action, the Run
+       button below the modal). */
+    #demo-images-confirm-btn {
+      background: rgba(var(--accent-rgb), .14);
+      border-color: rgba(var(--accent-rgb), .4);
+      color: var(--on-accent-color);
+    }
+    #demo-images-confirm-btn:hover:not(:disabled) {
+      background: rgba(var(--accent-rgb), .22);
+      border-color: rgba(var(--accent-rgb), .6);
+    }
+    /* Inline in the narrow gallery sidebar now (no modal footer to right-align
+       it for us) -- full width reads better in a single-column column than a
+       flush-right button with empty space beside it. */
+    .upload-gallery-col #demo-images-confirm-btn {
+      width: 100%;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* #report-screenshot-modal -- wider than the plain 440px .error-modal-box
+       (tuned for a message/form), since a captured results panel is a full
+       desktop-width photo+panels layout, not a single square tile. */
+    .report-screenshot-modal-box { width: min(900px, calc(100vw - 40px)); }
+    .report-screenshot-modal-body {
+      max-height: 78vh;
+      overflow: auto;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card-2);
+    }
+    .report-screenshot-modal-body img { display: block; width: 100%; height: auto; }
+
+    /* #notice-modal's title reuses .logo's own wordmark treatment (Photo in
+       the plain text color, Master in the brand gradient) instead of
+       #error-modal-title's red "failure" styling, since this popup reports
+       something the user needs to act on, not something that went wrong. */
+    .notice-modal-title { font-size: 17px; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
+    .notice-modal-title em {
+      font-style: normal; background: var(--mv-grad);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .notice-modal-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 16px; }
+    /* A bit more compact than the shared .btn-sm default -- this row can hold
+       up to three buttons (維持現況/重新分析/重新一鍵美化), so trims each
+       one's own padding/font-size rather than inheriting the taller size
+       meant for a lone single button. */
+    .notice-modal-actions .btn {
+      height: 34px;
+      padding: 0 12px;
+      font-size: 14.5px;
+      border-radius: 9px;
+    }
+    /* Below this, even the trimmed row above can't fit three buttons without
+       squeezing text unreadably small -- stack full-width instead so each
+       stays comfortably tappable. */
+    @media (max-width: 420px) {
+      .notice-modal-actions { flex-direction: column-reverse; gap: 8px; }
+      .notice-modal-actions .btn { width: 100%; height: 38px; font-size: 15px; }
+    }
+    #notice-modal-msg { font-size: 18px; white-space: pre-line; }
+
+    /* ── Account badge/modal/history (account.js + app.js) ── */
+    /* Hidden outright (not via the "hidden" attribute JS toggles based on
+       account state, applyAccountUi -- an id-selector rule always beats the
+       browser's own [hidden]{display:none} UA rule, so this stays hidden
+       unconditionally regardless of what applyAccountUi sets). The
+       underlying account/login logic is untouched -- this only hides the
+       entry points into it. */
+    #register-account-btn, #history-logout-btn { display: none; }
+    /* #register-account-btn keeps its text label at every width, unlike
+       #reload-batch-btn/#reset-btn (icon+label, moved down into
+       #header-actions-secondary under 900px instead, see
+       setupCompactHeaderActions in app.js, so they can show their own label
+       again). setupCompactHeaderActions moves this button along with them,
+       but the id selector below already outranked ".header-actions
+       .btn-label {display:none}" (styles.css) regardless of which of the
+       two rows it's currently sitting in, so the move itself changes
+       nothing about its own label. Also sizes it down to match
+       #account-badge's own compact footprint rather than a full .btn-sm,
+       since this is a low-priority utility action next to the logo. */
+    #register-account-btn.btn {
+      height: 32px;
+      padding: 0 14px;
+      gap: 6px;
+      font-size: 13px;
+    }
+    #register-account-btn .btn-label { display: inline; }
+    #register-account-btn svg { width: 12px; height: 12px; }
+    /* #reset-btn sits right next to #account-badge (last in .header-actions
+       now) -- sized down to the same compact footprint, same pattern as
+       #register-account-btn just above, plus the same 999px pill radius
+       #account-badge itself uses (.btn-sm's own 10px would otherwise still
+       show, since height/padding/gap/font-size aren't the only things that
+       differ). This sizing applies wherever #reset-btn currently sits --
+       .header-actions or, under 900px, #header-actions-secondary (see
+       setupCompactHeaderActions, app.js) -- since it's an always-on id
+       selector, not scoped to either row. */
+    #reset-btn.btn {
+      height: 32px;
+      padding: 0 14px;
+      gap: 6px;
+      font-size: 13px;
+      border-radius: 999px;
+    }
+    /* #report-btn skips both .btn-grad (too loud a treatment for a
+       secondary utility action, not the primary CTA it was designed for)
+       and plain .btn-secondary (would blend in with every other neutral
+       header button) -- a tinted outline instead, worth a second look
+       without shouting. Compact-pill sizing override, same reasons as
+       #reset-btn above. #report-btn-spacer (index.html) shares this rule so
+       it always renders at exactly the same size as the real button it's
+       standing in for. */
+    #report-btn.btn,
+    #report-btn-spacer.btn {
+      height: 32px;
+      padding: 0 14px;
+      gap: 6px;
+      font-size: 13px;
+      border-radius: 999px;
+      background: var(--card-2);
+      color: var(--accent);
+      border: 1px solid rgba(var(--accent-rgb),.4);
+    }
+    #report-btn:hover {
+      background: rgba(var(--accent-rgb),.12);
+      border-color: rgba(var(--accent-rgb),.6);
+    }
+    /* Invisible but still fully laid out (visibility:hidden, not
+       display:none/hidden) -- #report-btn-spacer's only job is to occupy
+       its flex slot in .header-actions exactly as if the real button were
+       still there, so #reset-btn/#header-settings-btn/#admin-reports-btn/
+       #account-badge line up the same way regardless of #report-btn itself
+       being a fixed-position element elsewhere. syncReportBtnPosition
+       (app.js) reads its live position on load and on resize. */
+    #report-btn-spacer { visibility: hidden; pointer-events: none; }
+    /* Pinned to the viewport at a z-index above every modal/drawer in this
+       file (highest otherwise is 1002, #confirm-modal/#report-screenshot-
+       modal). Its markup lives as a sibling of <header>, not a descendant
+       (see index.html) -- .site-header has its own backdrop-filter, and
+       per spec that makes it the CONTAINING BLOCK for any position:fixed
+       descendant instead of the viewport, which traps that descendant
+       inside .site-header's own stacking context (z-index:100) regardless
+       of its own z-index here. Escaping <header> entirely is what makes
+       z-index:2000 actually win against a modal appended as a true
+       body-level sibling (e.g. a dynamically-launched one like
+       #changelog-modal), and also means #history-drawer/#reports-drawer
+       opening (both start below the header) never reaches it either.
+
+       top/left aren't set here -- being outside .header-actions' own flex
+       flow now (fixed elements never participate in layout, wherever they
+       sit in the DOM), this button has no natural position of its own
+       anymore. syncReportBtnPosition (app.js) copies #report-btn-spacer's
+       live getBoundingClientRect() onto these as inline styles instead, so
+       it always renders exactly where that reserved slot is.
+
+       visibility starts hidden for the same reason -- with no top/left set
+       yet, a position:fixed element with no offsets renders at its own
+       static-flow position (here, flush against the left edge, right after
+       <header> in the DOM) until JS runs, so it would otherwise flash
+       there first and visibly jump to the right corner once
+       syncReportBtnPosition's first call lands. That same function flips
+       this back to visible once it's actually positioned correctly. */
+    #report-btn {
+      position: fixed;
+      z-index: 2000;
+      visibility: hidden;
+    }
+    /* #header-settings-btn sits in the same row (right after #account-badge,
+       the row's last child) -- same compact-pill override as #reset-btn
+       above, same reasons. #changelog-btn (right before it in the row) and
+       #theme-toggle-btn (last in the row, beside #report-btn-spacer) share
+       the same override so all three read as the same size/shape pill
+       instead of falling back to a taller, square .btn-sm. */
+    #header-settings-btn.btn,
+    #changelog-btn.btn,
+    #theme-toggle-btn.btn {
+      height: 32px;
+      padding: 0 14px;
+      gap: 6px;
+      font-size: 13px;
+      border-radius: 999px;
+    }
+    /* #admin-reports-btn sits in the same row (right before #account-badge)
+       -- same compact-pill override as #reset-btn just above, same reasons. */
+    #admin-reports-btn.btn {
+      height: 32px;
+      padding: 0 14px;
+      gap: 6px;
+      font-size: 13px;
+      border-radius: 999px;
+    }
+    .account-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 32px;
+      padding: 0 14px;
+      border-radius: 999px;
+      background: var(--card-2);
+      border: 1px solid var(--border-2);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-2);
+      cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+    .account-badge svg { flex-shrink: 0; }
+    .account-badge:hover { background: var(--card); border-color: var(--border); }
+    .account-badge:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .account-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .account-modal-input {
+      width: 100%;
+      box-sizing: border-box;
+      height: 42px;
+      margin-top: 12px;
+      padding: 0 14px;
+      border-radius: var(--radius);
+      border: 1.5px solid var(--border-2);
+      background: var(--card-2);
+      color: var(--text);
+      font-size: 15px;
+    }
+    .account-modal-input:focus { outline: none; border-color: var(--accent); }
+    .account-modal-error {
+      margin: 8px 0 0;
+      font-size: 13.75px;
+      color: var(--red);
+    }
+    /* #report-modal's two labeled fields -- .account-modal-input/-actions/
+       -error above are reused as-is for the name input and its error line;
+       only the label and the new textarea need their own rules. */
+    .report-modal-label {
+      display: block;
+      margin-top: 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-2);
+    }
+    .report-modal-label:first-of-type { margin-top: 12px; }
+    .report-modal-textarea {
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 84px;
+      margin-top: 6px;
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      border: 1.5px solid var(--border-2);
+      background: var(--card-2);
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      resize: vertical;
+    }
+    .report-modal-textarea:focus { outline: none; border-color: var(--accent); }
+    /* Houses the screenshot section's own label + its on-demand capture
+       trigger side by side, instead of stacking the button under the label
+       like every other field in this sheet -- the label here doesn't own a
+       form control of its own to sit above. */
+    .report-modal-screenshot-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .report-modal-screenshot-row .report-modal-label { margin-top: 0; }
+    .report-modal-screenshot-capture-btn {
+      flex: none;
+      padding: 4px 12px;
+      border-radius: 999px;
+      border: 1.5px solid var(--border-2);
+      background: var(--card-2);
+      color: var(--text-2);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .report-modal-screenshot-capture-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .report-modal-screenshot-capture-btn:disabled { opacity: 0.6; cursor: default; }
+    /* Sits between the capture-trigger row and the (normally hidden)
+       preview box below -- covers the "capturing" and "capture failed"
+       states, both of which have no image to show yet. */
+    .report-modal-screenshot-status { margin: 8px 0 0; font-size: 13px; color: var(--text-3); }
+    /* Compact preview strip -- #report-modal-box stays the plain 440px
+       .error-modal-box (sized for a form, not a photo), so this is a small
+       thumbnail rather than the admin side's full-size #report-screenshot-
+       modal-box. Stays hidden (see its markup) until a captured image is
+       actually ready, rather than reserving this height as an empty
+       placeholder the whole time. */
+    .report-modal-screenshot {
+      position: relative;
+      margin-top: 12px;
+      height: 120px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    /* Same floating-glass icon-button language as .canvas-btn (the
+       compare/fullscreen overlays on the results canvas), scaled down to
+       fit this strip's 120px height. Hidden until hovered/focused so it
+       doesn't compete with the preview image at rest -- deleting is the
+       only way back to #report-modal-screenshot-capture-btn once a capture
+       has succeeded (see handleReportModalScreenshotCapture, app.js). */
+    .report-modal-screenshot-delete-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: 1px solid rgba(var(--on-surface-rgb),.16);
+      border-radius: 50%;
+      background: rgba(9,9,11,.55);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: #fff;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity .15s, background .15s, border-color .15s;
+    }
+    .report-modal-screenshot:hover .report-modal-screenshot-delete-btn,
+    .report-modal-screenshot-delete-btn:focus-visible {
+      opacity: 1;
+    }
+    .report-modal-screenshot-delete-btn:hover {
+      background: rgba(239,68,68,.6);
+      border-color: rgba(239,68,68,.75);
+    }
+    .report-modal-screenshot-preview-btn {
+      display: block;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      border: none;
+      background: none;
+      cursor: zoom-in;
+    }
+    .report-modal-screenshot-preview-btn img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      /* contain (not cover) -- this is a confirmation preview of exactly
+         what's about to be sent, so it should show the whole capture
+         scaled to fit, not crop away whatever doesn't fit the strip's
+         fixed height. */
+      object-fit: contain;
+    }
+
+    /* ── Processing history: a slide-in drawer, not a full screen -- opened
+       over whatever's currently showing (upload/processing/results) via
+       openHistoryDrawer/closeHistoryDrawer (app.js), same
+       backdrop+close-button shape as .batch-sidebar's own narrow-viewport
+       drawer. Unlike that one, this is a drawer at every viewport width, not
+       just narrow ones -- History was never meant to replace the whole
+       page, just a panel the user glances at and dismisses. ── */
+    .history-drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0,0,0,.55);
+      display: none;
+    }
+    .history-drawer-backdrop.drawer-open { display: block; }
+    .history-drawer {
+      position: fixed;
+      top: var(--header-h);
+      right: 0;
+      bottom: 0;
+      width: min(420px, 90vw);
+      z-index: 1001;
+      background: var(--card);
+      border-left: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      /* Extra bottom room (vs. the uniform 20px everywhere else) so
+         #history-logout-btn -- absolutely positioned against this box, not
+         part of the scrolling flow -- never sits on top of the last row of
+         #history-list/#history-empty's own text. */
+      padding: 20px 20px 64px;
+      overflow-y: auto;
+      transform: translateX(100%);
+      transition: transform .25s ease;
+    }
+    .history-drawer.drawer-open { transform: translateX(0); }
+    /* Anchored to .history-drawer's own box (its nearest positioned
+       ancestor, itself position:fixed) rather than scrolling with
+       #history-list/#history-empty -- stays pinned at the drawer's visual
+       bottom-right corner no matter how far the list is scrolled. Sized down
+       from the default .btn-sm (38px) to the same compact 32px footprint
+       #account-badge/#reset-btn already use in the header -- this is a
+       low-priority utility action in the corner of a drawer, not a primary
+       action, so it shouldn't be the biggest thing in view. */
+    .history-logout-btn {
+      position: absolute;
+      right: 20px;
+      bottom: 20px;
+      z-index: 1;
+      height: 32px;
+      padding: 0 14px;
+      gap: 6px;
+      font-size: 13px;
+    }
+    .history-logout-btn svg { width: 12px; height: 12px; }
+    .history-drawer-close-btn {
+      position: absolute;
+      top: 20px;
+      right: 6px;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 999px;
+      background: var(--card-2);
+      color: var(--text-2);
+      cursor: pointer;
+    }
+    .history-drawer-close-btn:hover { color: var(--text); }
+    @media (max-width: 1200px) {
+      .history-drawer {
+        top: 50%; right: auto; bottom: auto; left: 50%;
+        width: min(560px, calc(100vw - 28px));
+        max-height: min(720px, calc(100vh - 40px));
+        border: 1px solid var(--border); border-radius: 22px;
+        transform: translate(-50%, -46%) scale(.97);
+        opacity: 0; pointer-events: none;
+        transition: transform .25s ease, opacity .2s ease;
+      }
+      .history-drawer.drawer-open {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1; pointer-events: auto;
+      }
+    }
+    /* Recent Photos is a modal, not a side drawer. Keep it centered on every
+       viewport while leaving the admin reports drawer unchanged. */
+    #history-drawer {
+      top: 50%;
+      right: auto;
+      bottom: auto;
+      left: 50%;
+      width: min(560px, calc(100vw - 28px));
+      height: min(560px, 70vh);
+      max-height: calc(100vh - 80px);
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      transform: translate(-50%, -46%) scale(.97);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform .25s ease, opacity .2s ease;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #history-drawer.drawer-open {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #history-drawer .history-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      flex: 0 0 auto;
+      background: var(--card);
+    }
+    #history-drawer .history-drawer-close-btn {
+      top: 11px;
+      right: 11px;
+      width: 36px;
+      height: 36px;
+      z-index: 5;
+    }
+    #history-drawer .history-drawer-close-btn svg {
+      width: 19px;
+      height: 19px;
+    }
+    #history-drawer .history-list {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: 4px;
+      scrollbar-width: thin;
+    }
+    /* rows reuse .batch-sidebar-item/.rc-media/.rc-badge (defined above,
+       batch sidebar) for the same thumbnail+badge look, just laid out
+       full-width instead of in a 280px column. */
+    .history-header {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 20px;
+      /* Room for .history-drawer-close-btn (30px, inset 6px), same reasoning
+         as .batch-sidebar-header's own padding-right. */
+      padding-right: 36px;
+    }
+    .history-header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .history-header-actions { display: flex; align-items: center; gap: 8px; }
+    /* Count badge inside #history-download-selected-btn -- empty (no count
+       shown) whenever nothing's selected yet, filled in by
+       updateHistoryDownloadSelectedBtn (app.js). */
+    .history-download-selected-btn { display: inline-flex; align-items: center; gap: 4px; }
+    .history-download-selected-btn:disabled { opacity: .5; cursor: not-allowed; }
+    /* Browser-default <h2> sizing (~1.5em+) left too little room next to
+       #history-clear-all-btn at the drawer's narrowest width (min(420px,
+       90vw)) -- "處理紀錄" wrapped mid-word into two lines instead of
+       shrinking to fit, since CJK text wraps between any two characters with
+       no whitespace needed. Fixed, smaller size + nowrap so the (always-
+       short, 4-char) title never wraps. */
+    .history-header h2 {
+      font-size: 20px;
+      margin: 0;
+      white-space: nowrap;
+    }
+    #history-clear-all-btn.btn {
+      height: 28px;
+      width: 28px;
+      padding: 0;
+      gap: 0;
+      flex-shrink: 0;
+    }
+    /* Red hover hint on the trash icon, same "this is destructive" cue as
+       .history-cube-remove:hover on each individual tile's own × button. */
+    #history-clear-all-btn.btn:hover {
+      color: #fff;
+      background: rgba(178,42,42,.9);
+      border-color: rgba(178,42,42,.9);
+    }
+    /* Same 28px footprint as #history-clear-all-btn above -- icon-only, so
+       it's the same tight square rather than the default .btn-sm's taller,
+       text-oriented sizing. */
+    #history-select-btn.btn {
+      height: 28px;
+      width: 28px;
+      padding: 0;
+      gap: 0;
+      flex-shrink: 0;
+    }
+    /* #history-select-cancel-btn/#history-download-selected-btn carry a text
+       label/count next to their icon, so they keep an auto width -- only the
+       height/padding/font-size are pulled down to match the 28px row the
+       icon-only buttons above set, so all four line up on the same
+       horizontal band regardless of which pair is showing. */
+    #history-select-cancel-btn.btn,
+    #history-download-selected-btn.btn {
+      height: 28px;
+      padding: 0 10px;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    #history-download-selected-btn.btn svg { width: 12px; height: 12px; }
+    /* Icon-only, same 28x28 square as #history-select-btn/
+       #history-clear-all-btn -- and the same destructive red hover as
+       #history-clear-all-btn, since this is the same kind of action just
+       scoped to the current selection. */
+    #history-delete-selected-btn.btn {
+      height: 28px;
+      width: 28px;
+      padding: 0;
+      gap: 0;
+      flex-shrink: 0;
+    }
+    #history-delete-selected-btn.btn:hover:not(:disabled) {
+      color: #fff;
+      background: rgba(178,42,42,.9);
+      border-color: rgba(178,42,42,.9);
+    }
+    /* Its own full-width subtitle line below .history-header-top now (not
+       squeezed into the same row as the title/button) -- still truncates
+       rather than wraps, for the rare case of a username wider than the
+       drawer itself. */
+    .history-current-user {
+      display: block;
+      font-size: 14px;
+      color: var(--text-3);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* Keep the title on its own row, then align the account context and
+       history actions on the row directly below it. The existing DOM stays
+       compatible with the history action handlers while display:contents
+       lets both controls participate in the same grid row. */
+    #history-drawer .history-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      column-gap: 12px;
+      row-gap: 4px;
+    }
+    #history-drawer .history-header-top {
+      display: contents;
+    }
+    #history-drawer .history-header-top h2 {
+      grid-column: 1 / -1;
+      grid-row: 1;
+    }
+    #history-drawer .history-current-user {
+      grid-column: 1;
+      grid-row: 2;
+      min-width: 0;
+    }
+    #history-drawer .history-header-actions {
+      grid-column: 2;
+      grid-row: 2;
+      justify-self: end;
+    }
+    /* One heading + grid per calendar day (see formatHistoryDayLabel/
+       renderHistoryList, app.js) -- .history-list itself just stacks the
+       day-groups, each of which owns its own heading + grid. */
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .history-day-heading {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-2);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin: 0 0 10px;
+    }
+    /* Cube tiles instead of the old full-width rows -- a fixed 3 columns
+       (not auto-fill) so the row count stays consistent even at the
+       drawer's own narrowest width (90vw on a small phone). */
+    .history-grid {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    /* Layers the square/grid-cell layout on top of batch-sidebar-item's own
+       status-driven styling (also applied to every .history-cube -- see
+       renderHistoryList) -- done/error/processing colors and dimming are
+       reused as-is, not duplicated here. */
+    .history-cube {
+      position: relative;
+      isolation: isolate;
+      aspect-ratio: 1 / 1;
+      border-radius: var(--radius);
+      overflow: hidden;
+      cursor: pointer;
+      background: var(--card-2);
+      box-shadow: var(--shadow-sm);
+    }
+    .history-cube .rc-media {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 0;
+      z-index: 0;
+    }
+    /* Overlaid on the photo's bottom-left corner instead of sitting beside
+       it (the old row layout's own arrangement) -- a cube has no room for
+       the badge next to the thumbnail. */
+    .history-cube .rc-badge {
+      position: absolute;
+      left: 6px;
+      bottom: 6px;
+      max-width: calc(100% - 12px);
+      z-index: 3;
+      background: rgba(9,9,11,.65);
+      /* Fixed light text to match the fixed-dark background above -- this
+         badge overlays a photo thumbnail, so unlike the sidebar's plain
+         .rc-badge (background: rgba(var(--on-surface-rgb),.12); color:
+         var(--text-2);) it can't let color track --text-2, which flips dark
+         in the paper/peach themes and would go unreadable on this backdrop. */
+      color: #fff;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    /* A history case whose analysis is below the current compatibility floor
+       remains viewable/downloadable and can be reprocessed with the current
+       version. Keep the refresh paths inset from the SVG bounds so the full
+       circular icon remains visible at this badge's small size. */
+    .batch-sidebar-item.archived .rc-badge::before {
+      content: "";
+      width: 14px;
+      height: 14px;
+      background: currentColor;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 11a8 8 0 1 0-2.34 5.66'/%3E%3Cpath d='M20 4v7h-7'/%3E%3C/svg%3E") center / contain no-repeat;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 11a8 8 0 1 0-2.34 5.66'/%3E%3Cpath d='M20 4v7h-7'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    .history-cube.batch-sidebar-item.archived .rc-badge {
+      background: rgba(75,75,85,.72);
+      border: 1px solid rgba(210,210,220,.5);
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,.6);
+    }
+    /* Top-right corner, opposite the badge (bottom-left) -- deletes just
+       this history entry (see handleDeleteHistoryEntry, app.js); the job(s)
+       it points to aren't touched, only the history pointer. Always visible
+       (not hover-revealed like .dz-thumb-remove) since these tiles are small
+       enough that a hover-only target would be hard to find/hit. */
+    .history-cube-remove {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      z-index: 4;
+      width: 20px;
+      height: 20px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      color: #fff;
+      font-size: 13px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+      transition: background .15s, transform .15s;
+    }
+    .history-cube-remove:hover { background: rgba(220,60,60,.85); transform: scale(1.08); }
+    /* Multi-select checkbox overlay (toggleHistorySelection, app.js) -- same
+       always-in-DOM/opacity-toggled checkmark badge as .demo-image-tile-check
+       above, reused here instead of duplicated styling. Only interactive on
+       tiles the list has marked .selectable (i.e. a finished job -- nothing
+       to download yet for a still-processing/failed one), and only visible
+       at all while #history-list carries .select-mode. */
+    .history-cube-check {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      z-index: 5;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(9,9,11,.55);
+      border: 1.5px solid rgba(var(--on-surface-rgb),.6);
+      color: #fff;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .15s, background-color .15s, border-color .15s;
+    }
+    /* The checkmark glyph itself stays invisible until .selected -- an
+       unselected-but-selectable tile shows only the empty circle outline
+       (an unchecked checkbox), not a checkmark that reads as already
+       picked. */
+    .history-cube-check svg { opacity: 0; transition: opacity .15s; }
+    .history-list.select-mode .history-cube.selectable .history-cube-check {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .history-cube.selected .history-cube-check svg { opacity: 1; }
+    .history-cube.selected .history-cube-check {
+      background: var(--mv-grad);
+      border-color: transparent;
+    }
+    .history-cube.selected { box-shadow: 0 0 0 2px var(--accent) inset; }
+    /* .history-cube-remove would otherwise still sit on top of (and can be
+       hit alongside) the checkbox while selecting -- select mode is purely
+       about picking a download subset, not deleting, so the remove button
+       steps aside entirely for the duration. */
+    .history-list.select-mode .history-cube-remove { display: none; }
+    /* Non-selectable tiles (still processing/failed -- no result to
+       download) dim and stop intercepting clicks while selecting, same
+       .processing dim treatment as elsewhere in this drawer. */
+    .history-list.select-mode .history-cube:not(.selectable) {
+      opacity: .5;
+      pointer-events: none;
+    }
+    /* Keep the loading indicator above the main image layer. The homepage
+       reuses the same cube markup as the history drawer, but its portrait
+       image explicitly sits at z-index:1, which otherwise paints over this
+       absolutely-positioned spinner. */
+    .history-cube .rc-media .rc-spinner { z-index: 2; }
+    .history-empty { color: var(--text-3); font-size: 15px; }
+    /* #reports-drawer's own list -- plain rows (not the day-grouped cube
+       grid #history-list uses) since reports have no per-day grouping and
+       carry a username instead of a status badge. */
+    .reports-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .report-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px;
+      border-radius: var(--radius);
+      background: var(--card-2);
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .report-item:hover { background: var(--border); }
+    /* A general (job-less) report has nothing for the row's own click to
+       open -- see renderReportsList, app.js -- so it drops the pointer
+       cursor/hover highlight that implies there's somewhere to go. */
+    .report-item.is-static { cursor: default; }
+    .report-item.is-static:hover { background: var(--card-2); }
+    .report-item-thumb {
+      flex-shrink: 0;
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--card);
+    }
+    .report-item-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .report-item-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .report-item-user {
+      font-size: 14px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .report-item-meta { font-size: 12px; color: var(--text-3); }
+    .report-item-note {
+      font-size: 12.5px;
+      color: var(--text-2);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* A <button> (opens #report-screenshot-modal in-app), not an <a> -- reset
+       the native button chrome so it still just reads as a plain text link. */
+    .report-item-screenshot-link {
+      font: inherit;
+      font-size: 12.5px;
+      color: var(--accent);
+      background: none;
+      border: none;
+      padding: 0;
+      text-decoration: none;
+      width: fit-content;
+      cursor: pointer;
+    }
+    .report-item-screenshot-link:hover { text-decoration: underline; }
+    /* Pinned to the row's far right via margin-left: auto (unlike
+       .history-cube-remove's absolute corner overlay -- .report-item is a
+       plain flex row, not a relatively-positioned tile). Always visible,
+       same reasoning as .history-cube-remove: no hover state to reveal it
+       on touch devices. */
+    .report-item-remove {
+      flex-shrink: 0;
+      margin-left: auto;
+      width: 22px;
+      height: 22px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0,0,0,.3);
+      color: var(--text-3);
+      font-size: 14px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+      transition: background .15s, color .15s, transform .15s;
+    }
+    .report-item-remove:hover { background: rgba(220,60,60,.85); color: #fff; transform: scale(1.08); }
+    /* Triage state, cycled by its own click (unread -> read -> solved ->
+       unread; see nextReportStatus/setReportStatus, app.js) -- same pill
+       shape as .rc-badge but its own class since colors differ. Sits
+       between .report-item-info and .report-item-remove, not pushed to the
+       far edge like the remove button. */
+    .report-item-status {
+      flex-shrink: 0;
+      border: none;
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .report-item-status:hover { opacity: .8; }
+    .report-item-status.status-unread { background: rgba(37,99,235,.18); color: var(--blue); }
+    .report-item-status.status-read { background: rgba(var(--on-surface-rgb),.12); color: var(--text-3); }
+    .report-item-status.status-solved { background: rgba(1,179,123,.22); color: var(--green); }
+    /* Same compact icon-square as #history-clear-all-btn -- sits in
+       .history-header-top next to "回報案件", reloads the list on demand
+       (see refreshReportsList, app.js) so an admin doesn't have to close
+       and reopen the drawer to see reports a background poll has already
+       flagged via .has-report-alert below. */
+    #reports-refresh-btn.btn {
+      height: 28px;
+      width: 28px;
+      padding: 0;
+      gap: 0;
+      flex-shrink: 0;
+    }
+    /* Small red dot for "there's a report you haven't seen yet" (see
+       setNewReportsAlert, app.js) -- toggled onto #admin-reports-btn while
+       the drawer is closed, or onto #reports-refresh-btn while it's open,
+       never both at once. The border punches a ring in the dot the same
+       color as the page background, so it reads as a notch cut out of the
+       button rather than a dot merely overlapping its edge. */
+    .has-report-alert { position: relative; }
+    .has-report-alert::after {
+      content: "";
+      position: absolute;
+      top: -3px;
+      right: -3px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #f43f5e;
+      border: 2px solid var(--bg);
+    }
+
+    /* Centered toast shown while a download zip is being assembled --
+       buildZip fetches each result image over the network before zipping,
+       which is otherwise invisible/silent for a batch with many images. */
+    .download-progress-toast {
+      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      z-index: 900;
+      display: flex; flex-direction: column; gap: 8px;
+      min-width: 240px; padding: 14px 18px;
+      background: var(--card); border: 1px solid var(--border-2);
+      border-radius: var(--radius); box-shadow: var(--shadow-lg);
+    }
+    .download-progress-toast[hidden] { display: none; }
+
+    /* Shown by update-check.js when /api/version reports a newer frontend or
+       worker build than the one this page loaded with. */
+    .update-banner {
+      position: fixed; left: 50%; top: 16px; transform: translateX(-50%);
+      z-index: 950;
+      display: flex; align-items: center; gap: 14px;
+      max-width: calc(100vw - 32px);
+      padding: 10px 16px;
+      background: var(--card); border: 1px solid var(--border-2);
+      border-radius: var(--radius-sm); box-shadow: var(--shadow-lg);
+    }
+    .update-banner[hidden] { display: none; }
+    .update-banner-text { font-size: 13px; color: var(--text); }
+    .update-banner-refresh {
+      flex-shrink: 0; padding: 6px 14px; border: none; border-radius: 999px;
+      background: var(--mv-grad); color: var(--n100); font-size: 13px; font-weight: 600;
+      cursor: pointer;
+    }
+    .update-banner-refresh:hover { opacity: .9; }
+    .download-progress-label { font-size: 13px; color: var(--text-2); text-align: center; }
+    .download-progress-track {
+      height: 6px; border-radius: 999px; background: var(--card-2); overflow: hidden;
+    }
+    .download-progress-fill {
+      height: 100%; width: 0%; border-radius: inherit;
+      background: var(--mv-grad); transition: width .2s ease;
+    }
+    /* ── Batch main-area loading/error placeholder and pre-edit review slot
+       (analyzing/processing/error and "analyzed, awaiting review" states) ──
+       Same .proc-visual/.think-ring/.proc-text markup+classes as the
+       single-image processing screen (styles.css) -- only this wrapper and
+       the error variant are batch-specific. */
+    .batch-main-loading {
+      display: flex; align-items: center; gap: 56px;
+      min-height: 320px; padding: 40px 0;
+    }
+    #batch-main-loading-title { font-size: clamp(24px, 2.6vw, 32px); }
+    /* Error: freeze the rings instead of spinning them (nothing is actually
+       "thinking"), and let the thumb show plainly, same treatment
+       .proc-visual.done uses for "analysis complete, ready" in the single-image
+       flow -- just red-tinted since this is a failure, not a pause. */
+    .batch-main-loading.is-error .think-ring { opacity: 0; animation-play-state: paused; }
+    .batch-main-loading.is-error .think-center { inset: 0; border-radius: 14px; background: none; }
+    .batch-main-loading.is-error .proc-thumb { border-radius: 14px; object-fit: contain; opacity: .5; }
+    .batch-main-loading.is-error .proc-eyebrow { color: var(--red); }
+    .batch-main-loading.is-error #batch-main-loading-title { color: var(--red); }
+    @media (max-width: 900px) {
+      .batch-main-loading { flex-direction: column; text-align: center; gap: 32px; }
+    }
+
+    @media (max-width: 900px) {
+      .results-body { flex-direction: column; }
+      /* Off-canvas drawer instead of the old "full-width, stacked above
+         #results-detail" layout -- that used to push the actual working
+         area (the swirl/compare card) below however many rows the batch
+         list needed, which grew with the batch size. Toggled open/closed
+         via openBatchDrawer/closeBatchDrawer in app.js (.drawer-open),
+         triggered by #batch-drawer-trigger; only relevant while
+         #results-body has "batch-mode" (single-image runs never show the
+         trigger, see the .batch-drawer-trigger rule above). */
+      .batch-sidebar {
+        /* top: var(--header-h) (not 0) -- sits below the sticky
+           .site-header/.header-inner, same as .batch-drawer-trigger, rather
+           than sliding out from underneath it. */
+        position: fixed; top: var(--header-h); left: 0; bottom: 0;
+        /* min(220px, 68vw) (was min(320px, 85vw), then min(260px, 78vw)) --
+           still read as covering most of the screen at typical phone
+           widths; narrowed again so the backdrop clearly reads as the
+           dominant surface with the drawer as a slim overlay panel. */
+        width: min(220px, 68vw); flex-basis: auto;
+        /* Cancels updateBatchSidebarMaxHeight's own inline max-height AND
+           height (app.js) -- this drawer variant is already sized top:0
+           bottom:0 (fixed), so an inline height would otherwise override
+           that computed top-to-bottom span with whatever fixed pixel value
+           JS last measured against the desktop layout. */
+        max-height: none !important; height: auto !important; margin-top: 0;
+        border-radius: 0; border-width: 0 1px 0 0;
+        z-index: 1001;
+        transform: translateX(-100%);
+        transition: transform .25s ease;
+      }
+      .batch-sidebar.drawer-open { transform: translateX(0); }
+      .results-body.batch-mode .batch-drawer-trigger { display: inline-flex; }
+      .batch-sidebar-close-btn { display: flex; }
+      .batch-sidebar-backdrop {
+        /* Matches .batch-sidebar's own top offset -- the header stays
+           unobscured (and clickable) while the drawer is open. */
+        top: var(--header-h);
+      }
+      .batch-sidebar-backdrop.drawer-open { display: block; }
+      /* Room for .batch-sidebar-close-btn (30px, inset 14px from the aside's
+         edge) so a long "全部下載" label never runs underneath it. */
+      .batch-sidebar-header { padding-right: 36px; }
+      /* Shrink the thumbnail so .batch-sidebar-text/.rc-badge get a bit more
+         of the drawer's already-tight width (min(220px, 68vw)) -- otherwise
+         a longer status string (e.g. "完成 (3/3)" for a multi-RUN image)
+         has too little room before its ellipsis kicks in.
+         :not(.history-cube) -- .batch-sidebar-item is also reused on every
+         .history-cube grid tile (renderHistoryList, app.js), whose own
+         .rc-media is absolutely positioned to fill the whole square tile
+         (inset:0, width/height:100%); this fixed 40x40 box would collapse
+         that photo into a tiny corner instead of the intended full square. */
+      .batch-sidebar-item:not(.history-cube) .rc-media { width: 40px; height: 40px; flex: 0 0 40px; }
+    }
+
+    .batch-continue-all-btn { width: 100%; justify-content: center; margin-bottom: 18px; }
+    .batch-lock-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 10px;
+      font-size: 11.5px;
+      font-weight: 400;
+      color: var(--text-3);
+      cursor: pointer;
+      user-select: none;
+    }
+    .batch-lock-toggle input { margin: 0; }
+
+    /* ── 補充指令 label row: label + "overwrite" checkbox inline ── */
+    .ap-prompt-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .ap-prompt-label-row .prompt-overwrite-toggle { margin-bottom: 0; }
+    /* Dim/disable just the option list when locked -- the lock-toggle above
+       it must stay clickable so the user can actually unlock it. */
+    .ap-style-item.is-locked .step-inline-list { opacity: .45; pointer-events: none; }
+    .ap-style-item.is-locked > .ap-style-trigger { opacity: .7; }
+    /* Applied by applyPickerSingleOptionState (app.js) once debug-only
+       candidates are filtered out and a single visible <option> is left --
+       nothing to pick, so drop the dropdown arrow and disable the trigger
+       entirely instead of opening a panel with one, already-selected row. */
+    .ap-style-item.is-single-option > .ap-style-trigger { pointer-events: none; cursor: default; opacity: .7; }
+    .ap-style-item.is-single-option > .ap-style-trigger::after { content: none; }
+  </style>
+  <script type="module" crossorigin src="./static/index-CKNZnoD6.js"></script>
+  <link rel="stylesheet" crossorigin href="./static/index-BKU_j-7H.css">
+</head>
+<body data-theme="caramel" data-theme-mode="light" class="side-panel-layout">
+  <!-- The attributes above are caramel, the fallback, so the common first load
+       needs no swap at all. This runs before first paint to repoint them at a
+       saved theme instead -- the module script below is deferred, so without
+       it a browser holding 極光 would get a cream page for a frame and then a
+       near-black one. Mirrors theme.ts, which mirrors app.js; all three lists
+       have to stay in step. -->
+  <script>
+    (function () {
+      try {
+        var KEYS = ["default", "purple-light", "lilac-dark", "lilac", "caramel-dark", "caramel"];
+        var MODE = {
+          "default": "dark", "purple-light": "light",
+          "lilac-dark": "dark", "lilac": "light",
+          "caramel-dark": "dark", "caramel": "light"
+        };
+        var SCROLLBAR = {
+          "default": "147,51,234", "purple-light": "124,58,237",
+          "lilac-dark": "201,103,162", "lilac": "136,71,136",
+          "caramel-dark": "241,170,66", "caramel": "185,81,27"
+        };
+        // Read on its own so a blocked localStorage still leaves the markup's
+        // caramel fully applied rather than stranding the page half-themed.
+        var saved = null;
+        try { saved = localStorage.getItem("photomaster-theme"); } catch (_) { /* storage may be blocked */ }
+        var theme = KEYS.indexOf(saved) !== -1 ? saved : "caramel";
+        document.documentElement.style.setProperty("--scrollbar-accent-rgb", SCROLLBAR[theme]);
+        if (theme === "default") delete document.body.dataset.theme;
+        else document.body.dataset.theme = theme;
+        document.body.dataset.themeMode = MODE[theme];
+      } catch (_) { /* never block first paint on a theming failure */ }
+    })();
+  </script>
+  <div id="app"></div>
+</body>
+</html>

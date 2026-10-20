@@ -1,0 +1,1057 @@
+import io
+import json
+import sys
+import types
+import unittest
+from unittest.mock import MagicMock, patch
+
+from tests.test_selections import base_analysis
+
+# What the upload page says after taking a wish down: the model's acknowledgement,
+# then what comes next.
+KEPT = "好，這個我記下來了。還有其他想改的地方嗎？沒有的話，可以從下面選「分析」或「一鍵美化」喔！"
+
+
+def _import_backend():
+    """backend.* imports aiserver_utils' Redis/queue/S3 clients at module
+    level, and those need the container's config -- stand in for them here."""
+    stubs = {name: types.ModuleType(name) for name in ("aiserver_utils.pf_redis", "aiserver_utils.queue", "aiserver_utils.s3")}
+    stubs["aiserver_utils.pf_redis"].pf_redis_client = MagicMock()
+    stubs["aiserver_utils.queue"].get_job_info = MagicMock()
+    stubs["aiserver_utils.s3"].S3Access = MagicMock()
+    stubs["aiserver_utils.s3"].S3AccessV2 = MagicMock()
+    with patch.dict(sys.modules, stubs):
+        from backend import app as app_module
+        from backend.routes import api, chat
+        from backend.services import chat_session
+    return app_module, api, chat, chat_session
+
+
+app_module, api, chat, chat_session = _import_backend()
+
+
+# The analysis fields the panel builds its face tabs from.
+ONE_FACE = {"_local_face_boxes": [{"box": {"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.2}}],
+            "local_face_review": [{"detection_index": 1, "matched_subject_index": 0}]}
+
+class FakeRedis:
+    """The subset of redis-py the chat store uses, values kept as str."""
+
+    def __init__(self):
+        self.data = {}
+        self.ttl = {}
+
+    def hset(self, key, field=None, value=None, mapping=None):
+        h = self.data.setdefault(key, {})
+        if field is not None:
+            h[field] = value
+        h.update(mapping or {})
+
+    def hgetall(self, key):
+        return dict(self.data.get(key, {}))
+
+    def hsetnx(self, key, field, value):
+        h = self.data.setdefault(key, {})
+        if field in h:
+            return 0
+        h[field] = value
+        return 1
+
+    def expire(self, key, seconds):
+        self.ttl[key] = seconds
+
+    def rpush(self, key, *values):
+        self.data.setdefault(key, []).extend(values)
+
+    def ltrim(self, key, start, end):
+        items = self.data.get(key, [])
+        n = len(items)
+        start, end = (start + n if start < 0 else start), (end + n if end < 0 else end)
+        self.data[key] = items[max(start, 0):end + 1]
+
+    def lrange(self, key, start, end):
+        items = self.data.get(key, [])
+        n = len(items)
+        start, end = (start + n if start < 0 else start), (end + n if end < 0 else end)
+        return items[max(start, 0):end + 1]
+
+    def lindex(self, key, index):
+        items = self.data.get(key, [])
+        return items[index] if -len(items) <= index < len(items) else None
+
+    def lset(self, key, index, value):
+        self.data[key][index] = value
+
+    def zadd(self, key, mapping):
+        self.data.setdefault(key, {}).update(mapping)
+
+    def zrevrange(self, key, start, end):
+        members = sorted(self.data.get(key, {}).items(), key=lambda kv: kv[1], reverse=True)
+        return [m for m, _ in members][start:end + 1]
+
+    def zrem(self, key, member):
+        self.data.get(key, {}).pop(member, None)
+
+
+USER = "tester"
+
+
+class ChatRoutesTest(unittest.TestCase):
+    def setUp(self):
+        self.redis = FakeRedis()
+        self.jobs = {}          # job_id -> {"status", "error"}
+        self.enqueued = []      # (job_id, engine_params)
+        self.history = []       # record_history kwargs
+        self.next_job = iter(f"job{i}" for i in range(1000))
+        self.analysis = {**base_analysis(), "compatibility_version": 5}
+
+        def enqueue(engine_params, src_content=None, job_id=None):
+            job_id = job_id or next(self.next_job)
+            for key in ("srcKeys", "dstKeys"):
+                engine_params[key] = [k.replace("{msg_id}", job_id) for k in engine_params[key]]
+            self.enqueued.append((job_id, json.loads(json.dumps(engine_params))))
+            self.jobs[job_id] = {"status": "processing", "error": None}
+            return job_id
+
+        def get_job_info(job_id, keyToGet=None):
+            job = self.jobs.get(job_id)
+            if job is None:
+                return None
+            return {**job, "0_res0": {"cusKeys": [f"{job_id}/analysis.json"]}}
+
+        def record_history(username, job_id, path, case_id, version_id, params=None, based_on=None):
+            self.history.append({"job_id": job_id, "case_id": case_id, "version_id": version_id,
+                                 "params": params, "based_on": based_on})
+
+        patches = [
+            patch.object(chat_session, "_client", lambda: self.redis),
+            patch.object(chat, "enqueue", enqueue),
+            patch.object(chat, "get_job_info", get_job_info),
+            patch.object(chat, "get_session_id", lambda: next(self.next_job)),
+            patch.object(chat, "download_bytes", lambda key, job_id: (json.dumps(self.analysis).encode(), None)),
+            patch.object(chat, "get_min_compatible_version", lambda: 3),
+            patch.object(api, "record_history", record_history),
+            patch.object(api, "get_current_compatibility_version", lambda: 5),
+        ]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.client = app_module.create_app({"TESTING": True}).test_client()
+
+    # --- helpers -----------------------------------------------------------
+
+    def url(self, sid, suffix=""):
+        return f"/api/photo-agent/chat/sessions/{sid}{suffix}"
+
+    def new_session(self):
+        res = self.client.post("/api/photo-agent/chat/sessions", json={"user": USER})
+        self.assertEqual(res.status_code, 201)
+        return res.get_json()["session_id"]
+
+    def add_photos(self, sid, n=1):
+        data = {"user": USER, "image": [(io.BytesIO(b"img"), f"p{i}.jpg") for i in range(n)]}
+        res = self.client.post(self.url(sid, "/photos"), data=data, content_type="multipart/form-data")
+        self.assertEqual(res.status_code, 202, res.get_json())
+        return res.get_json()["photos"]
+
+    def status(self, sid):
+        res = self.client.get(self.url(sid, "/status"), query_string={"user": USER})
+        self.assertEqual(res.status_code, 200)
+        return res.get_json()
+
+    def ready_photo(self, sid):
+        photo = self.add_photos(sid)[0]
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        self.status(sid)
+        return photo
+
+    def summary(self, sid):
+        """The session's row in the list -- what a history tile renders."""
+        listed = self.client.get("/api/photo-agent/chat/sessions", query_string={"user": USER}).get_json()
+        return next(s for s in listed["sessions"] if s["session_id"] == sid)
+
+    def render(self, sid, photo):
+        res = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [photo["photo_id"]]})
+        self.assertEqual(res.status_code, 202, res.get_json())
+        return res.get_json()["renders"][0]
+
+    # --- sessions ----------------------------------------------------------
+
+    def test_create_get_and_list(self):
+        sid = self.new_session()
+        res = self.client.get(self.url(sid), query_string={"user": USER})
+        body = res.get_json()
+        self.assertEqual(body["photos"], [])
+        self.assertEqual(body["messages"], [])
+        self.assertEqual(body["defaults"]["preset"], "natural")
+        listed = self.client.get("/api/photo-agent/chat/sessions", query_string={"user": USER}).get_json()
+        self.assertEqual([s["session_id"] for s in listed["sessions"]], [sid])
+        self.assertEqual(set(self.redis.ttl.values()), {chat_session.SESSION_TTL_SECONDS})
+
+    def test_unknown_session_and_bad_user(self):
+        self.assertEqual(self.client.get(self.url("s_nope"), query_string={"user": USER}).status_code, 404)
+        self.assertEqual(self.client.get(self.url("bad id!"), query_string={"user": USER}).status_code, 404)
+        self.assertEqual(self.client.post("/api/photo-agent/chat/sessions", json={"user": "a b"}).status_code, 400)
+        sid = self.new_session()
+        self.assertEqual(self.client.get(self.url(sid), query_string={"user": "other"}).status_code, 404)
+
+    def test_expired_session_drops_out_of_the_list(self):
+        sid = self.new_session()
+        del self.redis.data[chat_session._session_key(USER, sid)]
+        listed = self.client.get("/api/photo-agent/chat/sessions", query_string={"user": USER}).get_json()
+        self.assertEqual(listed["sessions"], [])
+
+    def test_session_tile_follows_the_newest_result(self):
+        """What a history tile shows: the first photo's original until the
+        session has rendered something, then the newest result, with the
+        badge's state over it."""
+        sid = self.new_session()
+        first, second = self.add_photos(sid, 2)
+        row = self.summary(sid)
+        self.assertEqual(
+            (row["status"], row["thumbnail_job_id"], row["thumbnail_result"], row["rendered_count"], row["photo_count"]),
+            ("analyzing", first["analyze_job_id"], None, 0, 2),
+        )
+
+        for photo in (first, second):
+            self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        self.status(sid)
+        self.assertEqual(self.summary(sid)["status"], "ready")
+
+        # Only the second photo is rendered, so the tile shows its result --
+        # while the original fallback still points at the first photo.
+        render = self.render(sid, second)
+        self.assertEqual(self.summary(sid)["status"], "rendering")
+        self.jobs[render["job_ids"][0]]["status"] = "success"
+        self.status(sid)
+        row = self.summary(sid)
+        self.assertEqual((row["status"], row["rendered_count"]), ("done", 1))
+        self.assertEqual(row["thumbnail_result"], {"job_id": render["job_ids"][0], "run": 1})
+        self.assertEqual(row["thumbnail_job_id"], first["analyze_job_id"])
+
+        # The first photo renders afterwards, and the tile moves to that newer
+        # result even though it comes earlier in the conversation.
+        later = self.render(sid, first)
+        self.jobs[later["job_ids"][0]]["status"] = "success"
+        self.status(sid)
+        row = self.summary(sid)
+        self.assertEqual(row["thumbnail_result"], {"job_id": later["job_ids"][0], "run": 1})
+        self.assertEqual(row["rendered_count"], 2)
+
+    def test_session_tile_is_failed_only_when_nothing_survived(self):
+        sid = self.new_session()
+        first, second = self.add_photos(sid, 2)
+        self.jobs[first["analyze_job_id"]]["status"] = "error"
+        self.status(sid)
+        # One photo is still analyzing, so the session is not failed yet.
+        self.assertEqual(self.summary(sid)["status"], "analyzing")
+        self.jobs[second["analyze_job_id"]]["status"] = "error"
+        self.status(sid)
+        row = self.summary(sid)
+        self.assertEqual((row["status"], row["thumbnail_result"], row["rendered_count"]), ("failed", None, 0))
+
+    def test_messages_are_capped(self):
+        sid = self.new_session()
+        with patch.object(chat_session, "MESSAGES_MAX_LEN", 3):
+            for i in range(5):
+                res = self.client.post(self.url(sid, "/messages"), json={"user": USER, "text": f"m{i}"})
+                self.assertEqual(res.status_code, 201)
+        messages = self.client.get(self.url(sid), query_string={"user": USER}).get_json()["messages"]
+        self.assertEqual([m["text"] for m in messages], ["m2", "m3", "m4"])
+        self.assertEqual(self.client.post(self.url(sid, "/messages"), json={"user": USER, "role": "system", "text": "x"}).status_code, 400)
+
+    # The upload page hands its whole conversation over in one post.
+    def test_several_messages_post_at_once(self):
+        sid = self.new_session()
+        post = lambda body: self.client.post(self.url(sid, "/messages"), json={"user": USER, **body})
+        res = post({"messages": [
+            {"text": "頭髮換成棕色", "card": {"type": "ask", "pre": True}},
+            {"role": "assistant", "card": {"type": "llm_reply", "pre": True, "text": "好"}},
+        ]})
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual([m["role"] for m in res.get_json()["messages"]], ["user", "assistant"])
+        messages = self.client.get(self.url(sid), query_string={"user": USER}).get_json()["messages"]
+        self.assertEqual([m["card"]["type"] for m in messages], ["ask", "llm_reply"])
+        for bad in ([], "x", [{"role": "system", "text": "x"}], [{}], [1], [{"text": "x"}] * 101):
+            with self.subTest(messages=bad):
+                self.assertEqual(post({"messages": bad}).status_code, 400)
+        # Nothing from a rejected batch lands.
+        self.assertEqual(len(self.client.get(self.url(sid), query_string={"user": USER}).get_json()["messages"]), 2)
+
+    def test_only_the_newest_user_message_can_be_replaced(self):
+        sid = self.new_session()
+        post = lambda body: self.client.post(self.url(sid, "/messages"), json={"user": USER, **body}).get_json()
+        put = lambda mid, card: self.client.put(self.url(sid, f"/messages/{mid}"), json={"user": USER, "card": card})
+        first = post({"card": {"type": "options_opened", "category": "face"}})
+        res = put(first["id"], {"type": "options_opened", "category": "style"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.get_json()["id"], first["id"])
+        messages = self.client.get(self.url(sid), query_string={"user": USER}).get_json()["messages"]
+        self.assertEqual([m["card"]["category"] for m in messages], ["style"])
+        self.assertEqual(put(first["id"], "x").status_code, 400)
+        post({"role": "assistant", "text": "later"})
+        self.assertEqual(put(first["id"], {"type": "options_opened"}).status_code, 409)
+        last = self.client.get(self.url(sid), query_string={"user": USER}).get_json()["messages"][-1]
+        self.assertEqual(put(last["id"], {"type": "x"}).status_code, 409)
+
+    # --- photos and analysis -----------------------------------------------
+
+    def test_add_photos_enqueues_analyze_jobs_like_analyze(self):
+        sid = self.new_session()
+        photos = self.add_photos(sid, n=2)
+        self.assertEqual([p["status"] for p in photos], ["analyzing", "analyzing"])
+        job_id, engine_params = self.enqueued[0]
+        self.assertEqual(engine_params["acts"][0]["params"]["stage"], "analyze")
+        self.assertEqual(photos[0]["case_id"], engine_params["srcKeys"][0])
+        self.assertEqual([h["version_id"] for h in self.history], [p["analyze_job_id"] for p in photos])
+        session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        self.assertEqual(session["active_photo_id"], photos[0]["photo_id"])
+        self.assertEqual(session["messages"][0]["card"]["type"], "photos_added")
+
+    def test_photo_cap(self):
+        sid = self.new_session()
+        with patch.object(chat_session, "MAX_PHOTOS_PER_SESSION", 2):
+            self.add_photos(sid, n=2)
+            data = {"user": USER, "image": [(io.BytesIO(b"img"), "x.jpg")]}
+            res = self.client.post(self.url(sid, "/photos"), data=data, content_type="multipart/form-data")
+        self.assertEqual(res.status_code, 400)
+
+    def test_status_finishes_analysis_once(self):
+        sid = self.new_session()
+        ok, bad = self.add_photos(sid, n=2)
+        self.assertEqual(self.status(sid)["new_messages"], [])
+        self.jobs[ok["analyze_job_id"]]["status"] = "success"
+        self.jobs[bad["analyze_job_id"]] = {"status": "error", "error": "boom"}
+        first = self.status(sid)
+        self.assertEqual([m["card"]["type"] for m in first["new_messages"]], ["analysis_ready", "analysis_failed"])
+        self.assertEqual([p["status"] for p in first["session"]["photos"]], ["ready", "failed"])
+        self.assertEqual(self.status(sid)["new_messages"], [])
+
+    def test_analysis_brief_follows_analysis_ready(self):
+        self.analysis.update({"photo_summary": "海邊合照", "detected_issues": ["偏暗"], "subjects": [
+            {"label": "left", "is_person": True, "blink_issue": {"blink_failure_confidence": 0.5, "should_fix": False}}],
+            **ONE_FACE})
+        sid = self.new_session()
+        photo = self.add_photos(sid)[0]
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        messages = self.status(sid)["new_messages"]
+        self.assertEqual([m["card"]["type"] for m in messages], ["analysis_ready", "analysis_brief"])
+        brief = messages[1]["card"]
+        self.assertEqual((brief["photo_id"], brief["summary"], brief["issues"]), (photo["photo_id"], "海邊合照", ["偏暗"]))
+        self.assertNotIn("questions", brief)
+
+    def test_upload_page_face_picks_are_named_from_the_analysis(self):
+        """The 個人化需求 written before the analysis says 人物 1; by the time
+        the analysis lands that face is called left, and the box is what says
+        so."""
+        self.analysis.update({"subjects": [{"label": "left", "is_person": True}], **ONE_FACE})
+        sid = self.new_session()
+        photo = self.add_photos(sid)[0]
+        res = self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"), json={"user": USER, "plan": {
+            "user_prompt": "人物 1（照片中從左邊數來第 1 位）：把眼鏡拿掉\n整體亮一點",
+            "prompt_faces": [{"box": ONE_FACE["_local_face_boxes"][0]["box"],
+                              "ref": "人物 1（照片中從左邊數來第 1 位）", "where": "照片中從左邊數來第 1 位"}]}})
+        self.assertEqual(res.status_code, 200, res.get_json())
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        self.status(sid)
+        plan = next(p["plan"] for p in self.status(sid)["session"]["photos"] if p["photo_id"] == photo["photo_id"])
+        self.assertEqual(plan["user_prompt"], "left（照片中從左邊數來第 1 位）：把眼鏡拿掉\n整體亮一點")
+        self.assertEqual(plan["prompt_faces"], [])
+
+    def test_a_face_pick_the_analysis_cannot_place_keeps_its_words(self):
+        self.analysis.update({"subjects": [{"label": "left", "is_person": True}], **ONE_FACE})
+        sid = self.new_session()
+        photo = self.add_photos(sid)[0]
+        self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"), json={"user": USER, "plan": {
+            "user_prompt": "人物 2（照片中從左邊數來第 2 位）：把眼鏡拿掉",
+            "prompt_faces": [{"box": {"x": 0.7, "y": 0.7, "w": 0.1, "h": 0.1},
+                              "ref": "人物 2（照片中從左邊數來第 2 位）", "where": "照片中從左邊數來第 2 位"}]}})
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        self.status(sid)
+        plan = next(p["plan"] for p in self.status(sid)["session"]["photos"] if p["photo_id"] == photo["photo_id"])
+        self.assertEqual(plan["user_prompt"], "人物 2（照片中從左邊數來第 2 位）：把眼鏡拿掉")
+        self.assertEqual(plan["prompt_faces"], [])
+
+    def test_analysis_route(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        body = self.client.get(self.url(sid, f"/photos/{photo['photo_id']}/analysis"), query_string={"user": USER}).get_json()
+        self.assertEqual(body["status"], "success")
+        self.assertTrue(body["result"]["compatible"])
+        self.assertEqual(body["result"]["compatibilityVersion"], 5)
+
+    # --- plans -------------------------------------------------------------
+
+    def test_photo_plans_are_independent(self):
+        sid = self.new_session()
+        a = self.ready_photo(sid)
+        b = self.ready_photo(sid)
+        res = self.client.patch(self.url(sid, f"/photos/{a['photo_id']}/plan"),
+                                json={"user": USER, "plan": {"run_count": 2, "recipe_checked": [False, True, True]}})
+        self.assertEqual(res.status_code, 200, res.get_json())
+        res = self.client.patch(self.url(sid, f"/photos/{a['photo_id']}/plan"),
+                                json={"user": USER, "plan": {"render_option": "nano-banana-2"}})
+        self.assertEqual(res.status_code, 400)
+        session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        plans = {p["photo_id"]: p["plan"] for p in session["photos"]}
+        self.assertEqual((plans[a["photo_id"]]["run_count"], plans[a["photo_id"]]["recipe_checked"]), (2, [False, True, True]))
+        self.assertEqual((plans[b["photo_id"]]["run_count"], plans[b["photo_id"]]["recipe_checked"]), (1, []))
+        self.assertEqual(session["defaults"]["run_count"], 1)
+
+    def test_batch_plan_edit(self):
+        sid = self.new_session()
+        a = self.ready_photo(sid)
+        failed = self.add_photos(sid)[0]
+        self.jobs[failed["analyze_job_id"]]["status"] = "error"
+        self.status(sid)
+        self.client.patch(self.url(sid, f"/photos/{a['photo_id']}/plan"),
+                          json={"user": USER, "plan": {"recipe_checked": [False]}})
+
+        res = self.client.patch(self.url(sid, "/plan"), json={"user": USER, "plan": {"recipe_checked": [True]}})
+        self.assertEqual(res.status_code, 400)
+        res = self.client.patch(self.url(sid, "/plan"), json={"user": USER, "plan": {"run_count": 2}})
+        self.assertEqual(res.status_code, 200, res.get_json())
+        body = res.get_json()
+        self.assertEqual(body["defaults"]["run_count"], 2)
+        # The failed photo is left out; the photo-only picks are kept.
+        self.assertEqual([p["photo_id"] for p in body["photos"]], [a["photo_id"]])
+        self.assertEqual((body["photos"][0]["plan"]["run_count"], body["photos"][0]["plan"]["recipe_checked"]), (2, [False]))
+
+        # A photo added later starts from the new defaults.
+        new = self.add_photos(sid)[0]
+        self.assertEqual(new["plan"]["run_count"], 2)
+        # ...and while it is analyzing, batch edits wait.
+        res = self.client.patch(self.url(sid, "/plan"), json={"user": USER, "plan": {"run_count": 3}})
+        self.assertEqual(res.status_code, 409)
+        self.assertEqual(res.get_json()["not_ready"], [{"photo_id": new["photo_id"], "reason": "analyzing"}])
+        self.assertEqual(self.client.get(self.url(sid), query_string={"user": USER}).get_json()["defaults"]["run_count"], 2)
+
+    # --- render ------------------------------------------------------------
+
+    def test_render_fans_out_and_records_a_version(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"),
+                          json={"user": USER, "plan": {"run_count": 2, "user_prompt": "warmer", "recipe_checked": [False]}})
+        self.history.clear()
+        res = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"})
+        self.assertEqual(res.status_code, 202, res.get_json())
+        self.assertEqual(res.get_json()["queued"], [])
+        render = res.get_json()["renders"][0]
+        self.assertEqual(len(render["job_ids"]), 2)
+        self.assertEqual(render["action_id"], render["job_ids"][0])
+
+        finish_jobs = [(j, p) for j, p in self.enqueued if j in render["job_ids"]]
+        for _, engine_params in finish_jobs:
+            params = engine_params["acts"][0]["params"]
+            self.assertEqual(params["stage"], "finish")
+            self.assertEqual(params["run_count"], 1)
+            self.assertEqual(params["user_prompt"], "warmer")
+            self.assertEqual(params["analysis"]["rejected_corrections"], ["brighten the subject"])
+            self.assertEqual(engine_params["srcKeys"], [photo["case_id"]])
+        self.assertEqual({h["version_id"] for h in self.history}, {render["action_id"]})
+        self.assertEqual(self.history[0]["params"]["session_id"], sid)
+        self.assertEqual(self.history[0]["params"]["selections"]["recipe_checked"], [False])
+        self.assertIsNone(self.history[0]["based_on"])
+
+        # A second render before this one finishes is refused.
+        again = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [photo["photo_id"]]})
+        self.assertEqual(again.status_code, 409)
+
+        self.jobs[render["job_ids"][0]]["status"] = "error"
+        self.assertEqual(self.status(sid)["new_messages"], [])
+        self.jobs[render["job_ids"][1]]["status"] = "success"
+        done = self.status(sid)
+        self.assertEqual([m["card"]["type"] for m in done["new_messages"]], ["render_done"])
+        state = done["session"]["photos"][0]
+        self.assertEqual(state["status"], "ready")
+        version = state["active_version"]
+        self.assertEqual(
+            {k: version[k] for k in ("version_id", "job_id", "run")},
+            {"version_id": render["action_id"], "job_id": render["job_ids"][1], "run": 1},
+        )
+        # Stamped so a session summary can tell which photo rendered last.
+        self.assertIsInstance(version["at"], float)
+
+        # The next render records which version it was derived from.
+        self.history.clear()
+        self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"})
+        self.assertEqual(self.history[0]["based_on"], render["action_id"])
+
+    def test_render_all_fails_render_failed(self):
+        sid = self.new_session()
+        self.ready_photo(sid)
+        render = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"}).get_json()["renders"][0]
+        self.jobs[render["job_ids"][0]] = {"status": "error", "error": "editor down"}
+        done = self.status(sid)
+        self.assertEqual(done["new_messages"][0]["card"]["type"], "render_failed")
+        self.assertEqual(done["session"]["photos"][0]["status"], "ready")
+        self.assertIsNone(done["session"]["photos"][0]["active_version"])
+
+    def test_render_is_all_or_nothing(self):
+        sid = self.new_session()
+        ready = self.ready_photo(sid)
+        failed = self.add_photos(sid)[0]
+        self.jobs[failed["analyze_job_id"]]["status"] = "error"
+        self.status(sid)
+        before = len(self.enqueued)
+        res = self.client.post(self.url(sid, "/render"),
+                               json={"user": USER, "photo_ids": [ready["photo_id"], failed["photo_id"]]})
+        self.assertEqual(res.status_code, 409)
+        self.assertEqual(len(self.enqueued), before)
+
+    def test_render_all_waits_for_every_photo(self):
+        sid = self.new_session()
+        ready = self.ready_photo(sid)
+        failed = self.add_photos(sid)[0]
+        self.jobs[failed["analyze_job_id"]]["status"] = "error"
+        self.status(sid)
+        analyzing = self.add_photos(sid)[0]
+        before = len(self.enqueued)
+
+        res = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"})
+        self.assertEqual(res.status_code, 409)
+        self.assertEqual(res.get_json()["not_ready"], [{"photo_id": analyzing["photo_id"], "reason": "analyzing"}])
+        self.assertEqual(len(self.enqueued), before)
+
+        # Once it is ready, "all" renders every photo but the failed one.
+        self.jobs[analyzing["analyze_job_id"]]["status"] = "success"
+        self.status(sid)
+        res = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"})
+        self.assertEqual(res.status_code, 202, res.get_json())
+        self.assertEqual([r["photo_id"] for r in res.get_json()["renders"]], [ready["photo_id"], analyzing["photo_id"]])
+
+    def test_render_of_an_analyzing_photo_is_queued_with_the_latest_plan(self):
+        sid = self.new_session()
+        photo = self.add_photos(sid)[0]
+        res = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [photo["photo_id"]]})
+        self.assertEqual(res.status_code, 202, res.get_json())
+        self.assertEqual((res.get_json()["renders"], res.get_json()["queued"]), ([], [photo["photo_id"]]))
+        again = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [photo["photo_id"]]})
+        self.assertEqual(again.status_code, 409)
+
+        # Edited after queueing: the render uses the edit.
+        self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"),
+                          json={"user": USER, "plan": {"user_prompt": "cooler"}})
+        self.assertEqual(self.status(sid)["new_messages"], [])
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        done = self.status(sid)
+        self.assertEqual([m["card"]["type"] for m in done["new_messages"]], ["analysis_ready", "render_started"])
+        started = done["new_messages"][1]["card"]
+        self.assertTrue(started["queued"])
+        state = done["session"]["photos"][0]
+        self.assertEqual(state["status"], "rendering")
+        self.assertIsNone(state["queued_render"])
+        params = dict(self.enqueued)[started["job_ids"][0]]["acts"][0]["params"]
+        self.assertEqual(params["user_prompt"], "cooler")
+
+    def test_queued_render_is_cancelled_when_analysis_fails(self):
+        sid = self.new_session()
+        photo = self.add_photos(sid)[0]
+        self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [photo["photo_id"]]})
+        before = len(self.enqueued)
+        self.jobs[photo["analyze_job_id"]] = {"status": "error", "error": "boom"}
+        done = self.status(sid)
+        card = done["new_messages"][0]["card"]
+        self.assertEqual((card["type"], card["queued_render_cancelled"]), ("analysis_failed", True))
+        self.assertEqual(done["session"]["photos"][0]["status"], "failed")
+        self.assertIsNone(done["session"]["photos"][0]["queued_render"])
+        self.assertEqual(len(self.enqueued), before)
+
+    def test_queued_render_that_cannot_start_reports_why(self):
+        sid = self.new_session()
+        photo = self.add_photos(sid)[0]
+        self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [photo["photo_id"]]})
+        self.analysis["compatibility_version"] = 1
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        done = self.status(sid)
+        self.assertEqual([m["card"]["type"] for m in done["new_messages"]], ["analysis_ready", "render_failed"])
+        self.assertEqual(done["new_messages"][1]["card"]["reason"], "analysis_compatibility_version_outdated")
+        state = done["session"]["photos"][0]
+        self.assertEqual((state["status"], state["queued_render"]), ("ready", None))
+
+    def test_render_rejects_bad_requests(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        cases = [
+            ({"photo_ids": "all", "base": "latest"}, 400),
+            ({"photo_ids": []}, 400),
+            ({"photo_ids": ["p_missing"]}, 404),
+        ]
+        for body, code in cases:
+            with self.subTest(body=body):
+                self.assertEqual(self.client.post(self.url(sid, "/render"), json={"user": USER, **body}).status_code, code)
+        self.analysis["compatibility_version"] = 1
+        res = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [photo["photo_id"]]})
+        self.assertEqual((res.status_code, res.get_json()["error"]), (409, "analysis_compatibility_version_outdated"))
+
+    # --- versions ----------------------------------------------------------
+
+    # --- typed questions ---------------------------------------------------
+
+    def ask(self, sid, photo, text, answer, **extra):
+        seen = []
+
+        def model(context):
+            seen.append(context)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        with patch.object(chat.chat_assistant, "call_model", model):
+            res = self.client.post(self.url(sid, f"/photos/{photo['photo_id']}/ask"), json={"user": USER, "text": text, **extra})
+        return res, seen
+
+    def test_ask_reply_with_a_proposal_changes_nothing_yet(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        patch_json = '{"style_options":{"lighting":"soft"},"advanced_options":{"smile_adjustment":false}}'
+        res, seen = self.ask(sid, photo, "光線柔和一點，笑容別動", {
+            "reply": "可以改成柔光、不調笑容，確認後套用。", "action": "none", "patch_json": patch_json})
+        self.assertEqual(res.status_code, 200, res.get_json())
+        messages = res.get_json()["messages"]
+        self.assertEqual([(m["role"], m["card"]["type"]) for m in messages], [("user", "ask"), ("assistant", "llm_reply")])
+        self.assertEqual(messages[0]["text"], "光線柔和一點，笑容別動")
+        proposal = messages[1]["card"]["proposal"]
+        self.assertEqual(proposal["patch"]["style_options"], {"lighting": "soft"})
+        self.assertNotIn("direct", proposal)
+        self.assertTrue(proposal["id"])
+        self.assertIn("user: 光線柔和一點，笑容別動", seen[0])
+        session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        self.assertEqual(session["photos"][0]["plan"]["style_options"], {})
+        self.assertEqual(session["messages"][-2:], messages)
+        self.assertEqual(self.enqueued[1:], [])
+
+    def test_a_single_setting_is_applied_without_asking(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        res, _ = self.ask(sid, photo, "光線柔和一點", {
+            "reply": "可以改成柔光，確認後套用。", "action": "none", "patch_json": '{"style_options":{"lighting":"soft"}}'},
+            screen={"bar": ["調整", "一鍵美化"], "topics": []})
+        messages = res.get_json()["messages"]
+        self.assertEqual([(m["role"], m["card"]["type"]) for m in messages],
+                         [("user", "ask"), ("assistant", "llm_reply"), ("user", "proposal_resolved")])
+        reply, resolved = messages[1]["card"], messages[2]["card"]
+        self.assertTrue(reply["proposal"]["direct"])
+        self.assertEqual(reply["proposal"]["undo"], {"style_options": {"lighting": "default"}})
+        self.assertEqual(reply["text"], "好，光線改成「柔光」了。按下方的「一鍵美化」我就開始。")
+        self.assertEqual((resolved["choice"], resolved["auto"], resolved["proposal_id"]),
+                         ("apply", True, reply["proposal"]["id"]))
+        session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        self.assertEqual(session["photos"][0]["plan"]["style_options"], {"lighting": "soft"})
+        self.assertEqual(self.enqueued[1:], [])
+
+    def test_applying_after_a_render_opens_a_round(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        render = self.render(sid, photo)
+        for job in render["job_ids"]:
+            self.jobs[job]["status"] = "success"
+        self.status(sid)
+        res, _ = self.ask(sid, photo, "光線柔和一點", {
+            "reply": "", "action": "none", "patch_json": '{"style_options":{"lighting":"soft"}}'})
+        messages = res.get_json()["messages"]
+        self.assertEqual([m["card"]["type"] for m in messages], ["ask", "llm_reply", "proposal_resolved", "adjust_opened"])
+        opened = messages[3]["card"]
+        self.assertEqual((opened["via"], opened["auto"], opened["plan"]["style_options"]), ("proposal", True, {}))
+        # A round already open is not opened twice.
+        res, _ = self.ask(sid, photo, "改成金色光調", {
+            "reply": "", "action": "none", "patch_json": '{"style_options":{"lighting":"gold"}}'})
+        self.assertEqual([m["card"]["type"] for m in res.get_json()["messages"]], ["ask", "llm_reply", "proposal_resolved"])
+
+    def test_a_picked_option_is_applied_without_asking(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        self.ask(sid, photo, "幫我調一下", {"reply": "想怎麼調？", "action": "none", "patch_json": "",
+                                          "options": ["柔光、不調笑容", "維持原樣"]})
+        res, _ = self.ask(sid, photo, "柔光、不調笑容", {
+            "reply": "", "action": "none",
+            "patch_json": '{"style_options":{"lighting":"soft"},"advanced_options":{"smile_adjustment":false}}'})
+        messages = res.get_json()["messages"]
+        self.assertEqual([m["card"]["type"] for m in messages], ["ask", "llm_reply", "proposal_resolved"])
+        self.assertEqual(messages[1]["card"]["text"], "好，已經幫你改好了。")
+
+    def test_winding_down_puts_the_round_back(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        before = photo["plan"]
+        self.client.post(self.url(sid, "/messages"), json={"user": USER, "card": {
+            "type": "adjust_opened", "photo_id": photo["photo_id"],
+            "plan": {"user_prompt": before["user_prompt"], "style_options": before["style_options"]}}})
+        changed = self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"), json={
+            "user": USER, "plan": {"style_options": {"lighting": "soft"}, "user_prompt": "背景換成海邊"}})
+        self.assertEqual(changed.get_json()["plan"]["style_options"], {"lighting": "soft"})
+        res, _ = self.ask(sid, photo, "先不要這些改動", {
+            "reply": "好的，這輪改的設定先還原了。", "action": "close", "patch_json": "", "options": []},
+            screen={"bar": ["美化"], "topics": ["風格"], "pending": ["風格", "個人化需求"]})
+        self.assertEqual(res.status_code, 200, res.get_json())
+        self.assertTrue(res.get_json()["messages"][1]["card"]["close"])
+        plan = self.client.get(self.url(sid), query_string={"user": USER}).get_json()["photos"][0]["plan"]
+        self.assertEqual((plan["style_options"], plan["user_prompt"]), (before["style_options"], before["user_prompt"]))
+
+    def test_ask_to_fix_it_renders_right_away(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        res, _ = self.ask(sid, photo, "幫我修好", {"reply": "好，馬上美化。", "action": "render", "patch_json": ""})
+        messages = res.get_json()["messages"]
+        self.assertEqual([m["card"]["type"] for m in messages], ["ask", "llm_reply", "render_requested"])
+        requested = messages[2]["card"]
+        self.assertEqual((requested["label"], requested["photo_id"], requested["queued"]), ("一鍵美化", photo["photo_id"], []))
+        self.assertEqual(len(requested["renders"]), 1)
+        self.assertEqual(self.status(sid)["session"]["photos"][0]["status"], "rendering")
+
+    def test_ask_to_fix_it_while_analyzing_queues_it(self):
+        sid = self.new_session()
+        photo = self.add_photos(sid)[0]
+        res, seen = self.ask(sid, photo, "幫我修好", {"reply": "", "action": "render", "patch_json": ""})
+        messages = res.get_json()["messages"]
+        self.assertEqual([m["card"]["type"] for m in messages], ["ask", "render_requested"])
+        self.assertEqual(messages[1]["card"]["queued"], [photo["photo_id"]])
+        self.assertIn("ANALYSIS: (not available yet)", seen[0])
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        self.assertEqual(self.status(sid)["new_messages"][-1]["card"]["type"], "render_started")
+
+    def test_ask_to_fix_it_while_rendering_says_so(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [photo["photo_id"]]})
+        res, _ = self.ask(sid, photo, "幫我修好", {"reply": "好", "action": "render", "patch_json": ""})
+        self.assertEqual([m["card"]["type"] for m in res.get_json()["messages"]], ["ask", "llm_reply", "render_failed"])
+        self.assertEqual(res.get_json()["messages"][2]["card"]["reason"], "photo_busy")
+
+    def test_ask_about_a_tapped_face(self):
+        self.analysis.update({"subjects": [
+            {"label": "left", "is_person": True, "blink_issue": {"blink_failure_confidence": 0.9, "should_fix": True}}],
+            **ONE_FACE})
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        res, seen = self.ask(sid, photo, "他的眼睛不要動", {
+            "reply": "可以，確認後套用。", "action": "none", "patch_json": '{"face_issue_overrides":{"0:blink_issue":false}}'},
+            subject_index=0)
+        messages = res.get_json()["messages"]
+        self.assertEqual(messages[0]["card"]["subject_indices"], [0])
+        self.assertIn("user: [pointing at left] 他的眼睛不要動", seen[0])
+        self.assertEqual(messages[1]["card"]["proposal"]["changes"][0]["subject_index"], 0)
+        for bad in (-1, "0", True):
+            with self.subTest(subject_index=bad):
+                self.assertEqual(self.ask(sid, photo, "hi", {}, subject_index=bad)[0].status_code, 400)
+            with self.subTest(subject_indices=bad):
+                self.assertEqual(self.ask(sid, photo, "hi", {}, subject_indices=[0, bad])[0].status_code, 400)
+        self.assertEqual(self.ask(sid, photo, "hi", {}, subject_indices=0)[0].status_code, 400)
+
+    def test_ask_about_several_tapped_faces(self):
+        self.analysis.update({"subjects": [
+            {"label": "left", "is_person": True}, {"label": "right", "is_person": True}],
+            "_local_face_boxes": [{"box": {"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.2}},
+                                  {"box": {"x": 0.6, "y": 0.1, "w": 0.2, "h": 0.2}}],
+            "local_face_review": [{"detection_index": 1, "matched_subject_index": 0},
+                                  {"detection_index": 2, "matched_subject_index": 1}]})
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        res, seen = self.ask(sid, photo, "他們都笑一下", {"reply": "好。", "action": "none"},
+                             subject_indices=[1, 0, 1])
+        self.assertEqual(res.get_json()["messages"][0]["card"]["subject_indices"], [1, 0])
+        self.assertIn("user: [pointing at right, left] 他們都笑一下", seen[0])
+
+    def test_ask_model_failure_is_a_message_not_an_error(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        res, _ = self.ask(sid, photo, "你好", RuntimeError("timeout"))
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual([m["card"]["type"] for m in res.get_json()["messages"]], ["ask", "llm_error"])
+
+    # A question the upload page could not answer comes along as a waiting ask
+    # and is answered once the analysis is in, with the question as the line
+    # to answer -- and only once.
+    def test_a_waiting_question_is_answered_after_the_analysis(self):
+        sid = self.new_session()
+        photo = self.add_photos(sid)[0]
+        posted = self.client.post(self.url(sid, "/messages"), json={
+            "user": USER, "text": "這張做成啤酒海報可以用什麼文案？",
+            "card": {"type": "ask", "photo_id": photo["photo_id"], "waiting": True}}).get_json()
+        reply = {"reply": "可以用「乾杯夏天」。", "action": "none", "patch_json": "", "options": []}
+        early, _ = self.ask(sid, photo, None, reply, waiting=posted["id"])
+        self.assertEqual(early.status_code, 409)
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        self.status(sid)
+        res, seen = self.ask(sid, photo, None, reply, waiting=posted["id"])
+        self.assertEqual(res.status_code, 200, res.get_json())
+        messages = res.get_json()["messages"]
+        self.assertEqual([(m["card"]["type"], m["card"]["answers"]) for m in messages], [("llm_reply", posted["id"])])
+        self.assertTrue(seen[0].rstrip().endswith("user: 這張做成啤酒海報可以用什麼文案？"))
+        self.assertNotIn("not available yet", seen[0])
+        again, seen = self.ask(sid, photo, None, reply, waiting=posted["id"])
+        self.assertEqual((again.get_json(), seen), ({"messages": []}, []))
+        self.assertEqual(self.ask(sid, photo, None, reply, waiting="nope")[0].status_code, 404)
+
+    # After 一鍵美化 the question waits for the retouched photo, not just the
+    # analysis.
+    def test_a_waiting_question_is_answered_after_the_retouch(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        posted = self.client.post(self.url(sid, "/messages"), json={
+            "user": USER, "text": "幫這張想個標題",
+            "card": {"type": "ask", "photo_id": photo["photo_id"], "waiting": True}}).get_json()
+        started = self.render(sid, photo)
+        reply = {"reply": "可以用「夏日午後」。", "action": "none", "patch_json": "", "options": []}
+        early, seen = self.ask(sid, photo, None, reply, waiting=posted["id"])
+        self.assertEqual((early.status_code, seen), (409, []))
+        self.jobs[started["job_ids"][0]]["status"] = "success"
+        self.status(sid)
+        res, _ = self.ask(sid, photo, None, reply, waiting=posted["id"])
+        self.assertEqual([m["card"]["answers"] for m in res.get_json()["messages"]], [posted["id"]])
+
+    def test_ask_rejects_bad_requests(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        answer = {"reply": "x", "action": "none", "patch_json": ""}
+        self.assertEqual(self.ask(sid, photo, "  ", answer)[0].status_code, 400)
+        self.assertEqual(self.ask(sid, {"photo_id": "nope"}, "hi", answer)[0].status_code, 404)
+        for bad in ("調整", {"bar": "調整"}, {"topics": ["x" * 41]}, {"bar": ["a"] * 9}):
+            with self.subTest(screen=bad):
+                self.assertEqual(self.ask(sid, photo, "hi", answer, screen=bad)[0].status_code, 400)
+        failed = self.add_photos(sid)[0]
+        self.jobs[failed["analyze_job_id"]] = {"status": "error", "error": "boom"}
+        self.status(sid)
+        self.assertEqual(self.ask(sid, failed, "hi", answer)[0].status_code, 409)
+
+    # --- the upload page's typed requests ----------------------------------
+
+    def review(self, text, answer, **extra):
+        seen = []
+
+        def model(context):
+            seen.append(context)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        with patch.object(chat.chat_assistant, "call_review", model):
+            res = self.client.post("/api/photo-agent/chat/prompt-review", json={"text": text, **extra})
+        return res, seen
+
+    def test_a_wish_typed_before_the_session_is_taken_down(self):
+        res, seen = self.review("外套換成藍色", {"verdict": "keep", "reply": "好，這個我記下來了。"},
+                                prompt="左側男性的帽子拿掉")
+        self.assertEqual(res.status_code, 200, res.get_json())
+        self.assertEqual(res.get_json(), {"accepted": True, "reply": KEPT})
+        # The model is asked about one line, against the list as it stands.
+        self.assertIn("LINES SO FAR:\n左側男性的帽子拿掉", seen[0])
+        self.assertIn("NEW LINE:\n外套換成藍色", seen[0])
+
+    # The sentence the user reads and the fate of the line are one answer, so
+    # a model that forgets to say what to do with the line cannot leave it
+    # saying 「好，這個我記下來了。」 over a line that was thrown away.
+    def test_a_verdict_that_did_not_come_back_keeps_the_line(self):
+        res, _ = self.review("牛仔褲都改成裙子", {"reply": "好，這個我記下來了。"})
+        self.assertEqual(res.get_json(), {"accepted": True, "reply": KEPT})
+
+    # The same two sources disagreeing out loud: the verdict threw the line
+    # away while the sentence told the user it had been taken down. The user
+    # only ever sees the sentence, so the sentence is the one that holds.
+    def test_a_drop_that_says_it_was_taken_down_keeps_the_line(self):
+        res, _ = self.review("把桌上的垃圾都移掉", {"verdict": "drop", "reply": "好，這個我記下來了。"})
+        self.assertEqual(res.get_json(), {"accepted": True, "reply": KEPT})
+
+    def test_something_that_is_not_about_the_photo_is_turned_away(self):
+        res, _ = self.review("幫我翻譯這段英文", {
+            "verdict": "drop", "reply": "這個我沒辦法回答，我只能幫你處理這張照片的修圖。"})
+        self.assertEqual(res.get_json(), {
+            "accepted": False, "reply": "這個我沒辦法回答，我只能幫你處理這張照片的修圖。"})
+
+    # The two start buttons in words: the page presses the one asked for.
+    def test_a_typed_start_starts_it(self):
+        res, _ = self.review("幫我修好", {"verdict": "render", "reply": "好，馬上美化。"})
+        self.assertEqual(res.get_json(), {"accepted": False, "start": "render",
+                                          "reply": chat.PROMPT_REVIEW_START_REPLIES["render"]})
+        res, _ = self.review("先幫我分析", {"verdict": "analyze", "reply": "好。"})
+        self.assertEqual(res.get_json(), {"accepted": False, "start": "analyze",
+                                          "reply": chat.PROMPT_REVIEW_START_REPLIES["analyze"]})
+
+    # Only an outright 「幫我分析」 starts it. A guessed intent is offered first,
+    # with the outright commands to tap, and starts nothing.
+    def test_a_guessed_start_is_offered_not_started(self):
+        res, _ = self.review("這張要怎麼修？", {"verdict": "offer", "reply": "要不要我先幫你分析這張照片？",
+                                            "line": "", "options": ["幫我分析", "一鍵美化"]})
+        self.assertEqual(res.get_json(), {"accepted": False, "reply": "要不要我先幫你分析這張照片？",
+                                          "offer": True, "options": ["幫我分析", "一鍵美化"]})
+        res, _ = self.review("適合什麼風格？", {"verdict": "offer", "reply": "", "line": "", "options": []})
+        self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.chat_assistant.OFFER_REPLY,
+                                          "offer": True, "options": chat.chat_assistant.OFFER_OPTIONS})
+
+    # The upload page only ever leads to the two starts: a 「先不用」 the model
+    # adds is dropped, and a missing start is put back.
+    def test_an_offer_carries_both_starts_and_nothing_else(self):
+        res, _ = self.review("這樣就好", {"verdict": "offer", "reply": "要不要直接幫你一鍵美化？", "line": "",
+                                       "options": ["一鍵美化", "先不用"]})
+        self.assertEqual(res.get_json()["options"], ["一鍵美化", "幫我分析"])
+
+    # A question only the analysis can answer is flagged, so a yes carries it
+    # into the session; an offer of 一鍵美化 never is.
+    def test_a_question_for_after_the_analysis_is_flagged(self):
+        res, _ = self.review("幫這張想個標題", {"verdict": "offer", "reply": "要不要我先幫你分析這張照片？",
+                                             "line": "", "options": ["幫我分析", "一鍵美化"], "later": True})
+        self.assertTrue(res.get_json()["later"])
+        res, _ = self.review("這樣就好", {"verdict": "offer", "reply": "要不要直接幫你一鍵美化？",
+                                       "line": "", "options": ["一鍵美化", "幫我分析"], "later": True})
+        self.assertNotIn("later", res.get_json())
+
+    # The buttons under an answer offer 分析, so its last sentence must too: a
+    # closing question about something else is swapped for the offer.
+    def test_an_answer_closes_with_the_offer_its_buttons_answer(self):
+        res, _ = self.review("長寬比要選哪個？", {"verdict": "answer", "line": "", "options": ["幫我分析", "一鍵美化"],
+                                             "reply": "長寬比可以選 Auto。你想要我再說明其他美化設定嗎？"})
+        self.assertEqual(res.get_json()["reply"], "長寬比可以選 Auto。要不要我先幫你分析看看？")
+        res, _ = self.review("一鍵美化是什麼？", {"verdict": "answer", "line": "", "options": ["一鍵美化", "幫我分析"],
+                                             "reply": "會直接修好。要不要直接幫你一鍵美化？"})
+        self.assertEqual(res.get_json()["reply"], "會直接修好。要不要直接幫你一鍵美化？")
+        res, _ = self.review("分析在做什麼？", {"verdict": "answer", "line": "", "options": ["幫我分析", "一鍵美化"],
+                                            "reply": "分析會先看過這張照片。"})
+        self.assertEqual(res.get_json()["reply"], "分析會先看過這張照片。要不要我先幫你分析看看？")
+        # An offer mid-reply, with the promise after it, is already the offer.
+        promise = "要不要我先幫你分析這張照片？分析或美化好之後就回答你。"
+        res, _ = self.review("這是在哪裡拍的？", {"verdict": "answer", "line": "", "options": ["幫我分析", "一鍵美化"],
+                                             "reply": promise})
+        self.assertEqual(res.get_json()["reply"], promise)
+        # An answer that just stops gets the offer too, but not right after one.
+        res, _ = self.review("美化引擎是什麼？", {"verdict": "answer", "line": "", "options": [],
+                                             "reply": "美化引擎是負責修圖的 AI 模型。"})
+        self.assertEqual(res.get_json()["reply"], "美化引擎是負責修圖的 AI 模型。要不要我先幫你分析看看？")
+        self.assertEqual(res.get_json()["options"], ["幫我分析", "一鍵美化"])
+        history = [{"role": "assistant", "text": "要不要我先幫你分析？", "question": True, "offer": True,
+                    "options": ["幫我分析", "一鍵美化"]}]
+        res, _ = self.review("不用", {"verdict": "answer", "line": "", "options": [],
+                                     "reply": "好的，想到要怎麼修再跟我說喔！"}, history=history)
+        self.assertEqual(res.get_json()["reply"], "好的，想到要怎麼修再跟我說喔！")
+
+    # An answer to the offer is not the answer to a question about a wish: a
+    # 「好」 there is never stitched onto the line before it, and a question
+    # right after an offer is still asked.
+    def test_after_an_offer_the_next_line_stands_alone(self):
+        history = [{"role": "user", "text": "頭髮換顏色"},
+                   {"role": "assistant", "text": "要不要我先幫你分析？", "question": True, "offer": True,
+                    "options": ["幫我分析", "一鍵美化"]}]
+        res, seen = self.review("好", {"verdict": "analyze", "reply": "", "line": "", "options": []},
+                                history=history)
+        self.assertEqual(res.get_json()["start"], "analyze")
+        self.assertIn("assistant (offer): 要不要我先幫你分析？ [options: 幫我分析 / 一鍵美化]", seen[0])
+        res, _ = self.review("他的眼睛放大", {"verdict": "clarify", "reply": "你說的是哪一位？", "line": "",
+                                          "options": []}, history=history)
+        self.assertTrue(res.get_json()["ask"])
+
+    # A question about the tool gets its answer and leaves the list alone, even
+    # when the answer happens to sound like 「沒問題」.
+    def test_a_question_about_the_tool_is_answered_not_kept(self):
+        res, seen = self.review("可以換背景嗎？", {"verdict": "answer", "reply": "可以喔！想換成什麼樣的背景？直接跟我說就好。"})
+        self.assertEqual(res.get_json(), {"accepted": False, "reply": "可以喔！想換成什麼樣的背景？直接跟我說就好。"})
+        self.assertIn("TOOL GUIDE", seen[0])
+        # An answer that ends by offering the next step carries the options.
+        res, _ = self.review("分析在做什麼？", {"verdict": "answer", "reply": "…要不要我先幫你分析看看？",
+                                            "options": ["幫我分析", "一鍵美化"]})
+        self.assertEqual(res.get_json(), {"accepted": False, "reply": "…要不要我先幫你分析看看？",
+                                          "offer": True, "options": ["幫我分析", "一鍵美化"]})
+
+    # A model that says nothing still has to say something here.
+    def test_a_silent_model_still_gets_a_sentence(self):
+        res, _ = self.review("外套換成藍色", {"verdict": "keep", "reply": ""})
+        self.assertEqual(res.get_json(), {"accepted": True, "reply": chat.PROMPT_REVIEW_KEPT_REPLY})
+        res, _ = self.review("??", {"verdict": "drop", "reply": ""})
+        self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.PROMPT_REVIEW_DROPPED_REPLY})
+
+    # The model is not a gate the user can be left standing behind.
+    def test_a_model_failure_lets_the_line_through(self):
+        res, _ = self.review("外套換成藍色", RuntimeError("timeout"))
+        self.assertEqual(res.get_json(), {"accepted": True, "reply": ""})
+
+    # The page sends what it has: the faces found so far and the conversation,
+    # so a wish can be read against who is in the photo and what was asked.
+    def test_the_model_sees_the_people_and_the_conversation(self):
+        history = [{"role": "user", "text": "外套換成藍色"},
+                   {"role": "assistant", "text": "好，這個我記下來了。"}]
+        _, seen = self.review("他的頭髮弄蓬一點", {"verdict": "keep", "reply": "好，這個我記下來了。"},
+                              history=history, people=["照片中從左邊數來第 1 位", "照片中從左邊數來第 2 位"])
+        self.assertIn("PEOPLE IN PHOTO:\n照片中從左邊數來第 1 位\n照片中從左邊數來第 2 位", seen[0])
+        self.assertIn("CONVERSATION SO FAR:\nuser: 外套換成藍色\nassistant: 好，這個我記下來了。", seen[0])
+
+    # A wish with a gap only the user can fill is asked about, not kept yet.
+    def test_an_unfinished_wish_is_asked_about(self):
+        res, _ = self.review("頭髮換顏色", {"verdict": "clarify", "reply": "想換成什麼顏色？", "line": "",
+                                          "options": [" 棕色", "黑色", "棕色", "", "金色", "紅色", "灰色"]})
+        self.assertEqual(res.get_json(), {"accepted": False, "reply": "想換成什麼顏色？", "ask": True,
+                                          "options": ["棕色", "黑色", "金色", "紅色"]})
+        res, _ = self.review("他的眼睛放大", {"verdict": "clarify", "reply": "", "line": "", "options": []})
+        self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.chat_assistant.CLARIFY_REPLY,
+                                          "ask": True, "options": []})
+
+    # The answer comes back as the whole wish, with the person split off for
+    # the page to attach.
+    def test_an_answer_completes_the_wish(self):
+        history = [{"role": "user", "text": "照片中從左邊數來第 1 位：頭髮換顏色"},
+                   {"role": "assistant", "text": "想換成什麼顏色？", "question": True, "options": ["棕色", "黑色"]}]
+        res, seen = self.review("棕色", {"verdict": "keep", "reply": "好，這個我記下來了。",
+                                       "line": "照片中從左邊數來第 1 位：頭髮換成棕色", "options": []},
+                                history=history, people=["照片中從左邊數來第 1 位"])
+        self.assertEqual(res.get_json(), {"accepted": True, "reply": KEPT, "line": "頭髮換成棕色",
+                                          "persons": ["照片中從左邊數來第 1 位"]})
+        self.assertIn("assistant (question): 想換成什麼顏色？ [options: 棕色 / 黑色]", seen[0])
+        # One question per wish: a second one in a row is taken as a keep.
+        res, _ = self.review("隨便", {"verdict": "clarify", "reply": "哪一種棕色？", "line": "頭髮換成棕色",
+                                    "options": ["深棕", "淺棕"]}, history=history)
+        self.assertEqual(res.get_json(), {"accepted": True, "reply": chat.PROMPT_REVIEW_KEPT_REPLY,
+                                          "line": "頭髮換成棕色"})
+
+    # Outside an answer, the line is what was typed.
+    def test_a_line_carrying_on_comes_back_written_out(self):
+        people = ["照片中從左邊數來第 1 位", "照片中從左邊數來第 2 位"]
+        res, _ = self.review("褲子也是", {"verdict": "keep", "reply": "好，這個我記下來了。",
+                                       "line": "照片中從左邊數來第 2 位：褲子也換成白色", "options": []},
+                             people=people)
+        self.assertEqual(res.get_json(), {"accepted": True, "reply": KEPT,
+                                          "line": "褲子也換成白色", "persons": ["照片中從左邊數來第 2 位"]})
+
+    def test_a_line_about_several_people_comes_back_with_all_of_them(self):
+        people = ["照片中從左邊數來第 1 位", "照片中從左邊數來第 2 位", "照片中從左邊數來第 3 位"]
+        res, _ = self.review("鞋子也是", {"verdict": "keep", "reply": "好，這個我記下來了。",
+                                       "line": "照片中從左邊數來第 1 位、照片中從左邊數來第 3 位：鞋子也換成白色",
+                                       "options": []}, people=people)
+        self.assertEqual(res.get_json(), {"accepted": True, "reply": KEPT, "line": "鞋子也換成白色",
+                                          "persons": ["照片中從左邊數來第 1 位", "照片中從左邊數來第 3 位"]})
+
+    def test_a_line_that_stands_on_its_own_is_not_sent_back(self):
+        res, _ = self.review("外套換成藍色", {"verdict": "keep", "reply": "好，這個我記下來了。",
+                                          "line": "外套換成藍色", "options": ["x"]})
+        self.assertEqual(res.get_json(), {"accepted": True, "reply": KEPT})
+
+    def test_a_dropped_line_is_not_written_out(self):
+        res, _ = self.review("今天天氣如何", {"verdict": "drop", "reply": "這個我沒辦法幫忙。",
+                                          "line": "今天天氣如何", "options": []})
+        self.assertNotIn("line", res.get_json())
+
+    def test_prompt_review_rejects_bad_requests(self):
+        answer = {"verdict": "keep", "reply": "x"}
+        self.assertEqual(self.review("  ", answer)[0].status_code, 400)
+        self.assertEqual(self.review("hi", answer, prompt=["no"])[0].status_code, 400)
+        self.assertEqual(self.review("hi", answer, prompt="x" * 2001)[0].status_code, 400)
+        for bad in ("no", [{"role": "system", "text": "x"}], [{"role": "user"}],
+                    [{"role": "assistant", "text": "x", "options": "a"}]):
+            with self.subTest(history=bad):
+                self.assertEqual(self.review("hi", answer, history=bad)[0].status_code, 400)
+        for bad in ("no", [""], [1], ["x" * 41], ["x"] * 21):
+            with self.subTest(people=bad):
+                self.assertEqual(self.review("hi", answer, people=bad)[0].status_code, 400)
+
+    def test_active_version_must_exist_in_history(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        entry = {"versions": [{"version_id": "v1", "results": [{"job_id": "j1", "run": 1, "field": "0_res0"}]}]}
+        url = self.url(sid, f"/photos/{photo['photo_id']}/active-version")
+        with patch.object(chat, "get_history_entry", lambda user, case_id: entry if case_id == photo["case_id"] else None):
+            ok = self.client.put(url, json={"user": USER, "version_id": "v1", "job_id": "j1", "run": 1})
+            missing = self.client.put(url, json={"user": USER, "version_id": "v1", "job_id": "j2", "run": 1})
+        self.assertEqual(ok.status_code, 200)
+        self.assertEqual(ok.get_json()["photos"][0]["active_version"]["version_id"], "v1")
+        self.assertEqual(missing.status_code, 404)
+
+
+if __name__ == "__main__":
+    unittest.main()

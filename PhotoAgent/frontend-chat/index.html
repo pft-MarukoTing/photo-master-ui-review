@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-Hant" style="--scrollbar-accent-rgb: 185,81,27">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Photo master · 對話</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Inter carries the Latin; Noto Sans TC carries the CJK (Inter has no CJK
+       glyphs, so it used to fall through to whatever the OS had). Noto Serif TC
+       is the display face -- headline and panel titles only. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css">
+  <!-- old-inline-styles -->
+</head>
+<body data-theme="caramel" data-theme-mode="light" class="side-panel-layout">
+  <!-- The attributes above are caramel, the fallback, so the common first load
+       needs no swap at all. This runs before first paint to repoint them at a
+       saved theme instead -- the module script below is deferred, so without
+       it a browser holding 極光 would get a cream page for a frame and then a
+       near-black one. Mirrors theme.ts, which mirrors app.js; all three lists
+       have to stay in step. -->
+  <script>
+    (function () {
+      try {
+        var KEYS = ["default", "purple-light", "lilac-dark", "lilac", "caramel-dark", "caramel"];
+        var MODE = {
+          "default": "dark", "purple-light": "light",
+          "lilac-dark": "dark", "lilac": "light",
+          "caramel-dark": "dark", "caramel": "light"
+        };
+        var SCROLLBAR = {
+          "default": "147,51,234", "purple-light": "124,58,237",
+          "lilac-dark": "201,103,162", "lilac": "136,71,136",
+          "caramel-dark": "241,170,66", "caramel": "185,81,27"
+        };
+        // Read on its own so a blocked localStorage still leaves the markup's
+        // caramel fully applied rather than stranding the page half-themed.
+        var saved = null;
+        try { saved = localStorage.getItem("photomaster-theme"); } catch (_) { /* storage may be blocked */ }
+        var theme = KEYS.indexOf(saved) !== -1 ? saved : "caramel";
+        document.documentElement.style.setProperty("--scrollbar-accent-rgb", SCROLLBAR[theme]);
+        if (theme === "default") delete document.body.dataset.theme;
+        else document.body.dataset.theme = theme;
+        document.body.dataset.themeMode = MODE[theme];
+      } catch (_) { /* never block first paint on a theming failure */ }
+    })();
+  </script>
+  <div id="app"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

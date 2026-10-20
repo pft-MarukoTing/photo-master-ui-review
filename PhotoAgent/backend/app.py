@@ -5,6 +5,7 @@ from flask_cors import CORS
 
 from backend.compression import init_compression
 from backend.routes.api import api_bp
+from backend.routes.chat import chat_bp
 from backend.routes.static import static_bp
 
 
@@ -23,5 +24,6 @@ def create_app(config=None):
     init_compression(app)
     app.register_blueprint(static_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(chat_bp)
 
     return app

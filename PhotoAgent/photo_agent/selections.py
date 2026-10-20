@@ -29,6 +29,8 @@ selections (every key optional):
 import copy
 
 import prompts
+from photo_agent import capabilities
+from photo_agent.param_validation import normalize_advanced_options
 
 _ADVANCED_TOPIC_KEYS = (
     "gaze_contact_detection",
@@ -68,7 +70,12 @@ SELECTION_KEYS = (
 
 
 def validate_selections(selections):
-    """Returns an error message for a malformed `selections`, else None."""
+    """Returns an error message for a malformed `selections`, else None.
+
+    Checks shapes and, against the feature registry, values: style option
+    values, face_issue_overrides keys / levels, and advanced_options. Values
+    are only checked here; apply_selections still stores them as sent.
+    """
     if not isinstance(selections, dict):
         return "selections must be a JSON object"
     expected = {
@@ -82,6 +89,59 @@ def validate_selections(selections):
         value = selections.get(key)
         if value is not None and not isinstance(value, kind):
             return f"selections.{key} must be a {kind.__name__}"
+    return (
+        _validate_advanced_options(selections.get("advanced_options"))
+        or _validate_style_options(selections.get("options"))
+        or _validate_face_issue_overrides(selections.get("face_issue_overrides"))
+    )
+
+
+def _validate_advanced_options(advanced_options):
+    if advanced_options is None:
+        return None
+    try:
+        normalize_advanced_options(advanced_options)
+    except RuntimeError as exc:
+        return f"selections.{exc.args[0].split(': ', 1)[-1]}"
+    return None
+
+
+def _validate_style_options(options):
+    for group_id, value in (options or {}).items():
+        group = capabilities.STYLE_GROUPS_BY_ID.get(group_id)
+        if group is None:
+            return f"selections.options.{group_id} is not a known style option"
+        if value is None or value in capabilities.STYLE_UNSET_VALUES:
+            continue
+        if not any(choice.value == value for choice in group.choices):
+            allowed = tuple(choice.value for choice in group.choices)
+            return f"selections.options.{group_id} must be one of {allowed}"
+    return None
+
+
+def _validate_face_issue_overrides(overrides):
+    for key, override in (overrides or {}).items():
+        parts = str(key).split(":")
+        if len(parts) != 2 or _override_subject_index(parts[0]) is None:
+            return f"selections.face_issue_overrides key {key!r} must be \"<subject_index>:<category>\""
+        category = parts[1]
+        if category not in capabilities.PORTRAIT_FIXES_BY_ID:
+            return f"selections.face_issue_overrides key {key!r} names an unknown category"
+        if override is False or override is True:
+            continue
+        if not isinstance(override, dict):
+            return f"selections.face_issue_overrides[{key!r}] must be false or an object"
+        allowed = override.get("allowed")
+        if allowed is not None and not isinstance(allowed, bool):
+            return f"selections.face_issue_overrides[{key!r}].allowed must be a boolean"
+        level = override.get("level")
+        if level is None or level == "":
+            continue
+        if not isinstance(level, str) or capabilities.normalize_level(category, level) is None:
+            levels = tuple(choice.value for choice in capabilities.PORTRAIT_FIXES_BY_ID[category].levels)
+            if not levels:
+                return f"selections.face_issue_overrides[{key!r}] takes no level"
+            return f"selections.face_issue_overrides[{key!r}].level must be one of {levels}"
     return None
 
 

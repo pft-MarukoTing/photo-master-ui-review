@@ -1,22 +1,12 @@
 """Microsoft Foundry MAI image-edit client used by PhotoAgent Step 5."""
 
-import base64
-import copy
 import os
 
-import backoff
 import requests
 
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
-from image_tools import (
-    apply_aspect_ratio_preference,
-    apply_framing_size,
-    ensure_png_bytes,
-    get_image_dimensions,
-    output_geometry_warnings,
-    resolve_crop_box_with_report,
-)
-from photo_agent.edit_prompt import assemble_edit_prompt
+from photo_agent.providers.http import checked_json, retry_transient
+from photo_agent.providers.image_edit import EditGeometry, run_image_edit
 
 
 MAI_IMAGE_26_MODEL = "MAI-Image-2.6"
@@ -56,39 +46,7 @@ def _deployment_name(model: str) -> str:
     return os.getenv("AZURE_MAI_DEPLOYMENT", "").strip() or model
 
 
-def _safe_json(response) -> dict:
-    try:
-        return response.json()
-    except Exception:
-        return {}
-
-
-def _error_message(data: dict, status_code: int) -> str:
-    error = data.get("error") if isinstance(data, dict) else None
-    if isinstance(error, dict):
-        return str(error.get("message") or error.get("code") or f"HTTP {status_code}")
-    if error:
-        return str(error)
-    return f"HTTP {status_code}"
-
-
-class _RetryableApiError(RuntimeError):
-    """Transient Azure MAI failure that is safe to retry."""
-
-
-_RETRYABLE_EXCEPTIONS = (
-    requests.exceptions.Timeout,
-    requests.exceptions.ConnectionError,
-    _RetryableApiError,
-)
-
-
-@backoff.on_exception(
-    backoff.expo,
-    _RETRYABLE_EXCEPTIONS,
-    max_tries=3,
-    jitter=backoff.full_jitter,
-)
+@retry_transient
 def _post_image_edit(
     deployment: str,
     prompt_text: str,
@@ -108,13 +66,7 @@ def _post_image_edit(
         },
         timeout=300,
     )
-    data = _safe_json(response)
-    if not response.ok:
-        message = _error_message(data, response.status_code)
-        if response.status_code in {408, 429} or response.status_code >= 500:
-            raise _RetryableApiError(f"Image edit failed (MAI): {message}")
-        raise RuntimeError(f"Image edit failed (MAI): {message}")
-    return data
+    return checked_json(response, "Image edit failed (MAI)")
 
 
 def _effective_ratio_label(analysis: dict, image_width: int, image_height: int) -> str:
@@ -142,58 +94,28 @@ def edit_photo(
     is accepted only to preserve PhotoAgent's shared editor-call signature.
     """
     del quality
-    image_width, image_height = get_image_dimensions(image_bytes)
 
-    size = (analysis.get("style_options") or {}).get("size")
-    framed_analysis = apply_framing_size(analysis, size)
-    framed_analysis = copy.deepcopy(
-        apply_aspect_ratio_preference(framed_analysis, aspect_ratio)
-    )
-    effective_ratio_label = _effective_ratio_label(
-        framed_analysis, image_width, image_height
-    )
-    framed_analysis["recommended_aspect_ratio"] = effective_ratio_label
-    if framed_analysis.get("crop_box"):
-        framed_analysis["crop_box"]["aspect_ratio"] = effective_ratio_label
-    crop_plan = resolve_crop_box_with_report(
-        framed_analysis.get("crop_box"),
-        framed_analysis,
-        image_width,
-        image_height,
-    )["cropBox"]
+    def resolve_geometry(framed_analysis, image_width, image_height):
+        return EditGeometry(ratio_label=_effective_ratio_label(framed_analysis, image_width, image_height))
 
-    prompt_text, resolution_metadata, prompt_strategy = assemble_edit_prompt(
-        framed_analysis, crop_plan, preset_key=preset_key, aspect_ratio=aspect_ratio,
-        source_size=(image_width, image_height), single_pass_edit=single_pass_edit,
-        revision_feedback=revision_feedback,
-    )
+    def send(png_bytes, prompt_text, geometry):
+        data = _post_image_edit(
+            _deployment_name(model),
+            prompt_text,
+            png_bytes,
+            # The edits API has no width/height fields. For Auto and named
+            # ratios, let MAI select from the explicit framing/ratio
+            # instruction in the prompt. Disable this only for "original",
+            # where the input canvas is the authoritative aspect ratio.
+            auto_aspect_ratio=aspect_ratio != "original",
+        )
+        image_b64 = (data.get("data") or [{}])[0].get("b64_json")
+        if not image_b64:
+            raise RuntimeError("Azure MAI response did not contain image data.")
+        return image_b64, {"model": model, "usage": data.get("usage")}
 
-    png_bytes = ensure_png_bytes(image_bytes)
-    deployment = _deployment_name(model)
-    data = _post_image_edit(
-        deployment,
-        prompt_text,
-        png_bytes,
-        # The edits API has no width/height fields. For Auto and named ratios,
-        # let MAI select from the explicit framing/ratio instruction in the
-        # prompt. Disable this only for "original", where the input canvas is
-        # the authoritative aspect ratio.
-        auto_aspect_ratio=aspect_ratio != "original",
+    return run_image_edit(
+        image_bytes, analysis, preset_key=preset_key, revision_feedback=revision_feedback,
+        aspect_ratio=aspect_ratio, single_pass_edit=single_pass_edit,
+        resolve_geometry=resolve_geometry, send=send,
     )
-    image_b64 = (data.get("data") or [{}])[0].get("b64_json")
-    if not image_b64:
-        raise RuntimeError("Azure MAI response did not contain image data.")
-
-    return {
-        "image_b64": image_b64,
-        "usage": {"model": model, "usage": data.get("usage")},
-        "geometry_warnings": output_geometry_warnings(
-            image_b64,
-            effective_ratio_label,
-            crop_plan,
-            image_width,
-            image_height,
-        ),
-        "prompt_resolution": resolution_metadata,
-        "prompt_strategy": prompt_strategy,
-    }, prompt_text

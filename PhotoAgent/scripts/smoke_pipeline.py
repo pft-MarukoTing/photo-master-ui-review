@@ -1,15 +1,18 @@
-"""Quick local smoke-test for the pipeline. Run from PhotoAgent/:
-    OPENAI_API_KEY=sk-... python test_pipeline.py path/to/photo.jpg
+"""Quick local smoke-test for the pipeline. Makes real (paid) model calls.
+Run from PhotoAgent/:
+    OPENAI_API_KEY=sk-... python scripts/smoke_pipeline.py path/to/photo.jpg
 """
 
 import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from pipeline import run_pipeline
 
 if len(sys.argv) < 2:
-    print("Usage: python test_pipeline.py <image_path> [user_prompt] [preset] [quality]")
+    print("Usage: python scripts/smoke_pipeline.py <image_path> [user_prompt] [preset] [quality]")
     sys.exit(1)
 
 image_path = sys.argv[1]

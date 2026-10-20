@@ -11,7 +11,8 @@ from werkzeug.utils import safe_join
 
 from aiserver_utils.queue import get_job_info
 from compatibility_version import get_compatibility_version, is_compatible
-from image_tools import create_preview_bytes, ensure_jpeg_bytes, sniff_image_mime, HISTORY_THUMBNAIL_MAX_SIDE
+from image_tools import create_preview_bytes, detect_face_boxes, ensure_jpeg_bytes, sniff_image_mime, HISTORY_THUMBNAIL_MAX_SIDE
+from photo_agent import capabilities
 from photo_agent.param_validation import normalize_advanced_options, validate_photo_agent_request
 from photo_agent.selections import apply_selections, validate_selections
 from pipeline import analyze_stage, reframe_stage
@@ -25,10 +26,15 @@ from backend.services.template_params import get_engine_params_template
 api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
 
 
-def _record_history_safely(user, job_id, path, image_key, action_id, params=None):
+def _record_history_safely(user, job_id, path, image_key, action_id, params=None, extra=None, based_on=None):
     """History bookkeeping must never fail the actual job submission it's
     attached to -- a bad/missing username here is a lost history row, not a
-    500 for a job that otherwise queued/ran fine."""
+    500 for a job that otherwise queued/ran fine.
+
+    `extra` is merged into the stored params as-is (the chat routes record the
+    session/photo and the selections a render used); `based_on` is the
+    version this one was derived from. Both default to what every route here
+    has always recorded."""
     if not user:
         return
     try:
@@ -38,7 +44,8 @@ def _record_history_safely(user, job_id, path, image_key, action_id, params=None
         }
         if path == "local":
             history_params["compatibility_version"] = _history_compatibility_version(params)
-        record_history(normalize_username(user), job_id, path, image_key, action_id, params=history_params)
+        history_params.update(extra or {})
+        record_history(normalize_username(user), job_id, path, image_key, action_id, params=history_params, based_on=based_on)
     except Exception:
         pass
 
@@ -90,11 +97,11 @@ def _parse_and_validate_params(form):
     real bool instead of the string "true"/"false" multipart forms send.
     """
     params = {
-        "preset": form.get("preset", "natural"),
-        "image_quality": form.get("image_quality", "medium"),
-        "image_model": form.get("image_model", "gpt-image-2"),
-        "analysis_model": form.get("analysis_model", "gpt-5.6-luna"),
-        "aspect_ratio": form.get("aspect_ratio", "auto"),
+        "preset": form.get("preset", capabilities.DEFAULT_PRESET),
+        "image_quality": form.get("image_quality", capabilities.DEFAULT_QUALITY),
+        "image_model": form.get("image_model", capabilities.DEFAULT_IMAGE_MODEL),
+        "analysis_model": form.get("analysis_model", capabilities.DEFAULT_ANALYSIS_MODEL),
+        "aspect_ratio": form.get("aspect_ratio", capabilities.DEFAULT_ASPECT_RATIO),
         "ai_photo_editing": str(form.get("ai_photo_editing", "true")).lower() == "true",
         "run_qa": str(form.get("run_qa", current_app.config.get("DEBUG_UI", False))).lower() == "true",
         "overwrite_prompt": str(form.get("overwrite_prompt", "false")).lower() == "true",
@@ -470,6 +477,35 @@ def report_screenshot(report_id):
     if download_error or image_bytes is None:
         return jsonify({"error": f"failed to download screenshot: {download_error}"}), 502
     return Response(image_bytes, mimetype="image/jpeg")
+
+
+@api_bp.post("/detect-faces")
+def detect_faces():
+    """The local face detector's boxes for an image, with nothing else.
+
+    The chat's upload page asks for this the moment a photo is picked, so it
+    can offer the same 指定對象 face picker the analysis page has before any
+    session, job or analysis exists. Runs in the web process rather than
+    through the queue: it is one 640px ONNX pass on a 1.2MB model, far below
+    the cost of standing a job up, and the answer is needed while the user is
+    still typing.
+
+    Best-effort by design (image_tools.detect_face_boxes): a photo with no
+    detectable face answers 200 with an empty list, same as one the detector
+    failed on -- the page simply shows no picker. Only an unreadable upload
+    is an error.
+    """
+    image = request.files.get("image")
+    if image is None or not image.filename:
+        return jsonify({"error": "image file is required"}), 400
+
+    try:
+        faces = detect_face_boxes(image.read())
+    except PILImage.DecompressionBombError:
+        return jsonify({"error": "Image resolution is too high, please use a smaller image."}), 422
+    except Exception:
+        return jsonify({"error": "Could not read this image."}), 422
+    return jsonify({"faces": faces})
 
 
 @api_bp.post("/submit")

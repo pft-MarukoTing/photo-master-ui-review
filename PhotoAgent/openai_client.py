@@ -1,5 +1,4 @@
 import base64
-import copy
 import json
 import logging
 import os
@@ -8,10 +7,9 @@ import traceback
 from datetime import datetime, timezone
 from typing import Tuple
 
-import backoff
 import requests
 
-from config import MODELS, ANALYSIS_MODEL_REASONING_EFFORT
+from config import MODELS
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
 from image_tools import (
     create_preview_bytes,
@@ -19,13 +17,10 @@ from image_tools import (
     image_to_data_url,
     get_image_dimensions,
     crop_resolution_ratio_label,
-    resolve_crop_box_with_report,
     apply_framing_size,
-    apply_aspect_ratio_preference,
     nearest_openai_edit_size,
     supports_arbitrary_openai_size,
     openai_edit_size_for_ratio,
-    output_geometry_warnings,
     ensure_png_bytes,
 )
 from prompts import (
@@ -55,7 +50,9 @@ from prompts import (
     style_option_entries,
     _apply_default_person_issues,
 )
-from photo_agent.edit_prompt import assemble_edit_prompt
+from photo_agent.capabilities import ANALYSIS_MODEL_REASONING_EFFORT
+from photo_agent.providers.http import api_error, checked_json, error_message, retry_transient, safe_json
+from photo_agent.providers.image_edit import EditGeometry, run_image_edit
 
 logger = logging.getLogger(__name__)
 
@@ -154,16 +151,7 @@ def _auth_headers() -> dict:
     return {"Authorization": f"Bearer {_openai_api_key()}"}
 
 
-class _RetryableApiError(RuntimeError):
-    """A transient OpenAI API failure (5xx) -- distinct from a 4xx rejection
-    (e.g. the safety system blocking a request), which will fail identically
-    on retry since the problem is the request's content, not the network."""
-
-
-_RETRYABLE_EXCEPTIONS = (requests.exceptions.Timeout, requests.exceptions.ConnectionError, _RetryableApiError)
-
-
-@backoff.on_exception(backoff.expo, _RETRYABLE_EXCEPTIONS, max_tries=3, jitter=backoff.full_jitter)
+@retry_transient
 def _post_json(url: str, body: dict, label: str, timeout: int = 120) -> dict:
     try:
         resp = requests.post(
@@ -177,30 +165,18 @@ def _post_json(url: str, body: dict, label: str, timeout: int = 120) -> dict:
     except Exception as exc:
         _attach_api_error_context(exc, url=url, body=body, label=label)
         raise
-    data = _safe_json(resp)
+    data = safe_json(resp)
     raw_response = data
     if not data:
         text = getattr(resp, "text", "")
         raw_response = {"raw_text": text} if text else data
     if not resp.ok:
-        error_data = data if isinstance(data, dict) else {}
-        msg = (error_data.get("error") or {}).get("message") or f"HTTP {resp.status_code}"
-        if resp.status_code >= 500:
-            exc = _RetryableApiError(f"{label}: {msg}")
-        else:
-            exc = RuntimeError(f"{label}: {msg}")
+        exc = api_error(resp, f"{label}: {error_message(data, resp.status_code)}")
         _attach_api_error_context(
             exc, url=url, body=body, label=label, raw_response=raw_response, status=resp.status_code
         )
         raise exc
     return data
-
-
-def _safe_json(resp) -> dict:
-    try:
-        return resp.json()
-    except Exception:
-        return {}
 
 
 def _extract_output_text(data: dict) -> str:
@@ -725,75 +701,46 @@ def edit_photo(
     single_pass_edit: bool = False,
 ):
     """Returns (result, prompt)."""
-    img_w, img_h = get_image_dimensions(image_bytes)
 
-    # Let the selected framing size (close/closer) drive the crop geometry, not
-    # just the style-hint text. For closer this rewrites crop_box onto a single
-    # subject and clears the other protected regions so the resolver does not
-    # re-expand the frame back over everyone. wide/wider/unset pass through.
-    size = (analysis.get("style_options") or {}).get("size")
-    framed_analysis = apply_framing_size(analysis, size)
-    # User's explicit aspect-ratio choice overrides the analysis's own
-    # recommendation ("original" only -- "auto" passes through unchanged).
-    # The effective output ratio is written into this working copy so crop
-    # geometry and prompt text agree with the API request. Do not mutate the
-    # shared analysis object: it is reused by QA and by independent RUNs.
-    framed_analysis = copy.deepcopy(apply_aspect_ratio_preference(framed_analysis, aspect_ratio))
-    # Resolve one effective ratio and reuse it for crop and output canvas.
-    if aspect_ratio == "original":
-        ratio_w, ratio_h = img_w, img_h
-        effective_ratio_label = "original"
-    else:
-        effective_ratio_label = _analysis_aspect_ratio_label(framed_analysis)
-        if effective_ratio_label == "original":
+    def resolve_geometry(framed_analysis, img_w, img_h):
+        if aspect_ratio == "original":
             ratio_w, ratio_h = img_w, img_h
+            ratio_label = "original"
         else:
-            ratio_w, ratio_h = _ratio_dimensions(effective_ratio_label)
-    size_param = openai_edit_size_for_ratio(ratio_w, ratio_h) if supports_arbitrary_openai_size(model) else nearest_openai_edit_size(ratio_w, ratio_h)
-    if "x" in size_param:
-        output_w, output_h = (int(v) for v in size_param.lower().split("x", 1))
-        effective_ratio_label = f"{output_w}:{output_h}"
-    framed_analysis["recommended_aspect_ratio"] = effective_ratio_label
-    # In expand mode the rectangle is not the canvas's shape and must not be
-    # refitted to it -- the canvas is reached by extending, not by cropping.
-    crop_ratio_label = crop_resolution_ratio_label(
-        framed_analysis, img_w, img_h, effective_ratio_label,
-    )
-    if framed_analysis.get("crop_box"):
-        framed_analysis["crop_box"]["aspect_ratio"] = crop_ratio_label
-    crop_geometry_ctx = dict(framed_analysis)
-    crop_geometry_ctx["recommended_aspect_ratio"] = crop_ratio_label
-    crop_plan = resolve_crop_box_with_report(
-        crop_geometry_ctx.get("crop_box"), crop_geometry_ctx, img_w, img_h,
-    )["cropBox"]
-    prompt_text, resolution_metadata, prompt_strategy = assemble_edit_prompt(
-        framed_analysis, crop_plan, preset_key=preset_key, aspect_ratio=aspect_ratio,
-        source_size=(img_w, img_h), single_pass_edit=single_pass_edit,
-        revision_feedback=revision_feedback,
-    )
-
-    # Converted once, outside the retry-wrapped call, so a retry doesn't
-    # needlessly re-encode the same bytes.
-    png_bytes = ensure_png_bytes(image_bytes)
-    data = _post_image_edit(model, prompt_text, quality, size_param, png_bytes)
-
-    b64 = (data.get("data") or [{}])[0].get("b64_json")
-    if not b64:
-        raise RuntimeError("OpenAI 回應沒有包含圖片資料。")
-
-    return {
-        "image_b64": b64,
-        "usage": {"model": model, "usage": data.get("usage")},
-        "geometry_warnings": output_geometry_warnings(
-            b64, effective_ratio_label, crop_plan, img_w, img_h,
+            ratio_label = _analysis_aspect_ratio_label(framed_analysis)
+            if ratio_label == "original":
+                ratio_w, ratio_h = img_w, img_h
+            else:
+                ratio_w, ratio_h = _ratio_dimensions(ratio_label)
+        size_param = openai_edit_size_for_ratio(ratio_w, ratio_h) if supports_arbitrary_openai_size(model) else nearest_openai_edit_size(ratio_w, ratio_h)
+        if "x" in size_param:
+            output_w, output_h = (int(v) for v in size_param.lower().split("x", 1))
+            ratio_label = f"{output_w}:{output_h}"
+        return EditGeometry(
+            ratio_label=ratio_label,
+            # In expand mode the rectangle is not the canvas's shape and must
+            # not be refitted to it -- the canvas is reached by extending,
+            # not by cropping.
+            crop_ratio_label=crop_resolution_ratio_label(framed_analysis, img_w, img_h, ratio_label),
             expanding=bool(framed_analysis.get("reframe_extension")),
-        ),
-        "prompt_resolution": resolution_metadata,
-        "prompt_strategy": prompt_strategy,
-    }, prompt_text
+            request={"size": size_param},
+        )
+
+    def send(png_bytes, prompt_text, geometry):
+        data = _post_image_edit(model, prompt_text, quality, geometry.request["size"], png_bytes)
+        b64 = (data.get("data") or [{}])[0].get("b64_json")
+        if not b64:
+            raise RuntimeError("OpenAI 回應沒有包含圖片資料。")
+        return b64, {"model": model, "usage": data.get("usage")}
+
+    return run_image_edit(
+        image_bytes, analysis, preset_key=preset_key, revision_feedback=revision_feedback,
+        aspect_ratio=aspect_ratio, single_pass_edit=single_pass_edit,
+        resolve_geometry=resolve_geometry, send=send,
+    )
 
 
-@backoff.on_exception(backoff.expo, _RETRYABLE_EXCEPTIONS, max_tries=3, jitter=backoff.full_jitter)
+@retry_transient
 def _post_image_edit(model: str, prompt_text: str, quality: str, size_param: str, png_bytes: bytes) -> dict:
     resp = requests.post(
         OPENAI_IMAGES_EDITS_URL,
@@ -802,13 +749,7 @@ def _post_image_edit(model: str, prompt_text: str, quality: str, size_param: str
         data={"model": model, "prompt": prompt_text, "quality": quality, "size": size_param},
         timeout=300,
     )
-    data = _safe_json(resp)
-    if not resp.ok:
-        msg = (data.get("error") or {}).get("message") or f"HTTP {resp.status_code}"
-        if resp.status_code >= 500:
-            raise _RetryableApiError(f"Image edit failed: {msg}")
-        raise RuntimeError(f"Image edit failed: {msg}")
-    return data
+    return checked_json(resp, "Image edit failed")
 
 
 # ── Step 5b: eye repair pass (OpenAI) ──────────────────────────────────────────

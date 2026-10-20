@@ -1,11 +1,12 @@
 import hashlib
 import os
 
-from flask import Blueprint, current_app, jsonify, send_from_directory
+from flask import Blueprint, current_app, jsonify, redirect, send_from_directory
 
 from aiserver_utils.pf_redis import pf_redis_client
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 import config as photoagent_config
+from photo_agent import capabilities
 
 static_bp = Blueprint("static_bp", __name__)
 
@@ -78,6 +79,14 @@ def config():
     })
 
 
+@static_bp.get("/api/capabilities")
+def capabilities_list():
+    """Every option a client may offer, from the feature registry
+    (photo_agent/capabilities.py): debug-only entries only when DEBUG_UI is
+    on, Body Reshape only when ENABLE_BODY_RESHAPE is, internal options never."""
+    return jsonify(capabilities.describe(debug=bool(current_app.config.get("DEBUG_UI", False))))
+
+
 @static_bp.get("/api/version")
 def version():
     try:
@@ -92,6 +101,18 @@ def version():
         "frontend": _frontend_version(current_app.config["FRONTEND_DIR"]),
         "worker": worker_version,
     })
+
+
+@static_bp.get("/chat")
+def chat_redirect():
+    # Relative, so it keeps whatever prefix a proxy mounted this app under.
+    return redirect("chat/")
+
+
+@static_bp.get("/chat/")
+def chat_index():
+    """The chat page (built from frontend-chat/ into frontend/chat/)."""
+    return _no_cache(send_from_directory(current_app.config["FRONTEND_DIR"], "chat/index.html"))
 
 
 @static_bp.get("/<path:filepath>")

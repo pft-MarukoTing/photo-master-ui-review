@@ -1,0 +1,930 @@
+/* Chat additions on top of the old PhotoMaster (caramel) styles. Only new
+   pieces live here; everything else is the old UI's own classes. */
+
+/* ── Tokens ───────────────────────────────────────────────────────────
+   This file ships with the Preact UI only, so everything declared here is
+   scoped to /chat/ and cannot reach the old vanilla UI at /.
+
+   Two groups. The scale tokens (type, spacing) are new. The semantic and
+   accent-text tokens are *fills for gaps in styles.css*: the shared sheet
+   has no --success / --warn / --danger, and its --accent is tuned as a
+   surface colour, so components here had been inventing literals for both.
+   They belong in styles.css next to the other theme tokens so the old UI
+   can share them -- until that lands, they are defined here against the
+   same theme selectors the shared sheet uses. */
+:root{
+  /* Type scale: 5 steps, no half-pixels. Was 9 sizes from 10.5 to 16 with
+     0.5px gaps that render identically. */
+  --chat-fs-xs:11px;   /* meta, tags, pill counters */
+  --chat-fs-sm:12px;   /* captions, secondary rows */
+  --chat-fs-md:14px;   /* body: messages, options, inputs */
+  --chat-fs-lg:16px;   /* card titles */
+  --chat-fs-xl:20px;   /* panel title */
+
+  /* 4pt spacing grid. The only values off it are optical: hairline borders,
+     the 2px vertical inside pill paddings, and the -2px label nudge. */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px; --sp-7:48px;
+
+  /* styles.css budgets the session view's height as 100vh minus the header
+     minus this, and its 54px fallback is the old numbered-disc rail. The
+     breadcrumb that replaced it is 12 + 18 + 8. The old UI sets its own copy
+     inline in frontend/index.html, so this only re-measures /chat/. */
+  --step-indicator-h:38px;
+
+  /* Dark-surface status colours (matches :root in styles.css, which is dark). */
+  --success:#34D399; --success-bg:rgba(52,211,153,.16);
+  --warn:#FBBF24;    --warn-bg:rgba(251,191,36,.16);
+  --danger:#FF6B5E;  --danger-bg:rgba(255,107,94,.16);
+}
+/* Same hues pushed dark enough to clear 4.5:1 on the lightest light surface
+   in the set (#FFFFFF) and the darkest (#F5F7FB): 5.25/4.90, 6.03/5.62,
+   6.54/6.09. Specificity matches the theme blocks in styles.css. */
+body[data-theme-mode="light"]{
+  --success:#2F7A48; --success-bg:rgba(69,160,98,.14);
+  --warn:#A04A12;    --warn-bg:rgba(213,103,35,.14);
+  --danger:#B3261E;  --danger-bg:rgba(179,38,30,.12);
+}
+/* --accent-text is the accent walked to the first point where it clears
+   4.5:1 against *both* the plain surfaces (--n04, --n09) and the 10% accent
+   wash the emphasised buttons sit on, so one token covers label text whether
+   or not there is a tint behind it. Light themes walk down, dark themes up;
+   accents already past the line (ocean, forest, caramel-dark) are untouched.
+   Measured on the wash, the tighter of the two surfaces:
+     caramel 4.62  peach 4.62  lilac 4.63  paper 4.61  purple-light 4.61
+     default 4.60  lilac-dark 4.60  ocean 7.49  forest 7.05  caramel-dark 7.04
+
+   The var(--accent) fallback sits on body, not :root. A var() inside a custom
+   property is substituted against the element the property is declared on, and
+   every palette in styles.css is declared on body[data-theme=...] -- so on
+   :root this resolved to :root's own --accent, the default palette's neon
+   purple, and the three themes that rely on the fallback (caramel-dark, ocean,
+   forest) painted purple labels over their own orange/cyan/green borders. */
+body{--accent-text:var(--accent)}
+/* applyTheme removes data-theme for the default palette rather than writing
+   "default", so the no-attribute case is the one that has to be named. */
+body:not([data-theme]),body[data-theme="default"]{--accent-text:#B85DFF}
+body[data-theme="lilac-dark"]{--accent-text:#D46DAB}
+body[data-theme="paper"]{--accent-text:#235DDF}
+body[data-theme="peach"]{--accent-text:#AE493F}
+body[data-theme="lilac"]{--accent-text:#924D92}
+body[data-theme="caramel"]{--accent-text:#A64F19}
+body[data-theme="purple-light"]{--accent-text:#7B39EA}
+/* ocean, forest and caramel-dark are absent above on purpose: their accents
+   already clear 4.5:1, so they keep the body-level var(--accent) fallback. */
+
+/* One display face, used only for the headline and panel titles. Anything
+   longer than a line stays on the sans -- a serif at 15px/1.8 in Traditional
+   Chinese gets muddy on a non-retina screen. */
+:root{--chat-serif:'Noto Serif TC',Georgia,'Songti TC',serif}
+
+/* Emphasis without a dark button.
+
+   The old --cta was a solid ramp per theme: one button filled dark so it
+   would outrank the rest. Two things were wrong with that. The screen's two
+   forward actions (分析 / 一鍵美化) are peers, so there was no single button
+   to promote -- filling one of them invented a hierarchy that the task does
+   not have. And a dark block dropped into a row of outline pills is the
+   heaviest thing on the panel, which read as bolted on rather than as part of
+   the theme.
+
+   Emphasis is now tonal: a light tint of the accent behind the label, the
+   accent at
+   full strength as a double-struck edge, and --accent-text on top. It still
+   outranks a plain outline chip at a glance, but it stays a light button, so
+   two of them can sit side by side as equals. Three weights, no dark fill:
+
+     tonal   (.is-primary)  forward actions      tint + accent edge
+     outline (default)      ordinary choices     card + neutral border
+     ghost   (.is-ghost)    cancel / clear       no fill, muted label
+
+   The home CTA is the lone filled button left in /chat/; see --cta below.
+
+   Non-text surfaces -- the avatar disc, the progress bar -- keep --mv-grad:
+   there is no label on them to read. */
+/* The tint cannot be a translucent accent laid over whatever happens to be
+   behind it. caramel's neutral ramp is rose-tinted (--n04 #FAF4F6, --n14
+   #F6E9EE), so 10% orange over it mixed to a pink-mauve that fought the
+   orange border and label sitting on top of it -- two hues in one button.
+   The tints are mixed against a fixed base per mode instead: white on light
+   themes, the panel on dark ones. What shows is the accent's own hue and
+   none of the surface's, and the button looks the same wherever it sits.
+
+   Light themes mix toward white, which lightens; dark themes mix toward the
+   panel, which also lightens, so the dark percentages are lower -- past ~12%
+   the fill rises far enough to drop --accent-text under 4.5:1. Measured
+   label-on-fill at --tonal / --tonal-hi, worst theme of each mode:
+     light  caramel 4.99 / 4.65     dark  default 4.85 / 4.61
+
+   On body for the same substitution reason as --accent-text above: --n09 and
+   --accent are body-level, so a :root declaration mixed the default palette's
+   purple into :root's own near-black and handed every dark theme the same
+   purple-tinted fill. */
+body{
+  --tonal-base:var(--n09);
+  --tonal-lo:color-mix(in srgb,var(--accent) 5%,var(--tonal-base));
+  --tonal:color-mix(in srgb,var(--accent) 8%,var(--tonal-base));
+  --tonal-hi:color-mix(in srgb,var(--accent) 12%,var(--tonal-base));
+}
+/* paper and peach are not in the theme picker (app.js THEME_MODE lists six),
+   so they never get data-theme-mode and have to be named here. */
+body[data-theme-mode="light"],body[data-theme="paper"],body[data-theme="peach"]{
+  --tonal-base:#fff;
+  --tonal-lo:color-mix(in srgb,var(--accent) 7%,var(--tonal-base));
+  --tonal:color-mix(in srgb,var(--accent) 10%,var(--tonal-base));
+  --tonal-hi:color-mix(in srgb,var(--accent) 16%,var(--tonal-base));
+}
+
+/* The one exception: the home 開始對話 button. It is the only button on the
+   landing screen -- nothing to be peers with, nothing to out-rank -- so the
+   "don't promote one of several" argument above does not apply to it, and a
+   tonal pill alone on a hero reads as disabled rather than inviting. It keeps
+   the filled CTA.
+
+   --cta is the deep ramp this page shipped with, kept on the user's call.
+   Most themes ride --mv-grad; caramel and peach override it because --mv-grad
+   runs light at one end (caramel's #F9D178 puts white at 1.5:1) and a label
+   has to sit on it. Their overrides walk down to #8D2212 / #7E211C, which is
+   deeper than the rest of the page -- that is the point here, and it no
+   longer leaks into the in-conversation buttons the way it used to, since
+   those are tonal now and this token has exactly one user.
+
+   Note the other themes still carry --mv-grad under white at its light end;
+   that was true before this pass and is unchanged. */
+body{--cta:var(--mv-grad);--on-cta:#fff}
+body[data-theme="caramel"]{--cta:linear-gradient(135deg,#B85017 0%,#A13415 55%,#8D2212 100%)}
+body[data-theme="peach"]{--cta:linear-gradient(135deg,#B3453B 0%,#9B322C 55%,#7E211C 100%)}
+
+/* Inter carries no CJK glyph, so every Chinese character on this page used to
+   fall through to whatever the OS happened to have -- PingFang, JhengHei, or
+   a Simplified face on Linux. Naming Noto Sans TC pins it. Scoped to /chat/;
+   styles.css's own stack is untouched. */
+body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-serif}
+
+.chat-panel{display:flex;flex-direction:column;height:100%;min-height:0;box-sizing:border-box;
+  background:var(--n09);border:0;border-radius:20px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)}
+/* Baseline, not centre: the 20px title and 12px sub sit on one baseline. */
+.chat-panel-head{display:flex;align-items:baseline;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--border);background:var(--n04)}
+.chat-panel-title{font-family:var(--chat-serif);font-size:var(--chat-fs-xl);font-weight:600;line-height:1.3;letter-spacing:.02em;color:var(--n100)}
+.chat-panel-sub{font-size:var(--chat-fs-sm);color:var(--n54);margin-left:auto}
+.chat-timeline{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:var(--sp-5);padding:var(--sp-5)}
+.chat-timeline>:first-child{margin-top:auto}
+.chat-msg{display:flex;gap:var(--sp-3);align-items:flex-start}
+.chat-msg.is-user{justify-content:flex-end}
+.chat-avatar{width:28px;height:28px;flex-shrink:0;border-radius:50%;background:var(--mv-grad);display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:var(--chat-fs-sm);font-weight:800;box-shadow:var(--shadow-sm)}
+.chat-body{min-width:0;flex:1;display:flex;flex-direction:column;gap:var(--sp-2)}
+.chat-msg.is-user .chat-body{flex:0 1 auto;align-items:flex-end}
+/* 15/1.8, not 14/1.6: this is the one surface people actually read a
+   paragraph on, and CJK needs the extra leading more than Latin does. */
+.chat-text{font-size:15px;line-height:1.8;color:var(--n84);text-wrap:pretty}
+.chat-text b{font-weight:700;color:var(--n100)}
+/* The user's own turns carry a faint accent wash so the two speakers are
+   told apart by colour, not only by which edge they hang off.
+   6/14 rather than the 12/16 step: most user turns are one short line, and
+   on those the scale step read as a slab instead of a bubble. The leading
+   stays at 1.6 -- the long turns still wrap, and CJK needs it. */
+.chat-bubble{background:var(--tonal);border:1px solid var(--tonal-hi);color:var(--n100);font-size:15px;line-height:1.6;
+  padding:6px 14px;border-radius:18px 18px 6px 18px;max-width:380px}
+.chat-bubble.is-click{display:inline-flex;align-items:center;gap:var(--sp-1)}
+.chat-bubble.is-click svg{color:var(--accent-text);width:14px;height:14px;flex-shrink:0}
+.chat-upload{display:flex;align-items:center;gap:var(--sp-3)}
+.chat-upload img{width:92px;height:62px;object-fit:cover;border-radius:10px;border:1px solid var(--n24)}
+.chat-meta{font-size:var(--chat-fs-xs);color:var(--n64)}
+/* A sentence of explanation under a group label -- same quiet register as
+   .chat-meta, but it wraps, so it needs the measure and the leading. */
+.chat-note{margin:0;font-size:var(--chat-fs-xs);line-height:1.7;color:var(--n64);text-wrap:pretty}
+.chat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:var(--sp-3) var(--sp-4)}
+/* 只有一句進度文案 -- 標題和轉環都在左邊畫布那一層（.canvas-busy）上。美化中這句
+   每 5 秒換一次，長短差很多；留兩行高度，換句時下面的快捷鍵才不會跟著上下跳。 */
+.chat-working p{margin:0;min-height:3.2em;font-size:var(--chat-fs-md);line-height:1.6;
+  color:var(--n84);text-wrap:pretty}
+
+/* ── 處理中蓋在原圖上的那一層 ──────────────────────────────────────────
+   分析中和美化中用同一層，所以兩個階段左欄看起來是同一件事在繼續，而不是
+   先看照片、再換成一張完全不同的轉圈卡片（舊版 #canvas-loading 的做法，仍留給
+   舊 UI 用）。底圖維持原圖：霧玻璃讓它退到後面，但人還看得到自己在等哪一張。
+
+   轉環直接沿用 styles.css 的 .proc-visual/.think-ring，連各主題的配色和 peach
+   那圈 dusty teal 都照舊；這裡只拿掉中央的縮圖 -- 原圖就在後面，中間再擺一張同一
+   張照片的小圓圖只是重複。 */
+.canvas-busy{
+  position:absolute;inset:0;z-index:4;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:var(--sp-3);padding:var(--sp-5);
+  background:rgba(var(--glass-rgb),.55);
+  backdrop-filter:blur(8px) saturate(.9);
+  -webkit-backdrop-filter:blur(8px) saturate(.9);
+}
+/* 沒有 backdrop-filter 就只能靠不透明度把底圖壓下去，字才讀得動。 */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .canvas-busy{background:rgba(var(--glass-rgb),.86)}
+}
+/* .photo-frame 的寬度是跟著圖走的，圖還沒載到時會塌成一條 -- 給這一層一個下限，
+   第一次分析時才不會先閃一條窄的霧玻璃。 */
+.photo-frame:has(> .canvas-busy){min-width:min(100%,320px)}
+/* 這一層只有轉環和一行字，所以轉環要夠大才撐得住 480px 高的框 -- 180px 的
+   .proc-visual 收到 156px 就好，負邊距把縮放後空出來的框收回來。 */
+.canvas-busy-rings{transform:scale(.87);transform-origin:center;margin:-12px;
+  filter:drop-shadow(0 1px 3px rgba(0,0,0,.28))}
+/* 1.5px 的線縮完剩 1.3px，壓在照片上會斷掉。 */
+.canvas-busy .think-ring{border-width:2px}
+.canvas-busy-title{margin:0;font-size:var(--chat-fs-lg);font-weight:800;
+  letter-spacing:-.3px;color:var(--text);text-align:center}
+/* The finished photo, at the width of the rail rather than as an 84x66 chip.
+   Height-capped rather than full-bleed: in the session view the canvas on the
+   left is already showing this photo large, so an uncapped copy here would
+   compete with it instead of confirming it. The cap is a max-height with auto
+   width, not a fixed band with object-fit:cover -- cropping a portrait to a
+   landscape strip cuts the subject out of the shot it is confirming. */
+.chat-result{display:flex;flex-direction:column;align-items:flex-start;gap:var(--sp-3);margin:0}
+.chat-result img{display:block;width:auto;max-width:100%;height:auto;max-height:240px;
+  border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.chat-result-cap{display:flex;flex-direction:column;gap:var(--sp-2)}
+.chat-result h4{margin:0;font-family:var(--chat-serif);font-size:var(--chat-fs-lg);font-weight:600;color:var(--n100)}
+.chat-verdict{display:inline-flex;align-items:center;gap:var(--sp-1);font-size:var(--chat-fs-sm);color:var(--n64)}
+.chat-verdict b{background:var(--success-bg);color:var(--success);border-radius:999px;padding:2px var(--sp-2);font-size:var(--chat-fs-xs)}
+/* One strip for both the subject picker and the quick replies: the rule, the
+   padding and the fill live here, and the two groups inside carry none of
+   their own. The faces take the leftover width -- so they are the side that
+   scrolls -- and the actions are flushed to the right edge at their natural
+   width, because the send button they lead to is on that edge too. */
+.chat-footbar{display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-4);
+  border-top:1px solid var(--border);background:var(--n04)}
+/* No padding of its own above or below: the chips and the faces carry their own
+   height, and the strip adding more only pushed the transcript up. The two
+   rules below close the same gap from the other side -- stacked, the footbar
+   and the composer read as one block, so only the block's outer edges are
+   padded. A composer standing alone keeps its own top padding.
+   The faces row comes to 52px (40 avatar + 3px pad + 1px border, twice, + the
+   track's 2px). Without faces the 32px chips alone set the height and sit
+   flush against the rule, so the strip holds 52px as a floor: the chips get
+   10px each side, and the strip keeps one height whether or not faces show. */
+.chat-footbar{min-height:52px}
+.chat-footbar+.chat-composer{border-top:0;padding-top:0}
+/* A fixed 20px rather than align-self:stretch -- the faces are half again as
+   tall as the chips, and a full-height rule drew attention to that. */
+.chat-footbar-sep{flex:0 0 auto;align-self:center;width:1px;height:20px;background:var(--border-2)}
+/* margin-left:auto, not only the faces' flex-grow: with no faces on screen the
+   actions still belong on the right edge. justify-content follows for the
+   narrow case, where the chips wrap onto a second line.
+   flex-shrink:0 so the faces are the side that gives way -- they already have
+   a scroller for exactly that, while the actions have nowhere to go but a
+   second line, and two chips stacked read as two separate decisions. They
+   still wrap when they alone outgrow the strip; by then there is genuinely no
+   room. */
+.chat-quick{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;
+  gap:var(--sp-2);flex:0 0 auto;max-width:100%;margin-left:auto}
+/* No longer width:100% -- in the merged strip the label is the first thing on
+   the line, not a caption above its own row. */
+.chat-quick-label{font-size:var(--chat-fs-sm);color:var(--n54)}
+/* min-height, not height: the touch block below needs to raise it, and 14px
+   text must not clip. */
+.chat-chip{display:inline-flex;align-items:center;gap:var(--sp-1);min-height:32px;padding:var(--sp-1) var(--sp-3);border-radius:999px;
+  font:600 var(--chat-fs-md)/1.3 Inter,'Noto Sans TC',system-ui,sans-serif;
+  background:var(--card);color:var(--n84);border:1px solid var(--n34);cursor:pointer}
+.chat-chip svg{width:14px;height:14px}
+.chat-chip.is-primary{background:var(--tonal);color:var(--accent-text);border-color:var(--accent);font-weight:700;
+  box-shadow:inset 0 0 0 1px var(--accent)}  /* doubles the 1px border into a 2px ring without changing the box */
+.chat-chip.is-ghost{background:transparent;color:var(--n64)}  /* keeps the chip's border and padding -- a borderless label stops reading
+     as a button. The demotion is carried by the muted text plus the group
+     gutter in .chat-actions, which is enough next to a tonal pair. */
+.chat-chip[disabled]{opacity:.45;cursor:not-allowed}
+/* Status badge over a session tile -- the same chip the old UI puts on
+   every history tile (.history-cube .rc-badge, index.html): a glass pill
+   with a glyph, tinted by status. Bottom-left, which is where the old UI
+   puts it too; the date reads along the top instead.
+   The tints are fixed literals rather than the --success/--danger tokens
+   above: this pill sits on an arbitrary photo, where only white on dark
+   glass holds up, so the colour cannot track the theme's text-on-surface
+   status colours. Same reasoning, and the same values, as the old sheet.
+   The transparent border on the base keeps the pill one size across states,
+   since the tinted ones carry a hairline. */
+.session-tile-badge{position:absolute;left:6px;bottom:6px;z-index:3;max-width:calc(100% - 12px);
+  display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;
+  font-size:var(--chat-fs-sm);font-weight:300;line-height:1.2;letter-spacing:.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;
+  background:rgba(9,9,11,.65);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);
+  border:1px solid transparent;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.session-tile-badge::before{flex:0 0 auto;margin-right:5px;font-size:13px;font-weight:800;line-height:1}
+.session-tile-badge.is-analyzing::before,.session-tile-badge.is-rendering::before{content:"\25CC"}
+.session-tile-badge.is-ready::before{content:"\2726"}
+.session-tile-badge.is-done::before{content:"\2713"}
+.session-tile-badge.is-failed::before{content:"!"}
+.session-tile-badge.is-ready{background:rgba(var(--accent-rgb),.35);border-color:rgba(var(--accent-soft-rgb),.55)}
+.session-tile-badge.is-done{background:rgba(1,179,123,.35);border-color:rgba(52,211,153,.55)}
+.session-tile-badge.is-failed{background:rgba(220,60,60,.35);border-color:rgba(220,60,60,.55)}
+/* A tile is ~96px wide in the home rail's three-column mosaic and ~126px in
+   the drawer, and one in every eight is twice that -- so the badge sizes
+   itself against the tile it sits on rather than against the surface.
+   The threshold sits between those two small sizes. */
+.demo-image-tile{container-type:inline-size}
+@container (max-width:110px){
+  .session-tile-badge{left:4px;bottom:4px;max-width:calc(100% - 8px);padding:2px 7px;font-size:10px}
+  .session-tile-badge::before{margin-right:4px;font-size:10px}
+}
+.chat-composer{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3);border-top:1px solid var(--border);background:var(--n04)}
+.chat-attach,.chat-send{width:44px;height:44px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  border:1px solid var(--n34);background:var(--card);color:var(--accent-text)}
+.chat-attach svg,.chat-send svg{width:18px;height:18px}
+.chat-send{background:var(--tonal);color:var(--accent-text);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.chat-send[disabled]{opacity:.4;cursor:not-allowed}
+.chat-composer-field{flex:1;min-height:48px;display:flex;align-items:center;padding:var(--sp-1) var(--sp-3);border-radius:999px;background:var(--card);
+  border:1px solid var(--n24);color:var(--n64);font-size:var(--chat-fs-md)}
+.home-start{display:flex;flex-direction:column;align-items:center;gap:var(--sp-2);margin-top:var(--sp-5)}
+.home-start-btn{display:inline-flex;align-items:center;gap:var(--sp-2);min-height:48px;padding:0 var(--sp-6) 0 var(--sp-5);border-radius:999px;font-size:var(--chat-fs-lg);font-weight:700;
+  background:var(--cta);color:var(--on-cta);border:0;box-shadow:0 8px 22px rgba(var(--accent-rgb),.30)}
+.home-start-btn svg{width:18px;height:18px}
+.chat-choices{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
+/* The forward actions and the utility actions are different kinds of thing,
+   so they are two groups with a wider gutter between them rather than four
+   evenly spaced pills. Wrapping keeps each group intact. Order is the order
+   of operations -- settings, then run -- so the emphasis sits on the right,
+   which is also where the eye lands last. */
+.chat-actions{align-items:center;gap:var(--sp-2) var(--sp-5)}
+.chat-actions-main,.chat-actions-aux{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
+.chat-chip.is-picked{border-color:var(--accent);color:var(--accent-text);background:var(--tonal-lo)}
+/* An answered turn. Not disabled -- disabled says "unavailable for now", and
+   this is simply past. The chip that was taken keeps its accent so the choice
+   stays readable when scrolling back; the one that was not recedes. */
+.chat-chip.is-static{cursor:default;border-color:var(--n24);color:var(--n54);background:transparent}
+.chat-chip.is-static.is-picked{border-color:var(--accent);color:var(--accent-text);background:var(--tonal-lo)}
+/* ── 範例照片 dialog ──────────────────────────────────────────────────
+   Same stacking band as the history drawer (backdrop 1000, panel 1001) and
+   the same backdrop wash, because they are the same kind of thing: a panel
+   you glance at and dismiss, with the page intact behind it. Browsing used
+   to happen in the timeline, which meant every look left a wall of
+   thumbnails in the transcript and -- since the grid had to be the last
+   message to be clickable -- re-picking had to throw away the photo already
+   chosen. Over the page instead, so the stage behind it keeps its photo. */
+.sample-modal-backdrop{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55)}
+/* Clear of the header the same way .error-modal is, rather than overlapping
+   it: the top inset is the header's height, and the box centres in what is
+   left, so it never needs to out-stack the header to stay usable. */
+.sample-modal{position:fixed;z-index:1001;left:50%;transform:translateX(-50%);
+  top:calc(var(--header-h) + var(--sp-4));bottom:var(--sp-4);
+  width:min(820px,calc(100vw - var(--sp-6)));display:flex;flex-direction:column;min-height:0;
+  box-sizing:border-box;background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);overflow:hidden}
+.sample-modal-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);
+  padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--border)}
+.sample-modal-head h2{margin:0;font:600 var(--chat-fs-lg)/1.4 Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n100)}
+.sample-modal-close{flex:none;display:flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;
+  border:none;border-radius:50%;background:none;color:var(--n64);cursor:pointer}
+.sample-modal-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp-5)}
+/* Columns, not a grid of squares: each frame keeps its photo's own aspect
+   ratio, so a portrait stays a portrait and nothing is cropped away before
+   the choice is made -- what you pick is what you get on the stage. A grid
+   would leave a ragged gap under every short tile in a row; multicol packs
+   them. column-width, not column-count, so the dialog decides how many fit. */
+.sample-grid{columns:160px;column-gap:var(--sp-3)}
+.sample-tile{display:block;width:100%;margin:0 0 var(--sp-3);break-inside:avoid;
+  padding:0;border-radius:12px;overflow:hidden;
+  border:2px solid transparent;background:var(--n14);cursor:pointer}
+.sample-tile img{width:100%;height:auto;display:block}
+.sample-tile.is-picked{border-color:var(--accent);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.2)}
+
+/* 上傳頁面的個人化需求，接在動作鍵上面。裡面跟 session 的個人化需求面板
+   （.chat-opt-prompt）同一套：一整段字，要改再打開輸入框。 */
+.chat-notes{display:flex;flex-direction:column;gap:var(--sp-2)}
+.chat-notes .chat-opt-prompt-text .chat-face-chip{vertical-align:middle;margin:-2px var(--sp-1) 0 0}
+
+/* ── Page-specific additions ─────────────────────────────────────────── */
+.chat-msg{flex-shrink:0}
+.chat-text{margin:0}
+.chat-muted{color:var(--n54)}
+/* 面板收起後留下的那一句結論。跟它上面的引言是兩種東西 -- 引言是當時在說
+   什麼，這句是最後談成的結果 -- 所以給它一道左線，讀起來像被引出來的一行，
+   顏色也比引言實一點。 */
+.chat-recap{margin:0;padding-left:var(--sp-3);border-left:2px solid var(--n24);font-size:14px;line-height:1.7;color:var(--n84);text-wrap:pretty}
+.chat-error{color:var(--danger)}
+.chat-panel.is-dragging{outline:2px dashed var(--accent);outline-offset:-4px}
+.chat-verdict b.is-warn{background:var(--warn-bg);color:var(--warn)}
+.chat-chip:not([disabled]):not(.is-static):hover{border-color:var(--accent);color:var(--accent-text)}
+.chat-chip.is-primary:not([disabled]):hover{background:var(--tonal-hi)}
+.chat-chip.is-ghost:not([disabled]):hover{background:var(--tonal-lo)}
+.chat-send:not([disabled]):hover{background:var(--tonal-hi)}
+.home-start-btn:not([disabled]):hover{filter:brightness(1.05)}
+/* The dialog's own hover feedback, in the same block as the rest. */
+.sample-tile:hover{border-color:rgba(var(--accent-rgb),.72)}
+.sample-modal-close:hover{background:var(--tonal-lo);color:var(--n100)}
+.chat-attach[disabled]{opacity:.45;cursor:not-allowed}
+/* Once a photo is picked the attach button is the only forward way back to
+   choosing one, so it opens the same two routes the greeting offered instead
+   of jumping straight to the file dialog. The sheet rises from the button it
+   belongs to and sits above the composer, which is the last row on the page. */
+.chat-attach-wrap{position:relative;flex-shrink:0;display:flex}
+.chat-attach-menu{position:absolute;left:0;bottom:calc(100% + var(--sp-2));z-index:20;min-width:170px;
+  display:flex;flex-direction:column;gap:2px;padding:var(--sp-1);border-radius:12px;
+  border:1px solid var(--border);background:var(--card);
+  box-shadow:0 14px 32px rgba(0,0,0,.16),0 2px 6px rgba(0,0,0,.06);
+  animation:chat-attach-menu-in .14s ease-out}
+.chat-attach-menu button{display:flex;align-items:center;gap:var(--sp-2);width:100%;padding:var(--sp-2) var(--sp-3);
+  border:0;border-radius:8px;background:none;cursor:pointer;white-space:nowrap;text-align:left;
+  font:inherit;font-size:var(--chat-fs-md);color:var(--n84)}
+.chat-attach-menu button:hover,.chat-attach-menu button:focus-visible{background:var(--tonal-lo);color:var(--accent-text)}
+.chat-attach-menu svg{width:16px;height:16px;flex-shrink:0}
+@keyframes chat-attach-menu-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.chat-attach-menu{animation:none}}
+.chat-boot-error{padding:var(--sp-7) var(--sp-4);color:var(--danger)}
+
+/* Settings editor */
+.chat-settings-editor{display:flex;flex-direction:column;gap:var(--sp-3)}
+.chat-settings-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-3)}
+.chat-field{display:flex;flex-direction:column;gap:var(--sp-1);min-width:0}
+.chat-field select{width:100%;font-size:var(--chat-fs-md);padding-top:var(--sp-2);padding-bottom:var(--sp-2)}
+.chat-settings-portrait{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2) var(--sp-4)}
+.chat-settings-portrait>.chat-meta{width:100%}
+/* Its own row, pulled up under the label it belongs to so the pair reads as
+   one heading rather than as two items in the group's flex flow. */
+.chat-settings-portrait>.chat-note{width:100%;margin-top:calc(2px - var(--sp-2))}
+.chat-switch-row{display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--chat-fs-md);color:var(--n84);cursor:pointer}
+
+
+/* Home: intro + 開始對話, then the chat in its place */
+/* Narrowing the 紀錄/範例 rail. From 1201px up it is not a flex column at all:
+   styles.css turns it into a position:fixed 360px edge rail and reserves the
+   same 360px as padding-right on the row, both under #upload-section, so only
+   an id-carrying selector can move it. Width and reservation have to change
+   together or the rail and the content stop lining up. 320 is the trim the
+   two-column tile grid inside can still take. Inside the same media query as
+   the rules it overrides: below 1201px the rail is back in the flow and the
+   row has no reservation to shrink. */
+@media (min-width:1201px){
+  #upload-section .upload-content-row{padding-right:320px}
+  #upload-section .upload-content-row>.upload-gallery-col{width:320px}
+}
+.upload-content-row>.home-intro{flex:0 1 980px;width:100%;max-width:980px;min-width:0}
+.home-intro{display:flex;flex-direction:column;gap:var(--sp-6);box-sizing:border-box}
+.home-hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);align-items:center;gap:var(--sp-7)}
+.home-hero-copy{display:flex;flex-direction:column;align-items:flex-start;text-align:left}
+.home-eyebrow{display:flex;align-items:center;gap:var(--sp-3);margin:0 0 var(--sp-3);color:var(--accent-text);font-size:var(--chat-fs-md);font-weight:700;letter-spacing:.06em}
+.home-eyebrow::before{content:"";width:28px;height:1px;background:currentColor;opacity:.7}
+/* Was 800-weight Inter clipped to --mv-grad. Gradient text puts the whole
+   sentence in low-contrast orange and hands the emphasis to the gradient
+   rather than to a word; solid ink plus one accented word says the same thing
+   and can actually be read. */
+.home-headline{margin:0;font-family:var(--chat-serif);font-size:clamp(34px,4vw,54px);font-weight:600;line-height:1.28;letter-spacing:.01em;color:var(--n100)}
+.home-headline span{display:block}
+.home-headline em{font-style:normal;color:var(--accent-text)}
+.home-lead{max-width:30em;margin:var(--sp-4) 0 0;color:var(--text-2);font-size:clamp(14px,1.1vw,16px);line-height:1.8;word-break:keep-all}
+/* The button and its meta line are one unit, so they align to each other,
+   not to the copy column: the box is shrink-to-fit (the parent is a
+   flex-start column), so it is the button's width and the meta centers
+   under it while the box itself stays flush with the headline. */
+.home-intro .home-start{margin-top:var(--sp-5)}
+/* Before/after: the after image is clipped from the left at --pos */
+.home-compare{position:relative;width:100%;max-width:400px;justify-self:center;aspect-ratio:4/5;overflow:hidden;border-radius:20px;
+  background:var(--n14);box-shadow:0 24px 56px rgba(0,0,0,.16),0 2px 8px rgba(0,0,0,.06);user-select:none}
+.home-compare-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.home-compare-img.is-after{clip-path:inset(0 0 0 var(--pos))}
+.home-compare-line{position:absolute;top:0;bottom:0;left:var(--pos);width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 8px rgba(0,0,0,.25);pointer-events:none}
+.home-compare-knob{position:absolute;top:50%;left:50%;display:flex;align-items:center;justify-content:center;width:34px;height:34px;
+  transform:translate(-50%,-50%);border-radius:50%;background:#fff;color:var(--accent-text);box-shadow:0 4px 12px rgba(0,0,0,.2)}
+.home-compare-tag{position:absolute;top:var(--sp-3);left:var(--sp-3);padding:var(--sp-1) var(--sp-3);border-radius:999px;background:rgba(0,0,0,.45);color:#fff;
+  font-size:var(--chat-fs-sm);font-weight:700;letter-spacing:.04em;pointer-events:none}
+.home-compare-tag.is-after{left:auto;right:var(--sp-3);background:var(--accent)}
+.home-compare-range{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize;-webkit-appearance:none;appearance:none}
+.home-compare-range:focus-visible{opacity:1;outline:2px solid rgba(var(--accent-rgb),.9);outline-offset:2px}
+@media (max-width:1200px){
+  .upload-content-row>.home-intro{flex:0 0 auto;padding-top:var(--sp-3)}
+}
+@media (max-width:860px){
+  .home-hero{grid-template-columns:1fr;gap:var(--sp-5)}
+  .home-hero-copy{align-items:center;text-align:center}
+  .home-eyebrow::after{content:"";width:28px;height:1px;background:currentColor;opacity:.7}
+  .home-compare{max-width:340px}
+}
+/* dvh, not vh: on mobile Safari/Chrome vh is the *largest* viewport, so a
+   100vh-based panel is taller than the visible area whenever the URL bar is
+   showing and the composer sits below the fold. */
+/* Once the 紀錄/範例 rail unmounts, the space reserved for it must go too, or
+   the panel centres inside a row whose right 320px is padding around nothing
+   and lands visibly left of the screen. The id here is not decoration: it is
+   the only way to outrank #upload-section's own reservation. */
+.upload-content-row.is-chat{padding-right:0}
+#upload-section .upload-content-row.is-chat{padding-right:0}
+/* Half and half, the same split the session view uses, so pressing 開始美化
+   swaps the photo for the canvas without the page re-laying out under the
+   cursor. The panel is capped so an ultra-wide screen spends its extra width
+   on the photograph rather than on a 1200px-wide column of chat. */
+.upload-content-row>.home-chat{flex:1 1 0%;width:auto;max-width:780px;min-width:0;
+  height:calc(100dvh - 150px);max-height:760px;min-height:480px;align-self:center}
+/* Alone on the page the panel is the page, so it takes the full column and
+   drops the 760px cap -- that cap is there to stop an ultra-wide screen
+   spending its height on chat instead of on the photograph, and there is no
+   photograph here yet. Narrower than the split half, because a single centred
+   column reads badly past ~720px. The row already centres on both axes, and
+   this outranks the stacked-layout heights below on specificity, which is
+   what we want: with no stage to share the viewport with, every breakpoint
+   gets the same full-height column. */
+.upload-content-row>.home-chat.is-solo{flex:0 1 auto;width:min(100%,720px);max-width:720px;
+  height:calc(100dvh - 150px);max-height:none;min-height:0}
+
+/* The stage: the photo being worked on, held in the place the session canvas
+   will take. No mat around it -- the session frames its photo because a
+   version strip and a compare handle sit on the same card, and there is
+   nothing here to separate it from. Shadow and radius are the session's. */
+.prechat-stage{flex:1 1 0%;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:calc(100dvh - 150px);max-height:760px;min-height:480px}
+/* flex:1 with min-height:0 gives the box a resolved height, which is what
+   lets the image's max-height:100% mean anything. */
+.prechat-shot{flex:1 1 auto;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
+.prechat-shot img{max-width:100%;max-height:100%;object-fit:contain;border-radius:var(--radius-lg);
+  box-shadow:0 18px 44px rgba(0,0,0,.12),0 2px 6px rgba(0,0,0,.05)}
+
+/* Session: the chat takes the analysis slot.
+
+   The chat is where the work actually happens in this view, so it gets an
+   even half rather than the 45% it had. These match the specificity of the
+   styles.css rules they override, and chat.css loads second, so they win on
+   order. Batch mode's own 40/40 rules are more specific and still apply. */
+.results-canvas-row.showing-analysis .results-canvas-col{flex:50 1 0%}
+.results-canvas-row.showing-analysis .results-analysis-slot{flex:50 1 0%}
+
+/* And the rail stops being a card: no background, no border, no radius, no
+   shadow, just one hairline divider -- so the photo is the only framed object
+   on the page. .chat-timeline keeps flex/min-height/overflow untouched; it
+   has to stay the scroll container, because ChatPanel pins the view by
+   writing its scrollTop. */
+/* 20px top and bottom was the old UI's gutter for a page that scrolled. This
+   view does not: the row below is pinned to the viewport, so every pixel here
+   comes straight off the photo and the conversation. Half at the top; the
+   bottom keeps its 20px so the composer is not flush with the window edge. */
+.results-container{padding-top:10px}
+
+/* height:100%, not a calc: styles.css already gives this slot the row's real
+   stretched height (body.side-panel-layout, >=901px), and the hand-counted
+   100dvh-190px was budgeting for chrome that is not there -- it left the rail
+   ending some 60px above the photo column and the page bottom. */
+.results-analysis-slot>.chat-panel{height:100%;min-height:0;
+  background:transparent;border:0;border-left:1px solid var(--border);border-radius:0;box-shadow:none;padding-left:var(--sp-4)}
+.results-analysis-slot>.chat-panel .chat-panel-head,
+.results-analysis-slot>.chat-panel .chat-footbar,
+.results-analysis-slot>.chat-panel .chat-composer{background:transparent}
+.results-analysis-slot>.chat-panel .chat-timeline{padding-left:0;padding-right:var(--sp-3)}
+
+/* The photo's frame was a dashed accent border laid over two accent radial
+   washes -- decoration competing with the one thing it was there to frame. The
+   border is a plain mat and the glow is a real shadow now, but the fill stays
+   styles.css's: --card-2 under the two accent washes, so the mat still reads as
+   this theme's rather than as flat white. --n09 (= --card) is #FDFDFE-ish in
+   every light theme, which dropped the card out of the palette entirely. */
+.compare-card{padding:var(--sp-3);border:1px solid var(--border);
+  background:
+    var(--card-sheen),
+    radial-gradient(ellipse 700px 420px at 50% 0%, rgba(var(--accent-rgb),.16) 0%, transparent 60%),
+    radial-gradient(ellipse 700px 320px at 50% 100%, rgba(var(--accent-2-rgb),.09) 0%, transparent 60%),
+    var(--card-2);
+  box-shadow:0 18px 44px rgba(0,0,0,.12),0 2px 6px rgba(0,0,0,.05)}
+
+/* Flow as a breadcrumb, not as chrome: four numbered discs on connector rails
+   sat at the top of a page whose subject is a photograph. One quiet line says
+   where you are and takes almost no room doing it. The dot is the one signal
+   the old spinner carried -- this step is still running. */
+.chat-flow-slot{padding-top:var(--sp-3);padding-bottom:var(--sp-2)}
+/* Indented to .compare-card's inner content edge (its 1px border + 12px pad)
+   rather than to the container gutter. Sat flush at the gutter, the first
+   crumb lined up with the card's bounding box while the card's own 26px
+   corner curved away underneath it, so the text read as hanging off the
+   left of the photo instead of sitting over it. */
+.chat-flow{padding-left:calc(var(--sp-3) + 1px)}
+.chat-flow ol{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1) var(--sp-2);margin:0;padding:0;list-style:none}
+.chat-flow-step{display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--chat-fs-sm);line-height:1.5;color:var(--n54)}
+.chat-flow-step+.chat-flow-step::before{content:"";width:5px;height:5px;margin-right:var(--sp-1);flex-shrink:0;
+  border-top:1.5px solid var(--n34);border-right:1.5px solid var(--n34);transform:rotate(45deg)}
+.chat-flow-step.is-done{color:var(--n64)}
+.chat-flow-step.is-now{color:var(--accent-text);font-weight:700}
+.chat-flow-dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:chat-flow-dot 1.2s ease-in-out infinite}
+@keyframes chat-flow-dot{0%,100%{opacity:.25}50%{opacity:1}}
+
+/* Below 900px styles.css flips .results-canvas-row to a column and gives both
+   children width:100%, so the canvas stacks above the chat and the page has
+   to scroll. The desktop height (100% of a stretched slot) then resolves
+   against a row that is no longer height-bounded, and the panel grows with
+   its own transcript until the composer is off the bottom. Bound the panel to a fraction of the viewport
+   instead: the page scrolls to it, the panel keeps its own scroller -- which
+   ChatPanel's pinning needs, it drives .chat-timeline's scrollTop -- and
+   overscroll-behavior:contain on .chat-timeline stops the two chaining. */
+/* From here down styles.css stacks the row into a column, so the stage sits
+   above the chat and both heights have to fit one viewport together. */
+@media (max-width:1200px){
+  .prechat-stage{flex:0 0 auto;width:min(100%,580px);height:auto;max-height:34dvh;min-height:0}
+  .upload-content-row>.home-chat{max-width:none;height:56dvh;max-height:none;min-height:360px}
+}
+
+@media (max-width:900px){
+  /* On a phone the stage costs a second scroll area to show what the timeline
+     already shows as a bubble. The conversation is the page here. */
+  .prechat-stage{display:none}
+  .upload-content-row>.home-chat{flex:1 1 auto;width:auto;height:70dvh;max-height:none;min-height:400px}
+  .results-analysis-slot>.chat-panel{height:70dvh;min-height:400px}
+  /* A phone has no page worth leaving visible around the edges, so the dialog
+     takes what it can and the tiles shrink to fit three to a row. */
+  .sample-modal{top:calc(var(--header-h) + var(--sp-2));bottom:var(--sp-2);
+    width:calc(100vw - var(--sp-4));border-radius:18px}
+  .sample-modal-head{padding:var(--sp-3) var(--sp-4)}
+  .sample-modal-body{padding:var(--sp-4)}
+  .sample-grid{columns:108px;column-gap:var(--sp-2)}
+  .sample-tile{margin-bottom:var(--sp-2)}
+}
+
+/* Touch pointers have no hover to fall back on and a ~44px contact patch, so
+   every tappable control clears that. Keyed off the pointer, not the width --
+   a 1024px tablet needs this and a narrow desktop window does not. */
+@media (hover:none){
+  .chat-chip,.chat-opt-chip,.chat-opt-person-head,.chat-face-chip,.chat-composer-field{min-height:44px}
+  .chat-opt-split-more{min-width:44px}
+  .chat-attach,.chat-send{width:44px;height:44px}
+  .chat-opt-row,.chat-proposal-row{padding-top:var(--sp-3);padding-bottom:var(--sp-3)}
+  .chat-face-chip.is-small{min-height:0}
+  .chat-composer-who-x{width:26px;height:26px}
+}
+
+/* Keyboard focus. Most of these are custom controls with no UA default ring,
+   and the file previously defined :hover only -- which serves the mouse and
+   nothing else. outline follows each element's own border-radius. */
+.chat-chip:focus-visible,
+.sample-tile:focus-visible,
+.sample-modal-close:focus-visible,
+.chat-composer-who-x:focus-visible,
+.chat-face-chip:focus-visible,
+.chat-attach:focus-visible,
+.chat-send:focus-visible,
+.chat-opt-chip:focus-visible,
+.chat-opt-split-more:focus-visible,
+.chat-opt-menu button:focus-visible,
+.chat-opt-person-head:focus-visible,
+.chat-opt-row:focus-visible,
+.chat-line-send:focus-visible,
+.chat-opt-style-none:focus-visible,
+.chat-opt-style-btn:focus-visible,
+.chat-opt-prompt textarea:focus-visible,
+.chat-proposal-edit:focus-visible,
+.chat-proposal-row:focus-visible,
+.history-drawer .chat-history-grid>.demo-image-tile:focus-visible{
+  outline:2px solid rgba(var(--accent-rgb),.9);outline-offset:2px}
+
+/* Faces the chat points at */
+.chat-face-chip{display:inline-flex;align-items:center;gap:var(--sp-1);min-height:30px;padding:0 var(--sp-3) 0 var(--sp-1);border-radius:999px;background:var(--card);
+  border:1px solid var(--n34);font:600 var(--chat-fs-sm) Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n84);flex-shrink:0}
+.chat-face-chip img,.chat-face-blank{width:24px;height:24px;border-radius:50%;object-fit:cover;display:block;background:var(--n14)}
+button.chat-face-chip{cursor:pointer}
+button.chat-face-chip:not([disabled]):hover{border-color:var(--accent);color:var(--accent-text)}
+.chat-face-chip.is-picked{border-color:var(--accent);color:var(--accent-text);background:var(--tonal-lo);box-shadow:0 0 0 2px rgba(var(--accent-rgb),.18)}
+.chat-face-chip.is-small{min-height:0;height:auto;padding:0;border:0;background:none;gap:0}
+.chat-face-chip.is-small img,.chat-face-chip.is-small .chat-face-blank{width:22px;height:22px;box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--n34)}
+button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--accent)}
+
+/* In the picker the crop is the label -- no name beside it -- so the chip is a
+   disc big enough to actually recognise a face in: 40px of photo, a mat, and a
+   ring that goes accent when picked. Without text the ring is the only thing
+   carrying the picked state, so it is thicker than the pill's. */
+.chat-face-chip.is-avatar{min-height:0;padding:3px;gap:0;border-radius:50%;
+  transition:border-color .15s ease,box-shadow .15s ease}
+/* 40, not 32: the strip no longer spends height on padding, so the face can
+   have it instead. It now sets the strip's height on its own -- which is the
+   right way round, since recognising who is who is the only thing this row is
+   for. */
+.chat-face-chip.is-avatar img,.chat-face-chip.is-avatar .chat-face-blank{width:40px;height:40px}
+.chat-face-chip.is-avatar.is-picked{background:var(--card);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.22)}
+/* The same face, as an answer under the AI's 「哪一位？」: once answered, the
+   ones not chosen fade like a settled text chip does. */
+.chat-choices>span.chat-face-chip.is-avatar:not(.is-picked){opacity:.45}
+/* A face written into a sentence in place of a name. */
+.chat-text .chat-face-chip.is-small,.chat-recap .chat-face-chip.is-small{vertical-align:middle;margin:-2px 2px 0}
+.chat-face-picker{display:flex;align-items:center;gap:var(--sp-2);flex:1 1 auto;min-width:0}
+.chat-face-picker-label{font-size:var(--chat-fs-sm);color:var(--n54);flex-shrink:0}
+/* Scrolls rather than wraps: a wrap would grow the strip a row at a time and
+   eat the transcript above it, and the number of faces is the photo's to
+   decide, not ours. Same plain native scroller as .chat-opt-style-row. The 2px
+   of vertical padding is for the picked ring, which is drawn outside the box. */
+.chat-face-track{display:flex;align-items:center;gap:var(--sp-2);min-width:0;overflow-x:auto;padding:2px 0}
+
+/* The live composer */
+.chat-composer-field.is-live{gap:var(--sp-1);padding:var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3);cursor:text;min-width:0}
+.chat-composer-field.is-live input{flex:1;min-width:0;height:100%;border:0;outline:0;background:none;padding:0;font:inherit;color:var(--n100)}
+/* The real <input> has outline:0, so the ring has to live on the wrapper. */
+.chat-composer-field.is-live:focus-within{border-color:var(--accent);outline:2px solid rgba(var(--accent-rgb),.55);outline-offset:1px}
+/* A photo just landed: the field bobs three times. Nothing else on screen
+   points at it -- the buttons below carry the eye -- and on touch there is not
+   even a caret to land in it. Three cycles is a nudge; a loop would read as a
+   broken element. 5px moves enough to catch peripheral vision without
+   disturbing the footer's alignment. */
+@keyframes chat-field-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.chat-composer-field.is-hint{animation:chat-field-bob .8s ease-in-out 3}
+.chat-composer-who{display:inline-flex;align-items:center;gap:var(--sp-1);flex-shrink:0;max-width:40%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  font-size:var(--chat-fs-sm);font-weight:600;color:var(--accent-text);background:var(--tonal-lo);border-radius:999px;padding:2px var(--sp-1) 2px 2px}
+/* Several picked faces overlap like a hand of cards; the mat ring each crop
+   already has keeps their edges apart. */
+.chat-composer-who-faces{display:inline-flex;align-items:center;flex-shrink:0}
+.chat-composer-who-faces>.chat-face-chip+.chat-face-chip{margin-left:-8px}
+/* Picking a face moves focus to the field, so the field is where the user
+   looks to undo it -- the token has to carry its own dismiss. The picker's
+   own chip toggles too, but with one face in the photo there is no picker. */
+.chat-composer-who-x{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;flex-shrink:0;
+  padding:0;border:0;border-radius:50%;background:none;color:inherit;opacity:.65;cursor:pointer}
+.chat-composer-who-x:hover{opacity:1;background:rgba(var(--accent-rgb),.16)}
+.chat-ask{display:inline-flex;align-items:center;gap:var(--sp-2);white-space:pre-wrap;word-break:break-word}
+
+/* AI replies */
+.chat-proposal{display:flex;flex-direction:column;gap:var(--sp-3)}
+.chat-proposal-title{margin:0;font-size:var(--chat-fs-sm);font-weight:700;color:var(--n54)}
+.chat-proposal-list{display:flex;flex-direction:column;gap:var(--sp-1);margin:0;padding:0;list-style:none}
+/* A long value (個人化需求) drops the diff to its own line and wraps there. */
+.chat-proposal-row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1) var(--sp-2);width:100%;padding:var(--sp-2) var(--sp-3);border:1px solid transparent;border-radius:8px;background:var(--n04);
+  font:inherit;font-size:var(--chat-fs-md);color:var(--n84);text-align:left;cursor:pointer}
+button.chat-proposal-row:hover{border-color:var(--n34)}
+div.chat-proposal-row{cursor:default}
+.chat-proposal-label{flex:1 0 auto;white-space:nowrap}
+.chat-proposal-label b{color:var(--n100);margin-right:var(--sp-1)}
+.chat-proposal-diff{display:inline-flex;align-items:baseline;gap:var(--sp-1);min-width:0;max-width:100%;font-size:var(--chat-fs-sm);line-height:1.5}
+.chat-proposal-diff svg{flex-shrink:0;align-self:center}
+.chat-proposal-diff s{flex-shrink:0;color:var(--n64)}
+.chat-proposal-diff b{min-width:0;color:var(--accent-text);overflow-wrap:anywhere}
+.chat-proposal-diff.is-long{display:flex;flex-direction:column;align-items:stretch;gap:var(--sp-1);flex-basis:100%;width:100%}
+.chat-proposal-diff.is-long s,.chat-proposal-diff.is-long b{overflow-wrap:anywhere;white-space:normal}
+.chat-proposal-diff.is-long svg{align-self:flex-start;transform:rotate(90deg)}
+/* 建議裡那段個人化需求就地可改：長得像輸入框，位置還是 is-long 的那一欄。 */
+.chat-proposal-edit{width:100%;box-sizing:border-box;padding:var(--sp-2) var(--sp-3);border:1px solid var(--n24);border-radius:8px;background:var(--card);
+  font:inherit;font-size:var(--chat-fs-md);line-height:1.5;color:var(--n100);resize:vertical}
+.chat-proposal-edit:focus{outline:0;border-color:var(--accent)}
+/* 摘要那句是這張卡唯一的實色，問題清單退到 --n54：同一段話裡只留一個重音，
+   清單讀起來像註腳而不是第二個開場白。 */
+.chat-brief-issues{margin:0;padding-left:20px;font-size:var(--chat-fs-md);line-height:1.6;color:var(--n54)}
+.chat-typing{display:inline-flex;gap:var(--sp-1);padding:var(--sp-2) var(--sp-3);border-radius:14px;background:var(--n14);width:max-content}
+.chat-typing span{width:6px;height:6px;border-radius:50%;background:var(--n54);animation:chat-typing 1s infinite ease-in-out}
+.chat-typing span:nth-child(2){animation-delay:.15s}
+.chat-typing span:nth-child(3){animation-delay:.3s}
+@keyframes chat-typing{0%,80%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+
+.is-ai-hot{animation:chat-ai-hot 2.4s ease-out;border-radius:8px}
+@keyframes chat-ai-hot{0%,30%{box-shadow:0 0 0 2px var(--accent);background-color:rgba(var(--accent-rgb),.10)}100%{box-shadow:0 0 0 2px transparent;background-color:transparent}}
+
+/* styles.css's reduced-motion block only covers .page-scroll-hint, so this
+   file's own animations have to opt out here. Each keeps the state it was
+   communicating -- the bar still reads as busy, the dots still read as a
+   pending reply, the AI-touched row still gets its ring -- without moving. */
+@media (prefers-reduced-motion:reduce){
+  .canvas-busy .think-ring{animation:none;opacity:.75}
+  .chat-typing span{animation:none;opacity:.55}
+  .is-ai-hot{animation:none;box-shadow:0 0 0 2px var(--accent)}
+  .chat-opt-caret{transition:none}
+  .chat-flow-dot{animation:none;opacity:.85}
+  .chat-composer-field.is-hint{animation:none}
+}
+
+/* The options cards: one category (人像 / 美化建議 / 風格) per card */
+.chat-options{display:flex;flex-direction:column;gap:var(--sp-3)}
+.chat-opt-chip{min-height:30px;padding:var(--sp-1) var(--sp-3);font-size:var(--chat-fs-sm)}
+.chat-opt-chip svg{width:12px;height:12px}
+.chat-opt-person{display:flex;flex-direction:column;align-items:flex-start;gap:var(--sp-2)}
+/* 人少的時候每個人都是攤開的，名字只是在說「底下這些項目是誰的」。不給藥丸：
+   藥丸看起來點得下去，但這裡沒有要點 -- 指定對象在輸入列上面那一排。長相跟人
+   多時展開的那一列對齊，同一件事只有一種樣子。 */
+.chat-opt-person-label{display:flex;align-items:center;gap:var(--sp-2);min-height:32px;
+  font:600 var(--chat-fs-sm) Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n100)}
+.chat-opt-person-label img,.chat-opt-person-label .chat-face-blank{width:24px;height:24px;border-radius:50%;
+  object-fit:cover;display:block;background:var(--n14);flex-shrink:0}
+.chat-opt-person+.chat-opt-person{padding-top:var(--sp-3);border-top:1px solid var(--border)}
+
+/* 人多的時候（>FOLD_PEOPLE_OVER）人像面板先只給人頭：一個人一列，列上就說完他
+   會修什麼，點了才展開那個人的項目。一次只開一個 -- 每一次點都已經存進 plan，
+   收起來不會掉東西，而這張卡夾在對話中間，高度是跟對話借的。 */
+.chat-opt-people{display:flex;flex-direction:column;gap:var(--sp-1)}
+.chat-opt-person-fold{display:flex;flex-direction:column;gap:var(--sp-2)}
+.chat-opt-person-head{display:flex;align-items:center;gap:var(--sp-2);width:100%;min-height:32px;padding:var(--sp-1) var(--sp-2);
+  border:0;border-radius:999px;background:none;font:600 var(--chat-fs-sm) Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n84);text-align:left;cursor:pointer}
+.chat-opt-person-head:hover{background:var(--n04);color:var(--n100)}
+.chat-opt-person-head.is-open{color:var(--n100)}
+.chat-opt-person-head img,.chat-opt-person-head .chat-face-blank{width:24px;height:24px;border-radius:50%;object-fit:cover;display:block;background:var(--n14);flex-shrink:0}
+.chat-opt-person-name{flex-shrink:0}
+/* 他會修什麼就寫在名字後面。擠不下就截掉 -- 要看細節的人本來就會點開。 */
+.chat-opt-person-sum{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:400;color:var(--n54)}
+/* 收起來之後，「這個人我動過」就只剩這一個記號 -- 列上那句結論寫的是現在會修
+   什麼，看不出哪些是建議、哪些是自己改的。寫字不給點：旁邊項目上那顆 accent
+   小圓點已經是「建議調整」，再放一顆沒字的點，兩種意思會長得一樣。 */
+.chat-opt-person-mark{flex-shrink:0;padding:1px var(--sp-2);border-radius:999px;background:var(--tonal);
+  color:var(--accent-text);font-size:var(--chat-fs-xs);font-weight:600}
+.chat-opt-person-head .chat-opt-caret{flex-shrink:0;color:var(--n54)}
+/* 內容對齊名字，一眼看得出這些是誰的：24 的人頭加兩個 gap。 */
+.chat-opt-person-body{display:flex;flex-direction:column;align-items:flex-start;gap:var(--sp-2);
+  padding:0 var(--sp-2) var(--sp-2) calc(24px + var(--sp-2) + var(--sp-2))}
+.chat-opt-caret{width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);transition:transform .15s}
+.chat-opt-caret.is-open{transform:translateY(1px) rotate(-135deg)}
+/* 挑得了程度的項目（髮絲、笑容）：一顆藥丸切成兩半，左半邊照常開關、順便寫著
+   現在是哪一種程度，右半邊的箭頭換程度。中間那道線是藥丸自己的右框 -- 不留這
+   道線，兩個按鈕會看起來是一個。關掉的時候右半邊整個不在，沒有程度要挑。 */
+.chat-opt-split{position:relative;display:inline-flex;align-items:stretch;border-radius:999px}
+/* 只有真的切成兩半時才切掉右邊的圓角。沒勾的時候右半邊不在，那就是一顆完整的
+   藥丸 -- 跟旁邊那些沒程度可挑的項目長得一樣。 */
+.chat-opt-split.is-split>.chat-opt-chip{border-top-right-radius:0;border-bottom-right-radius:0;padding-right:var(--sp-2)}
+.chat-opt-split-more{display:inline-flex;align-items:center;justify-content:center;padding:0 var(--sp-3) 0 var(--sp-2);
+  border:1px solid var(--accent);border-left:0;border-radius:0 999px 999px 0;background:var(--tonal-lo);color:var(--accent-text);cursor:pointer}
+.chat-opt-split-more:not([disabled]):hover{background:var(--tonal)}
+.chat-opt-split-more[disabled]{opacity:.45;cursor:not-allowed}
+/* 程度的選單從它自己的那半邊掀開，浮在對話上面 -- 這張卡夾在對話中間，在卡裡
+   多推開一列會把下面的訊息整個擠下去。挑完就收，選了什麼藥丸上就寫著。 */
+.chat-opt-menu{position:absolute;top:calc(100% + var(--sp-1));right:0;z-index:20;min-width:140px;
+  display:flex;flex-direction:column;gap:2px;padding:var(--sp-1);border-radius:12px;
+  border:1px solid var(--border);background:var(--card);
+  box-shadow:0 14px 32px rgba(0,0,0,.16),0 2px 6px rgba(0,0,0,.06);
+  animation:chat-opt-menu-in .14s ease-out}
+.chat-opt-menu.is-up{top:auto;bottom:calc(100% + var(--sp-1));animation-name:chat-opt-menu-up}
+.chat-opt-menu button{display:flex;align-items:center;gap:var(--sp-2);width:100%;padding:var(--sp-2) var(--sp-3);
+  border:0;border-radius:8px;background:none;cursor:pointer;white-space:nowrap;text-align:left;
+  font:inherit;font-size:var(--chat-fs-sm);color:var(--n84)}
+.chat-opt-menu button:hover,.chat-opt-menu button:focus-visible{background:var(--tonal-lo);color:var(--accent-text)}
+.chat-opt-menu button.is-picked{color:var(--accent-text);font-weight:600}
+/* 打勾的位置一直留著，沒打勾的字才不會往左跳一格。 */
+.chat-opt-menu-tick{display:inline-flex;width:14px;flex-shrink:0;color:var(--accent)}
+@keyframes chat-opt-menu-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@keyframes chat-opt-menu-up{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.chat-opt-menu{animation:none}}
+/* 建議調整的記號：縮到項目名稱的右上角，一眼掃過去只會看到項目本身。
+   在 is-picked 的淡色底上也還讀得到，所以不分狀態都用同一顆點。 */
+.chat-opt-dot{align-self:flex-start;flex-shrink:0;width:5px;height:5px;margin:2px -3px 0 -2px;border-radius:50%;background:var(--accent)}
+.chat-opt-value{font-weight:700;color:var(--accent-text)}
+.chat-opt-prompt{display:flex;flex-direction:column;gap:var(--sp-2)}
+.chat-opt-prompt textarea{width:100%;box-sizing:border-box;padding:var(--sp-2) var(--sp-3);border:1px solid var(--n24);border-radius:8px;background:var(--card);
+  font:inherit;font-size:var(--chat-fs-md);line-height:1.5;color:var(--n100);resize:vertical}
+.chat-opt-prompt textarea:focus{outline:0;border-color:var(--accent)}
+/* 還沒要改的時候，存下來的需求就是一段讀的內容，不是一個等著被打字的框。 */
+.chat-opt-prompt-text{margin:0;padding:var(--sp-2) var(--sp-3);border-radius:8px;background:var(--n04);
+  font-size:var(--chat-fs-md);line-height:1.5;color:var(--n100);white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty}
+.chat-opt-list{display:flex;flex-direction:column;gap:var(--sp-1);margin:0;padding:0;list-style:none}
+.chat-opt-row{display:flex;align-items:flex-start;gap:var(--sp-2);width:100%;padding:var(--sp-2) var(--sp-3);border:1px solid transparent;border-radius:8px;background:var(--n04);
+  font:var(--chat-fs-md)/1.5 Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n64);text-align:left;cursor:pointer}
+.chat-opt-row.is-on{color:var(--n100)}
+.chat-opt-row:not([disabled]):hover{border-color:var(--n34)}
+.chat-opt-row[disabled]{cursor:not-allowed;opacity:.6}
+.chat-opt-row strong{color:var(--accent-text)}
+.chat-opt-box{width:16px;height:16px;flex-shrink:0;margin-top:2px;border-radius:4px;border:1.5px solid var(--n34);background:var(--card);
+  display:flex;align-items:center;justify-content:center;color:#fff}
+.chat-opt-row.is-on .chat-opt-box{background:var(--accent);border-color:var(--accent)}
+.chat-opt-box svg{width:11px;height:11px}
+/* AI 想的文案：一列一句，點了就送出，所以不需要勾選框；選過的那列才帶勾。最後一列
+   是自己寫的輸入框，長得跟其他列一樣，只是能打字。 */
+.chat-line-row{align-items:center}
+.chat-line-row svg{flex-shrink:0;width:14px;height:14px;color:var(--accent-text)}
+.chat-line-row.is-on{background:var(--tonal);border-color:var(--accent)}
+.chat-line-row[disabled].is-on{opacity:1}
+.chat-line-text{flex:1;min-width:0;overflow-wrap:anywhere;text-wrap:pretty}
+.chat-line-own{display:flex;align-items:center;gap:var(--sp-2);margin:0;padding:var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3);
+  border:1px dashed var(--n24);border-radius:8px;background:var(--card)}
+.chat-line-own:focus-within{border-style:solid;border-color:var(--accent)}
+.chat-line-own input{flex:1;min-width:0;padding:var(--sp-1) 0;border:0;outline:0;background:transparent;
+  font:var(--chat-fs-md)/1.5 Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n100)}
+.chat-line-own input::placeholder{color:var(--n34)}
+.chat-line-send{width:28px;height:28px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  border:0;background:var(--tonal);color:var(--accent-text);box-shadow:inset 0 0 0 1px var(--accent)}
+.chat-line-send[disabled]{opacity:.4;cursor:not-allowed;box-shadow:inset 0 0 0 1px var(--n24);background:transparent;color:var(--n34)}
+.chat-line-send:not([disabled]):hover{background:var(--tonal-hi)}
+.chat-line-send svg{width:14px;height:14px}
+.chat-opt-style-row{display:flex;gap:var(--sp-2);overflow-x:auto;padding-bottom:var(--sp-1)}
+.chat-opt-style-none,.chat-opt-style-btn{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:var(--sp-1);padding:var(--sp-1);border-radius:10px;
+  border:2px solid transparent;background:none;font:600 var(--chat-fs-sm) Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n64);cursor:pointer}
+.chat-opt-style-btn img{width:64px;height:64px;object-fit:cover;border-radius:8px;display:block;background:var(--n14)}
+.chat-opt-style-btn span{max-width:64px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.chat-opt-style-none{width:64px;height:64px;box-sizing:content-box;justify-content:center;border:2px dashed var(--n34)}
+.chat-opt-style-none.is-picked,.chat-opt-style-btn.is-picked{border-color:var(--accent);border-style:solid;color:var(--accent-text)}
+.chat-opt-style-none[disabled],.chat-opt-style-btn[disabled]{cursor:not-allowed;opacity:.6}
+
+/* 對話紀錄 drawer: the same square three-column mosaic as the home gallery,
+   one grid per day under a 今天/昨天/M月D日 heading (SessionDays, home.tsx).
+   The home rail gets this grouping from the old sheet's .history-day-group
+   rules; the drawer is chat-only, so its heading is styled here. */
+.history-drawer .history-day-group+.history-day-group{margin-top:var(--sp-4)}
+.history-drawer .history-day-heading{margin:0 0 var(--sp-1);
+  font:600 var(--chat-fs-sm)/1.4 Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n64);letter-spacing:.02em}
+.history-drawer .chat-history-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:auto;grid-auto-flow:dense;gap:0}
+.history-drawer .chat-history-grid>.demo-image-tile{display:block;width:100%;height:auto;min-height:0;aspect-ratio:1/1;margin:0;padding-top:0;
+  border:1px solid var(--border-2);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+.history-drawer .chat-history-grid>.demo-image-tile img:not(.demo-image-tile-bg){position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.history-drawer .chat-history-grid>.demo-image-tile:hover,.history-drawer .chat-history-grid>.demo-image-tile.is-selected{border-color:rgba(var(--accent-rgb),.72)}
+.history-drawer .chat-history-grid>.demo-image-tile:nth-child(16n+1):nth-last-child(n+4){grid-column:1/span 2;grid-row:span 2}
+.history-drawer .chat-history-grid>.demo-image-tile:nth-child(16n+9):nth-last-child(n+4){grid-column:2/span 2;grid-row:span 2}
+
+/* The home rail's day grids. The old sheet already lays .history-grid out as
+   the three-column dense mosaic and shows the headings under .showing-recent;
+   only the enlarged-tile rhythm needs restating, because its rule there
+   selects the old UI's .history-cube and these tiles are .demo-image-tile.
+   The :nth-last-child guard is the old one's: a tile only doubles when four
+   or more follow it, so a short day doesn't open a hole nothing can backfill. */
+@media (min-width:1201px){
+  #upload-section .upload-gallery-col .history-grid>.demo-image-tile:nth-child(16n+1):nth-last-child(n+4){grid-column:1/span 2;grid-row:span 2}
+  #upload-section .upload-gallery-col .history-grid>.demo-image-tile:nth-child(16n+9):nth-last-child(n+4){grid-column:2/span 2;grid-row:span 2}
+}
+
+/* 美化紀錄最後面的空位：這一輪改過設定、還沒按美化。畫到紀錄裡，是因為旁邊
+   那張 After 看起來就是最新的，離開再回來時沒有別的地方會說它不是。虛線框、
+   不可點、沿用 .version-tile 的 64px 與 9px 圓角，所以它和前面幾格對得齊，
+   又一眼看得出還沒有東西。 */
+.version-tile.is-pending{
+  display:flex;align-items:center;justify-content:center;
+  border:2px dashed var(--border-2);background:transparent;color:var(--n54);cursor:default}
+.version-tile.is-pending:hover{transform:none}
+.version-group.is-pending .version-group-label{color:var(--n54);font-weight:500}
+/* 跟著 styles.css 把格子縮到 54px 的那個斷點走。 */
+@media (max-width:560px){
+  .version-tile.is-pending svg{width:16px;height:16px}
+}

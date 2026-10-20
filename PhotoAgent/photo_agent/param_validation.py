@@ -7,77 +7,37 @@ from typing import TypedDict
 
 from engine_result_code import RESULT_INVALID_PARAMETER
 
+from . import capabilities
 from .utils import optional_bool, optional_text
 
 
 EFFECT_NAME = "photoAgent"
-VALID_PRESETS = ("natural", "editorial", "product", "portrait", "custom")
-VALID_QUALITIES = ("low", "medium", "high")
-VALID_IMAGE_MODELS = (
-    "gpt-image-2",
-    "gpt-image-1.5",
-    "gpt-image-2.5-sunburst",
-    "gpt-image-2.5-flare",
-    "nano-banana-2",
-    "nano-banana-lite",
-    "MAI-Image-2.6",
-)
-VALID_ANALYSIS_MODELS = ("gpt-4.1-mini", "gpt-5.6-luna", "gpt-5.6-sol")
+
+# Every allowed value below comes from the feature registry (capabilities.py).
+VALID_PRESETS = capabilities.PRESET_IDS
+VALID_QUALITIES = capabilities.QUALITIES
+VALID_IMAGE_MODELS = tuple(m.id for m in capabilities.IMAGE_MODELS)
+VALID_ANALYSIS_MODELS = tuple(m.id for m in capabilities.ANALYSIS_MODELS)
 # "auto" (from the proposed crop) / "original" (the source frame) / one fixed
-# W:H frame. The label list mirrors image_tools.USER_SELECTABLE_ASPECT_RATIO_LABELS,
-# kept literal so this validator does not pull in that module's Pillow import.
-VALID_ASPECT_RATIOS = (
-    "auto", "original",
-    "1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9",
-)
-MAX_RUN_COUNT = 20
+# W:H frame.
+VALID_ASPECT_RATIOS = tuple(c.value for c in capabilities.ASPECT_RATIOS)
+MAX_RUN_COUNT = capabilities.MAX_RUN_COUNT
 
 # Advanced Settings (人像設定 on the upload page) -- bundled into one
 # "advanced_options" dict/field instead of each becoming its own named
-# parameter, so a new setting only needs a new entry here plus a matching
+# parameter, so a new setting only needs a new registry entry plus a matching
 # check in prompts.py, instead of threading a new argument through every
 # function between the frontend and the edit-prompt builders. Unknown keys
 # are dropped rather than rejected (see normalize_advanced_options), the same
 # tolerant-of-drift stance aipoc_client.py already takes for cross-service
-# param mismatches.
-ADVANCED_OPTION_DEFAULTS = {
-    "eye_closed_detection": True,
-    # "眼神對焦" on the upload page. Read at edit time only: by the edit-prompt
-    # builders and, independently, by pipeline._run_eye_repair_pass (gates
-    # Step 5b). The analysis always judges gaze_issue regardless.
-    "gaze_contact_detection": True,
-    "hair_mess_detection": True,
-    # Off by default, unlike the two above: those gate a repair the analysis
-    # proposes only when it finds a defect, while this one is a transformation
-    # the user elects and is applied whether or not the wind reads as a flaw.
-    "calm_hair": False,
-    # "笑容調整" on the upload page. On by default and paired with the
-    # smile_level choice below -- the toggle only says whether the level is
-    # applied at all. Read at edit time only (prompts.resolve_smile_targets);
-    # the analysis always reads every face's current smile so the level can
-    # still be changed on the results page without re-analyzing.
-    "smile_adjustment": True,
-}
-
-# Advanced options whose value is one of a fixed set of strings rather than a
-# bool. Kept in their own dict so ADVANCED_OPTION_DEFAULTS stays the "every
-# value is a bool" contract the toggles rely on.
-SMILE_LEVELS = ("auto", "neutral", "gentle", "broad", "laughing")
-SMILE_LEVEL_ALIASES = {
-    "no_smile": "neutral",
-    "closed_smile": "gentle",
-    "toothy_smile": "broad",
-    "bright_smile": "broad",
-}
-ADVANCED_OPTION_CHOICES = {
-    # "auto" = give a non-smiling face a natural closed-lip smile and leave an
-    # already-smiling one alone; the other levels are the level every readable
-    # face is taken to.
-    "smile_level": SMILE_LEVELS,
-}
-ADVANCED_OPTION_CHOICE_DEFAULTS = {
-    "smile_level": "auto",
-}
+# param mismatches. Toggles (bool) and choices (one of a fixed set of strings)
+# are kept apart so ADVANCED_OPTION_DEFAULTS stays the "every value is a
+# bool" contract the toggles rely on.
+ADVANCED_OPTION_DEFAULTS = {o.key: o.default for o in capabilities.ADVANCED_OPTIONS if not o.choices}
+SMILE_LEVELS = capabilities.SMILE_LEVELS
+SMILE_LEVEL_ALIASES = capabilities.SMILE_LEVEL_ALIASES
+ADVANCED_OPTION_CHOICES = {o.key: o.choices for o in capabilities.ADVANCED_OPTIONS if o.choices}
+ADVANCED_OPTION_CHOICE_DEFAULTS = {o.key: o.default for o in capabilities.ADVANCED_OPTIONS if o.choices}
 
 
 def normalize_advanced_options(value) -> dict:
@@ -165,7 +125,7 @@ def _validate_single_key(value, field_name: str) -> str:
 def _validate_params(params: dict) -> dict:
     normalized = dict(params)
 
-    preset = normalized.get("preset", "natural")
+    preset = normalized.get("preset", capabilities.DEFAULT_PRESET)
     if not isinstance(preset, str) or preset not in VALID_PRESETS:
         raise RuntimeError(
             f"{EFFECT_NAME}: preset must be one of {VALID_PRESETS}",
@@ -173,7 +133,7 @@ def _validate_params(params: dict) -> dict:
         )
     normalized["preset"] = preset
 
-    image_quality = normalized.get("image_quality", "medium")
+    image_quality = normalized.get("image_quality", capabilities.DEFAULT_QUALITY)
     if not isinstance(image_quality, str) or image_quality not in VALID_QUALITIES:
         raise RuntimeError(
             f"{EFFECT_NAME}: image_quality must be one of {VALID_QUALITIES}",
@@ -181,7 +141,7 @@ def _validate_params(params: dict) -> dict:
         )
     normalized["image_quality"] = image_quality
 
-    image_model = normalized.get("image_model", "gpt-image-2")
+    image_model = normalized.get("image_model", capabilities.DEFAULT_IMAGE_MODEL)
     if not isinstance(image_model, str) or image_model not in VALID_IMAGE_MODELS:
         raise RuntimeError(
             f"{EFFECT_NAME}: image_model must be one of {VALID_IMAGE_MODELS}",
@@ -189,7 +149,7 @@ def _validate_params(params: dict) -> dict:
         )
     normalized["image_model"] = image_model
 
-    analysis_model = normalized.get("analysis_model", "gpt-5.6-luna")
+    analysis_model = normalized.get("analysis_model", capabilities.DEFAULT_ANALYSIS_MODEL)
     if not isinstance(analysis_model, str) or analysis_model not in VALID_ANALYSIS_MODELS:
         raise RuntimeError(
             f"{EFFECT_NAME}: analysis_model must be one of {VALID_ANALYSIS_MODELS}",
@@ -197,7 +157,7 @@ def _validate_params(params: dict) -> dict:
         )
     normalized["analysis_model"] = analysis_model
 
-    aspect_ratio = normalized.get("aspect_ratio", "auto")
+    aspect_ratio = normalized.get("aspect_ratio", capabilities.DEFAULT_ASPECT_RATIO)
     if not isinstance(aspect_ratio, str) or aspect_ratio not in VALID_ASPECT_RATIOS:
         raise RuntimeError(
             f"{EFFECT_NAME}: aspect_ratio must be one of {VALID_ASPECT_RATIOS}",
@@ -249,7 +209,7 @@ def _validate_params(params: dict) -> dict:
     # multi-RUN request keep generating server-side regardless of whether the
     # client's tab is open/foregrounded to see it. Not used by the two-stage
     # analyze-only/finish-only stages (always exactly one result each).
-    run_count = normalized.get("run_count", 1)
+    run_count = normalized.get("run_count", capabilities.DEFAULT_RUN_COUNT)
     if isinstance(run_count, bool) or not isinstance(run_count, int) or not (1 <= run_count <= MAX_RUN_COUNT):
         raise RuntimeError(
             f"{EFFECT_NAME}: run_count must be an integer between 1 and {MAX_RUN_COUNT}",

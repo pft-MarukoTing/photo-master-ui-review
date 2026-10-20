@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import mai_client
 from photo_agent.edit_prompt import assemble_edit_prompt
-from test_aspect_ratio import _analysis, _image_b64, _image_bytes
+from tests.test_aspect_ratio import _analysis, _image_b64, _image_bytes
 
 CROP_PLAN = {"x": 0.05, "y": 0.05, "w": 0.9, "h": 0.9, "aspectRatio": "3:2"}
 
