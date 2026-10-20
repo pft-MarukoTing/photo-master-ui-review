@@ -3433,14 +3433,14 @@ export function App() {
                 t.reply ? (
                   <AssistantMsg>
                     <p class="chat-text">{t.reply}</p>
-                    {!!t.options?.length && (
-                      <div class="chat-choices">
-                        {t.options.map((o) => (
-                          <Chip label={o} settled={!latest} disabled={overviewHeld}
-                            onClick={() => { const m = overviewStartOf(o); return m ? overviewStart(m) : void overviewSay(o); }} />
-                        ))}
-                      </div>
-                    )}
+                    {!!t.options?.length && (() => {
+                      const nx = overview[i + 1];
+                      return (
+                        <AnswerList options={t.options} picked={!latest && nx?.kind === "wish" ? nx.text : null} open={latest} busy={overviewHeld}
+                          onPick={(o) => { const m = overviewStartOf(o); return m ? overviewStart(m) : void overviewSay(o); }}
+                          onOwn={(o) => void overviewSay(o)} />
+                      );
+                    })()}
                   </AssistantMsg>
                 ) : null
               ) : (
@@ -4957,17 +4957,7 @@ function PreChat(props: {
               <AssistantMsg>
                 <p class="chat-text">{said(t.ask.reply || (t.ask.kept !== false ? "好，這些會當成個人化需求，美化時一起套用。" : "好，那就先不加個人化需求。"), t.ask.replyPeople || t.ask.persons)}</p>
                 {options.length > 0 && (
-                  <div class="chat-choices">
-                    {options.map((o) => (
-                      <Chip
-                        label={o}
-                        kind={!open && next?.text === o ? "picked" : undefined}
-                        settled={!open}
-                        disabled={held}
-                        onClick={() => props.onAnswer(o)}
-                      />
-                    ))}
-                  </div>
+                  <AnswerList options={options} picked={open ? null : next?.text ?? null} open={open} busy={held} onPick={props.onAnswer} />
                 )}
                 {who.length > 1 && (
                   <div class="chat-choices">
@@ -5657,10 +5647,12 @@ function SessionView(props: {
             const si = asked?.type === "ask" ? askedIndices(asked) : [];
             // 沒有分析時指的人是框加位置，回答一樣繼續指著那幾位。
             const sf = localPick && asked?.type === "ask" && Array.isArray(asked.faces) ? asked.faces : undefined;
-            if (c.lines)
+            // 問的是哪一位時，答案就是那幾顆頭像（見下面）；其他答案一律排成清單。
+            if (!(c.question_kind === "person" && (c.options as string[]).some((o) => !!faceOption(o))))
               return (
-                <LinesCard
-                  lines={c.options as string[]}
+                <AnswerList
+                  options={c.options as string[]}
+                  copy={!!c.lines}
                   picked={next?.card?.type === "ask" ? next.text || "" : null}
                   open={open}
                   busy={busy}
@@ -6555,21 +6547,33 @@ function SessionView(props: {
 }
 
 
-// AI 幫照片想的文案：跟畫面建議一樣一列一句，點了就是選這句；最後一列留給自己寫。
-// 一句文案動輒十幾個字，擠成一排藥丸會斷得七零八落，一列一句才讀得完整。選過之
-// 後定格成紀錄：選中的那列標起來，自己寫的就換成寫下的那句。
+// AI 問回來的那句底下的答案（包括幫照片想的文案）：跟畫面建議一樣一列一個，點了
+// 就是選這個；最後一列留給自己輸入。答案長得跟底下的下一步按鈕（調整、再美化、
+// 分析…）不一樣，一眼就分得出哪些是在回答它的問題、哪些是往下走。選過之後定格成
+// 紀錄：選中的那列標起來，自己輸入的就換成打的那句。
+// copy：答案是文案，自己寫的也是一句文案，字數照文案的上限。
 const LINE_MAX = 40;
-function LinesCard(props: { lines: string[]; picked: string | null; open: boolean; busy: boolean; onPick: (text: string) => void }) {
+const ANSWER_MAX = 4000; // 跟輸入框一樣
+function AnswerList(props: {
+  options: string[];
+  picked: string | null;
+  open: boolean;
+  busy: boolean;
+  copy?: boolean;
+  onPick: (text: string) => void;
+  // 自己輸入的那句；沒給就跟點選項一樣處理。
+  onOwn?: (text: string) => void;
+}) {
   const [draft, setDraft] = useState("");
-  const own = props.picked && !props.lines.includes(props.picked) ? props.picked : null;
+  const own = props.picked && !props.options.includes(props.picked) ? props.picked : null;
   const send = () => {
     const t = draft.trim();
-    if (t && !props.busy) props.onPick(t);
+    if (t && !props.busy) (props.onOwn || props.onPick)(t);
   };
   return (
     <div class="chat-card chat-options">
       <ul class="chat-opt-list">
-        {props.lines.map((l) => (
+        {props.options.map((l) => (
           <li>
             <button
               type="button"
@@ -6593,14 +6597,14 @@ function LinesCard(props: { lines: string[]; picked: string | null; open: boolea
             >
               <input
                 type="text"
-                maxLength={LINE_MAX}
+                maxLength={props.copy ? LINE_MAX : ANSWER_MAX}
                 value={draft}
-                placeholder="自己寫一句"
-                aria-label="自己寫一句文案"
+                placeholder={props.copy ? "自己寫一句" : "或是自己輸入"}
+                aria-label={props.copy ? "自己寫一句文案" : "自己輸入回答"}
                 disabled={props.busy}
                 onInput={(e) => setDraft((e.target as HTMLInputElement).value)}
               />
-              <button type="submit" class="chat-line-send" disabled={props.busy || !draft.trim()} aria-label="用這句" title="用這句">
+              <button type="submit" class="chat-line-send" disabled={props.busy || !draft.trim()} aria-label={props.copy ? "用這句" : "送出"} title={props.copy ? "用這句" : "送出"}>
                 <Icon name="up" size={14} />
               </button>
             </form>
