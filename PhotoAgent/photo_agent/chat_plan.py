@@ -20,6 +20,7 @@ affects renders from then on.
 
 import copy
 import math
+import re
 
 from photo_agent import capabilities
 from photo_agent.param_validation import normalize_advanced_options
@@ -28,7 +29,7 @@ from photo_agent.text_overlay import validate_texts
 
 USER_PROMPT_MAX_LEN = 2000
 PHOTO_ONLY_KEYS = ("recipe_checked", "face_issue_overrides", "face_requests", "body_reshape_enabled",
-                   "prompt_faces", "pose_face_changes")
+                   "prompt_faces", "pose_face_changes", "side_reference_token")
 # Per-person facial requests the chat model marks beside the wish it writes into user_prompt.
 FACE_REQUEST_KINDS = ("face_symmetry",)
 PROMPT_FACES_MAX = 8
@@ -63,6 +64,7 @@ def default_plan(settings=None):
         "body_reshape_enabled": None,
         "prompt_faces": [],
         "pose_face_changes": None,
+        "side_reference_token": None,
     }
 
 
@@ -244,6 +246,9 @@ def apply_plan_patch(current, patch, *, debug=False, settings_only=False):
                     value = _validated_prompt_faces(value)
                 elif key == "pose_face_changes":
                     value = _validated_pose_face_changes(value)
+                elif key == 'side_reference_token':
+                    if value is not None and (not isinstance(value,str) or not re.fullmatch(r'bs_[a-f0-9]{32}',value)):
+                        raise ValueError('invalid_side_token')
             else:
                 value = _apply_setting(plan, key, value, debug)
             plan[key] = value

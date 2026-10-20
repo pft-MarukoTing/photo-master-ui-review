@@ -23,6 +23,8 @@ never change again, so they are left out of both.
 """
 
 from photo_agent import chat_analysis
+from photo_agent import side_reference
+from backend.services import side_reference_store
 import copy
 import json
 import re
@@ -432,6 +434,29 @@ def session_from_case():
     photo = session["photos"][0]
     store.append_messages(user, session_id, _advance_analyzing(user, session_id, photo, {}, rebuilt=True))
     _sync_from_history(user, session_id, store.load_session(user, session_id))
+    # Rehydrate versioned server metadata even after the old session/token TTL.
+    # Legacy history without this sibling field follows the original path.
+    saved=(versions[-1].get('params') or {}) if versions else {}
+    if saved.get('side_reference'):
+        try:
+            state=side_reference.validate_state(saved['side_reference'])
+            current=_photo(_session(user,session_id),photo['photo_id'])
+            patch=dict(user_prompt=saved.get('user_prompt') or state['canonical_text'],
+                literal_texts=saved.get('literal_texts') or state['literal_texts'])
+            plan,error=apply_plan_patch(current['plan'],patch,debug=_debug())
+            if error:raise ValueError(error)
+            current.update(plan=plan,source_sha256=state['photo_identity'],side_reference=state)
+            if side_reference.executable(state):
+                data=side_reference_store.create(user,state,state['photo_identity'],plan['analysis_model'],scope=session_id+':'+photo['photo_id'])
+                current.update(side_reference=data['state'],side_reference_token=data['token'])
+                current['plan']['side_reference_token']=data['token']
+                store.save_photo_snapshot(user,session_id,current)
+            else:
+                store.save_photo_snapshot(user,session_id,current)
+                _side_post_question(user,session_id,current,state['original_text'],state,echo=False)
+        except ValueError as exc:
+            current_app.logger.warning('invalid historical side metadata: %s',exc)
+            raise _RequestError('歷史需求的左右資料無法驗證，請重新確認需求。',409) from exc
     return jsonify({"session_id": session_id, "created": True}), 201
 
 
@@ -1127,6 +1152,16 @@ def _add_photos(user, session_id, session, images, client_key=None):
             engine_params = get_engine_params_template()
             photo_params = copy.deepcopy(params)
             data = image.read()
+            side_snapshot=None
+            if request.form.get('side_reference_token'):
+                try:
+                    side_snapshot=side_reference_store.load(user,request.form['side_reference_token'],
+                        source_hash=source_sha256(data),model=photo_params['analysis_model'],current=True)
+                    if side_reference.executable(side_snapshot['state']) and side_snapshot['state']['canonical_text'] not in (photo_params.get('user_prompt') or ''):
+                        raise ValueError('side_prompt_changed')
+                    photo_params['side_reference']=side_snapshot['state']
+                    if side_snapshot['state']['side_references']:photo_params.pop('skip_analysis',None)
+                except ValueError as exc:raise _RequestError(str(exc),409) from exc
             preview_id = request.form.get("preview_job_id") if len(images) == 1 else None
             reuse = False
             conversation_state = None
@@ -1245,12 +1280,24 @@ def _add_photos(user, session_id, session, images, client_key=None):
             "active_version": None,
             "analysis_skipped": bool(photo_params.get('skip_analysis')),
             "preview_conversation": conversation_state,
+            **({'side_reference':side_snapshot['state'],'side_reference_token':side_snapshot['token'],
+                'side_base_plan':copy.deepcopy(session['defaults'])} if side_snapshot else {}),
             **({"client_key": client_key} if client_key else {}),
         })
 
     if photos:
         store.add_photos(user, session_id, session, photos)
         for photo in photos:
+            if photo.get('side_reference') and side_reference.executable(photo['side_reference']):
+                plan=default_plan(session['defaults'])
+                bound=side_reference_store.create(user,photo['side_reference'],photo['source_sha256'],plan['analysis_model'],scope=session_id+':'+photo['photo_id'])
+                plan['side_reference_token']=bound['token']
+                photo.update(side_reference_token=bound['token'])
+                store.save_photo_plan(user,session_id,photo['photo_id'],plan)
+                store.save_photo_state(user,session_id,photo)
+            if photo.get('side_reference') and not side_reference.executable(photo['side_reference']):
+                photo['plan']=default_plan(session['defaults'])
+                _side_post_question(user,session_id,photo,'待確認的左右部位',photo['side_reference'])
             state = photo.get('preview_conversation')
             if state:
                 plan = store.load_session(user, session_id)['defaults']
@@ -1451,8 +1498,16 @@ def patch_photo_plan(session_id, photo_id):
     plan, error = apply_plan_patch(photo["plan"], body.get("plan"), debug=_debug())
     if error:
         raise _RequestError(error)
-    store.save_photo_plan(user, session_id, photo_id, plan)
+    if plan.get('side_reference_token'):
+        if 'side_reference_token' in body.get('plan',{}):_checked_side_token(user,session_id,photo,plan)
+        elif photo.get('side_reference') and photo['side_reference']['canonical_text'] not in plan['user_prompt']:
+            plan['side_reference_token']=None
     photo["plan"] = plan
+    _side_sync_plan(user,session_id,photo)
+    if photo.get('side_reference') and not side_reference.executable(photo['side_reference']):
+        photo['side_question_id']=None
+        store.save_photo_state(user,session_id,photo)
+        _side_ensure_question(user,session_id,photo)
     _reframe_if_needed(user, session_id, photo)
     return jsonify({"photo_id": photo_id, "plan": plan, "status": photo["status"]})
 
@@ -1575,6 +1630,9 @@ def _start_queued_render(user, session_id, photo, queued):
         return []
     prepared, problem = _prepare_render(photo, defer_unconfirmed=queued.get('defer_unconfirmed', False))
     if problem:
+        if problem[0] == side_reference.ERROR:
+            _side_ensure_question(user,session_id,photo)
+            return []
         if problem[0] in ('unresolved_people', 'unresolved_visual_target', 'protected_scope'):
             photo['error'] = None
             store.save_photo_state(user, session_id, photo)
@@ -1624,6 +1682,13 @@ def _refresh_visual_question(photo):
 
 
 def _conversation_render_problem(photo):
+    try:
+        state=photo.get('side_reference')
+        # Cancel/Undo restores the plan; stale metadata cannot block a different
+        # active prompt indefinitely, but pending proposals remain in photo state.
+        side_reference.guard(photo['plan'].get('user_prompt') or '',state)
+    except ValueError:
+        return (side_reference.ERROR,'請先確認身體部位的左右是以人物還是畫面為準，再開始美化。',409)
     state = photo.get('preview_conversation')
     blocked = chat_analysis.blocking({'_chat_request_checks':photo.get('chat_request_checks')}, state)
     if blocked:
@@ -1678,6 +1743,9 @@ def _render_without_guessed_targets(photo):
 
 def _prepare_render(photo, *, defer_unconfirmed=False):
     original = photo
+    problem = _conversation_render_problem(photo)
+    if problem and problem[0] == side_reference.ERROR:
+        return None, problem
     if defer_unconfirmed:
         photo = _render_without_guessed_targets(photo)
     conversation_problem = _conversation_render_problem(photo)
@@ -1693,6 +1761,8 @@ def _prepare_render(photo, *, defer_unconfirmed=False):
     if error:
         return None, ("invalid_plan", f"photo {photo['photo_id']}: {error}", 400)
     params["stage"] = "finish"
+    if photo.get('side_reference'):
+        params['side_reference']=copy.deepcopy(photo['side_reference'])
     analysis, error = _load_analysis(_analysis_job_id(photo))
     if analysis is not None:
         blocked = chat_analysis.blocking(analysis, photo.get('preview_conversation'))
@@ -1868,6 +1938,8 @@ def render(session_id):
     for photo in photos:
         problem = _conversation_render_problem(_render_without_guessed_targets(photo) if defer_unconfirmed else photo)
         if problem:
+            if problem[0] == side_reference.ERROR:
+                _side_ensure_question(user,session_id,photo)
             return jsonify({'error': problem[1], 'reason': problem[0]}), problem[2]
         if photo["status"] in ("analyzing", "reframing") and not photo["queued_render"]:
             to_queue.append(photo)
@@ -2057,6 +2129,7 @@ def confirm_photo_conversation(session_id, photo_id):
         store.make_message('assistant', card={'type': 'llm_reply', 'photo_id': photo_id,
             'text': state['question']['text'] if state['question'] else state['reply'],
             'target_question': copy.deepcopy(state['question']), 'question_revision': state['revision']})])
+    _side_ensure_question(user,session_id,photo)
     return jsonify({'conversation': state})
 
 
@@ -2184,6 +2257,9 @@ def ask_photo(session_id, photo_id):
     body = _body()
     user = _user(body.get("user"))
     photo = _photo(_session(user, session_id), photo_id)
+    side_reply = _side_turn(user, session_id, photo, body)
+    if side_reply is not None:
+        return side_reply
     waiting = body.get("waiting")
     if waiting is not None:
         return _answer_waiting(user, session_id, photo, waiting, _screen(body.get("screen")))
@@ -2222,6 +2298,161 @@ def ask_photo(session_id, photo_id):
         asked["card"]["answers_question_id"] = answer_to
     history = prior[-chat_assistant.HISTORY_LEN:] + [asked]
     return _answer(user, session_id, photo, history, screen, [asked])
+
+
+def _side_context(photo, body, text):
+    people=[]
+    if photo.get('status')=='ready':
+        analysis,error=_load_analysis(_analysis_job_id(photo))
+        if analysis is not None:people=[s for s in analysis.get('subjects',[]) if s.get('is_person',True)]
+    indices=_subject_indices(body);faces=_ask_faces(body)
+    if indices and faces:raise _RequestError('send subject_indices or faces, not both')
+    if people and any(i>=len(people) for i in indices):raise _RequestError('invalid_side_person')
+    selected=indices or faces
+    referent=re.search(r'(?:左邊|右邊|中央|左側|右側).{0,12}(?:女生|女孩|女性|男子|男生)',text)
+    context=dict(photo_id=photo.get('source_sha256') or side_reference.digest(photo['photo_id']),
+        people_count=len(people),selected_person_ids=selected,target_referent=referent.group() if referent else '',
+        source_revision=(photo.get('side_reference') or {}).get('revision',0)+1)
+    if len(indices)==1 and people:context['target_label']=people[indices[0]].get('label','')
+    elif len(faces)==1:context['target_label']=faces[0]['where']
+    if indices and people:context['selected_labels']=[people[i].get('label') or '照片中第 '+str(i+1)+' 位人物' for i in indices]
+    elif faces:context['selected_labels']=[f['where'] for f in faces]
+    previous=photo.get('side_reference')
+    if previous and side_reference.executable(previous) and '也' in text:
+        frames={r['reference_frame'] for r in previous['side_references']}
+        prior_ids=previous['context'].get('selected_person_ids',[])
+        if len(frames)==1 and (not selected or selected==prior_ids):
+            context.update(same_live_request_chain=True,explicit_prior_frame=next(iter(frames)),selected_person_ids=prior_ids)
+            for key in ('selected_labels','target_label'):
+                if previous['context'].get(key):context[key]=copy.deepcopy(previous['context'][key])
+    return context
+
+
+def _side_post_question(user, session_id, photo, text, state, base_plan=None, replaces_prompt=False, echo=True):
+    source=photo.get('source_sha256') or side_reference.digest(photo['photo_id'])
+    data=side_reference_store.create(user,state,source,photo['plan']['analysis_model'],
+        scope=session_id+':'+photo['photo_id'],base_prompt='' if replaces_prompt else photo['plan']['user_prompt'])
+    state=data['state']
+    answer=side_reference_store.reply(data)
+    card=dict(type='llm_reply',photo_id=photo['photo_id'],text=answer['reply'],proposal=None,
+        options=answer['options'],question_kind=answer['question_kind'],answer_mode=answer['answer_mode'],
+        clarification_subtype='body_side_reference',side_question=answer['side_question'])
+    reply=store.make_message('assistant',card=card)
+    reply['card']['side_question']['id']=reply['id']
+    photo.update(side_reference=state,side_reference_token=data['token'],side_question_id=reply['id'],
+        side_base_plan=copy.deepcopy(base_plan or photo['plan']),
+        side_question_analysis=_analysis_job_id(photo) if photo.get('status')=='ready' else None,
+        side_question_model=photo['plan']['analysis_model'])
+    store.save_photo_state(user,session_id,photo)
+    messages=([store.make_message('user',text,dict(type='ask',photo_id=photo['photo_id']))] if echo else [])+[reply]
+    store.append_messages(user,session_id,messages)
+    return jsonify(messages=messages)
+
+
+def _side_turn(user, session_id, photo, body):
+    text=body.get('text','')
+    if not isinstance(text,str) or len(text)>MESSAGE_TEXT_MAX_LEN:return None
+    if 'selected_frame' in body and body['selected_frame'] not in ('subject','image'):
+        raise _RequestError('invalid_reference_frame')
+    pending=photo.get('side_reference')
+    if pending:
+        removed=side_reference.cancelled_requests(pending,text)
+        correction=re.search(r'(?:第一個|第一筆|前一個).*(?:改成|改為|使用)',text)
+        frame=side_reference.answer_frame(text)
+        if removed or correction and frame:
+            state=side_reference.remove(pending,removed) if removed else side_reference.change(pending,pending['side_references'][0]['side_ref_id'],frame,
+                'right' if re.search('右(?:手|腳|眼|肩)',text) else 'left')
+            if not side_reference.executable(state):return _side_post_question(user,session_id,photo,text,state)
+            data=side_reference_store.create(user,state,photo.get('source_sha256') or side_reference.digest(photo['photo_id']),photo['plan']['analysis_model'],scope=session_id+':'+photo['photo_id'])
+            current=photo['plan']['user_prompt']
+            line=(current.replace(pending['canonical_text'],state['canonical_text'],1) if pending['canonical_text'] in current else
+                '；'.join(x for x in (current,state['canonical_text']) if x))
+            return _side_commit(user,session_id,photo,text,data,line_override=line)
+    pending= pending if pending and not side_reference.executable(pending) else None
+    if pending and pending['decision']=='clarify_person' and not body.get('subject_indices') and not body.get('faces') and photo.get('status')=='ready':
+        analysis,error=_load_analysis(_analysis_job_id(photo))
+        people=[s for s in (analysis or {}).get('subjects',[]) if s.get('is_person',True)]
+        matches=[i for i,p in enumerate(people) if p.get('label') and p['label'] in text]
+        if len(matches)==1:body={**body,'subject_indices':matches}
+    if pending and pending['decision']=='clarify_person' and (body.get('subject_indices') or body.get('faces')):
+        if body.get('answer_to') is not None and body['answer_to']!=photo.get('side_question_id'):raise _RequestError('stale_side_question',409)
+        context=_side_context(photo,body,pending['original_text'])
+        state=side_reference.inspect(pending['original_text'],context)
+        if all(r['reference_frame']!='unresolved' for r in pending['side_references']):
+            for r in state['side_references']:
+                prior=next(x for x in pending['side_references'] if x['start']==r['start'] and x['side']==r['side'])
+                r.update(reference_frame=prior['reference_frame'],resolution=prior['resolution'])
+            state.update(decision='pass',question_count=0)
+        state['canonical_text']=side_reference.compile_text(state)
+        if side_reference.executable(state):
+            data=side_reference_store.create(user,state,photo.get('source_sha256') or side_reference.digest(photo['photo_id']),photo['plan']['analysis_model'],scope=session_id+':'+photo['photo_id'],base_prompt=photo['plan']['user_prompt'])
+            return _side_commit(user,session_id,photo,text,data)
+        return _side_post_question(user,session_id,photo,text,state)
+    selected=body.get('selected_frame')
+    typed_frame=side_reference.answer_frame(text) if pending else None
+    if pending and (selected is not None or typed_frame and not side_reference.inspect(text)['side_references']):
+        if set(body)-{'user','text','subject_indices','faces','screen','answer_to','selected_frame','source_revision'}:
+            raise _RequestError('invalid_side_answer')
+        if body.get('answer_to')!=photo.get('side_question_id'):
+            raise _RequestError('左右確認問題已過期，請回答目前的問題。',409)
+        if photo['plan']!=photo.get('side_base_plan'):
+            raise _RequestError('設定已更新，請重新確認左右部位。',409)
+        try:
+            token=photo['side_reference_token']
+            def validate_result(data):
+                if _photo(_session(user,session_id),photo['photo_id'])['plan']!=photo['side_base_plan']:
+                    raise ValueError('stale_side_question')
+                if side_reference.executable(data['state']):_side_candidate(photo,data)
+            data=side_reference_store.answer(user,token,token,body.get('source_revision'),selected or typed_frame,
+                source_hash=photo.get('source_sha256') or side_reference.digest(photo['photo_id']),model=photo['plan']['analysis_model'],validate_result=validate_result)
+        except ValueError as exc:raise _RequestError(str(exc),400 if str(exc)=='invalid_reference_frame' else 409) from exc
+        if not side_reference.executable(data['state']):
+            return _side_post_question(user,session_id,photo,text,data['state'])
+        return _side_commit(user,session_id,photo,text,data,body['answer_to'])
+    if selected is not None:raise _RequestError('左右確認問題已過期。',409)
+    if pending and text.strip('。！!？? ') in ('都可以','隨便','不知道','不確定'):
+        return _side_post_question(user,session_id,photo,text,pending)
+    state=side_reference.inspect(text,_side_context(photo,body,text))
+    if state['decision']=='clarify_side':
+        return _side_post_question(user,session_id,photo,text,state)
+    if state['decision']=='clarify_person':
+        return _side_post_question(user,session_id,photo,text,state)
+    if state['decision']=='pass' and state['side_references']:
+        data=side_reference_store.create(user,state,photo.get('source_sha256') or side_reference.digest(photo['photo_id']),photo['plan']['analysis_model'],scope=session_id+':'+photo['photo_id'],base_prompt=photo['plan']['user_prompt'])
+        return _side_commit(user,session_id,photo,text,data)
+    return None
+
+
+def _side_candidate(photo,data,line_override=None):
+    resolved=data['state']
+    line=(data['base_prompt'].replace(resolved['original_text'],resolved['canonical_text'],1)
+        if resolved['original_text'] in data['base_prompt'] else
+        '；'.join(x for x in (data['base_prompt'],resolved['canonical_text']) if x))
+    if line_override is not None:line=line_override
+    before=copy.deepcopy(photo['plan'])
+    literal=list(dict.fromkeys(before.get('literal_texts',[])+resolved['literal_texts']))
+    patch=dict(user_prompt=line,literal_texts=literal,side_reference_token=data['token'])
+    faces=resolved['context'].get('selected_person_ids') or []
+    if faces and all(isinstance(f,dict) for f in faces):
+        patch['prompt_faces']=[dict(box=f['box'],where=f['where'],ref=f['where']) for f in faces]
+    plan,error=apply_plan_patch(before,patch,debug=_debug())
+    if error:raise _RequestError(error)
+    return before,patch,plan
+
+
+def _side_commit(user,session_id,photo,text,data,answer_to=None,line_override=None):
+    resolved=data['state']
+    before,patch,plan=_side_candidate(photo,data,line_override)
+    photo.update(side_reference=resolved,side_question_id=None)
+    proposal=dict(id=uuid.uuid4().hex[:12],patch=patch,direct=True,
+        undo=dict(user_prompt=before['user_prompt'],literal_texts=before.get('literal_texts',[]),side_reference_token=before.get('side_reference_token'),
+            **({'prompt_faces':copy.deepcopy(before.get('prompt_faces',[]))} if 'prompt_faces' in patch else {})),
+        changes=chat_assistant.describe_changes(before,plan,{}))
+    reply=store.make_message('assistant',card=dict(type='llm_reply',photo_id=photo['photo_id'],text='已確認：'+resolved['canonical_text'],proposal=proposal,options=[]))
+    messages=[store.make_message('user',text,dict(type='ask',photo_id=photo['photo_id'],answers_question_id=answer_to)),reply]
+    messages+=_apply_directly(user,session_id,photo,reply)
+    store.append_messages(user,session_id,messages)
+    return jsonify(messages=messages)
 
 
 def _answer_waiting(user, session_id, photo, message_id, screen):
@@ -2265,6 +2496,10 @@ def _apply_directly(user, session_id, photo, reply):
         reply["card"]["text"] = "可以幫你這樣調整，確認後套用。"
         return []
     photo_id = photo["photo_id"]
+    if plan.get('side_reference_token'):
+        if 'side_reference_token' in proposal['patch']:_checked_side_token(user,session_id,photo,plan)
+        elif photo.get('side_reference') and photo['side_reference']['canonical_text'] not in plan['user_prompt']:
+            plan['side_reference_token']=None
     messages = [store.make_message("user", card={
         "type": "proposal_resolved", "photo_id": photo_id, "proposal_id": proposal["id"], "choice": "apply",
         "auto": True})]
@@ -2272,13 +2507,67 @@ def _apply_directly(user, session_id, photo, reply):
         messages.append(store.make_message("assistant", card={
             "type": "adjust_opened", "photo_id": photo_id, "via": "proposal", "auto": True,
             "plan": {k: copy.deepcopy(photo["plan"][k]) for k in ROUND_KEYS if k in photo["plan"]}}))
-    store.save_photo_plan(user, session_id, photo_id, plan)
     photo["plan"] = plan
+    _side_sync_plan(user,session_id,photo)
     if _reframe_if_needed(user, session_id, photo):
         # 改了比例就先重新構圖，這時底下沒有能按的鍵：先不指下一步，構圖好了
         # 那則（reframe_done）再把項目和美化接上。
         reply["card"]["text"] = NEXT_STEP_RE.sub("", reply["card"]["text"]) + REFRAMING_NOTE
     return messages
+
+
+def _side_sync_plan(user,session_id,photo):
+    state=photo.get('side_reference')
+    token=photo['plan'].get('side_reference_token')
+    if not state and not token:
+        store.save_photo_plan(user,session_id,photo['photo_id'],photo['plan'])
+        return
+    if state and not side_reference.executable(state) and token!=photo.get('side_reference_token'):
+        store.save_photo_snapshot(user,session_id,photo)
+        return  # A new pending turn must not be replaced by the older plan token.
+    if token:
+        data=_checked_side_token(user,session_id,photo,photo['plan'])
+        photo.update(side_reference=data['state'],side_reference_token=token,side_question_id=None)
+        store.save_photo_snapshot(user,session_id,photo)
+        return
+    if state and side_reference.executable(state) and state['canonical_text'] not in photo['plan']['user_prompt']:
+        photo.update(side_reference=None,side_question_id=None,side_reference_token=None)
+    store.save_photo_snapshot(user,session_id,photo)
+
+
+def _checked_side_token(user,session_id,photo,plan):
+    try:
+        data=side_reference_store.load(user,plan['side_reference_token'],
+            source_hash=photo.get('source_sha256') or side_reference.digest(photo['photo_id']),model=plan['analysis_model'])
+        if data['scope']!=session_id+':'+photo['photo_id'] or not side_reference.executable(data['state']) or data['state']['canonical_text'] not in plan['user_prompt']:
+            raise ValueError('side_token_plan_mismatch')
+        return data
+    except ValueError as exc:raise _RequestError(str(exc),409) from exc
+
+
+def _side_ensure_question(user,session_id,photo):
+    previous=photo.get('side_reference')
+    if not previous and not side_reference.inspect(photo['plan'].get('user_prompt',''))['side_references']:return
+    if photo.get('side_question_id') and previous and not side_reference.executable(previous):
+        if (photo.get('status')!='ready' or photo.get('side_question_analysis')==_analysis_job_id(photo)) and photo.get('side_question_model')==photo['plan']['analysis_model'] and photo.get('side_base_plan')==photo['plan']:return
+    active_text=photo['plan'].get('user_prompt','')
+    active_state=side_reference.inspect(active_text)
+    replacement=bool(previous and side_reference.executable(previous) and not side_reference.executable(active_state))
+    text=active_text if replacement else (previous or {}).get('original_text') or active_text
+    context=_side_context(photo,{},text)
+    mapped=photo.get('preview_conversation') or {}
+    if mapped and conversation_domain.pending(mapped):return
+    selected=[i for c in mapped.get('clauses',[]) for i in c.get('target_ids',[])]
+    if selected:context['selected_person_ids']=selected
+    elif previous and previous['context'].get('selected_person_ids'):
+        context['selected_person_ids']=previous['context']['selected_person_ids']
+        context['target_label']=previous['context'].get('target_label','')
+    state=side_reference.inspect(text,context)
+    if previous and side_reference.executable(previous) and not replacement:
+        if state['decision']!='clarify_person':return
+        state['side_references']=copy.deepcopy(previous['side_references'])
+        state['canonical_text']=side_reference.compile_text(state)
+    if state['decision'] in ('clarify_side','clarify_person'):return _side_post_question(user,session_id,photo,text,state,replaces_prompt=replacement,echo=False)
 
 
 def _open_panel(user, session_id, photo, category):
@@ -2366,6 +2655,15 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
                 "reply": "設定已在這段時間更新，這次需求尚未套用，請依最新設定再送出。"}
         else:
             photo = current_photo
+    # A completed/revised model proposal is another entry into the same guard.
+    # Do not apply an ambiguous body instruction merely because it was produced
+    # by the language model rather than typed verbatim by the user.
+    if proposal and isinstance(proposal.get('patch',{}).get('user_prompt'),str):
+        candidate=proposal['patch']['user_prompt']
+        state=side_reference.inspect(candidate,_side_context(photo,{},candidate))
+        if state['side_references'] and not side_reference.executable(state):
+            store.append_messages(user,session_id,messages)
+            return _side_post_question(user,session_id,photo,candidate,state,replaces_prompt=True,echo=False)
     if proposal:
         proposal = {"id": uuid.uuid4().hex[:12], **proposal}
     if answer["reply"] or proposal or not answer["render"]:
@@ -2387,10 +2685,23 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
         # Re-read: a poll may have moved the photo on while the model thought.
         messages += _ask_render(user, session_id, _photo(_session(user, session_id), photo_id))
     store.append_messages(user, session_id, messages)
+    refreshed=_side_ensure_question(user,session_id,_photo(_session(user,session_id),photo_id))
+    if refreshed is not None:
+        messages+=refreshed.get_json()['messages']
     return jsonify({"messages": messages})
 
 
 # --- the upload page's typed requests ----------------------------------------
+
+@chat_bp.post('/side-reference/source')
+def body_side_source_hash():
+    """HTTP browsers without WebCrypto can bind a question without a preview."""
+    _user(request.form.get('user'))
+    image=request.files.get('image')
+    if image is None:raise _RequestError('image is required')
+    data=image.read(MAX_UPLOAD_BYTES+1)
+    if not data or len(data)>MAX_UPLOAD_BYTES:raise _RequestError('invalid image size')
+    return jsonify(source_sha256=source_sha256(data))
 
 # A typed 一鍵美化 or 分析: the page starts it, so the reply says it is starting.
 PROMPT_REVIEW_START_REPLIES = {"render": "好，馬上幫你一鍵美化。", "analyze": "好，我先幫你分析這張照片。"}
@@ -2403,6 +2714,63 @@ PROMPT_REVIEW_LABEL_MAX_LEN = 40
 # 個人化需求一個人一段，加上沒指定對象的那段。
 PROMPT_REVIEW_SECTIONS_MAX = PROMPT_REVIEW_PEOPLE_MAX + 1
 PROMPT_REVIEW_WAIT_SECONDS = chat_queue.WAIT_SECONDS
+
+
+def _side_upload_review(body,text):
+    context=body.get('side_context');answer=body.get('side_answer')
+    if context is None and answer is None:return None
+    if not isinstance(context,dict) or not {'source_sha256','analysis_model'}<=set(context) or set(context)-{'source_sha256','analysis_model','previous_token'}:
+        raise _RequestError('invalid_side_context')
+    if context['analysis_model'] not in [m.id for m in capabilities.ANALYSIS_MODELS]:raise _RequestError('invalid_side_model')
+    user=_user(body.get('user'))
+    try:
+        if answer is not None:
+            if not isinstance(answer,dict) or not {'token','answer_to','source_revision'}<=set(answer) or set(answer)-{'token','answer_to','source_revision','selected_frame'}:
+                raise _RequestError('invalid_side_answer')
+            if 'selected_frame' in answer and answer['selected_frame'] not in ('subject','image'):raise _RequestError('invalid_reference_frame')
+            current=side_reference_store.load(user,answer['token'],source_hash=context['source_sha256'],model=context['analysis_model'],current=True)
+            side_reference.validate_answer(current['state'],answer['source_revision'],context['source_sha256'])
+            if current['consumed'] or not current['question'] or current['question']['id']!=answer['answer_to']:
+                raise ValueError('stale_side_question')
+            removed=side_reference.cancelled_requests(current['state'],text)
+            if removed:
+                state=side_reference.remove(current['state'],removed)
+                data=side_reference_store.create(user,state,context['source_sha256'],context['analysis_model'],base_prompt=current['base_prompt'])
+                result=side_reference_store.reply(data)
+                if not state['canonical_text'].strip('；;、，, '):result['withdrawn']=True
+                return result
+            if current['state']['decision']=='clarify_person':
+                picked,_=chat_assistant._split_people(text,body.get('people',[]))
+                if not picked:return side_reference_store.reply(current)
+                state=side_reference.inspect(current['state']['original_text'],dict(people_count=len(body.get('people',[])),selected_person_ids=picked,selected_labels=picked,
+                    source_revision=current['state']['revision']+1,photo_id=context['source_sha256']))
+                data=side_reference_store.create(user,state,context['source_sha256'],context['analysis_model'],base_prompt=current['base_prompt'])
+                return side_reference_store.reply(data)
+            frame=answer.get('selected_frame') or side_reference.answer_frame(text)
+            if frame is None:
+                replacement=side_reference.inspect(text,dict(people_count=len(body.get('people',[])),photo_id=context['source_sha256'],source_revision=current['state']['revision']+1))
+                if replacement['side_references']:
+                    data=side_reference_store.create(user,replacement,context['source_sha256'],context['analysis_model'],base_prompt=current['base_prompt'])
+                    return side_reference_store.reply(data)
+                data=side_reference_store.load(user,answer['token'],source_hash=context['source_sha256'],model=context['analysis_model'],current=True)
+                return side_reference_store.reply(data)
+            data=side_reference_store.answer(user,answer['token'],answer['answer_to'],answer['source_revision'],frame,
+                source_hash=context['source_sha256'],model=context['analysis_model'])
+            return side_reference_store.reply(data)
+        picked,_=chat_assistant._split_people(text,body.get('people',[]))
+        parsing_context=dict(people_count=len(body.get('people',[])),selected_person_ids=picked,selected_labels=picked,photo_id=context['source_sha256'])
+        if context.get('previous_token') and '也' in text:
+            prior=side_reference_store.load(user,context['previous_token'],source_hash=context['source_sha256'],model=context['analysis_model'],current=True)['state']
+            frames={r['reference_frame'] for r in prior['side_references']}
+            if side_reference.executable(prior) and len(frames)==1 and picked==prior['context'].get('selected_person_ids',[]):
+                parsing_context.update(explicit_prior_frame=next(iter(frames)),same_live_request_chain=True)
+        state=side_reference.inspect(text,parsing_context)
+        if state['decision'] not in ('clarify_side','clarify_person','pass') or not state['side_references']:return None
+        data=side_reference_store.create(user,state,context['source_sha256'],context['analysis_model'],
+            base_prompt=body.get('prompt',''))
+        return side_reference_store.reply(data)
+    except ValueError as exc:
+        raise _RequestError(str(exc),400 if str(exc).startswith('invalid_') else 409) from exc
 
 
 @chat_bp.post("/prompt-review")
@@ -2447,6 +2815,8 @@ def prompt_review():
                        and len(x["text"]) <= USER_PROMPT_MAX_LEN for x in sections)):
         raise _RequestError(f"sections must be a list of at most {PROMPT_REVIEW_SECTIONS_MAX} {{who, text}} strings")
     batch = _review_batch(body.get("batch"))
+    side_out=_side_upload_review(body,text)
+    if side_out is not None:return jsonify(side_out)
     try:
         answer = chat_queue.run({
             "stage": chat_jobs.STAGE_REVIEW, "line": text, "prompt": prompt,
@@ -2457,8 +2827,8 @@ def prompt_review():
     except Exception:
         current_app.logger.exception("chat prompt review failed")
         if history and history[-1].get('question') and not history[-1].get('offer'):
-            return jsonify({'accepted': False, 'ask': True, 'options': [],
-                'reply': chat_assistant.INTERPRETATION_CLARIFY_REPLY, 'question_kind': 'meaning'})
+            from photo_agent.clarification_choices import answer_context,completion_retry
+            return jsonify(dict(accepted=False,ask=True,**completion_retry(answer_context(history,text))))
         # The model is not a gate the user can be left standing behind: the
         # line goes in, and the session checks it again with an analysis in
         # hand.
@@ -2492,6 +2862,8 @@ def prompt_review():
         out["ask"] = True
         out["question_kind"] = answer.get("question_kind") if answer.get("question_kind") in ("person", "meaning", "content") else "meaning"
         out["options"] = answer["options"]
+        if answer.get('clarification_subtype')=='body_side_reference':
+            out.update(clarification_subtype='body_side_reference',side_question=answer['side_question'])
     elif answer["offer"]:
         # 「要不要我先幫你分析？」: the user only seemed to want it, so nothing
         # starts until they say so -- the options say it for them.
@@ -2569,7 +2941,8 @@ def _review_history(history):
                 len(o) <= PROMPT_REVIEW_LABEL_MAX_LEN or
                 is_literal_choice(o) and len(o) <= MESSAGE_TEXT_MAX_LEN) for o in options):
             raise _RequestError("history options must be a list of short strings")
-        turns.append({"role": t["role"], "text": text.strip(), "question": t.get("question") is True,
+        # Preserve original characters for follow-up text-overlay completion.
+        turns.append({"role": t["role"], "text": text, "question": t.get("question") is True,
                       "offer": t.get("offer") is True, "options": options[:4]})
     return turns
 
@@ -2961,4 +3334,8 @@ def _advance_photos(user, session_id, session):
         elif photo["status"] == "rendering" and photo["pending_render"]:
             messages += _advance_rendering(user, session_id, photo, statuses)
     store.append_messages(user, session_id, messages)
+    for photo in store.load_session(user,session_id)['photos']:
+        if photo['status']=='ready':
+            extra=_side_ensure_question(user,session_id,photo)
+            if extra is not None:messages+=extra.get_json()['messages']
     return statuses, messages

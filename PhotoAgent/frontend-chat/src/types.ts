@@ -30,6 +30,7 @@ export interface Plan {
   run_count?: number;
   user_prompt?: string;
   literal_texts?: string[];
+  side_reference_token?: string | null;
   overwrite_prompt?: boolean;
   // 設定 → 詳細解說: how the assistant's replies sound.
   detailed_explanation?: boolean;

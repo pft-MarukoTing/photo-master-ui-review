@@ -1,4 +1,5 @@
 import { nextDisplayOrder } from "./display-order";
+import { sideChoice, type SideAnswer, type SideQuestion } from "./side-reference";
 // The chat page: home (intro + gallery), the pre-session chat that picks a
 // photo and settings, and a session (compare canvas + chat timeline built
 // from the server's messages). Every action is one of the chat API calls;
@@ -122,6 +123,7 @@ type PrePerson = FaceRef & { where: string; box: Box; thumbnail_box?: Box; previ
 // groups the lines one click took out, so 清除所有需求 is answered once and not
 // once per line.
 type Note = {
+  sideToken?: string;
   verbatim?: boolean;
   interpreted?: boolean;
   literalTexts?: string[];
@@ -143,7 +145,8 @@ type Note = {
   dropped?: { after: number; batch: number; order?: number; text?: string };
   // The AI's reply was a question back instead of a decision; `options` are
   // the short answers it offered to tap.
-  asked?: { options: string[]; kind?: "person" | "meaning" | "content" };
+  asked?: { options: string[]; kind?: "person" | "meaning" | "content";
+    subtype?: "body_side_reference"; side_question?: SideQuestion };
   askedResolved?: boolean;
   // The AI asked whether to start 分析／一鍵美化 for them instead of starting
   // it. Not a question about the line: the answer is a line of its own.
@@ -378,6 +381,13 @@ const notesPrompt = (ns: Note[], edits: PromptEdits = {}) =>
 
 function noteLiteralTexts(ns: Note[], prompt: string): string[] {
   return [...new Set(ns.filter(liveNote).flatMap(n => n.literalTexts || []))].filter(text => prompt.includes(text));
+}
+
+function pendingSideNote(ns: Note[]): Note | undefined {
+  return [...ns].reverse().find(n => !n.dropped && !n.askedResolved && n.asked?.subtype === "body_side_reference");
+}
+function sideTokenFor(ns: Note[]): string | undefined {
+  return pendingSideNote(ns)?.sideToken || [...ns].reverse().find(n => !n.dropped && n.kept && n.sideToken)?.sideToken;
 }
 
 // 上傳頁面的整段對話，給模型看的版本：它才分得出這句是在回答它剛問的，還是另一
@@ -633,9 +643,9 @@ type UploadArgs = Parameters<typeof api.uploadPhoto>;
 // 帶著 clientKey 傳一張，回後端加進 session 的那張。重試時上一次的還在傳，就等它傳好拿它那張；
 // 等太久當逾時，交給下一次重試。live() 變成 false 就不等了。
 async function uploadKeyed(id: string, blob: Blob, name: string, preview: UploadArgs[3], wishes: UploadArgs[4],
-  clientKey: string, live: () => boolean): Promise<{ photo_id: string; analyze_job_id: string }> {
+  clientKey: string, live: () => boolean, sideToken?: string): Promise<{ photo_id: string; analyze_job_id: string }> {
   try {
-    const up = await api.uploadPhoto(id, blob, name, preview, wishes, { signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS), clientKey });
+    const up = await api.uploadPhoto(id, blob, name, preview, wishes, { signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS), clientKey, sideToken });
     const added = up.photos?.[0];
     if (!added) throw new UploadFailed(up.errors?.[0]?.error || "上傳失敗");
     return added as { photo_id: string; analyze_job_id: string };
@@ -1864,7 +1874,7 @@ export function App() {
         ...previewIdentity, ...(p.mapping ? { conversation_token: p.mapping.token,
           conversation_wishes_digest: p.mapping.wishes_digest } : {}),
       }, previewEnabled ? (previewIdentity ? p.wishes : p.wishes.map((w) => ({ ...w, target_ids: [] }))) : undefined,
-      clientKey, live);
+      clientKey, live, sideTokenFor(log));
       const pid = added.photo_id;
       uploaded = pid;
       say(p.mode === "analyze" ? "照片傳好了，準備開始分析…" : p.overwrite ? "照片傳好了，準備開始調整…" : "照片傳好了，準備開始美化…");
@@ -2445,9 +2455,10 @@ export function App() {
     typed = true,
   ): Promise<Note[] | null> {
     let actionTried = false;
+    const sideTurn = base.some(n => !n.dropped && !n.askedResolved && n.asked?.subtype === "body_side_reference") || /[左右](?:側|邊|半)?(?:可見)?的?(?:那隻)?(?:手|腳|腿|眼|肩|臉|耳|眉|膝|胳膊)/.test(text);
     // A short correction such as 改成張開 answers the active action question;
     // it must not revise another completed wish and leave this one unresolved.
-    if ((bridgeQuestion?.kind === "action" || bridgeQuestion?.kind === "edit_description") && base === notes && !/取消|撤回|不做了|不用了|不要了/.test(text)) {
+    if (!sideTurn && (bridgeQuestion?.kind === "action" || bridgeQuestion?.kind === "edit_description") && base === notes && !/取消|撤回|不做了|不用了|不要了/.test(text)) {
       actionTried = true;
       if (typed) setPreClear(n => n + 1);
       setPreAsk({ order: nextDisplayOrder(), text, persons: [] });
@@ -2458,7 +2469,7 @@ export function App() {
         return null;
       } finally { setPreAsk(null); }
     }
-    if ((bridge.canRevise || bridge.result) && /不是|取消|撤回|保持原樣|不要|不整理|改成|改為|改看/.test(text)) {
+    if (!sideTurn && (bridge.canRevise || bridge.result) && /不是|取消|撤回|保持原樣|不要|不整理|改成|改為|改看/.test(text)) {
       setPreAsk({ order: nextDisplayOrder(), text, persons: [] });
       try {
         const correction = await bridge.revise(text, preRefs(subjectIndices).flatMap(p => p.preview_person_id ? [p.preview_person_id] : []));
@@ -2471,7 +2482,7 @@ export function App() {
         // 一句，照一般流程檢查，不把後端的錯誤代碼丟給使用者。
       } finally { setPreAsk(null); }
     }
-    if (!actionTried && bridgeQuestion && bridgeQuestion.kind !== "semantic" && base === notes) {
+    if (!sideTurn && !actionTried && bridgeQuestion && bridgeQuestion.kind !== "semantic" && base === notes) {
       const ids = preRefs(confirmationPointed).flatMap(p => p.preview_person_id ? [p.preview_person_id] : []);
       if (typed) setPreClear(n => n + 1);
       setPreAsk({ order: nextDisplayOrder(), text, persons: [] });
@@ -2484,6 +2495,7 @@ export function App() {
     const expectedPreview = preview.identity;
     const stillCurrent = () => previewReviewIdentity.current === expectedPreview;
     const asking = openAsk(base);
+    if (asking?.asked?.subtype === "body_side_reference" && !asking.asked.side_question && text === "重新確認左右需求") text = asking.text;
     const picked = preRefs(subjectIndices);
     const note: Note = { order: nextDisplayOrder(), text, persons: picked.length ? picked : asking?.persons || [],
       selectionSource: picked.length ? "user_selection" : asking?.selectionSource };
@@ -2503,12 +2515,24 @@ export function App() {
     // 分段送：哪一段有衝突，模型就只重寫那一段，指定的人跟著段留住。
     const sent = promptSections(base, segEdits);
     try {
+      let sideContext: { source_sha256: string; analysis_model: string; previous_token?: string } | undefined;
+      const sideQuestion = asking?.asked?.side_question;
+      if ((sideQuestion || /[左右](?:側|邊|半)?(?:可見)?的?(?:那隻)?(?:手|腳|腿|眼|肩|臉|耳|眉|膝|胳膊)/.test(text)) && source && settings) {
+        const { blob, name } = await sourceBlob(source, AbortSignal.timeout(STEP_TIMEOUT_MS));
+        // WebCrypto is unavailable on ordinary HTTP deployments. The fallback
+        // computes only a digest on the server, with no preview/model job.
+        const sourceHash = globalThis.crypto?.subtle
+          ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())), b => b.toString(16).padStart(2, "0")).join("")
+          : (await api.bodySideSourceHash(blob, name)).source_sha256;
+        sideContext = { source_sha256: sourceHash, analysis_model: settings.analysis_model || (caps ? defaultSettings(caps).analysis_model : "") || "", previous_token: sideTokenFor(base) };
+      }
       const reviewed = await api.promptReview(
         noteLine(note),
         bridge.result?.effective_prompt ?? notesPrompt(base, segEdits),
         reviewHistory(base, [...bridge.events, ...settingsEvents]),
         preOrder.map((p) => preWhere(p.subjectIndex)),
         sent.map((x) => ({ who: x.key, text: x.text })),
+        undefined, sideContext, sideQuestion && asking?.sideToken ? { ...sideChoice(sideQuestion, text), token: asking.sideToken } : undefined,
       );
       if (!stillCurrent()) return null;
       let r = routeReviewQuestion(reviewed, previewEnabled);
@@ -2524,10 +2548,12 @@ export function App() {
         // 只是撤回前面那項的一句不進清單：前面那項拿掉，就是照原樣了。
         kept: r.accepted && !r.withdrawn,
         ...(r.semantic_pending && (previewEnabled || preview.identity) ? { actionPending: true, resolvedWish: "" } : {}),
-        ...(r.ask ? { asked: { options: r.options || [], kind: r.question_kind || "meaning" } } : {}),
+        ...(r.ask ? { asked: { options: r.options || [], kind: r.question_kind || "meaning",
+          subtype: r.clarification_subtype, side_question: r.side_question } } : {}),
+        ...(r.side_reference_token ? { sideToken: r.side_reference_token } : {}),
         ...(r.offer ? { offered: { options: r.options || [], ...(r.later ? { later: true } : {}) } } : {}),
         ...(r.accepted && !r.withdrawn ? completed(r.line, r.persons) : {}),
-        ...(r.accepted && !r.withdrawn ? { literalTexts: r.request_semantics?.flatMap(s => s.literal_text ? [s.literal_text] : []) || [] } : {}),
+        ...(r.accepted && !r.withdrawn ? { literalTexts: r.literal_texts || r.request_semantics?.flatMap(s => s.literal_text ? [s.literal_text] : []) || [] } : {}),
         ...(r.verbatim ? { verbatim: true, wish: note.text, persons: [], selectionSource: undefined } : {}),
         ...(r.interpreted ? { interpreted: true,
           // A reviewed scene-wide revision is already complete. Forward that
@@ -2540,7 +2566,10 @@ export function App() {
       // 拿掉被這句取代的部分，跟使用者手改那段字走同一條路；這句自己接在它那段
       // 後面。指定了人的句子只動那個人的段；沒指定的句子講的是所有人或整個畫面，
       // 每個人的段都可能要改。
-      setNotes([...base, settled]);
+      const resolvedBase = r.clarification_subtype === "body_side_reference" &&
+        (r.accepted || r.side_question?.id !== asking?.asked?.side_question?.id)
+        ? base.map(n => n.asked?.subtype === "body_side_reference" ? { ...n, askedResolved: true } : n) : base;
+      setNotes([...resolvedBase, settled]);
       if (r.accepted && r.merged?.length) {
         const own = settled.persons.map(faceRef);
         const merged = r.merged;
@@ -2557,11 +2586,20 @@ export function App() {
       if (r.aspect_ratio || r.advanced_options) setSettings((s) => s && withReviewSettings(s, r));
       // 「幫我美化」「幫我分析」就是底下那兩顆鍵，照按：已經收下的需求一起帶進去。
       if (r.start) startSession(r.start, laterNote(base), [...base, settled]);
-      return r.accepted ? [...base, settled] : null;
-    } catch {
+      return r.accepted ? [...resolvedBase, settled] : null;
+    } catch (error) {
       // 問不到就放行：一次模型失敗不該讓人卡在上傳頁面，而且進了 session，
       // 個人化需求面板按下確認時還會再過一次。
       if (!stillCurrent()) return null;
+      if (sideTurn) {
+        const stale = error instanceof ApiError && /side_(?:model|photo)_changed|stale_side_question/.test(error.message);
+        const retryBase = stale ? base.map(n => n.asked?.subtype === "body_side_reference" ? { ...n, askedResolved: true } : n) : base;
+        setNotes([...retryBase, { ...note, kept: false, replyOrder: nextDisplayOrder(),
+          ...(stale ? { text: asking?.asked?.side_question?.original_text || asking?.text || note.text } : {}),
+          asked: !stale && asking?.asked || { options: ["重新確認左右需求"], kind: "content", subtype: "body_side_reference" },
+          sideToken: stale ? undefined : asking?.sideToken, reply: stale ? "照片或設定已更新，請重新確認這項左右需求。" : "左右確認尚未完成，請重試目前的選項。" }]);
+        return null;
+      }
       if (asking) {
         setNotes([...base, { ...note, kept: false, asked: { options: [], kind: "meaning" }, replyOrder: nextDisplayOrder(),
           reply: "這項需求還沒整理完整，請再說明想調整的效果。" }]);
@@ -2589,6 +2627,10 @@ export function App() {
   function answerWho(subjectIndices: number[]) {
     const persons = preRefs(subjectIndices);
     if (!preWhoAsk || !persons.length) return;
+    if (preWhoAsk.asked?.subtype === "body_side_reference") {
+      void reviewNote(persons.length > 1 ? "這幾位" : "這位", subjectIndices, notes, false);
+      return;
+    }
     const text = persons.length > 1 ? "這幾位" : "這位";
     setNotes([...notes, { order: nextDisplayOrder(), replyOrder: nextDisplayOrder(), text, wish: preWhoAsk.wish ?? preWhoAsk.text, persons, selectionSource: "user_selection", reply: WHO_ANSWERED_REPLY, kept: true }]);
   }
@@ -2599,6 +2641,15 @@ export function App() {
   // 再加上需求。有需求卻還沒問過，就先問，不開始。
   function startSession(mode: "analyze" | "render", later = laterNote(notes), log = notes, overwrite?: boolean) {
     if (!source || !caps || !settings || busy || submissionLock.current) return;
+    const sidePending = [...log].reverse().find(n => !n.dropped && !n.askedResolved && n.asked?.subtype === "body_side_reference");
+    if (sidePending && !sidePending.sideToken) {
+      setError(notice("左右需求尚未保存，請先按「重新確認左右需求」重試。"));
+      return;
+    }
+    if (mode === "render" && sidePending) {
+      setError(notice("請先確認身體部位左右的參考角度，再開始美化；也可以先分析。"));
+      return;
+    }
     if (mode === "render" && bridgeQuestion && bridge.result?.clauses.some(c =>
         bridgeQuestion.wish_ids.includes(c.wish_id) && c.scope === "protection")) {
       setError(notice("請先確認個人化需求指定的人物，再開始美化。"));
@@ -2674,7 +2725,7 @@ export function App() {
             ...previewIdentity, ...(mapping ? { conversation_token: mapping.token,
               conversation_wishes_digest: mapping.wishes_digest } : {}),
           }, previewEnabled ? (previewIdentity ? previewWishes : previewWishes.map(w => ({ ...w, target_ids: [] }))) : undefined,
-          clientKey, same);
+          clientKey, same, sideTokenFor(submissionLog));
           singleKey.current = null;
           break;
         } catch (e) {
@@ -2772,14 +2823,14 @@ export function App() {
     });
   }
 
-  function askPhoto(text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string) {
+  function askPhoto(text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string, sideAnswer?: SideAnswer) {
     if (!session || !photo) return Promise.resolve(false);
     const id = session.session_id;
     const pid = photo.photo_id;
     setPendingAsk({ photoId: pid, text, subjectIndices });
     return run(async () => {
       try {
-        await api.ask(id, pid, text, faces ? [] : subjectIndices, screen, faces, answerTo);
+        await api.ask(id, pid, text, faces ? [] : subjectIndices, screen, faces, answerTo, sideAnswer);
         setSession(await api.getSession(id));
       } finally {
         setPendingAsk(null);
@@ -5157,7 +5208,7 @@ function SessionView(props: {
   // 只剩拖放進畫布這條路會用到 -- 丟一張新的照片進來等於開一個新對話。
   onFile: (f: File) => void;
   // faces 只在沒有分析時用：指的人是本地偵測的框和位置，取代 subjectIndices 送出。
-  onAsk: (text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string) => Promise<boolean>;
+  onAsk: (text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string, sideAnswer?: SideAnswer) => Promise<boolean>;
   onAnswerWaiting: (messageId: string, screen: Screen) => void;
   onPatch: (patch: Plan) => Promise<boolean>;
   onQuietPrompt: (text: string) => Promise<unknown>;
@@ -5570,7 +5621,8 @@ function SessionView(props: {
       return true;
     }
     return props.onAsk(text || (si.length > 1 ? "這幾位" : "這位"), si, screen, askFaces(si),
-      lastCard?.question_kind ? messages[messages.length - 1].id : undefined);
+      lastCard?.question_kind ? messages[messages.length - 1].id : undefined,
+      lastCard?.clarification_subtype === "body_side_reference" ? sideChoice(lastCard.side_question, text) : undefined);
   }
 
   // 這張面板卡收起時的 plan。會收起它的那一步 -- 下一個開起來的面板，或下一輪
@@ -5690,7 +5742,8 @@ function SessionView(props: {
                       kind={!open && next?.card?.type === "ask" && next.text === o ? "picked" : undefined}
                       settled={!open}
                       disabled={busy}
-                      onClick={() => props.onAsk(o, si, screen, sf, c.question_kind ? messages[idx].id : undefined)}
+                      onClick={() => props.onAsk(o, si, screen, sf, c.question_kind ? messages[idx].id : undefined,
+                        c.clarification_subtype === "body_side_reference" ? sideChoice(c.side_question, o) : undefined)}
                     />
                   );
                 })}

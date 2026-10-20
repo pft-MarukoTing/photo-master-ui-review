@@ -4,7 +4,7 @@ import json
 import logging
 from photo_agent import request_semantics
 from photo_agent.chat_plan import apply_plan_patch
-from photo_agent.clarification_choices import validate_selected_literal
+from photo_agent.clarification_choices import validate_selected_literal, answer_context, answer_instruction, completion_retry
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +67,9 @@ def schema(base):
     out['schema']['required'].append('request')
     out['schema']['properties']['request']={
         'type':'object','additionalProperties':False,
-        'required':['kind','line','semantics','question_kind','answer_mode'],
+        'required':['kind','line','semantics','question_kind','answer_mode','missing_information'],
         'properties':{
+            'missing_information':{'type':'string'},
             'kind':{'type':'string','enum':['none','edit','clarify']},
             'line':{'type':'string'},
             'semantics':{'type':'array','items':request_semantics.SCHEMA},
@@ -93,6 +94,7 @@ def pending(history):
             # Older cards sometimes stored the assistant's question in line.
             # Recover the raw input from the actual preceding user turn.
             original=next((m.get('text') or '' for m in reversed(turns[:-2]) if m.get('role')=='user'),'')
+            original=answer_context(history,turns[-1].get('text') or '').get('original') or original
             saved.update(original=original,question=card.get('text') or '',
                          answer=turns[-1].get('text') or '',options=card.get('options') or [])
             if card['question_kind']!='person':
@@ -111,16 +113,21 @@ def validate(result,plan,history,validate_completion,options,debug=False):
     except (TypeError,ValueError):raise ContractError('invalid_patch_json','patch_json','Return a valid plan patch JSON object.')
     if not isinstance(patch,dict):raise ContractError('invalid_patch_json','patch_json','Return a JSON object.')
     kind=req['kind']
+    selected=answer_context(history,next((m.get('text') or '' for m in reversed(history) if m.get('role')=='user'),''))
     if kind=='none':
         if 'user_prompt' in patch or 'literal_texts' in patch:
             raise ContractError('request_kind_required','request.kind','Use edit with complete aligned semantics when changing user_prompt.')
+        if selected.get('selected_option') and not patch and result.get('action','none')=='none' and not result.get('open'):
+            raise ContractError('selected_answer_not_completed','request.kind','The user selected an answer. Return a complete edit or a focused clarification naming missing_information, not a bare acknowledgement.')
         return result
     if kind=='clarify':
+        if selected.get('selected_option') and req.get('question_kind')!='person' and not (isinstance(req.get('missing_information'),str) and req['missing_information'].strip()):
+            raise ContractError('missing_clarification_detail','request.missing_information','The user already chose an outcome. Complete the edit or name the specific essential missing user fact; malformed fields are not missing intent.')
         if patch or result.get('action','none')!='none' or result.get('open'):
             raise ContractError('clarification_has_side_effects','patch_json/action/open','A clarification cannot apply changes or execute commands.')
         if req.get('question_kind') not in ('person','meaning','content'):
             raise ContractError('invalid_question_kind','request.question_kind','Explicitly distinguish person, meaning and content.')
-        original=next((m.get('text') or '' for m in reversed(history) if m.get('role')=='user'),'')
+        original=selected.get('original') if selected.get('selected_option') else next((m.get('text') or '' for m in reversed(history) if m.get('role')=='user'),'')
         if req['question_kind']=='person':
             values=validate_completion(dict(line=req['line'],semantics=req.get('semantics')))
             if not any(v['owner_required'] or v['target_kind'] in ('person','outside_person') for v in values):
@@ -148,8 +155,21 @@ def validate(result,plan,history,validate_completion,options,debug=False):
     return {**result,'patch_json':json.dumps(patch,ensure_ascii=False),'request_validated':True}
 
 
+def _retry_result(selected):
+    retry=completion_retry(selected)
+    return dict(action='none',patch_json='',lines=False,your_pick=False,open='',**retry,
+        request=dict(kind='clarify',line=selected['original'],semantics=[],question_kind='content',answer_mode=retry['answer_mode']),
+        clarification=dict(line=selected['original'],original=selected['original'],semantics=[],question=retry['reply']))
+
+
 def resolve(context,plan,history,run_model,validate_completion,options,debug=False):
-    result=run_model(context)
+    selected=answer_context(history,next((m.get('text') or '' for m in reversed(history) if m.get('role')=='user'),''))
+    marker='PENDING CLARIFICATION: '
+    context=context.replace(marker,answer_instruction(selected)+'\n'+marker,1) if marker in context else context+'\n'+answer_instruction(selected)
+    try:result=run_model(context)
+    except (TimeoutError,RuntimeError,OSError):
+        if selected:return _retry_result(selected)
+        raise
     try:
         return validate(result,plan,history,validate_completion,options,debug)
     except ValueError as exc:
@@ -166,12 +186,14 @@ def resolve(context,plan,history,run_model,validate_completion,options,debug=Fal
             +'\nPREVIOUS RESULT:\n'+json.dumps(result,ensure_ascii=False))
         if 'request' not in repaired:
             raise ContractError('missing_request_contract','request','Return the required request object.')
-        if (result.get('request') or {}).get('kind')=='clarify' and (repaired.get('request') or {}).get('kind')!='clarify':
+        if (result.get('request') or {}).get('kind')=='clarify' and (repaired.get('request') or {}).get('kind')!='clarify' and not selected.get('selected_option'):
             raise ContractError('clarification_changed_to_edit','request.kind','Do not choose an answer on the user behalf.')
         return validate(repaired,plan,history,validate_completion,options,debug)
-    except (ValueError,TimeoutError) as exc:
+    except (ValueError,TimeoutError,RuntimeError,OSError) as exc:
         failure=getattr(exc,'feedback',dict(code=str(exc),field='request'))
         logger.warning('Chat session repair failed; no changes applied: %s field=%s', failure['code'],failure['field'])
+        if selected:
+            return _retry_result(selected)
         # Keep the conversation, never turn invalid output into a plan change.
         return dict(reply='這項需求暫時未能整理完成，尚未套用；請稍後再試。',action='none',
             patch_json='',options=[],lines=False,your_pick=False,open='',request_error=True)

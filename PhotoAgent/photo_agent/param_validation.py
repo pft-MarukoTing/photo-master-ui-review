@@ -196,6 +196,15 @@ def _validate_params(params: dict) -> dict:
     normalized["aspect_ratio"] = aspect_ratio
 
     normalized["user_prompt"] = optional_text(normalized.get("user_prompt"), "user_prompt")
+    if normalized.get('side_reference') is not None:
+        from photo_agent.side_reference import validate_state
+        try:normalized['side_reference']=validate_state(normalized['side_reference'])
+        except (ValueError,TypeError,KeyError) as exc:raise RuntimeError('invalid_side_state',RESULT_INVALID_PARAMETER) from exc
+    if stage in ('full','finish'):
+        from photo_agent.side_reference import guard
+        saved_analysis=normalized.get('analysis') if isinstance(normalized.get('analysis'),dict) else {}
+        try:guard(normalized['user_prompt'] or '',normalized.get('side_reference') or saved_analysis.get('_body_side_reference'))
+        except ValueError as exc:raise RuntimeError(str(exc), RESULT_INVALID_PARAMETER) from exc
     if 'literal_texts' in normalized:
         from photo_agent.text_overlay import validate_texts
         try:

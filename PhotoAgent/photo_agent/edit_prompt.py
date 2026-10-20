@@ -22,8 +22,10 @@ def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio
     """
     user_instruction = framed_analysis.get("user_instruction") or {}
     user_direction = user_instruction.get("normalized_user_direction") or ""
+    from photo_agent.side_reference import editor_instruction as side_instruction
+    side_contract=side_instruction(user_instruction.get('original_user_direction') or user_direction)
     if overwrites_prompt(user_instruction):
-        return user_direction.strip() + editor_instruction(framed_analysis), None, "overwrite"
+        return user_direction.strip() + editor_instruction(framed_analysis) + side_contract, None, "overwrite"
 
     sections = build_framing_sections(framed_analysis, crop_plan, aspect_ratio, source_size)
     prompt_text, resolution_metadata = build_compact_editor_prompt(
@@ -33,4 +35,4 @@ def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio
         raw_crop_instruction=sections["crop_instruction"],
         raw_style_instruction=sections["style_instruction"],
     )
-    return prompt_text + editor_instruction(framed_analysis), resolution_metadata, "resolved_compact"
+    return prompt_text + editor_instruction(framed_analysis) + side_contract, resolution_metadata, "resolved_compact"

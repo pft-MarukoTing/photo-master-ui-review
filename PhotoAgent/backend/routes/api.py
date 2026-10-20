@@ -42,6 +42,8 @@ def _record_history_safely(user, job_id, path, image_key, action_id, params=None
             key: (params or {}).get(key)
             for key in ("preset", "image_quality", "image_model", "analysis_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count", "advanced_options", "single_pass_edit", "stage")
         }
+        for key in ('side_reference','literal_texts'):
+            if key in (params or {}):history_params[key]=params[key]
         if path == "local":
             history_params["compatibility_version"] = _history_compatibility_version(params)
         history_params.update(extra or {})

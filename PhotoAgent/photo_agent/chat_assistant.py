@@ -26,7 +26,8 @@ import time
 
 from openai_client import OPENAI_RESPONSES_URL, _extract_output_text, _parse_json_from_text, _post_json, _responses_payload
 from photo_agent import capabilities, request_semantics
-from photo_agent.clarification_choices import LITERAL_CHOICE_INSTRUCTION, with_literal_choice, validate_selected_literal
+from photo_agent.clarification_choices import (LITERAL_CHOICE_INSTRUCTION, validate_selected_literal,
+    answer_context, answer_instruction, completion_retry)
 from photo_agent.chat_brief import face_people, person_names
 from photo_agent.chat_plan import apply_plan_patch
 
@@ -1088,6 +1089,17 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     True when the options are words for the photo to pick from. `screen` is
     {bar, topics}, the button labels the page shows right now."""
     from photo_agent import session_request
+    from photo_agent import side_reference
+    latest=next((m for m in reversed(history) if m.get('role')=='user'),{})
+    card=latest.get('card') or {}
+    people=[s for s in (analysis or {}).get('subjects',[]) if s.get('is_person',True)]
+    side=side_reference.inspect(latest.get('text') or '',dict(people_count=len(people),
+        selected_person_ids=card.get('subject_indices') or card.get('faces') or []))
+    if side['decision']=='clarify_side':
+        q=side_reference.question(side,'body-side')
+        return dict(reply=q['text'],render=False,proposal=None,options=[c['label'] for c in q['choices']],
+            close=False,lines=False,open='',question_kind='content',answer_mode='choices',
+            clarification_subtype='body_side_reference',side_question=q,side_reference=side)
     context = build_context(analysis, plan, status, history, debug=debug, screen=screen)
     marker = "CONVERSATION (oldest first, the last line is the message to answer):\n"
     context = context.replace(marker, session_request.INSTRUCTION + LITERAL_CHOICE_INSTRUCTION + "\nPENDING CLARIFICATION: "
@@ -1102,8 +1114,6 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     req = result.get('request') or {}
     if req.get('kind') == 'clarify':
         options = _options(result.get('options'))
-        if req['question_kind'] == 'meaning':
-            options = with_literal_choice(options, result['clarification']['original'])
         return dict(reply=result.get('reply') or CLARIFY_REPLY, render=False, proposal=None,
             options=options, close=False, lines=False, open='',
             question_kind=req['question_kind'], answer_mode='choices' if req['question_kind']=='meaning' else req.get('answer_mode') or '',
@@ -1207,8 +1217,9 @@ REVIEW_SCHEMA = {
     "schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["verdict", "reply", "line", "options", "later", "aspect_ratio", "advanced_options", "asked_ratio", "merged", "withdraw", "semantics", "question_kind", "answer_mode"],
+        "required": ["verdict", "reply", "line", "options", "later", "aspect_ratio", "advanced_options", "asked_ratio", "merged", "withdraw", "semantics", "question_kind", "answer_mode", "missing_information"],
         "properties": {
+            "missing_information": {"type": "string"},
             "semantics": {"type": "array", "items": request_semantics.SCHEMA},
             "verdict": {"type": "string", "enum": ["keep", "setting", "clarify", "drop", "render", "analyze", "offer", "answer"]},
             "reply": {"type": "string"},
@@ -1755,6 +1766,15 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     analyze -- and where the photo list is). The model is then told it speaks
     for all of them, sends a line about one photo to that photo, and is never
     offered 分析 once every photo is analyzed."""
+    from photo_agent import side_reference
+    picked,_ = _split_people(line,people)
+    side=side_reference.inspect(line,dict(people_count=len(people),selected_person_ids=picked))
+    if side['decision']=='clarify_side':
+        q=side_reference.question(side,'body-side')
+        return dict(kept=False,start='',ask=True,offer=False,later=False,reply=q['text'],line='',
+            persons=[],options=[c['label'] for c in q['choices']],aspect_ratio='',merged=[],withdrawn=False,
+            question_kind='content',answer_mode='choices',clarification_subtype='body_side_reference',
+            side_question=q,side_reference=side)
     chip = REVIEW_CHIP_STARTS.get(re.sub(r"[\s，。！？!?、.]+", "", line))
     if chip:
         return {"kept": False, "start": chip, "ask": False, "offer": False, "later": False,
@@ -1785,6 +1805,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     answering = (bool(history) and history[-1]["role"] == "assistant" and bool(history[-1].get("question"))
                  and not history[-1].get("offer"))
     after_offer = bool(history) and history[-1]["role"] == "assistant" and bool(history[-1].get("offer"))
+    selected_context=answer_context(history,line)
     context = "\n\n".join([
         REVIEW_INSTRUCTION,
         TOOL_GUIDE,
@@ -1796,6 +1817,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         *(["BATCH OVERVIEW:\n" + _batch_text(batch)] if batch else []),
         "PEOPLE IN PHOTO:\n" + ("\n".join(people) if people else "（總覽：好幾張照片，這裡不指定人物）" if batch else "（沒有偵測到人臉）"),
         f"LINES SO FAR:\n{_sections_text(sections) or '（還沒有）'}",
+        answer_instruction(selected_context),
         "CONVERSATION SO FAR:\n" + ("\n".join(_turn_line(t) for t in history) or "（還沒有）"),
         f"NEW LINE:\n{line}",
     ])
@@ -1838,11 +1860,8 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         return {**answer, 'options': [], 'answer_mode': 'free_text'}
 
     def finish_question(answer):
-        answer = complete_question_choices(answer)
-        if answer.get('ask') and answer.get('question_kind') == 'meaning':
-            return {**answer, 'options': with_literal_choice(answer.get('options') or [], line),
-                    'answer_mode': 'choices'}
-        return answer
+        if answer.get('request_error'):return answer
+        return complete_question_choices(answer)
 
     result = run_review(context)
     completed_context = False
@@ -1856,6 +1875,13 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
             elif not turn.get('question') or turn.get('offer'):
                 break
         def validate_answer(value):
+            if value.get('verdict')=='clarify' and value.get('question_kind')!='person':
+                missing=value.get('missing_information')
+                if isinstance(missing,str) and missing.strip() and ('？' in (value.get('reply') or '') or '?' in (value.get('reply') or '')):
+                    return
+                if selected_context.get('selected_option'):
+                    raise _ReviewCompletionError('missing_clarification_detail',field='missing_information',
+                        rule='The user already selected an outcome. Return a complete edit, or name the specific essential fact only the user can supply. An invalid model field is not missing user intent.')
             values = _completed_review_values(value, evidence)
             validate_selected_literal(values, line, history)
         try:
@@ -1880,9 +1906,10 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
                     + json.dumps(feedback, ensure_ascii=False) + '\nPREVIOUS RESULT:\n'
                     + json.dumps(result, ensure_ascii=False))
                 validate_answer(result)
-            except (ValueError, TimeoutError) as exc:
+            except (ValueError, TimeoutError, RuntimeError, OSError) as exc:
                 logger.warning('Chat clarification remains incomplete; keeping question: %s', exc)
-                return finish_question(_completion_question(result))
+                return dict(kept=False,start='',ask=True,offer=False,later=False,line='',persons=[],
+                    aspect_ratio='',merged=[],withdrawn=False,**completion_retry(selected_context))
         completed_context = True
     interpreted = False
     if result.get('verdict') == 'drop':
@@ -1933,8 +1960,8 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     # 一般內容或意思追問即使沒有選項，也不能因此直接收下。
     question_kind = _review_question_kind(result, semantic_values)
     who_without_faces = verdict == "clarify" and question_kind == "person" and len(people) < 2 and not _options(result.get("options"))
-    ask = semantic_incomplete or (verdict == "clarify" and not answering and not who_without_faces)
-    if verdict == "clarify" and (answering or who_without_faces) and not semantic_incomplete:
+    ask = semantic_incomplete or (verdict == "clarify" and not who_without_faces)
+    if verdict == "clarify" and who_without_faces and not semantic_incomplete:
         verdict, reply = "keep", ""
     # 總覽的鍵叫「全部分析」「全部一鍵美化」（做過幾張就是「…剩餘 N」），裡面一律照單張的名字算，
     # 回給頁面時再換回總覽的名字。
