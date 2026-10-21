@@ -1,3 +1,5 @@
 .DS_Store
 __pycache__
 .baseline_manifest.json
+# Chat UI build output; built from PhotoAgent/frontend-chat/ by run_backend.py.
+PhotoAgent/frontend/chat/
