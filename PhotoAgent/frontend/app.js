@@ -993,12 +993,23 @@
     applyPickerSingleOptionState(els.apImageModelQualityPicker, els.apImageModelQualitySelect);
   }
 
+  // Per-deployment stamp ("DEV") from /api/config's envLabel -- drawn by
+  // styles.css's html[data-env-label] .logo::after, and prefixed onto the
+  // tab title. Empty on deployments without ENV_LABEL.
+  function applyEnvLabel(label) {
+    if (!label) return;
+    document.documentElement.dataset.envLabel = label;
+    document.documentElement.style.setProperty("--env-label", JSON.stringify(label));
+    document.title = `[${label}] ${document.title}`;
+  }
+
   // Fetch the feature flag even on a ?debug page.  Debug mode may expose
   // inspection controls, but it must not bypass an internally disabled Body
   // Reshape feature.
   if (window.location.href.includes("debug")) {
     applyDebugUiVisibility(true);
     getUiConfig().then((cfg) => {
+      applyEnvLabel(cfg.envLabel);
       if (typeof cfg.enableBodyReshape === "boolean") {
         applyBodyReshapeVisibility(cfg.enableBodyReshape);
       }
@@ -1012,6 +1023,7 @@
     });
   } else {
     getUiConfig().then((cfg) => {
+      applyEnvLabel(cfg.envLabel);
       applyDebugUiVisibility(!!cfg.debugUi);
       if (typeof cfg.enableBodyReshape === "boolean") {
         applyBodyReshapeVisibility(cfg.enableBodyReshape);

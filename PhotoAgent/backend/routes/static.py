@@ -61,6 +61,10 @@ def config():
     return jsonify({
         "debugUi": current_app.config.get("DEBUG_UI", False),
         "aipocDefault": current_app.config.get("AIPOC_DEFAULT", False),
+        # Per-deployment stamp ("DEV") shown next to the logo and in <title>.
+        # Read from the env (.env.backend) rather than baked into the
+        # frontend, so the same bundle ships to dev and poc unchanged.
+        "envLabel": os.getenv("ENV_LABEL", "").strip(),
         # Internal server-side feature switch mirrored to the UI.  The
         # backend remains authoritative; this only gates the read-only preview.
         "enableBodyReshape": bool(getattr(photoagent_config, "ENABLE_BODY_RESHAPE", True)),

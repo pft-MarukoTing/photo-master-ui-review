@@ -571,6 +571,44 @@ body[data-theme-mode="light"] .site-header {
   color: transparent;
 }
 
+/* Environment stamp ("DEV") next to the wordmark -- dev and poc look
+   identical and are often open side by side. The label comes from
+   /api/config's envLabel (ENV_LABEL in .env.backend) at runtime: both UIs
+   set html[data-env-label] and --env-label, so nothing is baked into the
+   chat bundle and a deployment without ENV_LABEL shows no stamp.
+   Built from the theme's ink/border tokens so it stays legible on both the
+   dark and light themes. Fixed px size, unlike .logo's clamp(). */
+html[data-env-label] .logo::after {
+  content: var(--env-label);
+  display: inline-block;
+  /* Rides the top of the wordmark like a superscript mark; the nudge drops
+     it onto the cap height of the "P". */
+  vertical-align: top;
+  transform: translateY(4px);
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: rgba(var(--on-surface-rgb), .08);
+  color: var(--text-2);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+/* Phone widths: .logo's clamp() has shrunk the wordmark, so shrink the
+   stamp with it and re-seat it on the smaller cap height. */
+@media (max-width: 480px) {
+  html[data-env-label] .logo::after {
+    transform: translateY(2px);
+    margin-left: 5px;
+    padding: 1px 4px;
+    font-size: 8px;
+    letter-spacing: .06em;
+  }
+}
+
 /* Header buttons: shown across every screen (not just results),
    since .header-inner itself is global -- .header-inner's own
    justify-content:space-between is what actually pins this to the right,

@@ -1119,6 +1119,14 @@ export function App() {
         setPrefs(p);
         setSettings(defaultSettings(c, p));
         setDebugUi(!!cfg.debugUi);
+        // Per-deployment stamp ("DEV") from ENV_LABEL -- drawn by the shared
+        // styles.css (html[data-env-label] .logo::after), so it stays out of
+        // the bundle and only shows where the backend sets it.
+        if (cfg.envLabel) {
+          document.documentElement.dataset.envLabel = cfg.envLabel;
+          document.documentElement.style.setProperty("--env-label", JSON.stringify(cfg.envLabel));
+          document.title = `[${cfg.envLabel}] ${document.title}`;
+        }
         api
           .demoImages()
           .then((r) => setDemos(r.images || []))
