@@ -4498,7 +4498,7 @@ function BatchOverviewGrid(props: {
   );
 }
 
-// 「我的照片」方塊左下角的狀態。
+// 「我的照片」方塊左下角的狀態。用詞跟總覽的格子、「最近照片」的磚一樣（home.tsx 的 SESSION_BADGES）。
 function photoState(p: Photo, renderFailed = false): { key: string; text: string } {
   return p.status === "failed"
     ? { key: "error", text: "失敗" }
@@ -4509,8 +4509,8 @@ function photoState(p: Photo, renderFailed = false): { key: string; text: string
         : renderFailed
           ? { key: "error", text: "失敗" }
           : p.active_version
-          ? { key: "done", text: "已美化" }
-          : { key: "analyzed", text: "已分析" };
+          ? { key: "done", text: "美化完成" }
+          : { key: "analyzed", text: "待美化" };
 }
 
 // 方塊右上角的 ×，跟首頁磚上那顆同一個做法（home.tsx 的 RemoveMark）：方塊本身是
