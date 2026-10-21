@@ -121,6 +121,8 @@ def to_analysis(result, photo_facts, image_size):
         **{field: photo_facts[field] for field in ("photo_summary", "scene_category", "scene_type")},
         subject_category="食物",
         main_subject=hero["label"] if hero else result["plan"],
+        composition_mood=result["mood"],
+        detected_issues=result["issues"],
         portrait_framing="不適用",
         edit_intent=result["edit_brief"],
         alignment_strategy=result["alignment_strategy"]["decision"],
