@@ -20,7 +20,10 @@ def _smile_contracts(analysis):
             "subject_index": item.get("_subject_index"),
             "subject": item.get("label") or "畫面中的人物",
             "box": _box(item),
-            "source_state": ({"smile_level": item["current"]} if item["current"] else {}),
+            "source_state": (
+                {"smile_level": item["current"]} if item["current"]
+                else {"smile_user_forced": True} if item["user_forced"] else {}
+            ),
             "endpoint": {"smile_level": item["target"]},
             "direct_changes": ["mouth_expression"],
             "dependent_changes": [
@@ -89,6 +92,10 @@ class ExpressionSkill(EditorSkill):
             if current_smile:
                 state_lines.append(
                     f"- Transform this person's existing {current_smile} expression into {smile_text} on the existing face—{replacement_guard}."
+                )
+            elif source_state.get("smile_user_forced"):
+                state_lines.append(
+                    f"- This person's mouth is not clearly visible in the source. Render {smile_text} on the existing face—{replacement_guard}."
                 )
             else:
                 state_lines.append(

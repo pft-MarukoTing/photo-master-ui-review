@@ -2715,6 +2715,7 @@ def smile_qa_expectation(analysis):
     prompt did not request."""
     return "; ".join(
         f'{t["label"]}: {t["current"]} -> {t["target"]}' if t["current"]
+        else f'{t["label"]}: unreadable in the original -> {t["target"]}' if t["user_forced"]
         else f'{t["label"]}: unreadable in the original -> {t["target"]} where the mouth is visible after the edit'
         for t in resolve_smile_targets(analysis)
     )
