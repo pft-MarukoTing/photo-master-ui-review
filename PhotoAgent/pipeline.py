@@ -42,7 +42,8 @@ from prompts import (
     with_reframing_proposal,
 )
 from photo_agent.analysis_skills import ANALYSIS_SKILLS
-from photo_agent.photo_router import ROUTER_INSTRUCTION, run_call0
+from photo_agent.branch_skills import BRANCH_SKILLS, branch_named
+from photo_agent.photo_router import ROUTER_INSTRUCTION, run_call0, select_branch
 from photo_agent.edit_prompt import overwrites_prompt
 from photo_agent import capabilities
 from photo_agent.editor_skills import EDITOR_SKILLS
@@ -284,8 +285,16 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
         logger.info("Step 2.0 photo route: %s (%.2fs)", route.get("main_category") or route["state"], route_seconds)
         if route["state"] == "ready":
             preview_args["photo_facts"] = route
+    branch = select_branch(route, BRANCH_SKILLS) if route and route["state"] == "ready" else None
     t0 = time.time()
-    analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options, analysis_model=analysis_model, **preview_args)
+    if branch is not None:
+        logger.info("Step 2: %s branch replaces Call A", branch.name)
+        analysis, step2_usage, branch_prompt = branch.analyze(
+            image_bytes, aspect_ratio, route, analysis_model, user_requests=analysis_user_requests)
+        for skill in ANALYSIS_SKILLS:
+            analysis = skill.skip(analysis)
+    else:
+        analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options, analysis_model=analysis_model, **preview_args)
     analysis = sanitize_body_reshape_analysis(analysis)
     if not body_reshape_enabled():
         # Keep the stage boundary clean even when an alternate analyzer or a
@@ -317,7 +326,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     )
 
     analysis_prompts = {
-        "photo_analysis": build_overall_analysis_instruction(
+        "photo_analysis": branch_prompt if branch is not None else build_overall_analysis_instruction(
             aspect_ratio, source_size=get_image_dimensions(image_bytes),
             **({"photo_facts": preview_args["photo_facts"]} if "photo_facts" in preview_args else {})),
     }
@@ -416,10 +425,14 @@ def reframe_stage(
     else:
         t0 = time.time()
         logger.info("Step 2b: reframing for aspect_ratio=%s (planned for %s)", pref, planned_for)
-        reframe, usage, prompt_text = reframe_composition(
-            image_bytes, base, pref, analysis_model=analysis_model,
-        )
-        reframed = merge_reframe_result(base, reframe, pref)
+        branch = branch_named(base.get("analysis_branch"))
+        if branch is not None:
+            reframed, usage, prompt_text = branch.reframe(image_bytes, base, pref, analysis_model)
+        else:
+            reframe, usage, prompt_text = reframe_composition(
+                image_bytes, base, pref, analysis_model=analysis_model,
+            )
+            reframed = merge_reframe_result(base, reframe, pref)
         img_w, img_h = get_image_dimensions(image_bytes)
         reframed = apply_derived_aspect_ratio(reframed, img_w, img_h, aspect_ratio_pref=pref)
         reframed["prompts"] = {**(reframed.get("prompts") or {}), "photo_reframe": prompt_text}

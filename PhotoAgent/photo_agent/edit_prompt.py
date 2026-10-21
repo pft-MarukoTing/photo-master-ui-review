@@ -5,6 +5,7 @@ from config import PRESET_PROMPTS
 from photo_agent.feature_resolver import build_compact_editor_prompt
 from prompts import build_framing_sections, build_style_override_block
 from photo_agent.text_overlay import editor_instruction
+from photo_agent.branch_skills import branch_named
 
 
 def overwrites_prompt(user_instruction):
@@ -50,6 +51,11 @@ def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio
             user_direction.strip(), style_block,
             build_overwrite_baseline_block(preset_key) if config.ENABLE_OVERWRITE_BASELINE_RETOUCH else "")))
         return prompt_text + editor_instruction(framed_analysis) + side_contract, None, "overwrite"
+
+    branch = branch_named(framed_analysis.get("analysis_branch"))
+    if branch is not None:
+        prompt_text = branch.build_edit_prompt(framed_analysis, crop_plan, source_size, revision_feedback)
+        return prompt_text + editor_instruction(framed_analysis), None, f"{branch.name}_branch"
 
     sections = build_framing_sections(framed_analysis, crop_plan, aspect_ratio, source_size)
     prompt_text, resolution_metadata = build_compact_editor_prompt(

@@ -1121,7 +1121,7 @@ COMPOSITION_STATE_KEYS = REFRAME_FIELDS + (
     "correction_plan", "correction_axes", "correction_inverse", "retouch_recipe",
     "_reframing_geometry_source", "auto_aspect_ratio", "reframe_extension",
     "reframe_mode_override", "aspect_ratio_source", "crop_box_measured_ratio",
-    "_aspect_ratio_pref_at_analysis",
+    "_aspect_ratio_pref_at_analysis", "food_branch",
 )
 
 # Review and geometry state derived from the previous composition.
