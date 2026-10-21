@@ -295,7 +295,8 @@ def describe(*, debug: bool = False) -> dict:
     render_options = [o for o in RENDER_OPTIONS if debug or not o.debug_only]
     render_models = {o.image_model for o in render_options}
     return {
-        "features": {"subject_preview": bool(getattr(config, "ENABLE_CHAT_SUBJECT_PREVIEW", False)),
+        "features": {"body_side_clarification": bool(config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION),
+                     "subject_preview": bool(getattr(config, "ENABLE_CHAT_SUBJECT_PREVIEW", False)),
                      "preview_introduction": bool(getattr(config, "ENABLE_CHAT_SUBJECT_PREVIEW", False)
                                                   and getattr(config, "ENABLE_CHAT_PREVIEW_INTRODUCTION", False)),
                      "subject_preview_format_version": 3,

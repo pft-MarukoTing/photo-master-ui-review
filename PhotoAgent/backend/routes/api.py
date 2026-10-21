@@ -107,7 +107,7 @@ def _skipped_without_prompt(analysis, params):
         params["overwrite_prompt"] and (params.get("user_prompt") or "").strip())
 
 
-def _parse_and_validate_params(form):
+def _parse_and_validate_params(form, *, chat_body_side_clarification=True):
     """Returns (params, None) or (None, error_message).
 
     `form` may be a werkzeug form (multipart routes) or a plain dict (JSON
@@ -161,6 +161,10 @@ def _parse_and_validate_params(form):
         params["run_count"] = int(form.get("run_count", 1))
     except (TypeError, ValueError):
         params["run_count"] = None
+
+    # Server-only Chat policy; never read this switch from a public form.
+    if chat_body_side_clarification is False:
+        params["chat_body_side_clarification"] = False
 
     # Fast sync validation via the same validator the worker runs later,
     # so bad params 400 immediately instead of erroring after being queued.

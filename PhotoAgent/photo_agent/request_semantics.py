@@ -78,6 +78,32 @@ the person; an action answer changes only the requested action of that wish.
 '''
 
 
+# Completed Chat text has one canonical line. Unlike independent preview
+# wishes, coordinated clauses may share an explicitly written subject.
+COMPLETION_INSTRUCTION = '''
+COMPLETED CHAT SPAN CONTRACT:
+First compose the complete resulting line, then COPY source/action spans from
+that exact line. Never generate the line and its evidence as separate paraphrases.
+For coordinated actions a target may be shared from elsewhere in the SAME line;
+do not prepend that target to a source unless it is actually written there.
+Example line: 讓照片中的人物左手持劍、右手拿刀、頭戴圓帽
+Sources: 讓照片中的人物左手持劍 | 右手拿刀 | 頭戴圓帽
+Targets: 照片中的人物 for each; actions: 左手持劍 | 右手拿刀 | 頭戴圓帽.
+Alternatively repeat the supported subject explicitly in each clause of line
+and copy each clause exactly. Do not invent a subject or a left/right frame.
+For text line 在照片上加入文字「重力加速度」與「夏天」, do not invent
+source 在照片上加入文字「夏天」. Rewrite as independent complete clauses
+在照片上加入文字「重力加速度」；在照片上加入文字「夏天」, then copy them.
+These are structural examples, not vocabulary rules. Apply to arbitrary edits,
+objects, protections and exact printed strings. Preserve every compatible
+operation once; update only the property/person the user changed or cancelled.
+Never pass validation by dropping an operation/identity/negative/constraint,
+changing literal characters, or assigning the whole line to unrelated operations.
+Repair ALL entries together, including source, target, action and coverage;
+then synchronize the final line and user_prompt patch where present.
+'''
+
+
 def validate(raw, source):
     # Existing version-2 snapshots predate owner_required. New model schemas
     # require it, while historical snapshots keep their previous interpretation.

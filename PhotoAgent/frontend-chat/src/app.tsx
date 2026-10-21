@@ -975,6 +975,7 @@ export function App() {
   // A separate worker preview starts on selection; feature-off retains the
   // original local-detector path. Neither creates a formal Chat session yet.
   const preFull = !source ? "" : fullSrc(source);
+  const sideClarificationEnabled = caps?.features?.body_side_clarification !== false;
   const previewEnabled = !!caps?.features?.subject_preview;
   const previewIntroductionEnabled = previewEnabled && caps?.features?.preview_introduction === true;
   // Silent preview uses the legacy review/geometry handoff, without the conversation bridge.
@@ -2036,7 +2037,7 @@ export function App() {
         ...previewIdentity, ...(p.mapping ? { conversation_token: p.mapping.token,
           conversation_wishes_digest: p.mapping.wishes_digest } : {}),
       }, previewConversationEnabled ? (previewIdentity ? p.wishes : p.wishes.map((w) => ({ ...w, target_ids: [] }))) : undefined,
-      clientKey, live, sideTokenFor(log));
+      clientKey, live, sideClarificationEnabled ? sideTokenFor(log) : undefined);
       const pid = added.photo_id;
       uploaded = pid;
       say(p.mode === "analyze" ? "照片傳好了，準備開始分析…" : p.overwrite ? "照片傳好了，準備開始調整…" : "照片傳好了，準備開始美化…");
@@ -2765,8 +2766,8 @@ export function App() {
     const sent = promptSections(base, segEdits);
     try {
       let sideContext: { source_sha256: string; analysis_model: string; previous_token?: string } | undefined;
-      const sideQuestion = asking?.asked?.side_question;
-      if ((sideQuestion || /[左右](?:側|邊|半)?(?:可見)?的?(?:那隻)?(?:手|腳|腿|眼|肩|臉|耳|眉|膝|胳膊)/.test(text)) && source && settings) {
+      const sideQuestion = sideClarificationEnabled ? asking?.asked?.side_question : undefined;
+      if (sideClarificationEnabled && (sideQuestion || /[左右](?:側|邊|半)?(?:可見)?的?(?:那隻)?(?:手|腳|腿|眼|肩|臉|耳|眉|膝|胳膊)/.test(text)) && source && settings) {
         const { blob, name } = await sourceBlob(source, AbortSignal.timeout(STEP_TIMEOUT_MS));
         // WebCrypto is unavailable on ordinary HTTP deployments. The fallback
         // computes only a digest on the server, with no preview/model job.
@@ -2890,7 +2891,7 @@ export function App() {
   // 再加上需求。有需求卻還沒問過，就先問，不開始。
   function startSession(mode: "analyze" | "render", later = laterNote(notes), log = notes, overwrite?: boolean) {
     if (!source || !caps || !settings || busy || submissionLock.current) return;
-    const sidePending = [...log].reverse().find(n => !n.dropped && !n.askedResolved && n.asked?.subtype === "body_side_reference");
+    const sidePending = sideClarificationEnabled && [...log].reverse().find(n => !n.dropped && !n.askedResolved && n.asked?.subtype === "body_side_reference");
     if (sidePending && !sidePending.sideToken) {
       setError(notice("左右需求尚未保存，請先按「重新確認左右需求」重試。"));
       return;
@@ -2974,7 +2975,7 @@ export function App() {
             ...previewIdentity, ...(mapping ? { conversation_token: mapping.token,
               conversation_wishes_digest: mapping.wishes_digest } : {}),
           }, previewConversationEnabled ? (previewIdentity ? previewWishes : previewWishes.map(w => ({ ...w, target_ids: [] }))) : undefined,
-          clientKey, same, sideTokenFor(submissionLog));
+          clientKey, same, sideClarificationEnabled ? sideTokenFor(submissionLog) : undefined);
           singleKey.current = null;
           break;
         } catch (e) {
@@ -6008,8 +6009,8 @@ export function SessionView(props: {
       return true;
     }
     return props.onAsk(text || (si.length > 1 ? "這幾位" : "這位"), si, screen, askFaces(si),
-      lastCard?.question_kind ? messages[messages.length - 1].id : undefined,
-      lastCard?.clarification_subtype === "body_side_reference" ? sideChoice(lastCard.side_question, text) : undefined);
+      lastCard?.question_kind && !(caps.features?.body_side_clarification === false && lastCard.clarification_subtype === "body_side_reference") ? messages[messages.length - 1].id : undefined,
+      caps.features?.body_side_clarification !== false && lastCard?.clarification_subtype === "body_side_reference" ? sideChoice(lastCard.side_question, text) : undefined);
   }
 
   // 這張面板卡收起時的 plan。會收起它的那一步 -- 下一個開起來的面板，或下一輪
@@ -6092,7 +6093,7 @@ export function SessionView(props: {
           // 點過的那顆標起來。沒問問題時，調整中就把能打開的項目接在底下（AI 的
           // 話會指著它們講）；修完一版時要按的「看美化項目／再美化」由 endActions 接在最後。
           const open = idx === messages.length - 1 && !props.pendingAsk;
-          if (c.options?.length > 0) {
+          if (c.options?.length > 0 && !(caps.features?.body_side_clarification === false && c.clarification_subtype === "body_side_reference" && c.question_kind !== "person")) {
             const next = messages[idx + 1];
             const asked = messages[idx - 1]?.card;
             const si = asked?.type === "ask" ? askedIndices(asked) : [];
@@ -6108,7 +6109,7 @@ export function SessionView(props: {
                   open={open}
                   busy={busy}
                   onPick={(t) => props.onAsk(t, si, screen, sf, c.question_kind ? messages[idx].id : undefined,
-                    c.clarification_subtype === "body_side_reference" ? sideChoice(c.side_question, t) : undefined)}
+                    caps.features?.body_side_clarification !== false && c.clarification_subtype === "body_side_reference" ? sideChoice(c.side_question, t) : undefined)}
                 />
               );
             // 問的是哪一位時，答案就是那幾顆頭像：點一顆等於指著他說「這位」，
@@ -6137,7 +6138,7 @@ export function SessionView(props: {
                       settled={!open}
                       disabled={busy}
                       onClick={() => props.onAsk(o, si, screen, sf, c.question_kind ? messages[idx].id : undefined,
-                        c.clarification_subtype === "body_side_reference" ? sideChoice(c.side_question, o) : undefined)}
+                        caps.features?.body_side_clarification !== false && c.clarification_subtype === "body_side_reference" ? sideChoice(c.side_question, o) : undefined)}
                     />
                   );
                 })}

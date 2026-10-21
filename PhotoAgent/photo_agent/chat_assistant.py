@@ -34,6 +34,12 @@ from photo_agent.chat_plan import apply_plan_patch
 
 logger = logging.getLogger(__name__)
 
+# A Chat policy, not a change to the shared editor/API side-reference contract.
+SIDE_CHAT_RULE = ("Do not ask subject-relative versus image-relative left/right. "
+    "Preserve body-side wording as an ordinary edit without inventing a confirmed reference frame. "
+    "Still ask which person when needed.\n")
+
+
 MODEL = "gpt-5.6-luna"
 REASONING_EFFORT = "low"
 TIMEOUT_SECONDS = 45
@@ -1108,14 +1114,14 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     people=[s for s in (analysis or {}).get('subjects',[]) if s.get('is_person',True)]
     side=side_reference.inspect(latest.get('text') or '',dict(people_count=len(people),
         selected_person_ids=card.get('subject_indices') or card.get('faces') or []))
-    if side['decision']=='clarify_side':
+    if config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION and side['decision']=='clarify_side':
         q=side_reference.question(side,'body-side')
         return dict(reply=q['text'],render=False,proposal=None,options=[c['label'] for c in q['choices']],
             close=False,lines=False,open='',question_kind='content',answer_mode='choices',
             clarification_subtype='body_side_reference',side_question=q,side_reference=side)
     context = build_context(analysis, plan, status, history, debug=debug, screen=screen)
     marker = "CONVERSATION (oldest first, the last line is the message to answer):\n"
-    context = context.replace(marker, session_request.INSTRUCTION + LITERAL_CHOICE_INSTRUCTION + "\nPENDING CLARIFICATION: "
+    context = context.replace(marker, ("" if config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION else SIDE_CHAT_RULE) + session_request.INSTRUCTION + LITERAL_CHOICE_INSTRUCTION + "\nPENDING CLARIFICATION: "
         + _dump(session_request.pending(history)) + "\n" + marker, 1)
     end = min(deadline, time.time() + TIMEOUT_SECONDS) if deadline is not None else time.time() + TIMEOUT_SECONDS
     def run_model(text):
@@ -1676,6 +1682,7 @@ def _sections_text(sections):
 # How the review reads a line's meaning (photo_agent.request_semantics). The same
 # for every line, so it sits with the instructions, ahead of the cache break.
 REVIEW_SEMANTIC_CONTRACT = ('SEMANTIC CONTRACT:\n' + request_semantics.INSTRUCTION + '\nFor this review use semantics array (not resolutions or semantic_version). Parse NEW LINE as written out in "line", if any, and quote source/target/action from that text. No invented IDs. Non-edit commands, unrelated chat or an analysis start can use []. Complete free-form edits are keep, not clarify merely because a verb is unusual. Clarify only missing information; preserve the operation when only the target is unknown.')
+REVIEW_SEMANTIC_CONTRACT += request_semantics.COMPLETION_INSTRUCTION
 
 
 class _ReviewCompletionError(ValueError):
@@ -1708,14 +1715,21 @@ def _completed_review_values(result, source_evidence=()):
         raise _ReviewCompletionError('missing_completed_request', field='semantics',
             rule='Provide 1-40 complete semantic entries for line.', observed=values)
     validated = []
+    errors = []
     for index, value in enumerate(values):
         try:
             validated.append(request_semantics.validate(value, written))
         except ValueError as exc:
             field, rule = _SEMANTIC_REPAIR_RULES.get(str(exc), ('', 'Use the exact semantic schema, field types and allowed values from SEMANTIC CONTRACT.'))
-            raise _ReviewCompletionError(str(exc),
+            errors.append(dict(code=str(exc),
                 field='semantics[%d]%s' % (index, '.' + field if field else ''), rule=rule,
-                line=written, observed=value.get(field) if isinstance(value, dict) and field else value) from exc
+                observed=value.get(field) if isinstance(value, dict) and field else value))
+    if errors:
+        # One bounded repair must see every bad operation, not discover one
+        # additional invalid entry only after the first has been repaired.
+        first = errors[0]
+        raise _ReviewCompletionError(first['code'], field=first['field'], rule=first['rule'],
+            line=written, observed=first['observed'], errors=errors)
     values = validated
     for index, value in enumerate(values):
         if not value['complete'] or value['scope'] == 'query':
@@ -1798,7 +1812,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     from photo_agent import side_reference
     picked,_ = _split_people(line,people)
     side=side_reference.inspect(line,dict(people_count=len(people),selected_person_ids=picked))
-    if side['decision']=='clarify_side':
+    if config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION and side['decision']=='clarify_side':
         q=side_reference.question(side,'body-side')
         return dict(kept=False,start='',ask=True,offer=False,later=False,reply=q['text'],line='',
             persons=[],options=[c['label'] for c in q['choices']],aspect_ratio='',merged=[],withdrawn=False,
@@ -1813,6 +1827,8 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         [{"who": "", "text": prompt.strip()}] if prompt.strip() else [])
     # The tap carries the people the question was about; the option itself does not.
     def run_rest(context):
+        if not config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION:
+            context = SIDE_CHAT_RULE + context
         timeout = min(TIMEOUT_SECONDS, deadline - time.time()) if deadline is not None else None
         if timeout is not None and timeout <= 0:
             raise TimeoutError('review_deadline_exceeded')
@@ -1858,6 +1874,8 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         if remaining <= 0:
             raise TimeoutError('review_deadline_exceeded')
         review_calls += 1
+        if not config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION:
+            text = SIDE_CHAT_RULE + text
         return model(text) if model is not None else call_review(text, timeout=remaining)
 
     def complete_question_choices(answer):
@@ -1894,7 +1912,9 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
 
     result = run_review(context)
     completed_context = False
-    if answering and result.get('verdict') in ('keep', 'clarify', 'drop'):
+    completed_edit = (result.get('verdict') == 'keep' and bool(result.get('line'))
+                      and bool(result.get('semantics')))
+    if (answering and result.get('verdict') in ('keep', 'clarify', 'drop')) or completed_edit:
         # Follow the current clarification chain back to its original input,
         # without borrowing literal content from earlier unrelated wishes.
         evidence = [line]
@@ -1904,6 +1924,9 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
             elif not turn.get('question') or turn.get('offer'):
                 break
         def validate_answer(value):
+            if completed_edit and value.get('verdict') not in ('keep', 'clarify'):
+                raise _ReviewCompletionError('edit_repair_changed_command', field='verdict',
+                    rule='Repair the edit or ask for essential missing information; never turn an internal validation repair into a render, analyze or other command.')
             if value.get('verdict')=='clarify' and value.get('question_kind')!='person':
                 missing=value.get('missing_information')
                 if isinstance(missing,str) and missing.strip() and ('？' in (value.get('reply') or '') or '?' in (value.get('reply') or '')):
@@ -1936,10 +1959,16 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
                     + json.dumps(result, ensure_ascii=False))
                 validate_answer(result)
             except (ValueError, TimeoutError, RuntimeError, OSError) as exc:
-                logger.warning('Chat clarification remains incomplete; keeping question: %s', exc)
+                failure = getattr(exc, 'feedback', dict(code=str(exc)))
+                logger.warning('Chat completion repair failed; no changes applied: %s feedback=%s',
+                               exc, json.dumps(failure, ensure_ascii=False))
+                if not answering:
+                    return dict(kept=False, start='', ask=False, offer=False, later=False,
+                        line='', persons=[], options=[], aspect_ratio='', merged=[], withdrawn=False,
+                        request_error=True, reply='這項需求暫時未能整理完成，尚未套用；請稍後再試。')
                 return dict(kept=False,start='',ask=True,offer=False,later=False,line='',persons=[],
                     aspect_ratio='',merged=[],withdrawn=False,**completion_retry(selected_context))
-        completed_context = True
+        completed_context = answering
     interpreted = False
     if result.get('verdict') == 'drop':
         revised = result.get('line').strip() if isinstance(result.get('line'), str) else ''

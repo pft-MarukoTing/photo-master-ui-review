@@ -200,7 +200,9 @@ def _validate_params(params: dict) -> dict:
         from photo_agent.side_reference import validate_state
         try:normalized['side_reference']=validate_state(normalized['side_reference'])
         except (ValueError,TypeError,KeyError) as exc:raise RuntimeError('invalid_side_state',RESULT_INVALID_PARAMETER) from exc
-    if stage in ('full','finish'):
+    if 'chat_body_side_clarification' in normalized and type(normalized['chat_body_side_clarification']) is not bool:
+        raise RuntimeError('invalid_chat_side_policy', RESULT_INVALID_PARAMETER)
+    if stage in ('full','finish') and normalized.get('chat_body_side_clarification', True):
         from photo_agent.side_reference import guard
         saved_analysis=normalized.get('analysis') if isinstance(normalized.get('analysis'),dict) else {}
         try:guard(normalized['user_prompt'] or '',normalized.get('side_reference') or saved_analysis.get('_body_side_reference'))

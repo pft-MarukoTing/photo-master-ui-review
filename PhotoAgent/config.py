@@ -18,6 +18,9 @@ ENABLE_CHAT_SUBJECT_PREVIEW = False
 # Off keeps Stage 2.0/avatars, and uses chat_review plus the legacy geometry
 # handoff for requests; no chat_preview_conversation call is made by this flow.
 ENABLE_CHAT_PREVIEW_INTRODUCTION = False
+# Chat only: require confirmation of subject-relative versus image-relative body sides.
+# Off preserves left/right wording as an ordinary edit; person selection still applies.
+ENABLE_CHAT_BODY_SIDE_CLARIFICATION = False
 # Optional extra visual pass for Chat requests. Enable during rollout to
 # clarify absent/uncertain edit targets; no extra call when disabled or empty.
 ENABLE_CHAT_REQUEST_FEASIBILITY = False

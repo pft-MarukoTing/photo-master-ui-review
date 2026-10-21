@@ -1221,7 +1221,8 @@ def _add_photos(user, session_id, session, images, client_key=None):
     if len(session["photos"]) + len(images) > store.MAX_PHOTOS_PER_SESSION:
         raise _RequestError(f"a session holds at most {store.MAX_PHOTOS_PER_SESSION} photos")
 
-    params, error = _parse_and_validate_params(build_render_form(session["defaults"], "analyze"))
+    params, error = _parse_and_validate_params(build_render_form(session["defaults"], "analyze"),
+        chat_body_side_clarification=agent_config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION)
     if error:
         raise _RequestError(error)
     params["stage"] = "analyze"
@@ -1437,7 +1438,8 @@ def _start_analysis(user, session_id, photo, why):
     """Run the analysis a photo's upload skipped, on its source image. `why`
     is "check" (the user asked to see it: it lands as a check card) or
     "render" (a render queued behind it starts when it lands)."""
-    params, error = _parse_and_validate_params(build_render_form(photo["plan"], "analyze"))
+    params, error = _parse_and_validate_params(build_render_form(photo["plan"], "analyze"),
+        chat_body_side_clarification=agent_config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION)
     if error:
         raise _RequestError(error)
     params["stage"] = "analyze"
@@ -1626,7 +1628,8 @@ def _reframe_if_needed(user, session_id, photo, analysis=None):
         store.save_photo_state(user, session_id, photo)
     if planned == ratio:
         return False
-    params, error = _parse_and_validate_params(build_render_form(photo["plan"], "analyze"))
+    params, error = _parse_and_validate_params(build_render_form(photo["plan"], "analyze"),
+        chat_body_side_clarification=agent_config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION)
     if error:
         current_app.logger.warning("reframe not started for %s: %s", photo["photo_id"], error)
         return False
@@ -1772,7 +1775,8 @@ def _conversation_render_problem(photo):
         state=photo.get('side_reference')
         # Cancel/Undo restores the plan; stale metadata cannot block a different
         # active prompt indefinitely, but pending proposals remain in photo state.
-        side_reference.guard(photo['plan'].get('user_prompt') or '',state)
+        if agent_config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION:
+            side_reference.guard(photo['plan'].get('user_prompt') or '',state)
     except ValueError:
         return (side_reference.ERROR,'請先確認身體部位的左右是以人物還是畫面為準，再開始美化。',409)
     state = photo.get('preview_conversation')
@@ -1843,7 +1847,8 @@ def _prepare_render(photo, *, defer_unconfirmed=False):
     plan = photo["plan"]
     if any("detection_index" in f or "preview_person_id" in f for f in plan.get("prompt_faces", [])):
         return None, ("unresolved_preview_person", "指定人物尚未確認，請重新指定或清除該需求。", 409)
-    params, error = _parse_and_validate_params(build_render_form(plan, "finish"))
+    params, error = _parse_and_validate_params(build_render_form(plan, "finish"),
+        chat_body_side_clarification=agent_config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION)
     if error:
         return None, ("invalid_plan", f"photo {photo['photo_id']}: {error}", 400)
     params["stage"] = "finish"
@@ -2436,6 +2441,7 @@ def _side_post_question(user, session_id, photo, text, state, base_plan=None, re
 
 
 def _side_turn(user, session_id, photo, body):
+    if not agent_config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION:return None
     text=body.get('text','')
     if not isinstance(text,str) or len(text)>MESSAGE_TEXT_MAX_LEN:return None
     if 'selected_frame' in body and body['selected_frame'] not in ('subject','image'):
@@ -2632,6 +2638,7 @@ def _checked_side_token(user,session_id,photo,plan):
 
 
 def _side_ensure_question(user,session_id,photo):
+    if not agent_config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION:return
     previous=photo.get('side_reference')
     if not previous and not side_reference.inspect(photo['plan'].get('user_prompt',''))['side_references']:return
     if photo.get('side_question_id') and previous and not side_reference.executable(previous):
@@ -2744,7 +2751,7 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
     # A completed/revised model proposal is another entry into the same guard.
     # Do not apply an ambiguous body instruction merely because it was produced
     # by the language model rather than typed verbatim by the user.
-    if proposal and isinstance(proposal.get('patch',{}).get('user_prompt'),str):
+    if agent_config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION and proposal and isinstance(proposal.get('patch',{}).get('user_prompt'),str):
         candidate=proposal['patch']['user_prompt']
         state=side_reference.inspect(candidate,_side_context(photo,{},candidate))
         if state['side_references'] and not side_reference.executable(state):
@@ -2804,7 +2811,7 @@ PROMPT_REVIEW_WAIT_SECONDS = chat_queue.WAIT_SECONDS
 
 def _side_upload_review(body,text):
     context=body.get('side_context');answer=body.get('side_answer')
-    if context is None and answer is None:return None
+    if not agent_config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION or context is None and answer is None:return None
     if not isinstance(context,dict) or not {'source_sha256','analysis_model'}<=set(context) or set(context)-{'source_sha256','analysis_model','previous_token'}:
         raise _RequestError('invalid_side_context')
     if context['analysis_model'] not in [m.id for m in capabilities.ANALYSIS_MODELS]:raise _RequestError('invalid_side_model')

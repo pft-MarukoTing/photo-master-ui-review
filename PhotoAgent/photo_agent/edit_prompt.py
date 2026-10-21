@@ -42,7 +42,8 @@ def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio
     user_instruction = framed_analysis.get("user_instruction") or {}
     user_direction = user_instruction.get("normalized_user_direction") or ""
     from photo_agent.side_reference import editor_instruction as side_instruction
-    side_contract=side_instruction(user_instruction.get('original_user_direction') or user_direction)
+    side_contract = (side_instruction(user_instruction.get('original_user_direction') or user_direction)
+                     if user_instruction.get('chat_body_side_clarification', True) else '')
     if overwrites_prompt(user_instruction):
         style_block = build_style_override_block(framed_analysis, alongside_request=True)
         prompt_text = "\n\n".join(filter(None, (

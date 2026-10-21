@@ -137,7 +137,7 @@ export interface Choice {
 }
 
 export interface Capabilities {
-  features?: { subject_preview?: boolean; preview_introduction?: boolean; subject_preview_format_version?: number; low_confidence_candidates?: boolean };
+  features?: { body_side_clarification?: boolean; subject_preview?: boolean; preview_introduction?: boolean; subject_preview_format_version?: number; low_confidence_candidates?: boolean };
   render: {
     analysis_models: { id: string; label: string }[];
     aspect_ratios: Choice[];

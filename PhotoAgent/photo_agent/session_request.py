@@ -60,6 +60,7 @@ Source spans together must cover every request and identity qualifier in the lin
 constraints are verbatim nonempty substrings of source. All required fields must
 be present; complete and owner_required are booleans. Never invent a person ID.
 '''
+INSTRUCTION += request_semantics.COMPLETION_INSTRUCTION
 
 
 def schema(base):
@@ -174,7 +175,8 @@ def resolve(context,plan,history,run_model,validate_completion,options,debug=Fal
         return validate(result,plan,history,validate_completion,options,debug)
     except ValueError as exc:
         feedback=getattr(exc,'feedback',dict(code=str(exc),field='request',rule='Return a consistent complete request.'))
-        logger.warning('Chat session contract rejected: %s field=%s', feedback['code'], feedback['field'])
+        logger.warning('Chat session contract rejected: %s field=%s feedback=%s',
+                       feedback['code'], feedback['field'], json.dumps(feedback, ensure_ascii=False))
     try:
         repaired=run_model(context+'\nREPAIR SESSION REQUEST CONTRACT:\n'
             'This is an output validation error, not evidence that the user is unclear. '
@@ -191,7 +193,8 @@ def resolve(context,plan,history,run_model,validate_completion,options,debug=Fal
         return validate(repaired,plan,history,validate_completion,options,debug)
     except (ValueError,TimeoutError,RuntimeError,OSError) as exc:
         failure=getattr(exc,'feedback',dict(code=str(exc),field='request'))
-        logger.warning('Chat session repair failed; no changes applied: %s field=%s', failure['code'],failure['field'])
+        logger.warning('Chat session repair failed; no changes applied: %s field=%s feedback=%s',
+                       failure['code'], failure['field'], json.dumps(failure, ensure_ascii=False))
         if selected:
             return _retry_result(selected)
         # Keep the conversation, never turn invalid output into a plan change.
