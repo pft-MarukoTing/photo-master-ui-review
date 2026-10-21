@@ -644,7 +644,8 @@ const GREETING = "嗨！先選想美化的照片，可以一次選多張。要�
 // 帶著個人化需求按一鍵美化時問的兩條路。僅依需求修改 = overwrite_prompt：修圖
 // 只拿個人化需求當指令；整體美化 = 照分析修完，需求一起加上去（原本的做法）。
 // 僅依需求修改那條也是 session 裡那張美化卡的標題。按鈕是使用者的話、說明是
-// AI 的話，兩邊都不用「我」，主詞才不會打架。說明的順序跟按鈕一樣，整體美化在前。
+// AI 的話，兩邊都不用「我」，主詞才不會打架。說明的順序跟按鈕一樣，僅依需求修改在前；
+// 整體美化放後面並亮起來，是建議的那條。兩顆都用一鍵美化的 spark。
 // 一鍵美化前問需求怎麼套用。還沒美化過，選了「僅依需求修改」就直接開始，不再問風格。
 type RenderAsk = { later: Note | null; log: Note[]; overwrite?: boolean };
 
@@ -3679,16 +3680,17 @@ export function App() {
               <AssistantMsg>
                 <p class="chat-text">有幾張講了需求，要整體美化，還是僅依需求修改？在單張頁已經選過的，照它自己選的。</p>
                 <p class="chat-text chat-muted">
-                  {WITH_ANALYSIS_LABEL}：照需求修改，光線、人像、構圖也一起調整。{ONLY_PROMPT_LABEL}：只動寫到的地方，其他保持原樣。
+                  {ONLY_PROMPT_LABEL}：只動寫到的地方，其他保持原樣。{WITH_ANALYSIS_LABEL}：照需求修改，光線、人像、構圖也一起調整。
                 </p>
                 <div class="chat-choices">
                   {[
-                    { label: WITH_ANALYSIS_LABEL, overwrite: false },
                     { label: ONLY_PROMPT_LABEL, overwrite: true },
+                    { label: WITH_ANALYSIS_LABEL, overwrite: false },
                   ].map((o) => (
                     <Chip
                       label={o.label}
-                      kind={t.overwrite === o.overwrite ? "picked" : undefined}
+                      icon="spark"
+                      kind={t.overwrite === o.overwrite ? "picked" : t.overwrite === undefined && !o.overwrite ? "primary" : undefined}
                       settled={t.overwrite !== undefined}
                       disabled={overviewHeld}
                       onClick={() => overviewRenderMode(o.overwrite)}
@@ -5195,7 +5197,7 @@ function PreChat(props: {
       {source && greeted && !pending && !(last && "ask" in last && (last.ask.asked || last.ask.offered)) && <div class="prechat-actions">{actions}</div>}
 
       {/* 需求要怎麼套用，只有使用者自己知道：「把背景換成海邊」可能是只想換
-          背景，也可能是想順便整張修好。兩條路一樣重，不替人預設。 */}
+          背景，也可能是想順便整張修好。整體美化亮起來當建議，但不替人預設。 */}
       {asking && (
         <>
           <UserMsg>
@@ -5204,16 +5206,17 @@ function PreChat(props: {
           <AssistantMsg>
             <p class="chat-text">要整體美化，還是僅依你的需求修改？</p>
             <p class="chat-text chat-muted">
-              {WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。{ONLY_PROMPT_LABEL}：只動你寫到的地方，其他保持原樣。
+              {ONLY_PROMPT_LABEL}：只動你寫到的地方，其他保持原樣。{WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。
             </p>
             <div class="chat-choices">
               {[
-                { label: WITH_ANALYSIS_LABEL, overwrite: false },
                 { label: ONLY_PROMPT_LABEL, overwrite: true },
+                { label: WITH_ANALYSIS_LABEL, overwrite: false },
               ].map((o) => (
                 <Chip
                   label={o.label}
-                  kind={asking.overwrite === o.overwrite ? "picked" : undefined}
+                  icon="spark"
+                  kind={asking.overwrite === o.overwrite ? "picked" : asking.overwrite === undefined && !o.overwrite ? "primary" : undefined}
                   settled={busy && asking.overwrite !== undefined}
                   disabled={held}
                   onClick={() => props.onRenderMode(o.overwrite)}
@@ -6643,28 +6646,30 @@ export function SessionView(props: {
       <AssistantMsg>
         <p class="chat-text">要整體美化，還是僅依你的需求修改？</p>
         <p class="chat-text chat-muted">
-          {WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。{ONLY_PROMPT_LABEL}：
+          {ONLY_PROMPT_LABEL}：
           {styles.length ? `只動你寫到的地方，加上你挑的風格（${styles.join("、")}），其他保持原樣。` : "只動你寫到的地方，其他保持原樣。"}
+          {WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。
         </p>
         {/* 問題的答案直接接在問題底下。 */}
         <div class="chat-choices">
           <Chip label="先不美化" icon="x" disabled={busy} onClick={() => setAskMode(null)} />
-          <Chip
-            label={WITH_ANALYSIS_LABEL}
-            icon={askMode.icon}
-            disabled={busy}
-            onClick={() => props.onRender(WITH_ANALYSIS_LABEL, askMode.icon, { overwrite_prompt: false })}
-          />
           <Chip
             label={ONLY_PROMPT_LABEL}
             icon={askMode.icon}
             disabled={busy}
             onClick={() => props.onRender(ONLY_PROMPT_LABEL, askMode.icon, { overwrite_prompt: true })}
           />
+          <Chip
+            label={WITH_ANALYSIS_LABEL}
+            icon={askMode.icon}
+            kind="primary"
+            disabled={busy}
+            onClick={() => props.onRender(WITH_ANALYSIS_LABEL, askMode.icon, { overwrite_prompt: false })}
+          />
         </div>
       </AssistantMsg>
     );
-    bar = ["先不美化", WITH_ANALYSIS_LABEL, ONLY_PROMPT_LABEL];
+    bar = ["先不美化", ONLY_PROMPT_LABEL, WITH_ANALYSIS_LABEL];
   } else if (confirmRerun && photo.status === "ready" && adjusting) {
     working = (
       <AssistantMsg>
