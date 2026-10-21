@@ -5289,6 +5289,8 @@ function PreChat(props: {
             />
           </UserMsg>
 
+          {/* 舊偵測流程等掃描完才講開場白，中間先接一個跟回覆需求時一樣的打字點，不讓畫面停在空白。 */}
+          {!greeted && <AssistantMsg><div class="chat-typing" aria-label="AI 正在看照片"><span /><span /><span /></div></AssistantMsg>}
           {greeted && (
           <AssistantMsg>
             <p class="chat-text">照片選好了。想怎麼修，直接打在下面的對話框告訴我。</p>
