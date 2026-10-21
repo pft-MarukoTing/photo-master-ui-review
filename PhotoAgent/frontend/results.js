@@ -1464,7 +1464,9 @@ window.PhotoAgentResults = (() => {
       const actionHeight = els.apOptionsCardInline?.querySelector(".ap-actions-row")?.offsetHeight || 0;
       const analysisMinHeight = Math.max(260, Math.ceil(panelHeight * 0.6));
       const availableHeight = panelHeight - analysisMinHeight - actionHeight - 18;
-      compactHeight = Math.max(110, Math.min(PHOTO_SUMMARY_COMPACT_HEIGHT, availableHeight));
+      // The column's flex-shrink can leave the card shorter than this estimate; its laid-out height is the real limit.
+      const renderedHeight = Math.floor(summary.getBoundingClientRect().height);
+      compactHeight = Math.max(110, Math.min(PHOTO_SUMMARY_COMPACT_HEIGHT, availableHeight, renderedHeight));
     }
 
     const needsCompactToggle = naturalHeight > compactHeight;
