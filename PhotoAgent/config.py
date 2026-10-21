@@ -14,8 +14,9 @@ ENABLE_BODY_RESHAPE = False
 # Enables Chat previews and ensures Stage 2.0 precedes every analyze_stage call.
 # Ready snapshots are reused; disabling retains the legacy Chat/analyze paths.
 ENABLE_CHAT_SUBJECT_PREVIEW = False
-# Auto-introduce the Stage 2.0 roster in Chat. Off keeps the avatar picker
-# and later request matching, without an unsolicited conversation call.
+# Enable the Preview Conversation flow (introduction and request matching).
+# Off keeps Stage 2.0/avatars, and uses chat_review plus the legacy geometry
+# handoff for requests; no chat_preview_conversation call is made by this flow.
 ENABLE_CHAT_PREVIEW_INTRODUCTION = False
 # Optional extra visual pass for Chat requests. Enable during rollout to
 # clarify absent/uncertain edit targets; no extra call when disabled or empty.

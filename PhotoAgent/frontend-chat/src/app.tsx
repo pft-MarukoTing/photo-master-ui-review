@@ -968,6 +968,8 @@ export function App() {
   const preFull = !source ? "" : fullSrc(source);
   const previewEnabled = !!caps?.features?.subject_preview;
   const previewIntroductionEnabled = previewEnabled && caps?.features?.preview_introduction === true;
+  // Silent preview uses the legacy review/geometry handoff, without the conversation bridge.
+  const previewConversationEnabled = previewIntroductionEnabled;
   const loadSource = async () => {
     if (!source) throw new Error("no source");
     return sourceBlob(source);
@@ -1040,7 +1042,7 @@ export function App() {
     subjectIndices.flatMap((i) => {
       const p = preFaces.find((q) => q.subjectIndex === i);
       return p ? [{ name: p.name, thumb: preThumbs[preFaces.indexOf(p)] || "", where: preWhere(p.subjectIndex), box: p.box, thumbnail_box: p.thumbnail_box,
-        ...(previewEnabled && preview.result ? { ...(p.preview_person_id
+        ...(previewConversationEnabled && preview.result ? { ...(p.preview_person_id
           ? { preview_person_id: p.preview_person_id } : { detection_index: p.detection_index }),
           preview_job_id: preview.result.preview_job_id, source_sha256: preview.result.source_sha256 } : {}) }] : [];
     });
@@ -1053,12 +1055,12 @@ export function App() {
     setNotesHistory(events => appendNotesHistory(events, historySections, nextDisplayOrder(), conversation(notes).length));
   }, [historySectionsKey, !!preAsk, phase]);
   const previewWishes = wishesFor(notes, segEdits);
-  const bridge = usePreviewConversation({ identity: preview.identity ? `${preview.identity}#${sourceGeneration}` : null, preview: preview.result,
+  const bridge = usePreviewConversation({ identity: previewConversationEnabled && preview.identity ? `${preview.identity}#${sourceGeneration}` : null, preview: preview.result,
     photoKey: `${selectionIdentity}#${sourceGeneration}`, people: prePickable,
     model: settings?.analysis_model || "", history: reviewHistory(notes), historyWithEvents: events => reviewHistory(notes, [...events, ...settingsEvents]), wishes: previewWishes,
     prompt: notesPrompt(notes, segEdits), turns: conversation(notes).length,
     busy: !!preAsk || busy, blocked: !!openAsk(notes)?.asked?.options.length || !!renderAsk,
-    active: phase === "chat" && !submitting && previewEnabled, introductionEnabled: previewIntroductionEnabled });
+    active: phase === "chat" && !submitting && previewConversationEnabled, introductionEnabled: previewIntroductionEnabled });
   // Introduction mode waits for prose; silent mode exposes the ready roster directly.
   // Formal submission never waits for this presentation gate.
   const previewPresentationKey = preview.identity ? `${preview.identity}#${sourceGeneration}` : null;
@@ -1975,7 +1977,7 @@ export function App() {
       // 重試時沿用上一次拿到的 session；上一次建了卻沒等到回應的，後端認得 clientKey，回同一個。
       if (!id) id = (await api.createSession(bid, { signal: step(), clientKey })).session_id;
       const previewIdentity = await p.identity;
-      const log = previewEnabled && !previewIdentity
+      const log = previewEnabled && (!previewConversationEnabled || !previewIdentity)
         ? p.log.map((note) => ({ ...note, persons: note.persons.map(withoutPreviewIdentity) })) : p.log;
       const kept = keptNotes(log);
       const userPrompt = (previewIdentity && p.effective !== undefined ? p.effective : notesPrompt(log, p.segEdits)).slice(0, PROMPT_MAX);
@@ -1987,7 +1989,7 @@ export function App() {
       const added = await uploadKeyed(id, blob, name, previewIdentity && {
         ...previewIdentity, ...(p.mapping ? { conversation_token: p.mapping.token,
           conversation_wishes_digest: p.mapping.wishes_digest } : {}),
-      }, previewEnabled ? (previewIdentity ? p.wishes : p.wishes.map((w) => ({ ...w, target_ids: [] }))) : undefined,
+      }, previewConversationEnabled ? (previewIdentity ? p.wishes : p.wishes.map((w) => ({ ...w, target_ids: [] }))) : undefined,
       clientKey, live, sideTokenFor(log));
       const pid = added.photo_id;
       uploaded = pid;
@@ -2655,7 +2657,7 @@ export function App() {
         undefined, sideContext, sideQuestion && asking?.sideToken ? { ...sideChoice(sideQuestion, text), token: asking.sideToken } : undefined,
       );
       if (!stillCurrent()) return null;
-      let r = routeReviewQuestion(reviewed, previewEnabled);
+      let r = routeReviewQuestion(reviewed, previewConversationEnabled);
       if (asking && r.accepted && !r.withdrawn && !r.line && !r.verbatim) {
         r = { ...r, accepted: false, ask: true, options: [],
           reply: "這項需求還沒整理完整，請再說明想調整的效果。" };
@@ -2667,7 +2669,7 @@ export function App() {
         replyPeople: prePickable.map(p => ({ ...p })),
         // 只是撤回前面那項的一句不進清單：前面那項拿掉，就是照原樣了。
         kept: r.accepted && !r.withdrawn,
-        ...(r.semantic_pending && (previewEnabled || preview.identity) ? { actionPending: true, resolvedWish: "" } : {}),
+        ...(r.semantic_pending && previewConversationEnabled ? { actionPending: true, resolvedWish: "" } : {}),
         ...(r.ask ? { asked: { options: r.options || [], kind: r.question_kind || "meaning",
           subtype: r.clarification_subtype, side_question: r.side_question } } : {}),
         ...(r.side_reference_token ? { sideToken: r.side_reference_token } : {}),
@@ -2805,7 +2807,7 @@ export function App() {
     setSubmitting({ sources: [source], mode, since });
     void run(async () => {
       const previewIdentity = await previewDecision;
-      const submissionLog = previewEnabled && !previewIdentity ? log.map((note) => ({
+      const submissionLog = previewEnabled && (!previewConversationEnabled || !previewIdentity) ? log.map((note) => ({
         ...note, persons: note.persons.map(withoutPreviewIdentity),
       })) : log;
       const kept = keptNotes(submissionLog);
@@ -2844,7 +2846,7 @@ export function App() {
           added = await uploadKeyed(id, blob, name, previewIdentity && {
             ...previewIdentity, ...(mapping ? { conversation_token: mapping.token,
               conversation_wishes_digest: mapping.wishes_digest } : {}),
-          }, previewEnabled ? (previewIdentity ? previewWishes : previewWishes.map(w => ({ ...w, target_ids: [] }))) : undefined,
+          }, previewConversationEnabled ? (previewIdentity ? previewWishes : previewWishes.map(w => ({ ...w, target_ids: [] }))) : undefined,
           clientKey, same, sideTokenFor(submissionLog));
           singleKey.current = null;
           break;
@@ -3250,7 +3252,7 @@ export function App() {
         <>
           <FootBar
             faces={
-              !bridgeQuestion && !preWhoAsk && preDisplayPeople.length > 1 &&
+              !bridgeQuestion && !preWhoAsk && preDisplayPeople.length > (previewEnabled && !previewConversationEnabled ? 0 : 1) &&
                 <FacePicker people={preDisplayPeople} pointed={prePointed} onPoint={setPrePointed} />
             }
           />
