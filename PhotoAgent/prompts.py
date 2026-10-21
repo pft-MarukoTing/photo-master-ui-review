@@ -887,11 +887,14 @@ def build_overall_analysis_instruction(aspect_ratio_pref="auto", source_size=Non
         + "\n"
     )
     instruction += _aspect_ratio_policy_suffix(aspect_ratio_pref, source_size)
-    if photo_facts:
-        facts = {field: photo_facts[field] for field in CALL0_FIELDS}
-        instruction += (_PHOTO_FACTS_SECTION + json.dumps(facts, ensure_ascii=False)
-                        + (_SCREENSHOT_FACT if photo_facts.get("is_screenshot") else ""))
-    return instruction
+    return instruction + photo_facts_section(photo_facts) if photo_facts else instruction
+
+
+def photo_facts_section(photo_facts):
+    """Call 0's settled facts, appended to an analysis instruction so it builds on them instead of writing them."""
+    facts = {field: photo_facts[field] for field in CALL0_FIELDS}
+    return (_PHOTO_FACTS_SECTION + json.dumps(facts, ensure_ascii=False)
+            + (_SCREENSHOT_FACT if photo_facts.get("is_screenshot") else ""))
 
 
 # ── Structured output schema for Step 2 (photo analysis) ──────────────────────
