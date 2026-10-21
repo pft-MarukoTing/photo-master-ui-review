@@ -6097,7 +6097,8 @@ export function SessionView(props: {
                   picked={next?.card?.type === "ask" ? next.text || "" : null}
                   open={open}
                   busy={busy}
-                  onPick={(t) => props.onAsk(t, si, screen, sf, c.question_kind ? messages[idx].id : undefined)}
+                  onPick={(t) => props.onAsk(t, si, screen, sf, c.question_kind ? messages[idx].id : undefined,
+                    c.clarification_subtype === "body_side_reference" ? sideChoice(c.side_question, t) : undefined)}
                 />
               );
             // 問的是哪一位時，答案就是那幾顆頭像：點一顆等於指著他說「這位」，
