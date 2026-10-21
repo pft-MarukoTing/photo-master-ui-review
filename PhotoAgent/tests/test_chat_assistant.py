@@ -583,6 +583,24 @@ class ReviewLineTest(unittest.TestCase):
         self.assertEqual(result["reply"], "好，這個我記下來了。還沒美化的 2 張會照這樣修，已經在美化或美化好的 1 張不動。"
                          "還有其他想改的地方嗎？沒有的話，可以按下面的「一鍵美化其餘 2」。")
 
+    # 每張都美化過了：需求套到每一張，鍵是「全部再美化」，問的是要不要再美化一次，不提分析。
+    def test_an_overview_where_every_photo_is_rendered_offers_to_render_again(self):
+        redo = {**self.BATCH, "unrendered": 3, "analyze": "", "render": "全部再美化", "redo": True}
+        result, context = self.batch_review({"verdict": "offer", "reply": "", "line": "", "options": []}, redo)
+        self.assertEqual((result["options"], result["reply"]), (["全部再美化"], chat_assistant.BATCH_REDO_OFFER_REPLY))
+        self.assertIn("Every photo is rendered already", context)
+        self.assertIn("never offer or mention 分析", context)
+        answer = {"verdict": "answer", "reply": "1*2+3 等於 5。", "line": "", "options": []}
+        result, _ = self.batch_review(answer, redo, line="1*2+3")
+        self.assertEqual((result["options"], result["reply"]), (["全部再美化"], "1*2+3 等於 5。要不要照這樣再美化一次？"))
+        keep = {"verdict": "keep", "reply": "好，這個我記下來了。", "line": "照片清楚一點", "options": []}
+        result, _ = self.batch_review(keep, redo, line="照片看起來糊糊的")
+        self.assertEqual(result["reply"], "好，這個我記下來了。這 3 張再美化時都會照這樣修。"
+                         "還有其他想改的地方嗎？沒有的話，可以按下面的「全部再美化」。")
+        ask = {"verdict": "ask", "reply": "要不要直接幫你一鍵美化？", "line": "", "options": ["全部再美化", "把黑白風格去掉"]}
+        result, _ = self.batch_review(ask, redo, line="現在個人化需求是什麼")
+        self.assertEqual(result["reply"], "要不要直接幫你再美化？")
+
     def test_a_chip_name_needs_no_model(self):
         def model(context):
             raise AssertionError("the model was asked")

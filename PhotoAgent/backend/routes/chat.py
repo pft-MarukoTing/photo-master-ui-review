@@ -3005,6 +3005,13 @@ def _review_batch(batch):
         if not isinstance(label, str) or len(label) > PROMPT_REVIEW_LABEL_MAX_LEN:
             raise _RequestError(f"batch.{key} must be a string of at most {PROMPT_REVIEW_LABEL_MAX_LEN} characters")
         out[key] = label.strip()
+    # Every photo rendered already: a kept line goes to all of them and the
+    # render button renders them again.
+    redo = batch.get("redo", False)
+    if not isinstance(redo, bool):
+        raise _RequestError("batch.redo must be a boolean")
+    if redo:
+        out["redo"] = True
     return out
 
 

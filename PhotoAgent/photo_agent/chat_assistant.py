@@ -1506,6 +1506,9 @@ OFFER_OPTIONS = ["幫我分析", "一鍵美化"]
 # 總覽（一批好幾張）講的是「這幾張」；每張都分析過了就只剩美化可以提。
 BATCH_OFFER_REPLY = "這幾張要先分析看看，還是直接一鍵美化？分析完會整理出每張可以修的地方給你參考。"
 BATCH_RENDER_OFFER_REPLY = "這幾張都分析好了，要直接美化嗎？"
+# 每張都美化過了（redo）：記下的需求要再美化一次才看得到，問的就是要不要再美化。
+BATCH_REDO_OFFER_REPLY = "要照這樣把這幾張再美化一次嗎？"
+BATCH_REDO_QUESTION = "要不要照這樣再美化一次？"
 
 
 def _batch_text(batch):
@@ -1513,16 +1516,23 @@ def _batch_text(batch):
     of photos rather than from one photo's upload page."""
     analyze, render, where = batch.get("analyze") or "", batch.get("render") or "", batch.get("where") or "「我的照片」"
     buttons = "、".join(f"「{b}」" for b in (analyze, render) if b) or "（目前沒有可按的）"
+    if batch.get("redo"):
+        scope = (f"The user is on the OVERVIEW of {batch['photos']} photos, not on one photo. Every photo is rendered"
+                 f" already; a kept line is added to all {batch['unrendered']} of them and shows only after they press"
+                 f" 「{render}」 to render them again, so speak of 「這幾張」 and never 「這張照片」.")
+    else:
+        scope = (f"The user is on the OVERVIEW of {batch['photos']} photos, not on one photo. A kept line is added to"
+                 f" every photo not rendered yet ({batch['unrendered']} of them), so speak of 「這幾張」 and never 「這張照片」.")
     return "\n".join([
-        f"The user is on the OVERVIEW of {batch['photos']} photos, not on one photo. A kept line is added to every photo"
-        f" not rendered yet ({batch['unrendered']} of them), so speak of 「這幾張」 and never 「這張照片」.",
+        scope,
         f"The buttons for the whole batch are {buttons}; name them exactly like that, never 「分析」 or 「一鍵美化」 alone.",
         f"- A line about only some of the photos (「第二張」「那張海邊的」「其中一張」「左邊那張」) is not for the overview:"
         f" verdict \"answer\", nothing kept; tell them to pick that photo in {where} and say it there,"
         f" e.g. 「只想改其中一張的話，請從{where}選那一張，在那裡告訴我。」",
         "- You cannot see the photos here. A question about which photo needs what, or what a photo shows, is answered by"
         " pointing them to open that photo from " + where + " (each photo has its own analysis there).",
-        *([] if analyze else ["- Every photo is analyzed already: never offer or mention 分析; offer only 一鍵美化."]),
+        *([] if analyze else [f"- Every photo is rendered already: never offer or mention 分析; offer only 「{render}」 (render them again)."]
+          if batch.get("redo") else ["- Every photo is analyzed already: never offer or mention 分析; offer only 一鍵美化."]),
     ])
 
 
@@ -1532,7 +1542,9 @@ def _kept_next(batch):
     if not batch:
         return KEPT_NEXT
     photos, unrendered = batch.get("photos") or 0, batch.get("unrendered") or 0
-    if unrendered and unrendered < photos:
+    if batch.get("redo"):
+        scope = f"這 {unrendered} 張再美化時都會照這樣修。" if unrendered else ""
+    elif unrendered and unrendered < photos:
         scope = f"還沒美化的 {unrendered} 張會照這樣修，已經在美化或美化好的 {photos - unrendered} 張不動。"
     elif unrendered:
         scope = f"這 {unrendered} 張美化時都會照這樣修。"
@@ -1624,7 +1636,7 @@ OFFER_WORDS = {"幫我分析": "分析", "一鍵美化": "一鍵美化"}
 REVIEW_CHIP_STARTS = {"一鍵美化": "render", "分析": "analyze"}
 
 
-def _offer_question(reply, options, batch=False):
+def _offer_question(reply, options, batch=False, redo=False):
     """`reply` with its last question made to match the offer in `options`.
 
     The offer may sit mid-reply with a promise after it (「要先幫你分析看看，
@@ -1633,6 +1645,10 @@ def _offer_question(reply, options, batch=False):
     nothing gets it added."""
     both = BATCH_OFFER_BOTH if batch else OFFER_BOTH
     offer = (both if len(options) > 1 else OFFER_QUESTIONS).get(options[0]) if options else None
+    words = OFFER_WORDS
+    if redo and offer:
+        # 總覽每張都美化過了，只剩「再美化」可以問。
+        offer, words = BATCH_REDO_QUESTION, {"一鍵美化": "再美化"}
     body = reply.rstrip()
     if not offer:
         return body
@@ -1640,7 +1656,7 @@ def _offer_question(reply, options, batch=False):
     if end < 0:
         return body + offer
     cut = max(body.rfind(c, 0, end) for c in "。！？!?")
-    if all(OFFER_WORDS[o] in body[cut + 1:end] for o in options if o in OFFER_WORDS):
+    if all(words[o] in body[cut + 1:end] for o in options if o in words):
         return body
     return body[:cut + 1] + offer + body[end + 1:]
 
@@ -1979,6 +1995,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     # 總覽的鍵叫「全部分析」「全部一鍵美化」（做過幾張就是「…其餘 N」），裡面一律照單張的名字算，
     # 回給頁面時再換回總覽的名字。
     labels = {"幫我分析": batch.get("analyze"), "一鍵美化": batch.get("render")} if batch else {}
+    redo = bool(batch and batch.get("redo"))
     named = {v: k for k, v in labels.items() if v}
     options = [named.get(o, o) for o in _options(result.get("options"))]
     asked = result.get("asked_ratio") if isinstance(result.get("asked_ratio"), str) else ""
@@ -1997,10 +2014,11 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         first = [o for o in options if o in starts]
         options = first + [o for o in starts if o not in first]
     if verdict == "offer":
-        reply = _offer_question(reply, options, bool(batch)) if reply else (
-            OFFER_REPLY if not batch else BATCH_OFFER_REPLY if batch.get("analyze") else BATCH_RENDER_OFFER_REPLY)
+        reply = _offer_question(reply, options, bool(batch), redo) if reply else (
+            OFFER_REPLY if not batch else BATCH_OFFER_REPLY if batch.get("analyze")
+            else BATCH_REDO_OFFER_REPLY if redo else BATCH_RENDER_OFFER_REPLY)
     elif offer:
-        reply = _offer_question(reply, options, bool(batch))
+        reply = _offer_question(reply, options, bool(batch), redo)
     elif (verdict == "answer" and reply and not after_offer and "？" not in reply and "?" not in reply
           and (not batch or batch.get("analyze") or batch.get("render"))):
         # An answer that just stops leaves the user with nothing to tap; 分析
@@ -2012,7 +2030,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         # 叫人去「我的照片」選某一張的回答，鍵照給，但不改成問要不要全部分析——
         # 那句講的是某一張，接一句「要不要幫你分析？」會像在問那一張。
         if not (batch and (batch.get("where") or "我的照片") in reply):
-            reply = _offer_question(reply, options, bool(batch))
+            reply = _offer_question(reply, options, bool(batch), redo)
     # Only a question an offer of 分析 promises to answer afterwards.
     later = offer and result.get("later") is True and options[0] == OFFER_OPTIONS[0]
     # 說了比例、或只是開關人像修正的，直接改「設定」：不然 AI 建議照樣跑，分析還
@@ -2057,6 +2075,9 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         reply = (reply or KEPT_REPLY) + replaced + _settings_note(ratio, switches) + _kept_next(batch)
     elif ratio or switches or replaced:
         reply = replaced + _settings_note(ratio, switches) + reply
+    if redo:
+        # 每張都美化過了，鍵叫「全部再美化」：AI 自己寫的「一鍵美化」也照鍵名改。
+        reply = reply.replace("一鍵美化", "再美化")
     wish = wish if kept else ""
     persons, wish = _split_people(wish, people)
     if not completed_context and not persons and wish == _split_people(line.strip(), people)[1]:

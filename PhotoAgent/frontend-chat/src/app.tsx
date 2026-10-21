@@ -541,18 +541,20 @@ export type OverviewTurn =
   // line 是它整理過的那句（跟打的不一樣才有）；沒收下（問題、閒聊、撤回）就只有 reply，
   // options 是能點的回答。沒有 kept 的是 AI 沒回應、照原句發出去的。
   // gone 是之後被撤回或被新的一句取代，已經從每張拿掉了。
-  | { id: number; kind: "wish"; text: string; count: number; skipped: number;
+  // redo 是每張都美化過了才說的：發到每一張，要按「全部再美化」才看得到。
+  // held 是說的當下每張都還在跑、沒有一張接得住：先排著（queued），跑完再發到每一張。
+  | { id: number; kind: "wish"; text: string; count: number; skipped: number; redo?: boolean; held?: boolean; queued?: boolean;
       pending?: boolean; kept?: boolean; reply?: string; options?: string[]; offer?: boolean; line?: string; gone?: boolean }
   // from 是打開時的設定，之後跟 settings 比，講這一輪改了什麼。
-  | { id: number; kind: "settings"; settings?: Settings; from?: Settings; model?: boolean }
+  | { id: number; kind: "settings"; settings?: Settings; from?: Settings; model?: boolean; redo?: boolean }
   | { id: number; kind: "ask"; overwrite?: boolean; label?: string }
-  | { id: number; kind: "start"; mode: "analyze" | "render"; count: number; keys: string[]; overwrite?: boolean; label?: string };
+  | { id: number; kind: "start"; mode: "analyze" | "render"; count: number; keys: string[]; overwrite?: boolean; label?: string; redo?: boolean; same?: boolean };
 // 總覽裡 AI 提議開始時給的兩個答案，點了就是按總覽的那顆鍵。
 // 後端給的是總覽鍵上的名字（「全部分析」「一鍵美化其餘 N」），舊的對話紀錄裡可能還是單張的名字，
 // 或改名前的「…剩餘 N」。
 function overviewStartOf(label: string): "analyze" | "render" | undefined {
   if (/^(幫我分析|全部分析|分析(?:其餘|剩餘) \d+)$/.test(label)) return "analyze";
-  if (/^(一鍵美化|全部一鍵美化|一鍵美化(?:其餘|剩餘) \d+)$/.test(label)) return "render";
+  if (/^(一鍵美化|全部一鍵美化|一鍵美化(?:其餘|剩餘) \d+|再美化|全部再美化|再美化 \d+ 張)$/.test(label)) return "render";
 }
 // 總覽說的需求放進每張對話時，AI 在那張裡回的話。
 const OVERVIEW_NOTE_REPLY = "好，這句是在總覽說的，這張也會照著修。只想改這張的話，直接在這裡說。";
@@ -577,15 +579,17 @@ function batchItemState(r: BatchRun | undefined, p: Photo | null, wished: boolea
 
 // 總覽算進度用的：還沒開始、還在跑（上傳、分析、美化）、分析好、美化好、失敗。
 type BatchProgress = "todo" | "running" | "analyzed" | "done" | "error";
-type OverviewChips = { pending: boolean; renderable: boolean; labels?: { analyze: string; render: string } };
+// finished：每張都美化過了，只剩「設定」；redo 是之後在總覽改過，多一顆「全部再美化」。
+type OverviewChips = { pending: boolean; renderable: boolean; finished?: boolean; redo?: boolean;
+  labels?: { analyze: string; render: string; redo?: string } };
 // 總覽每一則之後講的下一步（turnHints）。
 type TurnHint = { text: string; chips: OverviewChips | null; pending?: number; renderable?: boolean };
 // 總覽的對話存到後端的樣子。照片用那張的 session id 記：本機選的照片接回來後 key 會變成
 // remote 那種，對不上；還沒開始、沒有 session 的那幾張離開就沒了，也不記。
-// hints 照則的 id 記，開場白那句記在 "intro"。
-export type SavedOverview = { turns: OverviewTurn[]; hints: Record<string, TurnHint> };
+// hints 照則的 id 記，開場白那句記在 "intro"；redo 是總覽改過、還沒再美化的那幾張。
+export type SavedOverview = { turns: OverviewTurn[]; hints: Record<string, TurnHint>; redo?: string[] };
 function packOverview(turns: OverviewTurn[], hints: Record<string, TurnHint>, introKey: string,
-  sidOf: (key: string) => string | undefined): SavedOverview {
+  sidOf: (key: string) => string | undefined, redo: Iterable<string> = []): SavedOverview {
   const ids = (keys: string[]) => keys.map(sidOf).filter((x): x is string => !!x);
   const out = turns.flatMap((t): OverviewTurn[] =>
     t.kind === "upload" ? (ids(t.srcs).length ? [{ ...t, srcs: ids(t.srcs) }] : [])
@@ -594,7 +598,8 @@ function packOverview(turns: OverviewTurn[], hints: Record<string, TurnHint>, in
   const said: Record<string, TurnHint> = {};
   for (const t of out) if (t.id in hints) said[t.id] = hints[t.id];
   if (introKey in hints) said.intro = hints[introKey];
-  return { turns: out, hints: said };
+  const again = ids([...redo]);
+  return { turns: out, hints: said, ...(again.length ? { redo: again } : {}) };
 }
 // 接回來：session id 換回現在的 key。離開時還在等 AI 回話的那句就當沒等到；一鍵美化問到一半的
 // 那則拿掉，回來再按一次會重問。
@@ -613,6 +618,8 @@ function allLabel(mode: "analyze" | "render", n: number, total: number) {
   if (mode === "analyze") return n >= total ? "全部分析" : `分析其餘 ${n}`;
   return n >= total ? "全部一鍵美化" : `一鍵美化其餘 ${n}`;
 }
+// 每張都美化過了，照總覽改過的再美化一次。跟單張頁的「再美化」同一個說法。
+const redoLabel = (n: number, total: number) => (n >= total ? "全部再美化" : `再美化 ${n} 張`);
 
 function batchProgress(r: BatchRun | undefined, p: Photo | null, failed = false): BatchProgress {
   if (!r) return "todo";
@@ -928,6 +935,8 @@ export function App() {
   // 剛按了「全部…」：送出的那幾張還沒全部有著落（照片狀態問到了、美化請求回來了）之前，
   // 兩顆「全部…」停在按下去時的字、不能按，等一起有結果再換成新的（通常就收掉了）。
   const [allHold, setAllHold] = useState<{ keys: string[]; pending: number; renderable: number } | null>(null);
+  // 每張都美化過之後，在總覽說了需求或改了設定、還沒再美化的那幾張；有才擺「全部再美化」。
+  const [redo, setRedo] = useState<ReadonlySet<string>>(new Set());
   // 一張一張排著傳，全部一起按時不會同時塞好幾張給後端。每張各自一段 session。
   const batchQueue = useRef<Promise<unknown>>(Promise.resolve());
   // 每次重來（清掉、換一批、離開）加一，舊的那批還在跑的回呼就不再動畫面。
@@ -1239,6 +1248,7 @@ export function App() {
     setAllHold(null);
     // 總覽之前講過的話接回來；沒存過（或過期了）就從現在這幾張重新開場。
     const keyOf = new Map(Object.entries(nextRuns).map(([key, r]) => [r.sessionId, key]));
+    setRedo(new Set((saved?.redo || []).map((sid) => keyOf.get(sid)).filter((x): x is string => !!x)));
     setOverview(saved?.turns ? unpackOverview(saved, (sid) => keyOf.get(sid)) : []);
     for (const [id, h] of Object.entries(saved?.hints || {})) turnHints.current[id === "intro" ? `intro-${epoch}` : id] = h;
     savedOverview.current = "";
@@ -1418,6 +1428,7 @@ export function App() {
     setBatchFailed({});
     setRenderSent(new Set());
     setAllHold(null);
+    setRedo(new Set());
     setAllSettings(null);
     setOverview([]);
     savedOverview.current = "";
@@ -1806,12 +1817,12 @@ export function App() {
     const id = batchId.current;
     if (!id || !batch || !overview.length) return;
     if (!Object.values(batchRuns).some((r) => r.sessionId)) return;
-    const body = packOverview(overview, turnHints.current, `intro-${batchEpoch.current}`, (k) => batchRuns[k]?.sessionId);
+    const body = packOverview(overview, turnHints.current, `intro-${batchEpoch.current}`, (k) => batchRuns[k]?.sessionId, redo);
     const text = JSON.stringify(body);
     if (text === savedOverview.current) return;
     savedOverview.current = text;
     overviewSaving.current = overviewSaving.current.then(() => api.saveBatchOverview(id, body).catch(() => {}));
-  }, [overview, batchRuns, batchLive, photoLoad, allHold]);
+  }, [overview, batchRuns, batchLive, photoLoad, allHold, redo]);
   const unstarted = (key: string) => {
     const r = batchRunsRef.current[key];
     return !r || !!r.error;
@@ -1828,6 +1839,30 @@ export function App() {
     const p = livePhoto(key);
     return p && canRenderInAll(p) ? p : null;
   };
+  // 美化過、現在沒在跑的那張。每張都這樣時，總覽說的需求和設定改成套到它們身上，再按「全部再美化」。
+  const doneLive = (key: string): Photo | null => {
+    const p = livePhoto(key);
+    return p && p.active_version && !isBusy(p) && !p.queued_render && !p.pending_render && p.status !== "failed" ? p : null;
+  };
+  // 總覽說的話落得到的那張：還沒美化的照舊；每張都美化過了，美化好的也算。
+  const overviewLive = (key: string): Photo | null => renderableLive(key) || (overviewFinished() ? doneLive(key) : null);
+  // 每張都美化過了（沒開始的、還沒美化的、在跑的都沒有；失敗的不算數），至少有一張美化好。
+  function overviewFinished() {
+    if (!batch || allHold) return false;
+    const keys = batch.map(sourceSrc);
+    const quiet = (k: string) => {
+      const p = livePhoto(k);
+      return !!p && !isBusy(p) && !p.queued_render && !p.pending_render;
+    };
+    return keys.every((k) => !unstarted(k) && !renderSent.has(k) && !renderableLive(k) && quiet(k)) && keys.some((k) => !!doneLive(k));
+  }
+  // 「全部再美化」送的：總覽改過的那幾張；沒改過就是每張美化好的。
+  const redoKeys = () => {
+    const done = (batch || []).map(sourceSrc).filter((k) => !!doneLive(k));
+    const marked = done.filter((k) => redo.has(k));
+    return marked.length ? marked : done;
+  };
+  const markRedo = (keys: string[]) => keys.length && setRedo((s) => new Set([...s, ...keys]));
   // 每張現在跑到哪，總覽的提示和「跑完了」那句照這個算。
   const progress = batch ? batch.map((s) => batchProgress(batchRuns[sourceSrc(s)], livePhoto(sourceSrc(s)), batchFailed[sourceSrc(s)])) : [];
   // 總覽照時序記進度：有照片開始跑（在總覽按的已經有那句「開始了」，不再記），跑的從有變成沒有就記一句
@@ -1843,6 +1878,9 @@ export function App() {
     const same = was.epoch === batchEpoch.current;
     // 分析好的那張換了長寬比，後端會重新構圖，那段也算在跑，但不是新開始的，不另外講一句「開始分析了」。
     const fresh = runningKeys.filter((k) => (!same || !was.keys.includes(k)) && livePhoto(k)?.status !== "reframing");
+    // 在單張頁已經再美化的，不用在總覽再送一次。
+    const rendering = runningKeys.filter((k) => { const p = livePhoto(k); return !!p && photoState(p).key === "processing"; });
+    if (rendering.some((k) => redo.has(k))) setRedo((s) => new Set([...s].filter((k) => !rendering.includes(k))));
     if (fresh.length) {
       const verbs = new Set(fresh.map((k) => {
         const p = livePhoto(k);
@@ -2144,15 +2182,18 @@ export function App() {
     }
   }
 
-  async function renderStarted(key: string, id: string, pid: string, plan: Parameters<typeof renderMeta>[1]) {
+  async function renderStarted(key: string, id: string, pid: string, plan: Parameters<typeof renderMeta>[1],
+    chip = { label: "一鍵美化", icon: "spark" }) {
     const epoch = batchEpoch.current;
     try {
-      await sendRender(key, id, pid, plan);
+      await sendRender(key, id, pid, plan, chip);
     } finally {
       if (epoch === batchEpoch.current) markRenderSent([key], false);
     }
   }
-  async function sendRender(key: string, id: string, pid: string, plan: Parameters<typeof renderMeta>[1]) {
+  // chip 是那張對話裡這次美化掛的鍵名：總覽的「全部再美化」在單張裡就是「再美化」。
+  async function sendRender(key: string, id: string, pid: string, plan: Parameters<typeof renderMeta>[1],
+    chip = { label: "一鍵美化", icon: "spark" }) {
     try {
       const overwrite = liveMode.current[key];
       if (overwrite !== undefined) {
@@ -2167,7 +2208,8 @@ export function App() {
     const full = await api.getSession(id).catch(() => null);
     if (!full) return;
     const last = [...(full.messages || [])].reverse().find((m) => m.card?.type === "render_requested" && m.card.photo_id === pid);
-    if (last && caps) rememberRenderLabel([last.id], { label: "一鍵美化", icon: "spark", meta: renderMeta(caps, plan) });
+    const sent = full.photos.find((x) => x.photo_id === pid)?.plan || plan;
+    if (last && caps) rememberRenderLabel([last.id], { ...chip, meta: renderMeta(caps, sent) });
     if (session?.session_id === id) setSession(full);
     else {
       const np = full.photos.find((x) => x.photo_id === pid);
@@ -2286,13 +2328,19 @@ export function App() {
     const keys = batch.map(sourceSrc);
     const pending = keys.filter(unstarted).length;
     const unrendered = keys.filter(needsRender).length;
-    const scope = {
-      photos: keys.length,
-      unrendered,
-      analyze: pending ? allLabel("analyze", pending, keys.length) : "",
-      render: unrendered ? allLabel("render", unrendered, keys.length) : "",
-      where: drawerLayout ? "上面的照片" : "左邊的「我的照片」",
-    };
+    const where = drawerLayout ? "上面的照片" : "左邊的「我的照片」";
+    // 每張都美化過了：不提分析，這句發到每一張，鍵是「全部再美化」。
+    const finished = overviewFinished();
+    const doneN = keys.filter((k) => !!doneLive(k)).length;
+    const scope = finished
+      ? { photos: keys.length, unrendered: doneN, analyze: "", render: redoLabel(doneN, keys.length), where, redo: true }
+      : {
+        photos: keys.length,
+        unrendered,
+        analyze: pending ? allLabel("analyze", pending, keys.length) : "",
+        render: unrendered ? allLabel("render", unrendered, keys.length) : "",
+        where,
+      };
     let r: Awaited<ReturnType<typeof api.promptReview>>;
     try {
       r = await api.promptReview(text, kept.join("；"), history, [], [], scope);
@@ -2328,19 +2376,36 @@ export function App() {
     if (r.start) overviewStart(r.start);
   }
   // 一句需求發到每張還沒美化的照片：還沒開始的進它的草稿，開始過、還沒美化的接在它的個人化需求後面。
+  // 每張都美化過了，就接在每一張的個人化需求後面，等按「全部再美化」。
   function spreadWish(text: string) {
     const keys = (batch || []).map(sourceSrc);
+    const finished = overviewFinished();
     const open = keys.filter(unstarted);
-    const live = keys.filter((k) => !unstarted(k) && renderableLive(k));
+    const live = keys.filter((k) => !unstarted(k) && overviewLive(k));
     for (const k of open) {
       const d = drafts.current[k] || freshDraft();
       const note: Note = { order: nextDisplayOrder(), replyOrder: nextDisplayOrder(), text, persons: [], kept: true, reply: OVERVIEW_NOTE_REPLY };
       drafts.current[k] = { ...d, notes: [...d.notes, note], renderAsk: null };
     }
     for (const k of live) void wishLive(k, text);
+    if (finished) markRedo(live);
     const count = open.length + live.length;
-    return { count, skipped: keys.length - count };
+    // 每張都在跑、一張都接不住：先排著，跑完再發（見底下那個 effect），不要說記下了又說不會套用。
+    if (!count && runningKeys.length) return { count, skipped: 0, held: true, queued: true };
+    return { count, skipped: keys.length - count, ...(finished ? { redo: true } : {}) };
   }
+  // 排著的那幾句：這批跑完（沒有在跑、剛送出的也有著落了）就發到每一張。
+  useEffect(() => {
+    if (!batch || allHold || runningKeys.length || renderSent.size) return;
+    const waiting = overview.filter((t): t is Extract<OverviewTurn, { kind: "wish" }> =>
+      t.kind === "wish" && !!t.queued && !t.gone && !t.pending);
+    if (!waiting.length) return;
+    const sent = new Map(waiting.map((t) => [t.id, spreadWish(t.line || t.text)]));
+    setOverview((ts) => ts.map((t) => {
+      const r = sent.get(t.id);
+      return r && t.kind === "wish" ? { ...t, ...r, held: true, queued: false } : t;
+    }));
+  }, [runningSig, allHold, renderSent, overview, batchLive]);
   // spreadWish 的反面：總覽發出去的那句，從還沒開始的草稿裡拿掉，開始過、還沒美化的從個人化需求刪掉那一行。
   function unspreadWish(text: string) {
     for (const k of (batch || []).map(sourceSrc)) {
@@ -2350,29 +2415,40 @@ export function App() {
         continue;
       }
       const r = batchRuns[k];
-      const p = renderableLive(k);
+      const p = overviewLive(k);
       if (!r?.sessionId || !p) continue;
       const before = p.plan.user_prompt || "";
       const after = before.split("\n").filter((l) => l.trim() !== text).join("\n");
       if (after === before) continue;
       const id = r.sessionId;
-      void api.patchPhotoPlan(id, p.photo_id, { user_prompt: after }).then(({ plan }) => {
+      if (p.active_version) markRedo([k]);
+      livePatch(api.patchPhotoPlan(id, p.photo_id, { user_prompt: after }).then(({ plan }) => {
         if (session?.session_id === id)
           setSession((s) => s && s.session_id === id ? { ...s, photos: s.photos.map((x) => (x.photo_id === p.photo_id ? { ...x, plan } : x)) } : s);
         else setBatchLive((m) => (m[k] ? { ...m, [k]: { ...m[k], plan } } : m));
-      }).catch((e) => setError(notice(errorText(e))));
+      }).catch((e) => setError(notice(errorText(e)))));
     }
   }
+  // 總覽改到照片 plan 的請求：「全部再美化」等它們都回來才送，才不會照改之前的美化。
+  const livePatches = useRef<Promise<unknown>>(Promise.resolve());
+  const livePatch = (job: Promise<unknown>) => {
+    livePatches.current = Promise.all([livePatches.current, job.catch(() => {})]);
+  };
   async function wishLive(key: string, text: string) {
     const r = batchRuns[key];
-    const p = renderableLive(key);
+    const p = overviewLive(key);
     if (!r?.sessionId || !p) return;
     const before = (p.plan.user_prompt || "").trim();
     const id = r.sessionId;
     try {
-      const { plan } = await api.patchPhotoPlan(id, p.photo_id, { user_prompt: before ? `${before}\n${text}` : text });
-      liveAsk.current.add(key);
-      delete liveMode.current[key];
+      const sent = api.patchPhotoPlan(id, p.photo_id, { user_prompt: before ? `${before}\n${text}` : text });
+      livePatch(sent);
+      const { plan } = await sent;
+      // 美化過的那張照它原本的方式再美化，不用再問整體美化還是僅依需求修改。
+      if (!p.active_version) {
+        liveAsk.current.add(key);
+        delete liveMode.current[key];
+      }
       if (session?.session_id === id)
         setSession((s) => s && s.session_id === id ? { ...s, photos: s.photos.map((x) => (x.photo_id === p.photo_id ? { ...x, plan } : x)) } : s);
       else setBatchLive((m) => (m[key] ? { ...m, [key]: { ...m[key], plan } } : m));
@@ -2386,7 +2462,9 @@ export function App() {
     keepOwn.current = new Set();
     // 分析引擎只有還沒開始的用得到；開的當下沒有這種照片就不擺，之後回頭看也照當時的。
     const model = !!batch?.some((s) => unstarted(sourceSrc(s)));
-    setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "settings", settings: allSettings, from: allSettings, model }]);
+    const redo = overviewFinished();
+    setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "settings", settings: allSettings, from: allSettings, model,
+      ...(redo ? { redo } : {}) }]);
   }
   // 美化用得到的那幾項（分析引擎分析完就用不到了）。人像修正補上預設值，沒寫的跟寫了預設的才算一樣。
   const renderPart = (x: Partial<Settings>) => ({
@@ -2398,13 +2476,15 @@ export function App() {
   // 長寬比不一樣時後端會自己重新構圖。引擎在一般帳號可能不給改，被擋就不帶這項。
   async function patchLive(key: string, next: Settings) {
     const r = batchRuns[key];
-    const p = renderableLive(key);
+    const p = overviewLive(key);
     if (!r?.sessionId || !p) return;
     const patch: Plan = renderPart(next);
-    await api.patchPhotoPlan(r.sessionId, p.photo_id, patch).catch(() => {
+    const sent = api.patchPhotoPlan(r.sessionId, p.photo_id, patch).catch(() => {
       const { render_option, ...rest } = patch;
       return api.patchPhotoPlan(r.sessionId!, p.photo_id, rest);
     }).catch((e) => setError(notice(errorText(e))));
+    livePatch(sent);
+    await sent;
     const full = await api.getSession(r.sessionId).catch(() => null);
     if (!full) return;
     if (session?.session_id === r.sessionId) setSession(full);
@@ -2421,6 +2501,18 @@ export function App() {
     setAllSettings(next);
     setSettings(next);
     setOverview((t) => t.map((x, i) => (i === t.length - 1 && x.kind === "settings" ? { ...x, settings: next } : x)));
+    // 每張都美化過了：換到每一張自己的 plan，等按「全部再美化」；在單張頁改過的也一起換，
+    // 這裡改就是要整批一樣。
+    if (overviewFinished()) {
+      if (!renderChanged) return;
+      const keys = batch.map(sourceSrc).filter((k) => {
+        const p = doneLive(k);
+        return !!p && JSON.stringify(renderPart(p.plan)) !== JSON.stringify(renderPart(next));
+      });
+      for (const k of keys) void patchLive(k, next);
+      markRedo(keys);
+      return;
+    }
     const own: { key: string; i: number }[] = [];
     batch.forEach((s, i) => {
       const key = sourceSrc(s);
@@ -2454,6 +2546,10 @@ export function App() {
   // 總覽的全部分析／全部一鍵美化。一鍵美化時有需求、還沒選怎麼套用的，先在總覽問一次。
   function overviewStart(mode: "analyze" | "render") {
     if (!batch || busy || preAsk) return;
+    if (mode === "render" && overviewFinished()) {
+      void overviewRedo();
+      return;
+    }
     if (mode === "render") {
       const unasked = batch.map(sourceSrc).filter((k) => unstarted(k)
         ? batchWished(k) && drafts.current[k]?.renderAsk?.overwrite === undefined
@@ -2478,6 +2574,29 @@ export function App() {
     }
     setOverview((t) => t.map((x, i) => (i === t.length - 1 && x.kind === "ask" ? { ...x, overwrite } : x)));
     overviewGo("render", overwrite);
+  }
+  // 「全部再美化」：每張都美化過了，照總覽改過的需求和設定再美化一次。
+  async function overviewRedo() {
+    if (!batch || busy || preAsk) return;
+    const keys = redoKeys();
+    if (!keys.length) return;
+    const epoch = batchEpoch.current;
+    setError("");
+    // 什麼都沒改也能按：照原本的需求和設定再跑一次，回話講清楚。
+    const same = !(batch || []).some((s) => redo.has(sourceSrc(s)));
+    setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "start", mode: "render", count: keys.length, keys,
+      label: redoLabel(keys.length, batch.length), redo: true, ...(same ? { same } : {}) }]);
+    setAllHold({ keys, pending: 0, renderable: 0 });
+    markRenderSent(keys, true);
+    setRedo(new Set());
+    await livePatches.current;
+    if (epoch !== batchEpoch.current) return;
+    for (const k of keys) {
+      const r = batchRuns[k];
+      const p = livePhoto(k);
+      if (r?.sessionId && p) void renderStarted(k, r.sessionId, p.photo_id, p.plan, { label: "再美化", icon: "redo" });
+      else markRenderSent([k], false);
+    }
   }
   const renderLabelNow = () => batch ? allLabel("render", batch.filter((x) => needsRender(sourceSrc(x))).length, batch.length) : undefined;
   function overviewGo(mode: "analyze" | "render", overwrite?: boolean) {
@@ -3421,8 +3540,18 @@ export function App() {
     const notYet = todo + failed;
     const untouched = progress.every((x) => x === "todo");
     // 桌機上這則底下會放「全部…」那排鍵，句子裡的鍵就說「下面」；照片還是在左邊。
-    const labels = { analyze: allLabel("analyze", pending, batch.length), render: allLabel("render", renderableAll, batch.length) };
-    const chipsNow: OverviewChips | null = !drawerLayout && (pending || renderable) ? { pending: !!pending, renderable: !!renderable, labels } : null;
+    // 每張都美化過了：對話照樣能講，需求和設定落到每一張，改過的那幾張用「全部再美化」再跑一次。
+    const finished = overviewFinished();
+    const redoN = finished ? batch.filter((s) => redo.has(sourceSrc(s)) && !!doneLive(sourceSrc(s))).length : 0;
+    // 「全部再美化」每張都美化過就給；沒改過時照原本的再跑一次，提示和鍵的說明會講。
+    const redoAll = finished ? redoKeys().length : 0;
+    const redoTitle = redoN ? "總覽改過需求或設定的那幾張，照改過的再美化一次"
+      : "還沒改過需求或設定，會照原本的再美化一次，結果可能跟上次不太一樣";
+    const redoLbl = redoLabel(redoKeys().length, batch.length);
+    const labels = { analyze: allLabel("analyze", pending, batch.length), render: allLabel("render", renderableAll, batch.length), redo: redoLbl };
+    const chipsNow: OverviewChips | null = drawerLayout ? null
+      : finished ? { pending: false, renderable: false, finished: true, redo: !!redoAll, labels }
+      : pending || renderable ? { pending: !!pending, renderable: !!renderable, labels } : null;
     const btn = chipsNow ? "下面" : spot;
     let statusHint = "";
     if (running) {
@@ -3436,6 +3565,17 @@ export function App() {
         : lastTurn?.kind === "running" || lastTurn?.kind === "start"
           ? ""
           : `還有 ${running} 張處理中，完成後我會在這裡說；想看哪張的進度，從${where}選取那張。`;
+    } else if (finished) {
+      // 剛報完「跑完了」，看結果那句已經講過，只補還能怎麼改。
+      // 剛跑完、排著的需求也套用好了：只講按哪顆，不再從「想再調整」講起。
+      const applied = lastTurn?.kind === "done" && redoN > 0;
+      const again = redoN ? `改好了按${btn}的「${redoLbl}」重新美化。`
+        : `改好了按${btn}的「${redoLbl}」重新美化；沒改直接按，會照原本的需求和設定再美化一次，結果可能跟上次不太一樣。`;
+      statusHint = applied
+        ? `剛剛說的已經套用到每一張，按${btn}的「${redoLbl}」就照這樣重新美化。`
+        : `${lastTurn?.kind === "done" ? "" : `每張都美化好了，從${where}選取照片就能看結果。`}`
+        + `想再調整，直接打字告訴我，或按${btn}的「設定」，會套用到每一張；${again}`
+        + (failed && lastTurn?.kind !== "done" ? `另外有 ${failed} 張沒有成功，選取那張可以看原因。` : "");
     } else if (!untouched) {
       // 剛報完「跑完了」，分析好、失敗幾張那句已經講過，這裡只補它沒提到的、還沒開始的那幾張。
       const afterDone = lastTurn?.kind === "done";
@@ -3460,10 +3600,12 @@ export function App() {
     // 不然會把剛送去美化的那張也算成「分析好了，還沒美化」。
     const at = (k: string) => progress[batch.findIndex((x) => sourceSrc(x) === k)];
     // 打字問的那則還在等回話：先不定下來，不然下一步那句會搶在回話前面冒出來。
+    // 排著的需求還沒發出去也先等：不然「跑完了」那句會搶在套用之前定下來。
     const settling = loadingPhotos || !!allHold || (lastTurn?.kind === "wish" && !!lastTurn.pending)
+      || overview.some((t) => t.kind === "wish" && !!t.queued && !t.gone)
       || (lastTurn?.kind === "start" && lastTurn.keys.some((k) =>
         at(k) === "todo" || (lastTurn.mode === "render" && at(k) === "analyzed")));
-    const named = statusHint.includes(`「${labels.analyze}」`) || statusHint.includes(`「${labels.render}」`);
+    const named = (finished && !!statusHint) || statusHint.includes(`「${labels.analyze}」`) || statusHint.includes(`「${labels.render}」`);
     // 打字問的那則，下一步跟著回話走：沒收下的，後端回話時就附好選項（答完沒問什麼的也補上開始鍵）；
     // 收下的，「全部…」那排接在回話底下。不再另起一則講一樣的話——不然每打一句，最底下就又多一句。
     const snap = lastTurn?.kind === "wish" ? { text: "", chips: chipsNow } : { text: statusHint, chips: named ? chipsNow : null };
@@ -3477,9 +3619,10 @@ export function App() {
     // 手機的照片格就在對話上面，不另外放。
     const chipRow = (c: OverviewChips | null | undefined, live: boolean) => {
       if (!c) return null;
-      const has = live ? { pending: !!pending, renderable: !!renderable, labels } : c;
+      const has: OverviewChips = live
+        ? { pending: !finished && !!pending, renderable: !finished && !!renderable, finished, redo: !!redoAll, labels } : c;
       const lb = has.labels || { analyze: "全部分析", render: "全部一鍵美化" };
-      if (live && (askOpen || drawerLayout || !(has.pending || has.renderable))) return null;
+      if (live && (askOpen || drawerLayout || !(has.pending || has.renderable || has.finished))) return null;
       return (
         <div class="chat-choices chat-actions">
           <div class="chat-actions-aux">
@@ -3496,6 +3639,11 @@ export function App() {
                 title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
                 onClick={() => overviewStart("render")} />
             ) : null}
+            {has.redo ? (
+              <Chip label={lb.redo || "全部再美化"} icon="redo" kind={live ? "primary" : undefined} settled={!live} disabled={overviewHeld}
+                title={redoTitle}
+                onClick={() => void overviewRedo()} />
+            ) : null}
           </div>
         </div>
       );
@@ -3510,7 +3658,9 @@ export function App() {
     const introLive = !hint && overview.every((t) => t === first && t.kind === "upload");
     const settingsSaid = (t: Extract<OverviewTurn, { kind: "settings" }>) => {
       const changed = caps && t.from && t.settings ? settingsChanges(caps, t.from, t.settings, t.model) : [];
-      return changed.length ? `好，${changed.join("、")}，會套用到每張還沒美化的照片。` : "設定沒有改動。";
+      return !changed.length ? "設定沒有改動。"
+        : t.redo ? `好，${changed.join("、")}，每一張再美化時都會照這個。`
+        : `好，${changed.join("、")}，會套用到每張還沒美化的照片。`;
     };
     // 總覽：沒有中間那格預覽，對話直接佔滿。桌機的照片和「全部…」都在左邊「我的照片」，
     // 對話上面不再擺一份；「我的照片」收成抽屜時，才在對話上面放成果格。
@@ -3535,6 +3685,11 @@ export function App() {
             onPick={pickBatch}
             onStartAll={overviewStart}
             onSettings={overviewEditSettings}
+            finished={finished}
+            redo={redoAll}
+            redoLabel={redoLbl}
+            redoTitle={redoTitle}
+            onRedo={() => void overviewRedo()}
             onMore={() => setRevealDrawer((n) => n + 1)}
             onAdd={busy || loadingPhotos ? undefined : appendFiles}
             onSamples={busy || loadingPhotos ? undefined : showSamples}
@@ -3549,7 +3704,7 @@ export function App() {
               onFiles={appendFiles}
               attachTitle="新增照片"
               onSample={showSamples}
-              disabled={overviewHeld || !(pending || renderable || running)}
+              disabled={overviewHeld || !(pending || renderable || running || finished)}
               onSend={async (text) => {
                 if (!text) return false;
                 void overviewSay(text);
@@ -3558,6 +3713,7 @@ export function App() {
               clearKey={preClear}
               placeholder={pending ? ["想怎麼美化這幾張？會套用到每一張", "想怎麼美化這幾張？"]
                 : renderable ? ["還沒美化的這幾張想怎麼修？會套用到每一張", "還沒美化的這幾張想怎麼修？"]
+                : finished ? ["想再怎麼修這幾張？會套用到每一張", "想再怎麼修這幾張？"]
                 // 輸入框跟著現在的狀態走：還有在跑的說在跑，全部好了才說好了。
                 : running ? `還有 ${running} 張處理中，從${where}選取照片看進度`
                 : `每張都美化好了，從${where}選取照片看結果`}
@@ -3642,14 +3798,22 @@ export function App() {
                           onOwn={(o) => void overviewSay(o)} />
                       );
                     })()}
+                    {/* 沒問什麼的（撤回、回答完）也照樣給現在按得到的鍵，不讓對話停在這裡。 */}
+                    {!t.options?.length && chipRow(turnHints.current[t.id]?.chips, latest)}
                   </AssistantMsg>
                 ) : null
               ) : (
                 <AssistantMsg>
                   <p class="chat-text">
-                    {t.count && t.reply ? t.reply : <>
+                    {/* 排著的那句維持說的當下那樣；跑完套用好了，由「跑完了」那則一起講。 */}
+                    {t.held ? <>
                     {t.line && `好，記下了：${t.line}。`}
-                    {t.count
+                    {`${t.line ? "" : "好，"}這幾張還在美化，等美化好我會把這句套用到每一張，到時按「全部再美化」就會照這樣重新美化。`}
+                    </> : t.count && t.reply ? t.reply : <>
+                    {t.line && `好，記下了：${t.line}。`}
+                    {t.count && t.redo
+                      ? `${t.line ? "" : "好，"}這句會套用在 ${t.count} 張上，按「${t.count >= batch.length ? "全部再美化" : `再美化 ${t.count} 張`}」就照這樣重新美化。只想改某一張，從${where}選取那張調整。`
+                      : t.count
                       ? `${t.line ? "" : "好，"}這句會套用在 ${t.count} 張還沒美化的照片上。${t.skipped ? `已經在美化或美化好的 ${t.skipped} 張不會套用。` : ""}只想改某一張，從${where}選取那張調整。`
                       : "每張都已經在美化或美化好了，這句不會套用；要改哪一張，到那張的結果頁說就好。"}
                     </>}
@@ -3665,7 +3829,9 @@ export function App() {
               <UserMsg><ClickBubble icon="tune" label="設定" /></UserMsg>
               {latest && caps && settings ? (
                 <AssistantMsg>
-                  <p class="chat-text">{t.model
+                  <p class="chat-text">{t.redo
+                    ? "好，調整下面的設定，會套用到每一張，再美化時生效。"
+                    : t.model
                     ? "好，調整下面的設定，會套用到每張還沒美化的照片；分析引擎只有還沒分析的用得到。"
                     : "好，調整下面的設定，會套用到每張還沒美化的照片。"}</p>
                   <SettingsEditor caps={caps} settings={settings} onChange={overviewSettings} hideModel={!t.model} />
@@ -3706,10 +3872,10 @@ export function App() {
           const asked = overview[i - 1]?.kind === "ask";
           return (
             <div key={t.id}>
-              {!asked && <UserMsg><ClickBubble icon={t.mode === "analyze" ? "search" : "spark"} label={t.label || (t.mode === "analyze" ? "全部分析" : "全部一鍵美化")} /></UserMsg>}
+              {!asked && <UserMsg><ClickBubble icon={t.mode === "analyze" ? "search" : t.redo ? "redo" : "spark"} label={t.label || (t.mode === "analyze" ? "全部分析" : "全部一鍵美化")} /></UserMsg>}
               <AssistantMsg>
                 <p class="chat-text">
-                  {`好，${t.count} 張開始${t.mode === "analyze" ? "分析" : t.overwrite ? "調整" : "美化"}了，全部完成後我會在這裡說；想看哪張的進度，從${where}選取那張。`}
+                  {`好，${t.count} 張開始${t.mode === "analyze" ? "分析" : t.same ? "照原本的需求和設定重新美化" : t.redo ? "重新美化" : t.overwrite ? "調整" : "美化"}了，全部完成後我會在這裡說；想看哪張的進度，從${where}選取那張。`}
                 </p>
               </AssistantMsg>
             </div>
@@ -3754,6 +3920,11 @@ export function App() {
                     // 一鍵美化正在問怎麼套用：先回答那一題，「全部…」等一下。剛按過「全部…」也等一下。
                     actionsHeld={(!source && askOpen) || !!allHold}
                     onSettings={source ? undefined : overviewEditSettings}
+                    finished={!source && finished}
+                    redo={source ? 0 : redoAll}
+                    redoLabel={redoLbl}
+                    redoTitle={redoTitle}
+                    onRedo={source ? undefined : () => void overviewRedo()}
                     onRemove={busy || loadingPhotos ? undefined : removeFromBatch}
                     onClear={busy || anyRun || loadingPhotos ? undefined : clearBatch}
                     onAdd={busy || loadingPhotos ? undefined : appendFiles}
@@ -4055,6 +4226,12 @@ export function BatchPreSidebar(props: {
   onSettings?: () => void;
   // 「全部…」暫時不能按，但照片還能點（總覽正在問一鍵美化怎麼套用）。
   actionsHeld?: boolean;
+  // 總覽時每張都美化過了：「設定」照樣在；總覽改過的那幾張有「全部再美化」。
+  finished?: boolean;
+  redo?: number;
+  redoLabel?: string;
+  redoTitle?: string;
+  onRedo?: () => void;
   onRemove?: (i: number) => void;
   onClear?: () => void;
   onAdd?: (files: File[]) => void;
@@ -4174,7 +4351,7 @@ export function BatchPreSidebar(props: {
               <Icon name="next" size={14} />
             </button>
           )}
-          {pending || renderable ? (
+          {pending || renderable || (props.finished && props.onSettings) ? (
             // 每次進到總覽重新掛一次，那兩顆就再跳一下，提示這裡可以一次處理全部。
             <div key={props.overview ? "overview" : "single"} class={`batch-sidebar-all${props.overview && !held ? " is-nudge" : ""}`}>
               {props.onSettings ? <Chip
@@ -4202,6 +4379,17 @@ export function BatchPreSidebar(props: {
                 disabled={held}
                 title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
                 onClick={() => startAll("render")}
+              /> : null}
+              {props.redo && props.onRedo ? <Chip
+                label={props.redoLabel || "全部再美化"}
+                icon="redo"
+                kind="primary"
+                disabled={held}
+                title={props.redoTitle}
+                onClick={() => {
+                  close();
+                  props.onRedo!();
+                }}
               /> : null}
             </div>
           ) : null}
@@ -4335,6 +4523,12 @@ function BatchOverviewGrid(props: {
   onPick: (s: Source) => void;
   onStartAll: (mode: "analyze" | "render") => void;
   onSettings: () => void;
+  // 每張都美化過了：「設定」照樣在；總覽改過的那幾張有「全部再美化」。
+  finished?: boolean;
+  redo?: number;
+  redoLabel?: string;
+  redoTitle?: string;
+  onRedo?: () => void;
   // 手機上「我的照片」是抽屜：「顯示全部」改成打開抽屜，不另外開一個面板。
   onMore?: () => void;
   // 跟「我的照片」標題列那幾顆一樣：新增、全部清除、每格的 ×。不給就不出現（例如正在跑）。
@@ -4482,7 +4676,7 @@ function BatchOverviewGrid(props: {
           </div>
         </>
       )}
-      {props.pending || props.renderable ? (
+      {props.pending || props.renderable || props.finished ? (
         // 總覽上一次處理全部的按鈕只放這裡：固定在對話上面，不會被新訊息捲走。
         <div class="batch-grid-actions">
           <Chip label="設定" icon="tune" kind="ghost" disabled={props.actionsHeld} onClick={props.onSettings} />
@@ -4495,6 +4689,11 @@ function BatchOverviewGrid(props: {
             <Chip label={allLabel("render", props.renderable, props.sources.length)} icon="spark" kind="primary" disabled={props.actionsHeld}
               title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
               onClick={() => props.onStartAll("render")} />
+          ) : null}
+          {props.redo && props.onRedo ? (
+            <Chip label={props.redoLabel || "全部再美化"} icon="redo" kind="primary" disabled={props.actionsHeld}
+              title={props.redoTitle}
+              onClick={props.onRedo} />
           ) : null}
         </div>
       ) : null}
