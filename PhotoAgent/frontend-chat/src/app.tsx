@@ -942,8 +942,10 @@ export function App() {
   const gen = useRef(0);
   // 進 session 時要停在哪張。
   const pendingActive = useRef<string | null>(null);
-  // 剛按開始的那張：傳好就打開它的結果頁。中途切到別張就不跳了。
+  // 正在看的那張還在上傳（剛按開始，或上傳中點過來的）：傳好就打開它的結果頁。中途切到別張就不跳了。
   const follow = useRef<string | null>(null);
+  // 跟著跳的那張正在打開結果頁：進度卡留到打開為止。
+  const [jumping, setJumping] = useState<string | null>(null);
   const batchKey = source ? sourceSrc(source) : null;
   // 總覽頁（多張、沒有打開哪一張）自己的對話：送出的共用需求、開過的設定、一起開始的紀錄。
   const [overview, setOverview] = useState<OverviewTurn[]>([]);
@@ -1923,9 +1925,14 @@ export function App() {
     if (!batch || preAsk || busy) return;
     const nextKey = sourceSrc(next);
     if (nextKey === batchKey) return;
-    follow.current = null;
+    follow.current = uploadingRun(nextKey) ? nextKey : null;
     snapshotDraft();
     applyDraft(next, drafts.current[nextKey] || freshDraft());
+  }
+  // 已經開始、還沒傳好的那張：點過去先看上傳進度，傳好就直接接到它的分析對話。
+  function uploadingRun(key: string) {
+    const r = batchRunsRef.current[key];
+    return !!r && !r.done && !r.error;
   }
 
   type BatchJob = {
@@ -2217,9 +2224,14 @@ export function App() {
   function openBatchResult(key: string) {
     const sid = batchRunsRef.current[key]?.sessionId;
     if (!sid) return;
+    const followed = follow.current === key;
     follow.current = null;
     if (phase === "chat") snapshotDraft();
-    void openSession(sid).then(() => refreshSessions());
+    if (followed) setJumping(key);
+    void openSession(sid).then(() => {
+      if (followed) setJumping(null);
+      return refreshSessions();
+    });
   }
   // 從結果頁回上傳頁，打開點的那張。
   function backToBatch(next: Source) {
@@ -2228,6 +2240,7 @@ export function App() {
     setSessionHash(null);
     setPhase("chat");
     const key = sourceSrc(next);
+    follow.current = uploadingRun(key) ? key : null;
     if (key !== batchKey) applyDraft(next, drafts.current[key] || freshDraft());
     window.scrollTo(0, 0);
   }
@@ -3321,7 +3334,8 @@ export function App() {
         busy={busy || batchActive}
         starting={batch ? (batchActive ? batchRun! : null) : starting}
         error={batchRun?.error || error}
-        batch={batchIndex >= 0 ? { index: batchIndex, done: !!batchRun?.done, onOpen: () => batchKey && openBatchResult(batchKey) } : undefined}
+        // 傳好就要自己跳到結果頁的那張，進度卡留到跳過去，不先閃一下「看結果」。
+        batch={batchIndex >= 0 ? { index: batchIndex, done: !!batchRun?.done && follow.current !== batchKey && jumping !== batchKey, onOpen: () => batchKey && openBatchResult(batchKey) } : undefined}
         onUpload={() => fileInput.current?.click()}
         onView={() => setViewing(true)}
         onSamples={showSamples}
@@ -3383,7 +3397,9 @@ export function App() {
     const lastTurn = overview[overview.length - 1];
     // 一鍵美化正在問怎麼套用：選項就是那兩顆，底下那排先收起來。
     const askOpen = lastTurn?.kind === "ask" && lastTurn.overwrite === undefined;
-    const overviewHeld = busy || !!preAsk || loadingPhotos || !!allHold || overview.some((t) => t.kind === "wish" && t.pending);
+    // 點照片只是換去看那張，不用等「全部…」送出的那幾張有著落；上傳中點了看得到它的進度。
+    const pickHeld = busy || !!preAsk || loadingPhotos || overview.some((t) => t.kind === "wish" && t.pending);
+    const overviewHeld = pickHeld || !!allHold;
     // 最早那次上傳；從結果頁接回來的一批沒有這筆，就拿現在這幾張當開頭。
     const first = overview[0];
     const firstUpload = first?.kind === "upload" ? first.srcs : batch.map(sourceSrc);
@@ -3510,7 +3526,7 @@ export function App() {
             wished={batchWished}
             pending={pending}
             renderable={renderableAll}
-            disabled={overviewHeld}
+            disabled={pickHeld}
             // 一鍵美化正在問怎麼套用：先回答那一題，「全部…」那排等一下。
             actionsHeld={overviewHeld || askOpen}
             onPick={pickBatch}
