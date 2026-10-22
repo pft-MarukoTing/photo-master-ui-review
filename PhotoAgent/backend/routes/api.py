@@ -21,7 +21,7 @@ from backend.services.account import attach_case_analysis, create_account, clear
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, derive_preview_key, derive_view_key, cache_thumbnail, upload_report_screenshot, lost_job_error
-from backend.services.report import REPORT_CHAT_FIELDS, delete_report, get_report, get_report_by_id, get_reported_job_info, get_reports, is_admin, record_report, update_report_status
+from backend.services.report import REPORT_CHAT_FIELDS, delete_report, get_report, get_report_by_id, get_reported_job_info, get_report_chat, get_reports, is_admin, record_report, save_report_chat, update_report_status
 from backend.services.template_params import get_engine_params_template
 
 api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
@@ -470,7 +470,22 @@ def report_job():
         note=body.get("note"), user_prompt=body.get("user_prompt"), screenshot_key=screenshot_key,
         source=source, chat=chat
     )
+    _save_reported_chat(report_id, chat)
     return jsonify({"reported": True, "report_id": report_id})
+
+
+def _save_reported_chat(report_id, chat):
+    """Keeps the conversation as it is right now with the report, so the
+    admin's read-only view (report_session, routes/chat.py) shows the moment
+    of the report rather than whatever the user did after. Best effort: the
+    report is already recorded, and without a copy the view reads live."""
+    owner = (chat or {}).get("owner")
+    if not owner or not (chat.get("session_id") or chat.get("batch_id")):
+        return
+    try:
+        save_report_chat(report_id, chat_session.report_chat(owner, chat.get("session_id"), chat.get("batch_id")))
+    except Exception:
+        current_app.logger.warning("report: conversation not copied for %s", report_id, exc_info=True)
 
 
 REPORTS_MAX_PAGE = 200
@@ -493,6 +508,10 @@ def reports(user):
     except (TypeError, ValueError):
         return jsonify({"error": "limit and offset must be integers"}), 400
     reports, has_more = get_reports(limit=limit, offset=offset)
+    for entry in reports:
+        thumbnail = _chat_report_thumbnail(entry)
+        if thumbnail:
+            entry["thumbnail"] = thumbnail
     return jsonify({"reports": reports, "has_more": has_more})
 
 
@@ -507,10 +526,70 @@ def report_entry(user, report_id):
         return jsonify({"error": str(exc)}), 400
     if not is_admin(name):
         return jsonify({"error": "not authorized"}), 403
-    entry = get_report(report_id)
+    entry = get_report(report_id, job_id=request.args.get("job") or None)
     if entry is None:
         return jsonify({"error": "report not found"}), 404
+    if not entry.get("job_id"):
+        analyze_job_id = _chat_report_analyze_job(entry)
+        if analyze_job_id:
+            entry["analyze_job_id"] = analyze_job_id
     return jsonify({"report": entry})
+
+
+def _chat_report_analyze_job(entry):
+    """A chat report filed on a photo with no edit yet has no job_id, but the
+    photo still has its analysis: the analyze job, so 面板模式 can open that
+    photo the way the history drawer opens a 待美化 case. Best effort, like
+    _panel_case_chat."""
+    owner, session_id, photo_id = entry.get("owner"), entry.get("session_id"), entry.get("photo_id")
+    if not owner or not session_id or not photo_id:
+        return None
+    try:
+        session = chat_session.load_session(normalize_username(owner), session_id)
+    except Exception:
+        current_app.logger.warning("report: no conversation lookup for %s", entry.get("report_id"), exc_info=True)
+        return None
+    photo = next((p for p in (session or {}).get("photos", []) if p.get("photo_id") == photo_id), None)
+    return (photo or {}).get("analyze_job_id")
+
+
+def _chat_report_thumbnail(entry):
+    """The drawer row's thumbnail for a chat report with no job of its own
+    (a 一般回報 filed from a photo, a conversation or a batch overview), in
+    session_summary's {job_id, run} shape -- run None means the original.
+    From the report-time copy of the conversation (save_report_chat) when
+    there is one, so it shows what was on screen then. A job-tied report is
+    thumbnailed from its job_id by the drawer itself (renderReportsList,
+    app.js). Best effort, like _chat_report_analyze_job."""
+    owner, session_id, batch_id = entry.get("owner"), entry.get("session_id"), entry.get("batch_id")
+    if entry.get("job_id") or not owner or not (session_id or batch_id):
+        return None
+    try:
+        sessions = (get_report_chat(entry["report_id"]) or {}).get("sessions")
+        if sessions is None:
+            user = normalize_username(owner)
+            # A live read only needs the one session the thumbnail comes from.
+            session = chat_session.load_session(user, session_id) if session_id else next(iter(chat_session.batch_sessions(user, batch_id)), None)
+            sessions = [session] if session else []
+    except Exception:
+        current_app.logger.warning("report: no conversation lookup for %s", entry.get("report_id"), exc_info=True)
+        return None
+    # The session the report names, else (filed from a batch overview) the
+    # batch's first conversation.
+    session = next((s for s in sessions if s.get("session_id") == session_id), None) if session_id else next(iter(sessions), None)
+    if not session:
+        return None
+    photo = next((p for p in session.get("photos", []) if p.get("photo_id") == entry.get("photo_id")), None)
+    if photo:
+        version = photo.get("active_version") or {}
+        if version.get("job_id"):
+            return {"job_id": version["job_id"], "run": version.get("run") or 1}
+        return {"job_id": photo.get("analyze_job_id"), "run": None} if photo.get("analyze_job_id") else None
+    # No photo: the conversation's own tile thumbnail on the home page.
+    summary = chat_session.session_tile(session)
+    if summary.get("thumbnail_result"):
+        return summary["thumbnail_result"]
+    return {"job_id": summary["thumbnail_job_id"], "run": None} if summary.get("thumbnail_job_id") else None
 
 
 @api_bp.patch("/reports/<user>/<report_id>")
@@ -892,7 +971,11 @@ def _downscaled_result(job_id, derive_key, max_side):
     if download_error or image_bytes is None:
         return jsonify({"error": f"failed to download result image: {download_error}"}), 502
 
-    small_bytes = create_preview_bytes(image_bytes, max_side=max_side)
+    try:
+        small_bytes = create_preview_bytes(image_bytes, max_side=max_side)
+    except PILImage.UnidentifiedImageError:
+        # An analyze job's result is its analysis.json, not an image.
+        return jsonify({"error": "job result is not an image"}), 404
     cache_thumbnail(small_bytes, small_key, job_id)
     return _immutable_image_response(small_bytes, "image/jpeg")
 

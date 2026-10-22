@@ -59,6 +59,10 @@ export interface ReportEntry extends ReportRef {
   status?: ReportStatus;
   user_prompt?: string | null;
   version_params?: Dict;
+  // 這個 job 只做了分析、沒有結果圖，縮圖改用它的原圖。
+  analyze_job_id?: string | null;
+  // 沒有 job 的聊天回報，後端從對話裡挑一張當縮圖（_chat_report_thumbnail, api.py）；run 是 null 就是原圖。
+  thumbnail?: { job_id: string; run: number | null } | null;
 }
 
 export function getUser() {
@@ -268,8 +272,12 @@ export const api = {
     request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/conversation-confirm`, { ...json("POST", body), signal: AbortSignal.timeout(PREVIEW_CONVERSATION_TIMEOUT_MS) }),
   // 管理者從回報打開那段對話（唯讀）：照原樣讀對話主人的 session，不推進、不同步。
   // 多張上傳的回報帶回同一批的每個 session，和總覽存下來的對話（沒有就是 null）。
-  reportSession: (reportId: string) =>
-    request<{ sessions: Session[]; overview: Dict | null; report: ReportRef }>(`${CHAT}/report-session${q({ report: reportId })}`),
+  // 預設是回報當下存下來的那份；live 改讀對話現在的樣子。kept：這筆有沒有存當下那份
+  // （這功能上線前的回報沒有，只能看現在的）。
+  reportSession: (reportId: string, live = false) =>
+    request<{ sessions: Session[]; overview: Dict | null; report: ReportRef; live: boolean; kept: boolean }>(
+      `${CHAT}/report-session${q({ report: reportId, ...(live ? { live: "1" } : {}) })}`,
+    ),
   // 回報清單，只有管理者讀得到（不是管理者就 403，順便當成「是不是管理者」的判斷）。
   reports: (offset = 0, limit = 50) =>
     request<{ reports: ReportEntry[]; has_more: boolean }>(
@@ -277,8 +285,10 @@ export const api = {
     ),
   setReportStatus: (reportId: string, status: ReportStatus) =>
     request<Dict>(`${API}/photo-agent/reports/${encodeURIComponent(currentUser)}/${encodeURIComponent(reportId)}`, json("PATCH", { status })),
-  reportAnalysis: (reportId: string, sessionId: string, photoId: string) =>
-    request<Dict>(`${CHAT}/report-session/analysis${q({ report: reportId, session_id: sessionId, photo_id: photoId })}`),
+  reportAnalysis: (reportId: string, sessionId: string, photoId: string, live = false) =>
+    request<Dict>(
+      `${CHAT}/report-session/analysis${q({ report: reportId, session_id: sessionId, photo_id: photoId, ...(live ? { live: "1" } : {}) })}`,
+    ),
   analysis: (id: string, photoId: string) =>
     request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/analysis${q()}`),
   // A typed message about one photo; subjectIndices are the faces the user tapped.
@@ -347,7 +357,9 @@ export const urls = {
   // With a case, 面板模式 opens straight on it.
   oldUi: (caseId?: string | null) => `${BASE}/${location.search}${caseId ? `#case=${encodeURIComponent(caseId)}` : ""}`,
   // 回報的唯讀檢視切過去：舊版用管理者身分打開這筆回報，跟在它的回報清單點這筆一樣。
-  oldUiReport: (reportId: string) => `${BASE}/${location.search}#report=${encodeURIComponent(reportId)}`,
+  // job / analyze：批次裡不是回報那張的照片，指定要開哪個 job（見 app.js openReportFromHash）。
+  oldUiReport: (reportId: string, open?: { job?: string; analyze?: string }) =>
+    `${BASE}/${location.search}#${new URLSearchParams({ report: reportId, ...open })}`,
 };
 
 const STYLE_FILE_ALIAS: Record<string, Record<string, string>> = {

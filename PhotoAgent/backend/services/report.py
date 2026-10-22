@@ -25,6 +25,11 @@ REPORT_STATUSES = ("unread", "read", "solved")
 # gone. Keyed by job_id alone: the job is the same whoever reported it.
 REPORT_JOBS_KEY = "yce_ai:photoAgent:report_jobs"
 REPORT_JOB_FIELDS = ("status", "error", "error_message", "stage", "run_count", "runs_done", "0_res0", "srcKeys")
+# The reported conversation as it stood when the report was filed
+# (chat_session.report_chat), keyed by report_id: the live one keeps changing
+# as the user goes on -- new messages, another version picked -- and expires
+# after SESSION_TTL_SECONDS, while the admin wants the moment of the report.
+REPORT_CHATS_KEY = "yce_ai:photoAgent:report_chats"
 # What a report filed from the chat UI (/chat/) carries about the conversation
 # on screen, so an admin can open that conversation itself. owner is whose
 # session it is -- the report's own "user" is whatever name the reporter typed
@@ -61,12 +66,11 @@ def _history_owner(entry):
     return entry.get("owner") or entry.get("user")
 
 
-def _version_params(case, job_id):
-    """The settings the version holding job_id was submitted with
-    (record_history's params: user_prompt, preset, aspect_ratio, models...)."""
+def _reported_version(case, job_id):
+    """The version of case holding job_id, or None."""
     for version in (case or {}).get("versions") or []:
         if job_id in (version.get("runs") or []):
-            return version.get("params") or None
+            return version
     return None
 
 
@@ -145,6 +149,26 @@ def _snapshot_reported_job(job_id):
         pass
 
 
+def save_report_chat(report_id, chat):
+    """Best-effort, like _snapshot_reported_job: without the copy the
+    read-only view just falls back to the live conversation. A re-report of
+    the same job (record_report's dedup) refreshes it with the new moment."""
+    try:
+        pf_redis_client.hset(REPORT_CHATS_KEY, report_id, json.dumps(chat))
+    except Exception:
+        pass
+
+
+def get_report_chat(report_id):
+    """save_report_chat's copy for report_id, or None (a report filed before
+    copies were kept, or one whose copy failed)."""
+    try:
+        raw = pf_redis_client.hget(REPORT_CHATS_KEY, report_id)
+        return json.loads(raw) if raw else None
+    except Exception:
+        return None
+
+
 def get_reported_job_info(job_id, keys):
     """The report-time copy of job_id's job info, narrowed to `keys` in the
     same shape get_job_info returns -- or None if no report holds one."""
@@ -198,10 +222,12 @@ def delete_report(report_id):
     any) is a separate lifecycle (see account.py's own history-vs-job
     split) and is never touched here. Any S3 screenshot the report carried
     is left in place; it's just no longer reachable via report_screenshot
-    once its entry is gone. The job-info copy (_snapshot_reported_job) is
-    dropped once no report points at that job any more."""
+    once its entry is gone. The conversation copy (save_report_chat) goes
+    with it; the job-info copy (_snapshot_reported_job) is dropped once no
+    report points at that job any more."""
     entry = get_report_by_id(report_id)
     pf_redis_client.hdel(REPORTS_KEY, report_id)
+    pf_redis_client.hdel(REPORT_CHATS_KEY, report_id)
     # The job copy goes with the last report pointing at that job.
     job_id = (entry or {}).get("job_id")
     if job_id and not _job_still_reported(job_id):
@@ -249,14 +275,26 @@ def get_reports(limit=50, offset=0):
     return page, offset + len(page) < len(entries)
 
 
-def get_report(report_id):
+def get_report(report_id, job_id=None):
     """One report in the same shape get_reports hands out -- for the old
     UI's #report=<id> entry point (openReportFromHash, app.js), which the
-    chat page's read-only report view links to as its 面板 switch."""
+    chat page's read-only report view links to as its 面板 switch.
+
+    job_id: present it as if filed on that job instead -- another photo of
+    the reported batch, picked in the read-only view's sidebar (or any photo
+    of a report filed from 總覽, which has no job of its own). The owner's
+    history then fills that job's version_params and times; user_prompt and
+    history_image_key belong to the reported photo, so they're dropped."""
     entry = get_report_by_id(report_id)
     if entry is None:
         return None
     entry["report_id"] = report_id
+    if job_id:
+        entry["job_id"] = job_id
+        entry.pop("user_prompt", None)
+        entry.pop("history_image_key", None)
+        entry.pop("uploaded_at", None)
+        entry.pop("modified_at", None)
     return _present_report(entry)
 
 
@@ -272,7 +310,14 @@ def _present_report(entry):
         if case:
             entry.setdefault("uploaded_at", case.get("uploaded_at"))
             entry["modified_at"] = case.get("modified_at")
-            params = _version_params(case, entry["job_id"])
-            if params:
-                entry["version_params"] = params
+            version = _reported_version(case, entry["job_id"]) or {}
+            # The settings the version was submitted with (record_history's
+            # params: user_prompt, preset, aspect_ratio, models...).
+            if version.get("params"):
+                entry["version_params"] = version["params"]
+            # Reported in 對話模式 while the photo was only analyzed: the job
+            # is its analyze job, with no edit result to open -- 面板模式
+            # opens it like a 待美化 case instead (openReportInPanel, app.js).
+            if version.get("kind") == "analyze":
+                entry["analyze_job_id"] = entry["job_id"]
     return entry

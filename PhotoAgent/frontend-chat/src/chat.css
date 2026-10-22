@@ -2025,3 +2025,14 @@ div.chat-proposal-row{cursor:default}
 .report-item-status.status-read{background:rgba(var(--on-surface-rgb),.12);color:var(--text-3)}
 .report-item-status.status-solved{background:rgba(1,179,123,.22);color:var(--green)}
 .reports-more-btn.btn{display:flex;margin:var(--sp-3) auto 0}
+/* 「回報時｜現在」：沿用「對話｜面板」的 .mode-switch（styles.css），兩段都是按鈕。 */
+.report-view-when{flex-shrink:0;padding:2px}
+.report-view-when .mode-switch-opt{height:26px;padding:0 12px;border-radius:13px;font-size:12.5px}
+button.mode-switch-opt{border:0;background:transparent;font-family:inherit;cursor:pointer}
+button.mode-switch-opt:not(.is-active):not(:disabled):hover{background:rgba(var(--accent-rgb),.08);color:var(--text)}
+button.mode-switch-opt:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.mode-switch-opt:disabled{cursor:not-allowed}
+button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
+@media (max-width:760px){
+  .report-view-when .mode-switch-opt{padding:0 9px;font-size:12px}
+}

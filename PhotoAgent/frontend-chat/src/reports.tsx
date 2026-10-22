@@ -141,7 +141,16 @@ function ReportRow({ r, current, onOpen }: { r: ReportEntry; current: boolean; o
   const open = opensHere(r);
   const where = r.source === "chat" ? "聊天模式" : r.path === "aipoc" ? "AIPoC" : "面板模式";
   const prompt = (r.version_params?.user_prompt as string | undefined) || r.user_prompt;
-  const [thumb, setThumb] = useState(!!r.job_id && r.path === "local");
+  // 跟面板模式的回報清單同一套挑法（renderReportsList, app.js）：只做了分析的 job 用原圖，
+  // 有結果的用結果圖，沒有 job 的一般回報用後端從對話挑的那張。AIPoC 那條路沒有縮圖可用。
+  const src =
+    r.path !== "local" ? ""
+    : r.analyze_job_id ? urls.sourceThumb(r.analyze_job_id)
+    : r.job_id ? urls.resultThumb(r.job_id)
+    : !r.thumbnail ? ""
+    : r.thumbnail.run ? urls.resultThumb(r.thumbnail.job_id, r.thumbnail.run)
+    : urls.sourceThumb(r.thumbnail.job_id);
+  const [broken, setBroken] = useState<string | null>(null);
   return (
     <li
       class={`report-item${open ? "" : " is-static"}${current ? " is-current" : ""}`}
@@ -149,7 +158,7 @@ function ReportRow({ r, current, onOpen }: { r: ReportEntry; current: boolean; o
       onClick={open ? () => onOpen(r) : undefined}
     >
       <div class="report-item-thumb">
-        {thumb && r.job_id && <img alt="" src={urls.resultThumb(r.job_id)} loading="lazy" onError={() => setThumb(false)} />}
+        {src && src !== broken && <img alt="" src={src} loading="lazy" onError={() => setBroken(src)} />}
       </div>
       <div class="report-item-info">
         <span class="report-item-user">{r.owner || r.user}</span>

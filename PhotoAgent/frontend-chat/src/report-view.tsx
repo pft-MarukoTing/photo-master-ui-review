@@ -5,6 +5,8 @@
 // 是舊版這筆回報的畫面（#report=<id>）。
 // 多張上傳的回報帶回整批：左邊照樣是「我的照片」，可以切到別張或總覽看，一開停在
 // 被回報的那張；在總覽回報的（只有 batch_id）就停在總覽。
+// 預設看的是回報當下存下來的那份對話，使用者回報之後再做的操作不會混進來；標頭的
+// 「回報時｜現在」可以切到對話現在的樣子。這功能上線前的回報沒存，只能看現在的。
 import { useLayoutEffect, useEffect, useState } from "preact/hooks";
 import { api, setUser, urls, type ReportRef } from "./api";
 import {
@@ -32,9 +34,9 @@ import type { Analysis, Capabilities, Photo, Session, Version } from "./types";
 const noop = async () => false;
 const OVERVIEW = "overview";
 
-function reportLabel(ts: number) {
+function reportLabel(ts: number, live: boolean) {
   const d = new Date(ts * 1000);
-  return `回報於 ${d.getMonth() + 1}/${d.getDate()} ${clockLabel(ts)}`;
+  return `回報於 ${d.getMonth() + 1}/${d.getDate()} ${clockLabel(ts)}${live ? " · 目前狀態" : ""}`;
 }
 
 const photoKey = (sessionId: string, photoId: string) => `${sessionId}:${photoId}`;
@@ -43,16 +45,19 @@ type Loaded = {
   sessions: Session[];
   overview: SavedOverview | null;
   report: ReportRef;
+  // live：這份是對話現在的樣子（不是回報當下存的）；kept：有沒有存回報當下那份。
+  live: boolean;
+  kept: boolean;
   caps: Capabilities;
   debugUi: boolean;
   analyses: Record<string, Analysis>;
 };
 
 // 回報的那一刻：時間軸上標一條線，底下是回報說明。
-function ReportMark({ report }: { report: ReportRef }) {
+function ReportMark({ report, live }: { report: ReportRef; live: boolean }) {
   return (
     <div class="chat-report-mark" id="chat-report-mark">
-      <span class="chat-report-mark-line">{reportLabel(report.ts)}</span>
+      <span class="chat-report-mark-line">{reportLabel(report.ts, live)}</span>
       {report.note && <p class="chat-report-mark-note">{report.note}</p>}
     </div>
   );
@@ -64,13 +69,18 @@ export function ReportView({ reportId }: { reportId: string }) {
   // 正在看的：OVERVIEW，或 photoKey(session, photo)。
   const [view, setView] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  // 想看現在的樣子；沒存回報當下那份的，後端照樣回現在的（data.live 才是實際看到的）。
+  const [wantLive, setWantLive] = useState(false);
+  const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
+    let stale = false;
+    setSwitching(true);
     (async () => {
       try {
         setUser(await resolveUser());
-        const [{ sessions, overview, report }, caps, cfg] = await Promise.all([
-          api.reportSession(reportId),
+        const [{ sessions, overview, report, live, kept }, caps, cfg] = await Promise.all([
+          api.reportSession(reportId, wantLive),
           api.capabilities(),
           api.config(),
         ]);
@@ -78,7 +88,7 @@ export function ReportView({ reportId }: { reportId: string }) {
         const loaded = await Promise.all(
           sessions.flatMap((s) =>
             s.photos.map((p) =>
-              api.reportAnalysis(reportId, s.session_id, p.photo_id).then(
+              api.reportAnalysis(reportId, s.session_id, p.photo_id, live).then(
                 (r) => [photoKey(s.session_id, p.photo_id), r?.status === "success" ? (r.result?.analysis as Analysis) : null] as const,
                 () => [photoKey(s.session_id, p.photo_id), null] as const,
               ),
@@ -90,26 +100,54 @@ export function ReportView({ reportId }: { reportId: string }) {
         const reported = sessions.find((s) => s.session_id === report.session_id);
         const photo = reported && (reported.photos.find((p) => p.photo_id === report.photo_id) || activePhoto(reported));
         const first = sessions[0] && activePhoto(sessions[0]);
-        setView(
-          reported
+        if (stale) return;
+        // 切換「回報時｜現在」時，左邊停在哪張就留在哪張（那張還在的話）。
+        setView((prev) =>
+          prev && (prev === OVERVIEW ? !!report.batch_id : sessions.some((s) => s.photos.some((p) => prev === photoKey(s.session_id, p.photo_id))))
+            ? prev
+            : reported
             ? photo ? photoKey(reported.session_id, photo.photo_id) : null
             : report.batch_id
               ? OVERVIEW
               : first ? photoKey(sessions[0].session_id, first.photo_id) : null,
         );
         // 打開一筆未讀的就算讀過了，跟從清單點進來一樣（舊版「查看對話」的連結不會改狀態）。
-        if ((report.status || "unread") === "unread") saveStatus(report, "read", () => {});
-        setData({ sessions, overview: (overview as SavedOverview | null) || null, report, caps, debugUi: !!cfg.debugUi, analyses });
+        if (!wantLive && (report.status || "unread") === "unread") saveStatus(report, "read", () => {});
+        setData({ sessions, overview: (overview as SavedOverview | null) || null, report, live, kept, caps, debugUi: !!cfg.debugUi, analyses });
+        setSelected(null);
+        setSwitching(false);
       } catch (e) {
+        if (stale) return;
+        setSwitching(false);
         const status = (e as { status?: number }).status;
         setError(
           status === 403 ? "只有管理者能查看回報的對話。" : status === 404 ? "這筆回報沒有對應的對話，或對話已經刪除。" : "對話讀取失敗，請重新整理再試一次。",
         );
       }
     })();
-  }, [reportId]);
+    return () => {
+      stale = true;
+    };
+  }, [reportId, wantLive]);
 
   const report = data?.report;
+  // 面板模式跟著左邊正在看的那張走。回報的那張用回報自己的 job（帶著當時的設定）；
+  // 批次裡的其他張、或在總覽回報的（沒有 job），改開那張目前的版本，沒美化過就開它的分析。
+  const [viewSession, viewPhoto] = view && view !== OVERVIEW ? view.split(":") : [];
+  const shown = data?.sessions.find((s) => s.session_id === viewSession)?.photos.find((p) => p.photo_id === viewPhoto);
+  const panelHref = !report
+    ? null
+    : view === OVERVIEW || !shown
+      ? report.job_id
+        ? urls.oldUiReport(report.report_id)
+        : null
+      : report.job_id && viewSession === report.session_id && viewPhoto === report.photo_id
+        ? urls.oldUiReport(report.report_id)
+        : shown.active_version?.job_id
+          ? urls.oldUiReport(report.report_id, { job: shown.active_version.job_id })
+          : shown.analyze_job_id
+            ? urls.oldUiReport(report.report_id, { analyze: shown.analyze_job_id })
+            : null;
   const pick = (key: string) => {
     setView(key);
     setSelected(null);
@@ -122,23 +160,44 @@ export function ReportView({ reportId }: { reportId: string }) {
           <button type="button" class="logo" onClick={leaveReport}>
             Photo<em>Master</em>
           </button>
-          {report && (
+          {data && report && (
             <div class="report-view-meta">
               <span class="report-view-badge">唯讀</span>
               <span class="report-view-owner">{report.owner} 的對話</span>
               <StatusPill report={report} />
+              <nav class="mode-switch report-view-when" aria-label="看哪個時間點的對話">
+                <button
+                  type="button"
+                  class={`mode-switch-opt${!data.live ? " is-active" : ""}`}
+                  aria-pressed={!data.live}
+                  disabled={!data.kept || switching}
+                  title={data.kept ? "看使用者按下回報那一刻的對話" : "這筆回報送出時還沒有保存當下的對話，只能看現在的樣子"}
+                  onClick={() => setWantLive(false)}
+                >
+                  回報時
+                </button>
+                <button
+                  type="button"
+                  class={`mode-switch-opt${data.live ? " is-active" : ""}`}
+                  aria-pressed={data.live}
+                  disabled={switching}
+                  title="看這段對話現在的樣子，包含回報之後的操作"
+                  onClick={() => setWantLive(true)}
+                >
+                  現在
+                </button>
+              </nav>
             </div>
           )}
           <div class="report-view-actions">
             <ReportsButton currentId={reportId} />
-            {/* 面板模式看的是回報當下那個 job，不跟著左邊切到哪張；一般回報沒有照片，沒得看。 */}
-            {report?.job_id ? (
-              <a class="btn btn-secondary btn-sm" href={urls.oldUiReport(report.report_id)} title="用面板模式看這筆回報">
+            {panelHref ? (
+              <a class="btn btn-secondary btn-sm" href={panelHref} title="用面板模式看左邊這張">
                 <Icon name="layout" size={14} />
                 <span class="btn-label">面板模式</span>
               </a>
             ) : (
-              <a class="btn btn-secondary btn-sm" aria-disabled="true" title={report ? "一般回報沒有照片，沒有面板可看" : undefined}>
+              <a class="btn btn-secondary btn-sm" aria-disabled="true" title={report ? (view === OVERVIEW ? "先在左邊選一張，才有面板可看" : "這張還沒有分析結果，沒有面板可看") : undefined}>
                 <Icon name="layout" size={14} />
                 <span class="btn-label">面板模式</span>
               </a>
@@ -257,7 +316,7 @@ function ReportBody(props: {
       pendingAsk={null}
       busy
       error=""
-      readOnly={marked ? { reportAt: report.ts, label: reportLabel(report.ts), note: report.note } : {}}
+      readOnly={marked ? { reportAt: report.ts, label: reportLabel(report.ts, data.live), note: report.note } : {}}
       onSelectVersion={(v: Version) => props.onSelect(v.version_id)}
       onRender={() => {}}
       onFile={() => {}}
@@ -393,7 +452,7 @@ function OverviewLog({ data, thumbs }: { data: Loaded; thumbs: Map<string, strin
         <p class="chat-text">{`收到你上傳的 ${firstCount} 張照片了。`}</p>
         {!overview && <p class="chat-text chat-muted">總覽的對話沒有留下紀錄（可能已經過期），只看得到各張自己的對話。</p>}
       </AssistantMsg>
-      {at < 0 ? items : <>{items.slice(0, at)}<ReportMark report={report} />{items.slice(at)}</>}
+      {at < 0 ? items : <>{items.slice(0, at)}<ReportMark report={report} live={data.live} />{items.slice(at)}</>}
     </ChatPanel>
   );
 }

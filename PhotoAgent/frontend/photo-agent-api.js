@@ -737,8 +737,10 @@ window.PhotoAgentApi = (() => {
 
   // Admin-only, same is_admin gate as getReports above -- one report in the
   // list's shape, for the #report=<id> entry point (openReportFromHash, app.js).
-  async function getReport(user, reportId) {
-    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/reports/${encodeURIComponent(user)}/${encodeURIComponent(reportId)}`);
+  // jobId: present the report as if filed on that job (another photo of its batch).
+  async function getReport(user, reportId, { jobId } = {}) {
+    const query = jobId ? `?${new URLSearchParams({ job: jobId })}` : "";
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/reports/${encodeURIComponent(user)}/${encodeURIComponent(reportId)}${query}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       const err = new Error(data.error || `取得回報失敗：HTTP ${response.status}`);

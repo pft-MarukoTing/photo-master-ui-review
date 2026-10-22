@@ -192,6 +192,12 @@ def _summary(session_id, session):
     }
 
 
+def session_tile(session):
+    """_summary of an already loaded session -- e.g. the copy a report kept
+    (save_report_chat, backend/services/report.py)."""
+    return _summary(session["session_id"], session)
+
+
 def session_summary(user, session_id):
     """list_sessions' row for one session, or None if absent/expired."""
     session = load_session(user, session_id)
@@ -221,6 +227,24 @@ def batch_sessions(user, batch_id):
         if session is not None and session.get("batch_id") == batch_id:
             out.append(session)
     return sorted(out, key=lambda s: s.get("created_at") or 0)
+
+
+def report_chat(user, session_id=None, batch_id=None):
+    """The conversation a report points at, as the admin's read-only view
+    shows it: the session it names and, for a multi-photo upload, every other
+    session of that batch, each with its messages, plus the batch overview.
+    Read only, like batch_sessions -- nothing here pushes back an expiry.
+    Recorded with the report (save_report_chat, backend/services/report.py)
+    and read live for the view's 目前狀態."""
+    sessions = batch_sessions(user, batch_id) if batch_id else []
+    if session_id and not any(s["session_id"] == session_id for s in sessions):
+        session = load_session(user, session_id)
+        if session is not None:
+            sessions.append(session)
+    return {
+        "sessions": [{**s, "messages": get_messages(user, s["session_id"], limit=MESSAGES_MAX_LEN)} for s in sessions],
+        "overview": load_batch_overview(user, batch_id, touch=False) if batch_id else None,
+    }
 
 
 def delete_session(user, session_id):

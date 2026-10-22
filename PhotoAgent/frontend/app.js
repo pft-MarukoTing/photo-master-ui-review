@@ -1061,8 +1061,14 @@
   // sees the panel as it was reported. Once it's on screen syncCaseHash
   // turns the hash into that photo's #case=, so a reload just reopens it.
   async function openReportFromHash() {
-    const reportId = new URLSearchParams(location.hash.slice(1)).get("report");
+    const params = new URLSearchParams(location.hash.slice(1));
+    const reportId = params.get("report");
     if (!reportId) return;
+    // job / analyze: the chat report view's 面板模式 for another photo of
+    // the reported batch (or any photo of a report filed from 總覽, which
+    // has no job of its own) -- see urls.oldUiReport.
+    const otherJob = params.get("job");
+    const otherAnalyze = params.get("analyze");
     const reveal = () => document.body.classList.remove("is-opening-case");
     const onSection = (e) => {
       if (e.detail?.name === "upload") return;
@@ -1072,12 +1078,14 @@
     document.addEventListener("photoagent:sectionchange", onSection);
     try {
       const user = resolveAdminUser();
-      const report = user ? await getReport(user, reportId).catch(() => null) : null;
-      if (!report?.job_id) {
+      const report = user ? await getReport(user, reportId, { jobId: otherJob }).catch(() => null) : null;
+      if (report && otherAnalyze) {
+        await viewAnalyzeHistoryRecord({ job_id: otherAnalyze, stage: "analyze", path: "local" });
+      } else if (report?.job_id || report?.analyze_job_id) {
+        await openReportInPanel(report, els.resultReportStatus);
+      } else {
         showNoticeModal("打不開這筆回報：可能沒有管理者權限，或回報已經刪掉了。");
-        return;
       }
-      await openReportInPanel(report, els.resultReportStatus);
     } finally {
       document.removeEventListener("photoagent:sectionchange", onSection);
       reveal();
@@ -9286,6 +9294,19 @@
     // way a real history record would -- picked key by key, never
     // stage, which isAnalyzedAfterEdits reads off this same object.
     const versionParams = r.version_params || {};
+    if (r.analyze_job_id) {
+      // Reported while the photo was only analyzed (對話模式's analysis
+      // stage): no edit result to open, so it opens like a 待美化 case.
+      return openAnalyzedReport({
+        job_id: r.analyze_job_id,
+        stage: "analyze",
+        path: r.path || "local",
+        ...pickVersionParams(versionParams),
+        user_prompt: versionParams.user_prompt || r.user_prompt,
+        uploaded_at: r.uploaded_at,
+        modified_at: r.modified_at
+      });
+    }
     return viewHistoryRecord({
       path: r.path,
       runs: [r.job_id],
@@ -9294,6 +9315,24 @@
       uploaded_at: r.uploaded_at,
       modified_at: r.modified_at
     }, { revealDetailExtra: true, report: r });
+  }
+
+  // viewAnalyzeHistoryRecord only settles once the admin acts on the review
+  // (runPendingReviewFlow), so this resolves as soon as the page leaves the
+  // upload section instead -- or with false if it never got there.
+  function openAnalyzedReport(job) {
+    return new Promise((resolve) => {
+      const onSection = (e) => {
+        if (e.detail?.name === "upload") return;
+        document.removeEventListener("photoagent:sectionchange", onSection);
+        resolve(true);
+      };
+      document.addEventListener("photoagent:sectionchange", onSection);
+      viewAnalyzeHistoryRecord(job).finally(() => {
+        document.removeEventListener("photoagent:sectionchange", onSection);
+        resolve(currentSectionName !== "upload");
+      });
+    });
   }
 
   function renderReportsList(reports, { append = false } = {}) {
@@ -9306,13 +9345,21 @@
       const thumb = document.createElement("div");
       thumb.className = "report-item-thumb";
       // r.job_id is absent for a general report (#report-btn is clickable
-      // with nothing on screen -- record_report, backend/services/report.py)
-      // -- nothing to thumbnail in that case, same as an AIPoC-path report
-      // already has no thumbnail route to use.
-      if (r.job_id && r.path === "local") {
+      // with nothing on screen -- record_report, backend/services/report.py);
+      // a chat one still has r.thumbnail when its conversation is known
+      // (_chat_report_thumbnail, api.py). r.analyze_job_id: the job is only
+      // an analysis, with no result to thumbnail -- show its original. An
+      // AIPoC-path report has no thumbnail route to use.
+      const thumbSrc = r.path !== "local" ? null
+        : r.analyze_job_id ? sourceThumbnailUrl(r.analyze_job_id)
+        : r.job_id ? resultThumbnailUrl(r.job_id)
+        : !r.thumbnail ? null
+        : r.thumbnail.run ? resultThumbnailUrl(r.thumbnail.job_id, { run: r.thumbnail.run })
+        : sourceThumbnailUrl(r.thumbnail.job_id);
+      if (thumbSrc) {
         const img = document.createElement("img");
         img.alt = "";
-        img.src = resultThumbnailUrl(r.job_id);
+        img.src = thumbSrc;
         img.addEventListener("error", () => img.remove());
         thumb.appendChild(img);
       }
