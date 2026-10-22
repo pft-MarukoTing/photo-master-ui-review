@@ -176,6 +176,9 @@ def enqueue(engine_param_dict, src_content=None, job_id=None, queue=MSG_ID_QUEUE
     upload_dict["srcKeys"] = json.dumps(engine_param_dict["srcKeys"])
     upload_dict["dstKeys"] = json.dumps(engine_param_dict["dstKeys"])
     upload_dict["acts"] = json.dumps(engine_param_dict["acts"])
+    # When it was queued (ms, this backend's clock): with the worker's ts and
+    # endTs, where a job's time went (services/timing.py).
+    upload_dict["enq_ts"] = int(time.time() * 1000)
     msg_info_key = MSG_DETAIL_QUEUE.replace("{msg_id}", f"{job_id}")
     redis_conn.hset(msg_info_key, mapping=upload_dict)
     redis_conn.zadd(queue, {job_id: timestamp})

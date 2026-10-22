@@ -28,6 +28,7 @@ from backend.services import side_reference_store
 import copy
 import json
 import re
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -37,6 +38,7 @@ from flask import Blueprint, Response, current_app, jsonify, request
 from aiserver_utils.queue import get_job_info
 from backend.routes.api import _apply_review_selections, _parse_and_validate_params, _record_history_safely
 from backend.services import chat_queue, chat_session as store, preview_conversation_store as conversation_store
+from backend.services.timing import job_spans, timed, timeline
 from photo_agent import preview_conversation as conversation_domain
 from backend.services.account import (
     HISTORY_MAX_LEN,
@@ -302,10 +304,9 @@ def _landed(user, row):
     the photo state only moves when something advances it, so a render that
     finished after the user left would otherwise stay 美化中 on its tile
     until the session is opened."""
-    session = store.load_session(user, row["session_id"])
-    if session is None:
+    if store.load_session(user, row["session_id"]) is None:
         return row
-    _advance_photos(user, row["session_id"], session)
+    _advance_session(user, row["session_id"])
     return store.session_summary(user, row["session_id"]) or row
 
 
@@ -580,7 +581,8 @@ def _adopt_case_analysis(photo, entry, statuses):
 @chat_bp.get("/sessions/<session_id>")
 def get_session(session_id):
     user = _user(request.args.get("user"))
-    _advance_photos(user, session_id, _session(user, session_id))
+    _session(user, session_id)
+    _advance_session(user, session_id)
     _sync_from_history(user, session_id, _session(user, session_id))
     session = _session(user, session_id)
     limit = request.args.get("messages_limit", 100, type=int)
@@ -3192,15 +3194,21 @@ def _bind_face_wishes(user, session_id, photo, analysis, pending, *, ask=True, h
         **({"answers": host["id"]} if host else {})})]
 
 
-def _opening_brief(analysis, wishes=""):
-    """With 詳細解說 on: the first note in a retoucher's voice, written
-    by the worker, or None -- the caller then shows the analysis's own summary
-    and issues."""
+def _submit_brief(analysis, wishes=""):
+    """With 詳細解說 on: queue the first note in a retoucher's voice for
+    the worker to write, as the photo's pending_brief, or None when it could
+    not be queued -- the caller then shows the analysis's own summary and
+    issues. Nothing waits for it (a queued render starts right away);
+    _advance_texts posts it once it is in."""
     try:
-        brief = chat_queue.run({"stage": chat_jobs.STAGE_OPENING, "analysis": analysis, "wishes": wishes})
+        job_id = chat_queue.submit({"stage": chat_jobs.STAGE_OPENING, "analysis": analysis, "wishes": wishes})
     except Exception:
         current_app.logger.exception("chat opening failed")
         return None
+    return {"job_id": job_id, "since": time.time()}
+
+
+def _valid_brief(brief):
     ok = (isinstance(brief, dict) and isinstance(brief.get("summary"), str)
           and isinstance(brief.get("issues"), list) and all(isinstance(i, str) for i in brief["issues"]))
     return brief if ok else None
@@ -3248,23 +3256,63 @@ def _earlier_versions(user, session_id, photo_id, based_on):
     return (source or {}).get("plan"), notes
 
 
-def _render_note(user, session_id, photo, plan, job_id, based_on):
-    """With 詳細解說 on: a retoucher's note on a finished version,
-    written by the worker from the original and the result side by side, or
-    None -- the result card then speaks for itself."""
+def _submit_note(user, session_id, photo, pending):
+    """With 詳細解說 on: queue a retoucher's note on a finished version
+    (`pending`, the photo's pending_note), for the worker to write from the
+    original and the result side by side; the job id, or None -- the result
+    card then speaks for itself."""
     analysis, error = _load_analysis(_analysis_job_id(photo))
     if error:
         return None
-    previous_plan, earlier_notes = _earlier_versions(user, session_id, photo["photo_id"], based_on)
-    before, after = _note_images(photo, job_id)
+    job_id = pending["render_job"]
+    previous_plan, earlier_notes = _earlier_versions(user, session_id, photo["photo_id"], pending.get("based_on"))
+    with timed("note_images", photo=photo["photo_id"], job=job_id):
+        before, after = _note_images(photo, job_id)
     try:
-        note = chat_queue.run({"stage": chat_jobs.STAGE_NOTE, "analysis": analysis, "plan": plan,
-                               "previous_plan": previous_plan, "earlier_notes": earlier_notes,
-                               "before": before, "after": after})
+        return chat_queue.submit({"stage": chat_jobs.STAGE_NOTE, "analysis": analysis, "plan": pending["plan"],
+                                  "previous_plan": previous_plan, "earlier_notes": earlier_notes,
+                                  "before": before, "after": after})
     except Exception:
         current_app.logger.exception("chat render note failed")
         return None
-    return note.strip() if isinstance(note, str) and note.strip() else None
+
+
+def _advance_texts(user, session_id, photo):
+    """The brief and the note the worker writes while the photo itself has
+    already moved on: the brief is posted once it is in (or the analysis's
+    own summary, if the worker could not write it); the note goes into the
+    card of the version it is about. Returns the messages to post."""
+    messages, fields = [], {}
+    brief = photo.get("pending_brief")
+    if brief:
+        done, answer = chat_queue.poll(brief["job_id"], brief["since"], chat_jobs.STAGE_OPENING)
+        if done and store.claim(user, session_id, brief["job_id"]):
+            fields["pending_brief"] = None
+            card = _valid_brief(answer)
+            if card is None:
+                analysis = _load_analysis(_analysis_job_id(photo))[0]
+                card = build_brief(analysis) if analysis else None
+            if card:
+                messages.append(store.make_message("assistant", card={
+                    "type": "analysis_brief", "photo_id": photo["photo_id"], **card}))
+    note = photo.get("pending_note")
+    if note and not note.get("job_id"):
+        # Asked here rather than as the version landed, so its card is
+        # already up while the images for the note are fetched.
+        if store.claim(user, session_id, f"note:{note['version_id']}"):
+            job_id = _submit_note(user, session_id, photo, note)
+            fields["pending_note"] = {**note, "job_id": job_id, "since": time.time()} if job_id else None
+    elif note:
+        done, answer = chat_queue.poll(note["job_id"], note["since"], chat_jobs.STAGE_NOTE)
+        if done and store.claim(user, session_id, note["job_id"]):
+            fields["pending_note"] = None
+            text = answer.strip() if isinstance(answer, str) else ""
+            if text:
+                store.update_card(user, session_id, note["message_id"], {"note": text})
+    if fields:
+        photo.update(fields)
+        store.update_photo_state(user, session_id, photo["photo_id"], fields)
+    return messages
 
 
 def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
@@ -3274,6 +3322,7 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
     job = _job_status(job_id, statuses)
     if job["status"] not in TERMINAL_STATUSES or not store.claim(user, session_id, job_id):
         return []
+    timeline(photo=photo["photo_id"], job=job_id, event="analyzed", **job_spans("analyze", job_id))
     if photo.get("reanalysis"):
         return _advance_reanalysis(user, session_id, photo, job)
     queued = photo["queued_render"]
@@ -3327,8 +3376,8 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
             return messages
         face_wishes = _start_face_wishes(photo, analysis)
         detailed = photo["plan"].get("detailed_explanation") and not rebuilt
-        brief = ((_opening_brief(analysis, photo["plan"].get("user_prompt") or "") if detailed else None)
-                 or build_brief(analysis))
+        photo["pending_brief"] = _submit_brief(analysis, photo["plan"].get("user_prompt") or "") if detailed else None
+        brief = None if photo["pending_brief"] else build_brief(analysis)
         if brief:
             messages.append(store.make_message("assistant", card={
                 "type": "analysis_brief", "photo_id": photo["photo_id"], **brief}))
@@ -3373,12 +3422,12 @@ def _advance_reanalysis(user, session_id, photo, job):
     photo["planned_ratio"] = _planned_for(analysis)
     photo["error"] = None
     _name_prompt_faces(user, session_id, photo, analysis)
-    store.save_photo_state(user, session_id, photo)
-    pending = _start_face_wishes(photo, analysis)
     # The brief the upload skipped: the check card below lists it.
     detailed = photo["plan"].get("detailed_explanation")
-    brief = ((_opening_brief(analysis, photo["plan"].get("user_prompt") or "") if detailed else None)
-             or build_brief(analysis))
+    photo["pending_brief"] = _submit_brief(analysis, photo["plan"].get("user_prompt") or "") if detailed else None
+    brief = None if photo["pending_brief"] else build_brief(analysis)
+    store.save_photo_state(user, session_id, photo)
+    pending = _start_face_wishes(photo, analysis)
     messages = [store.make_message("assistant", card={
         "type": "analysis_brief", "photo_id": photo_id, **brief})] if brief else []
     # Before the round below snapshots the plan; said last, where its options can be tapped.
@@ -3409,6 +3458,8 @@ def _advance_rendering(user, session_id, photo, statuses):
         return []
     if not store.claim(user, session_id, pending["action_id"]):
         return []
+    timeline(photo=photo["photo_id"], job=pending["job_ids"][0], event="rendered",
+             **job_spans("render", pending["job_ids"][0]))
     succeeded = [job_id for job_id, j in jobs.items() if j["status"] == "success"]
     photo["status"] = "ready"
     photo["pending_render"] = None
@@ -3425,19 +3476,20 @@ def _advance_rendering(user, session_id, photo, statuses):
                 "job_ids": succeeded, "failed_job_ids": [j for j in pending["job_ids"] if j not in succeeded],
                 # Kept so the next version's note can tell what changed.
                 "plan": plan}
-        if plan.get("detailed_explanation"):
-            note = _render_note(user, session_id, photo, plan, succeeded[0], pending.get("based_on"))
-            if note:
-                card["note"] = note
     else:
         failed = next((j for j in jobs.values() if j["error"]), {})
         photo["error"] = failed.get("error") or "render failed"
         card = {"type": "render_failed", "photo_id": photo["photo_id"], "version_id": pending["action_id"],
                 "error": photo["error"], "error_code": failed.get("error_code")}
+    messages = [store.make_message("assistant", card=card)]
+    if card["type"] == "render_done" and card.get("plan", {}).get("detailed_explanation"):
+        # The card goes up now; _advance_texts adds the note to it once written.
+        photo["pending_note"] = {"version_id": pending["action_id"], "message_id": messages[0]["id"],
+                                 "render_job": succeeded[0], "based_on": pending.get("based_on"),
+                                 "plan": card["plan"]}
     store.save_photo_state(user, session_id, photo)
     # A 長寬比 changed while rendering is re-planned now.
     _reframe_if_needed(user, session_id, photo)
-    messages = [store.make_message("assistant", card=card)]
     state = photo.get('preview_conversation')
     if pending.get('deferred_confirmation') and state and state.get('question'):
         messages.append(_confirmation_notice(photo, ('unresolved_people', state['question']['text'], 409)))
@@ -3447,8 +3499,65 @@ def _advance_rendering(user, session_id, photo, statuses):
 @chat_bp.get("/sessions/<session_id>/status")
 def session_status(session_id):
     user = _user(request.args.get("user"))
-    statuses, messages = _advance_photos(user, session_id, _session(user, session_id))
+    _session(user, session_id)
+    statuses, messages = _advance_session(user, session_id) or ({}, [])
     return jsonify({"session": store.load_session(user, session_id), "jobs": statuses, "new_messages": messages})
+
+
+def _advance_session(user, session_id):
+    """_advance_photos, by whichever gets to it first: the watcher below or
+    a request (the fallback, should the watcher not be running). None when
+    another is at it right now -- the caller then reads the state as it is."""
+    token = store.lock_advance(user, session_id)
+    if token is None:
+        return None
+    try:
+        return _advance_photos(user, session_id, _session(user, session_id))
+    finally:
+        store.unlock_advance(user, session_id, token)
+
+
+# How often the watcher lands what active sessions' jobs finished.
+WATCH_SECONDS = 1.0
+
+
+def start_watcher(app):
+    """Land finished jobs for every session with a photo waiting on one,
+    about once a second, in a thread of this process -- so the next step
+    starts, and its card is posted, without waiting for a page to poll, or
+    for anyone to have the page open. Each process running the backend may
+    run one; the per-session lock keeps them out of each other's way."""
+    threading.Thread(target=_watch, args=(app,), name="chat-watcher", daemon=True).start()
+
+
+def _watch(app):
+    while True:
+        time.sleep(WATCH_SECONDS)
+        with app.app_context():
+            try:
+                active = store.active_sessions()
+            except Exception:
+                current_app.logger.exception("chat watcher: listing active sessions failed")
+                continue
+            for user, session_id in active:
+                try:
+                    _watch_session(user, session_id)
+                except Exception:
+                    current_app.logger.exception("chat watcher: session %s failed", session_id)
+
+
+def _watch_session(user, session_id):
+    session = store.load_session(user, session_id)
+    if session is not None and any(store.waiting(p) for p in session["photos"]):
+        _advance_session(user, session_id)
+        session = store.load_session(user, session_id)
+    if session is None or not any(store.waiting(p) for p in session["photos"]):
+        store.drop_active(user, session_id)
+        # A photo that started waiting since the read above marked the
+        # session again before that drop.
+        session = store.load_session(user, session_id)
+        if session is not None and any(store.waiting(p) for p in session["photos"]):
+            store.mark_active(user, session_id)
 
 
 def _advance_photos(user, session_id, session):
@@ -3458,13 +3567,27 @@ def _advance_photos(user, session_id, session):
     would otherwise reopen as still working until the first poll."""
     statuses, messages = {}, []
     for photo in session["photos"]:
-        if photo["status"] == "analyzing":
-            messages += _advance_analyzing(user, session_id, photo, statuses)
-        elif photo["status"] == "reframing" and photo.get("pending_reframe"):
-            messages += _advance_reframing(user, session_id, photo, statuses)
-        elif photo["status"] == "rendering" and photo["pending_render"]:
-            messages += _advance_rendering(user, session_id, photo, statuses)
+        started, status = time.monotonic(), photo["status"]
+        if status == "analyzing":
+            landed = _advance_analyzing(user, session_id, photo, statuses)
+        elif status == "reframing" and photo.get("pending_reframe"):
+            landed = _advance_reframing(user, session_id, photo, statuses)
+        elif status == "rendering" and photo["pending_render"]:
+            landed = _advance_rendering(user, session_id, photo, statuses)
+        else:
+            continue
+        if landed:
+            # How long the request that noticed it was held up landing it.
+            timeline(photo=photo["photo_id"], event=f"advanced_{status}", ms=int((time.monotonic() - started) * 1000),
+                     cards="+".join(m["card"]["type"] for m in landed if m.get("card")))
+        messages += landed
     store.append_messages(user, session_id, messages)
+    texts = []
+    for photo in session["photos"]:
+        if photo.get("pending_brief") or photo.get("pending_note"):
+            texts += _advance_texts(user, session_id, photo)
+    store.append_messages(user, session_id, texts)
+    messages += texts
     for photo in store.load_session(user,session_id)['photos']:
         if photo['status']=='ready':
             extra=_side_ensure_question(user,session_id,photo)

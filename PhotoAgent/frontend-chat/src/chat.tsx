@@ -794,15 +794,18 @@ const qaCache = new Map<string, { verdict: string; score: string; pass: boolean 
 
 // next：這是最新的一版、底下正掛著「看美化項目」時才講下一步。舊的結果卡不講，不然
 // 往上捲會看到每一版都在叫人去按一顆已經不在的按鈕。
-// note：開了「詳細解說」時，後端對照原圖與成品寫的點評；沒有就不顯示。
+// note：開了「詳細解說」時，後端對照原圖與成品寫的點評；沒有就不顯示。成品先出來，
+// 點評隨後才到，noting 是還在寫：先放一行淡字佔位，操作提示和下一步等點評到了
+// 再接在它後面，順序才不會先出提示、說明再插進來。
 // shown：這一版正顯示在畫布上。是的話跟畫布用同一張大圖，不多抓；其他版只顯示成小卡，
 // 用中尺寸預覽就夠清楚，不必每次打開都把每一版的大圖抓一遍。
-export function ResultCard({ job, ordinal, failed, next, note, onOpen, shown }: {
+export function ResultCard({ job, ordinal, failed, next, note, noting, onOpen, shown }: {
   job: string;
   ordinal: number;
   failed: number;
   next?: boolean;
   note?: string;
+  noting?: boolean;
   // 手機上旁邊沒有比較卡，成品放大、點了開大圖檢視。
   onOpen?: () => void;
   shown?: boolean;
@@ -858,19 +861,19 @@ export function ResultCard({ job, ordinal, failed, next, note, onOpen, shown }: 
       )}
       <figcaption class="chat-result-cap">
         <h4>第 {ordinal} 版完成</h4>
-        {note && <p class="chat-text">{note}</p>}
+        {note ? <p class="chat-text">{note}</p> : noting && <p class="chat-text chat-muted">正在對照原圖，整理這版的變化…</p>}
         {qa && (
           <div class="chat-verdict">
             輸出評語 <b class={qa.pass ? "" : "is-warn"}>{qa.verdict}</b>
             {qa.score && ` 品質分數 ${qa.score}`}
           </div>
         )}
-        <p class="chat-text chat-muted">
+        {!noting && <p class="chat-text chat-muted">
           {failed > 0 && `有 ${failed} 張沒有成功，已略過。`}
           <span class="chat-result-hint-wide">左側可比較 Before / After，也可從「美化紀錄」切換版本。</span>
           <span class="chat-result-hint-narrow">上方照片可以跟原圖比，點右上的版本也能切換。</span>
-        </p>
-        {next && <p class="chat-text">想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。</p>}
+        </p>}
+        {next && !noting && <p class="chat-text">想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。</p>}
       </figcaption>
     </figure>
   );

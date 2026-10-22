@@ -4,6 +4,7 @@ import sys
 import time
 import types
 import unittest
+import uuid
 from unittest.mock import MagicMock, patch
 
 from tests.test_selections import base_analysis
@@ -115,6 +116,15 @@ class FakeRedis:
     def get(self, key):
         return self.data.get(key)
 
+    def sadd(self, key, *members):
+        self.data.setdefault(key, set()).update(members)
+
+    def srem(self, key, *members):
+        self.data.get(key, set()).difference_update(members)
+
+    def smembers(self, key):
+        return set(self.data.get(key, set()))
+
 
 USER = "tester"
 
@@ -151,6 +161,16 @@ class ChatRoutesTest(unittest.TestCase):
             self.history.append({"job_id": job_id, "case_id": case_id, "version_id": version_id,
                                  "params": params, "based_on": based_on})
 
+        self.chat_answers = {}
+
+        def submit_chat(params):
+            job_id = f"chat_{len(self.chat_answers)}_{uuid.uuid4().hex[:6]}"
+            try:
+                self.chat_answers[job_id] = chat.chat_jobs.run(json.loads(json.dumps(params)))
+            except Exception:
+                self.chat_answers[job_id] = None
+            return job_id
+
         patches = [
             patch.object(chat_session, "_client", lambda: self.redis),
             patch.object(chat, "enqueue", enqueue),
@@ -161,6 +181,9 @@ class ChatRoutesTest(unittest.TestCase):
             # The worker's side of a chat job, run in place: only what survives
             # the trip through the job's info hash gets there.
             patch.object(chat.chat_queue, "run", lambda params, **kwargs: chat.chat_jobs.run(json.loads(json.dumps(params)))),
+            # A queued one (a brief, a note) is answered by the next poll.
+            patch.object(chat.chat_queue, "submit", submit_chat),
+            patch.object(chat.chat_queue, "poll", lambda job_id, since, stage=None: (True, self.chat_answers.pop(job_id))),
             patch.object(api, "record_history", record_history),
             patch.object(chat, "get_history", lambda user, limit=50, offset=0: sorted(
                 self.cases.values(), key=lambda e: e["ts"], reverse=True)[offset:offset + limit]),
@@ -258,7 +281,8 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(body["defaults"]["preset"], "natural")
         listed = self.client.get("/api/photo-agent/chat/sessions", query_string={"user": USER}).get_json()
         self.assertEqual([s["session_id"] for s in listed["sessions"]], [sid])
-        self.assertEqual(set(self.redis.ttl.values()), {chat_session.SESSION_TTL_SECONDS})
+        self.assertEqual({v for k, v in self.redis.ttl.items() if not k.endswith(":advancing")},
+                         {chat_session.SESSION_TTL_SECONDS})
 
     def test_unknown_session_and_bad_user(self):
         self.assertEqual(self.client.get(self.url("s_nope"), query_string={"user": USER}).status_code, 404)
@@ -954,7 +978,12 @@ class ChatRoutesTest(unittest.TestCase):
         with patch.object(chat.chat_assistant, "call_render_note", model), \
                 patch.object(chat, "_note_images", lambda photo, job_id: ("data:before", "data:after")):
             card = self.status(sid)["new_messages"][0]["card"]
-        self.assertEqual((card["type"], card["note"]), ("render_done", "色調暖了一點。"))
+            self.assertEqual(card["type"], "render_done")
+            self.assertNotIn("note", card)
+            self.assertEqual(self.status(sid)["session"]["photos"][0]["pending_note"], None)
+        card = [m["card"] for m in self.client.get(self.url(sid), query_string={"user": USER}).get_json()["messages"]
+                if (m.get("card") or {}).get("type") == "render_done"][-1]
+        self.assertEqual(card["note"], "色調暖了一點。")
         context, images = seen[0]
         self.assertIn('"user_prompt":"warmer"', context)
         # The original and this version, side by side.
@@ -974,6 +1003,7 @@ class ChatRoutesTest(unittest.TestCase):
             first = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"}).get_json()
             self.jobs[first["renders"][0]["job_ids"][0]]["status"] = "success"
             self.assertEqual(self.status(sid)["new_messages"][0]["card"]["plan"]["user_prompt"], "")
+            self.status(sid)
             self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"),
                               json={"user": USER, "plan": {"user_prompt": "warmer"}})
             second = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"}).get_json()
@@ -1009,8 +1039,10 @@ class ChatRoutesTest(unittest.TestCase):
             raise RuntimeError("model down")
 
         with patch.object(chat.chat_assistant, "call_render_note", fail):
-            card = self.status(sid)["new_messages"][0]["card"]
-        self.assertEqual(card["type"], "render_done")
+            self.assertEqual(self.status(sid)["new_messages"][0]["card"]["type"], "render_done")
+            self.assertEqual(self.status(sid)["session"]["photos"][0]["pending_note"], None)
+        card = [m["card"] for m in self.client.get(self.url(sid), query_string={"user": USER}).get_json()["messages"]
+                if (m.get("card") or {}).get("type") == "render_done"][-1]
         self.assertNotIn("note", card)
 
     def test_render_fans_out_and_records_a_version(self):
@@ -1183,8 +1215,8 @@ class ChatRoutesTest(unittest.TestCase):
         done = self.status(sid)
         cards = [m["card"] for m in done["new_messages"]]
         self.assertEqual([(c["type"], c.get("via"), c.get("requested")) for c in cards],
-                         [("analysis_brief", None, None), ("adjust_opened", "check", True)])
-        self.assertTrue(cards[1]["plan"]["overwrite_prompt"])
+                         [("adjust_opened", "check", True), ("analysis_brief", None, None)])
+        self.assertTrue(cards[0]["plan"]["overwrite_prompt"])
         state = done["session"]["photos"][0]
         self.assertEqual((state["status"], state["analysis_skipped"], state["analysis_job_id"]),
                          ("ready", False, job_id))
@@ -1206,7 +1238,7 @@ class ChatRoutesTest(unittest.TestCase):
         self.analysis = self.real_analysis
         self.jobs[job_id]["status"] = "success"
         done = self.status(sid)
-        self.assertEqual([m["card"]["type"] for m in done["new_messages"]], ["analysis_brief", "render_started"])
+        self.assertEqual([m["card"]["type"] for m in done["new_messages"]], ["render_started", "analysis_brief"])
         self.assertEqual(done["session"]["photos"][0]["status"], "rendering")
 
     def analyzed_from_custom_mode(self, sid, photo, status):

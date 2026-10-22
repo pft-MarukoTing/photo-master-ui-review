@@ -1356,7 +1356,8 @@ export function App() {
     pendingActive.current = null;
   }, [sessionId]);
   const messages = session?.messages || [];
-  const polling = !!session && session.photos.some(isBusy);
+  // 照片好了以後，開場摘要／這版的說明可能還在寫，等它們到了才停。
+  const polling = !!session && session.photos.some((p) => isBusy(p) || !!p.pending_brief || !!p.pending_note);
   const sessionRef = useRef(session);
   sessionRef.current = session;
 
@@ -1370,7 +1371,9 @@ export function App() {
         const st = await api.status(id);
         if (stop) return;
         const prev = sessionRef.current;
-        const shape = (s: Session | null) => (s?.photos || []).map((p) => `${p.photo_id}:${p.status}`).join(",");
+        // 說明是寫回那一版的完成卡上，不是新訊息：pending 消失也要重抓。
+        const shape = (s: Session | null) =>
+          (s?.photos || []).map((p) => `${p.photo_id}:${p.status}:${!!p.pending_brief}:${!!p.pending_note}`).join(",");
         if (st.new_messages?.length || shape(prev) !== shape(st.session)) {
           // Another tab may have advanced the photo; refetch to get its messages too.
           const full = await api.getSession(id);
@@ -5734,9 +5737,14 @@ export function SessionView(props: {
   // go there, even if the user had scrolled up.
   const [toBottom, setToBottom] = useState(0);
   // 分析或美化一完成（分析後的開場、第 N 版完成），對話捲到這一段的開頭（ChatPanel toStart）。
-  const lastDone =
-    [...messages].reverse().find((m) => ["analysis_brief", "render_done", "render_failed"].includes(m.card?.type as string))
-      ?.id ?? null;
+  // 摘要可能比分析完成晚幾秒才到，那時它屬於前面那則 analysis_ready，不再捲一次。
+  const lastDone = (() => {
+    const DONE = ["analysis_ready", "analysis_brief", "render_done", "render_failed"];
+    const done = messages.filter((m) => DONE.includes(m.card?.type as string) && !m.card?.skipped);
+    const last = done[done.length - 1];
+    const prev = done[done.length - 2];
+    return last?.card?.type === "analysis_brief" && prev?.card?.type === "analysis_ready" ? prev.id : last?.id ?? null;
+  })();
   useEffect(() => {
     setPointed([]);
     setHot({});
@@ -6200,12 +6208,21 @@ export function SessionView(props: {
   // 分析摘要（analysis_brief）跟在 analysis_ready 後面寫進來，但畫面上不另外顯示，
   // 找前後一則時要跳過它。
   const SILENT = ["analysis_brief"];
+  // 摘要／成品說明是另外排隊寫的，晚幾秒才到。還在寫的時候那則訊息只放淡字佔位，
+  // 後面的引導、回答、按鈕都先不出，等字到了再一起接上，順序才不會亂。
+  const briefPending = !!photo.pending_brief && !brief;
+  const textPending = (idx: number) => {
+    const c = messages[idx]?.card;
+    if (c?.type === "analysis_ready" || (c?.type === "adjust_opened" && c.check)) return briefPending;
+    return c?.type === "render_done" && !!photo.pending_note && photo.pending_note.version_id === c.version_id;
+  };
   const step = (idx: number, dir: 1 | -1) => {
     let i = idx + dir;
     while (SILENT.includes(messages[i]?.card?.type || "")) i += dir;
     return i;
   };
   const answerIn = (idx: number) => {
+    if (textPending(idx)) return null;
     if (holding(idx)) return typing;
     const i = step(idx, 1);
     const next = messages[i];
@@ -6295,10 +6312,10 @@ export function SessionView(props: {
     endReply?.type === "llm_reply" &&
     ((!!endReply.proposal && !resolvedChoice[endReply.proposal.id]) || endReply.options?.length > 0);
   const offerCheckAt = (idx: number) =>
-    messages[idx]?.card?.type === "render_done" && idx === lastRender && !adjusting &&
+    messages[idx]?.card?.type === "render_done" && idx === lastRender && !adjusting && !textPending(idx) &&
     !!photo.plan.overwrite_prompt && (skippedAnalysis || !!analysis) &&
     !messages.slice(idx + 1).some(x => x.card?.type === "check_declined" || x.card?.type === "analysis_brief");
-  const showActionRow = !!actionChips && !busy && !props.pendingAsk && photo.status === "ready" && !askMode && !confirmRerun && !endAsks && !pendingPerson && !offerCheckAt(endIdx);
+  const showActionRow = !!actionChips && !textPending(endIdx) && !busy && !props.pendingAsk && photo.status === "ready" && !askMode && !confirmRerun && !endAsks && !pendingPerson && !offerCheckAt(endIdx);
   // 只照需求改完，除了問要不要分析，也給「風格」：只照需求改照樣套得上風格。
   const offerStyle = caps.style_options.length > 0;
   if (!showActionRow) bar = offerCheckAt(endIdx) ? ["好，幫我分析", ...(offerStyle ? [CATEGORIES.style.label] : []), "不用了"] : [];
@@ -6363,11 +6380,13 @@ export function SessionView(props: {
           <AssistantMsg>
             {skippedAnalysis ? null : brief ? (
               <BriefCard brief={brief} />
+            ) : photo.pending_brief ? (
+              <p class="chat-text chat-muted">正在整理分析重點…</p>
             ) : (
               <p class="chat-text">分析完成。</p>
             )}
             {answerIn(idx)}
-            {fresh && !holding(idx) && !deferGuide && lastStepIdx < 0 && firstGuide()}
+            {fresh && !holding(idx) && !textPending(idx) && !deferGuide && lastStepIdx < 0 && firstGuide()}
             {endActions(idx)}
           </AssistantMsg>
         );
@@ -6529,12 +6548,12 @@ export function SessionView(props: {
             )}
             <AssistantMsg>
               <p class="chat-text">{openLine}</p>
-              {check && brief && <BriefCard brief={brief} />}
+              {check && (brief ? <BriefCard brief={brief} /> : photo.pending_brief && <p class="chat-text chat-muted">正在整理分析重點…</p>)}
               {check && live && !!promptNow && <p class="chat-text chat-muted">你的需求會留著，這次會連同分析的建議一起美化。</p>}
               {/* 「幫我分析」想知道的是還有哪裡能修，摘要已經回答了；下一步多半是照著美化，
                   所以先只給「看美化項目／美化」，想細調再展開項目。後面已經接著別的話
                   （打開項目、打字問 AI），下一步由那則帶，這裡就不掛了。 */}
-              {check && showChips && messages.slice(idx + 1).every((x) => x.card?.auto) &&
+              {check && showChips && !briefPending && messages.slice(idx + 1).every((x) => x.card?.auto) &&
                 (expandedCheck === m.id ? (
                   <>
                     <p class="chat-text">
@@ -6666,6 +6685,7 @@ export function SessionView(props: {
               failed={(c.failed_job_ids || []).length}
               next={idx === endIdx && !!endRow && !adjusting && !offerCheck}
               note={typeof c.note === "string" ? c.note : undefined}
+              noting={photo.pending_note?.version_id === c.version_id}
               onOpen={() => openVersion(v)}
               shown={v.version_id === current?.version_id}
             />

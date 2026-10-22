@@ -14,6 +14,10 @@ the draft plan for each, their in-flight jobs, and the message log.
     <base>:chat:sessions                ZSET  session_id -> updated_at
     <base>:chat:batch:<batch_id>:overview  STRING  the batch overview's own
                                               conversation, as the page wrote it
+    <base>:chat:<session_id>:advancing  STRING  held while one process lands
+                                              what the session's jobs finished
+    ACTIVE_KEY                          SET   [user, session_id] of sessions
+                                              with a photo waiting on a job
 
 <base> is account.py's per-user prefix, so every key carries the same Redis
 Cluster hash tag as that user's history. A photo's state (written by the
@@ -24,6 +28,7 @@ versions a session produced stay in history, which has no TTL.
 """
 
 import json
+import os
 import time
 import uuid
 
@@ -33,6 +38,16 @@ from photo_agent.chat_plan import default_plan, default_settings
 SESSION_TTL_SECONDS = 30 * 24 * 3600
 MESSAGES_MAX_LEN = 500
 MAX_PHOTOS_PER_SESSION = 100
+# Sessions the watcher keeps advancing. Named after the job queue like the chat
+# queue is, so each developer's .env.default keeps theirs apart from everyone
+# else's on a shared Redis -- otherwise one backend would advance another's
+# sessions with its own branch's code.
+ACTIVE_KEY = os.getenv("REDIS_CHAT_ACTIVE_KEY") or (
+    os.getenv("REDIS_MSG_QUEUE", "yce_ai:photoAgent:queue").split(",")[0] + ":chat:active")
+# A photo in one of these, or with a brief or note still being written, has
+# something for the backend to pick up (routes/chat.py's watcher).
+BUSY_STATUSES = ("analyzing", "reframing", "rendering")
+ADVANCE_LOCK_SECONDS = 120
 
 
 def _client():
@@ -74,6 +89,42 @@ def _touch(user, session_id):
 def _write(user, session_id, fields):
     _client().hset(_session_key(user, session_id), mapping={k: json.dumps(v) for k, v in fields.items()})
     _touch(user, session_id)
+    if any(k.startswith("photo:") and not k.endswith(":plan") and isinstance(v, dict) and waiting(v)
+           for k, v in fields.items()):
+        mark_active(user, session_id)
+
+
+def waiting(photo):
+    """Whether a photo has a job the backend still has to pick up."""
+    return (photo.get("status") in BUSY_STATUSES or bool(photo.get("pending_brief"))
+            or bool(photo.get("pending_note")))
+
+
+def mark_active(user, session_id):
+    _client().sadd(ACTIVE_KEY, json.dumps([user, session_id]))
+
+
+def drop_active(user, session_id):
+    _client().srem(ACTIVE_KEY, json.dumps([user, session_id]))
+
+
+def active_sessions():
+    """(user, session_id) of every session marked active."""
+    return [tuple(json.loads(_decode(m))) for m in _client().smembers(ACTIVE_KEY) or []]
+
+
+def lock_advance(user, session_id):
+    """A token if this caller may land the session's finished jobs now (no
+    one else is), else None. Released by unlock_advance."""
+    token = uuid.uuid4().hex
+    ok = _client().set(f"{_session_key(user, session_id)}:advancing", token, nx=True, ex=ADVANCE_LOCK_SECONDS)
+    return token if ok else None
+
+
+def unlock_advance(user, session_id, token):
+    key = f"{_session_key(user, session_id)}:advancing"
+    if _decode(_client().get(key)) == token:
+        _client().delete(key)
 
 
 def new_id(prefix):
@@ -322,6 +373,15 @@ def save_photo_state(user, session_id, photo):
     _write(user, session_id, {f"photo:{photo['photo_id']}": state})
 
 
+def update_photo_state(user, session_id, photo_id, fields):
+    """Merge fields into a photo's state as it is now -- not as an earlier
+    read of it had it, which a request may have moved on since."""
+    raw = _client().hget(_session_key(user, session_id), f"photo:{photo_id}")
+    if raw is None:
+        return
+    _write(user, session_id, {f"photo:{photo_id}": {**json.loads(raw), **fields}})
+
+
 def save_photo_snapshot(user, session_id, photo):
     """Commit a plan and its side-reference metadata in one Redis HSET."""
     state = {k: v for k, v in photo.items() if k != "plan"}
@@ -384,6 +444,27 @@ def replace_last_message(user, session_id, message_id, card):
     redis.lset(key, -1, json.dumps(message))
     _touch(user, session_id)
     return message
+
+
+def update_card(user, session_id, message_id, fields):
+    """Merge fields into one message's card -- a note written after its
+    version was already shown. False when the message is no longer kept."""
+    redis = _client()
+    key = _messages_key(user, session_id)
+    raw = redis.lrange(key, 0, -1) or []
+    for i in range(len(raw) - 1, -1, -1):
+        message = json.loads(raw[i])
+        if message["id"] != message_id:
+            continue
+        # Re-read just before writing: a trim since would have shifted it.
+        current = redis.lindex(key, i)
+        if not current or json.loads(current)["id"] != message_id:
+            return False
+        message["card"] = {**(message.get("card") or {}), **fields}
+        redis.lset(key, i, json.dumps(message))
+        _touch(user, session_id)
+        return True
+    return False
 
 
 def get_messages(user, session_id, limit=100):

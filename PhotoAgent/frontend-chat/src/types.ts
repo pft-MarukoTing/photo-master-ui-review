@@ -71,6 +71,9 @@ export interface Photo {
   reanalysis?: "check" | "render" | null;
   planned_ratio?: string | null;
   pending_render?: { action_id: string; job_ids: string[]; base?: string } | null;
+  // 照片本身已經好了，AI 還在寫的開場摘要／這一版的說明（開了「詳細解說」才有）。
+  pending_brief?: { job_id: string } | null;
+  pending_note?: { version_id: string; job_id?: string } | null;
   queued_render?: Dict | null;
   active_version?: ActiveVersion | null;
   plan: Plan;
