@@ -177,6 +177,8 @@ class ChatRoutesTest(unittest.TestCase):
             patch.object(chat, "get_job_info", get_job_info),
             patch.object(chat, "get_session_id", lambda: next(self.next_job)),
             patch.object(chat, "download_bytes", lambda key, job_id: (json.dumps(self.analysis).encode(), None)),
+            # Tests swap self.analysis under the same keys; the cache has its own test.
+            patch.object(chat, "_ANALYSIS_CACHE_SIZE", 0),
             patch.object(chat, "get_min_compatible_version", lambda: 3),
             # The worker's side of a chat job, run in place: only what survives
             # the trip through the job's info hash gets there.
@@ -2160,3 +2162,33 @@ class ReportSessionTest(unittest.TestCase):
         self.assertEqual(response.get_json()["report"], listed)
         self.assertEqual(self.client.get(f"/api/photo-agent/reports/{USER}/{report_id}").status_code, 403)
         self.assertEqual(self.client.get("/api/photo-agent/reports/admin/nope").status_code, 404)
+
+
+class AnalysisCacheTest(unittest.TestCase):
+    """A finished analysis is read from S3 once; later asks reuse the bytes."""
+
+    def setUp(self):
+        self.downloads = []
+        info = {"status": "success", "0_res0": {"cusKeys": ["a/analysis.json"]}}
+        cache = patch.object(chat, "_analysis_bytes", chat.OrderedDict())
+        for p in (cache, patch.object(chat, "get_job_info", lambda job_id, keyToGet=None: info),
+                  patch.object(chat, "download_bytes", self.download)):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def download(self, key, job_id):
+        self.downloads.append(key)
+        return json.dumps({"faces": [1]}).encode(), None
+
+    def test_a_second_load_skips_s3_and_hands_back_its_own_copy(self):
+        first, _ = chat._load_analysis("j1")
+        first["faces"].append(2)
+        second, error = chat._load_analysis("j1")
+        self.assertIsNone(error)
+        self.assertEqual(second, {"faces": [1]})
+        self.assertEqual(self.downloads, ["a/analysis.json"])
+
+    def test_a_failed_download_is_not_kept(self):
+        with patch.object(chat, "download_bytes", lambda key, job_id: (None, "timed out")):
+            self.assertEqual(chat._load_analysis("j1"), (None, "failed to download analysis: timed out"))
+        self.assertEqual(chat._load_analysis("j1")[0], {"faces": [1]})

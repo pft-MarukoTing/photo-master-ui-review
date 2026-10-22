@@ -31,6 +31,7 @@ import re
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 
 from flask import Blueprint, Response, current_app, jsonify, request
@@ -153,6 +154,29 @@ def _photo(session, photo_id):
     raise _RequestError("Photo not found", 404)
 
 
+# A finished job's result file never changes (its key carries the job id), yet
+# every ask, plan and brief re-reads it from S3. Keeping the raw bytes, not the
+# parsed dict, hands each caller a fresh copy it may mutate.
+_ANALYSIS_CACHE_SIZE = 256
+_analysis_bytes = OrderedDict()
+_analysis_bytes_lock = threading.Lock()
+
+
+def _download_analysis(key, job_id):
+    with _analysis_bytes_lock:
+        if key in _analysis_bytes:
+            _analysis_bytes.move_to_end(key)
+            return _analysis_bytes[key], None
+    data, error = download_bytes(key, job_id)
+    if error or data is None:
+        return data, error
+    with _analysis_bytes_lock:
+        _analysis_bytes[key] = data
+        while len(_analysis_bytes) > _ANALYSIS_CACHE_SIZE:
+            _analysis_bytes.popitem(last=False)
+    return data, None
+
+
 def _load_analysis(job_id):
     """(analysis, None) or (None, error) for a finished analyze job -- the
     same lookup /analyze/result does.
@@ -172,7 +196,7 @@ def _load_analysis(job_id):
     if not result_keys:
         return None, "job succeeded but analysis key is missing"
     combined = len(result_keys) > 1
-    analysis_bytes, download_error = download_bytes(result_keys[1 if combined else 0], job_id)
+    analysis_bytes, download_error = _download_analysis(result_keys[1 if combined else 0], job_id)
     if download_error or analysis_bytes is None:
         return None, f"failed to download analysis: {download_error}"
     analysis = json.loads(analysis_bytes)
@@ -2406,8 +2430,9 @@ def ask_photo(session_id, photo_id):
     asked = store.make_message("user", text.strip(), card)
     # Filtered before the limit: in a session of several photos the others'
     # turns would otherwise use up this photo's history.
-    prior = [m for m in store.get_messages(user, session_id, limit=1000)
-             if _about(m.get("card"), photo_id)]
+    with timed("ask_history", photo=photo_id):
+        prior = [m for m in store.get_messages(user, session_id, limit=1000)
+                 if _about(m.get("card"), photo_id)]
     answer_to = body.get("answer_to")
     if answer_to is not None:
         actionable = [m for m in prior if (m.get("card") or {}).get("type") != "personalized_snapshot"]
@@ -2421,7 +2446,8 @@ def ask_photo(session_id, photo_id):
                 # label verbatim, including whitespace, for selected_option.
                 asked['text'] = text
     history = prior[-chat_assistant.HISTORY_LEN:] + [asked]
-    return _answer(user, session_id, photo, history, screen, [asked])
+    with timed("ask_answer", photo=photo_id):
+        return _answer(user, session_id, photo, history, screen, [asked])
 
 
 def _side_context(photo, body, text):
@@ -2754,7 +2780,8 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
     photo_id = photo["photo_id"]
     analysis = None
     if photo["status"] != "analyzing":
-        analysis, error = _load_analysis(_analysis_job_id(photo))
+        with timed("ask_analysis", photo=photo_id):
+            analysis, error = _load_analysis(_analysis_job_id(photo))
         if error:
             current_app.logger.warning("chat ask without analysis for %s: %s", photo_id, error)
             analysis = None
