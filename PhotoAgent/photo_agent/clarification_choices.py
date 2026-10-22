@@ -1,6 +1,29 @@
 """Presentation choices for an unclear intent; accepting them still needs the LLM."""
 import json
 
+
+def choice_repair_instruction(question):
+    return ('\nCOMPLETE CLARIFICATION CHOICES ONLY:\n'
+        'Keep this question and the original user intent unchanged. Return 2-4 distinct, '
+        'short, actionable answers matching this question in options, answer_mode=choices. '
+        'Do not execute, accept or rewrite the editing request. If the question requires '
+        'original free text rather than alternatives, return answer_mode=free_text, options=[]. '
+        'Never invent names, literal text or people.\nQUESTION: ' + question)
+
+
+def question_presentation(result, repaired, options):
+    """Only copy answer presentation; patches, commands and new replies are ignored."""
+    out = dict(result)
+    req = dict(result.get('request') or {})
+    choices = options(repaired.get('options'))
+    mode = (repaired.get('request') or {}).get('answer_mode', repaired.get('answer_mode'))
+    # A validated question is still answerable by typing if presentation repair
+    # fails. This is not accepting an edit or inventing a missing user value.
+    free_text = mode == 'free_text' or len(choices) < 2
+    req['answer_mode'] = 'free_text' if free_text else 'choices'
+    out.update(request=req, options=[] if free_text else choices)
+    return out
+
 ANSWER_COMPLETION_INSTRUCTION = '''
 SELECTED ANSWER COMPLETION:
 Reason from the original input, the pending question and the user's answer as one

@@ -26,9 +26,9 @@ import time
 
 import config
 from openai_client import OPENAI_RESPONSES_URL, _extract_output_text, _parse_json_from_text, _post_json, _responses_payload
-from photo_agent import capabilities, request_semantics
+from photo_agent import capabilities, request_semantics, text_transform
 from photo_agent.clarification_choices import (LITERAL_CHOICE_INSTRUCTION, validate_selected_literal,
-    answer_context, answer_instruction, completion_retry)
+    answer_context, answer_instruction, completion_retry, choice_repair_instruction)
 from photo_agent.chat_brief import face_people, person_names
 from photo_agent.chat_plan import apply_plan_patch
 
@@ -1236,8 +1236,9 @@ REVIEW_SCHEMA = {
     "schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["verdict", "reply", "line", "options", "later", "aspect_ratio", "advanced_options", "asked_ratio", "merged", "withdraw", "semantics", "question_kind", "answer_mode", "missing_information"],
+        "required": ["verdict", "reply", "line", "options", "later", "aspect_ratio", "advanced_options", "asked_ratio", "merged", "withdraw", "semantics", "question_kind", "answer_mode", "missing_information", "text_transformations"],
         "properties": {
+            "text_transformations": text_transform.SCHEMA,
             "missing_information": {"type": "string"},
             "semantics": {"type": "array", "items": request_semantics.SCHEMA},
             "verdict": {"type": "string", "enum": ["keep", "setting", "clarify", "drop", "render", "analyze", "offer", "answer"]},
@@ -1683,6 +1684,7 @@ def _sections_text(sections):
 # for every line, so it sits with the instructions, ahead of the cache break.
 REVIEW_SEMANTIC_CONTRACT = ('SEMANTIC CONTRACT:\n' + request_semantics.INSTRUCTION + '\nFor this review use semantics array (not resolutions or semantic_version). Parse NEW LINE as written out in "line", if any, and quote source/target/action from that text. No invented IDs. Non-edit commands, unrelated chat or an analysis start can use []. Complete free-form edits are keep, not clarify merely because a verb is unusual. Clarify only missing information; preserve the operation when only the target is unknown.')
 REVIEW_SEMANTIC_CONTRACT += request_semantics.COMPLETION_INSTRUCTION
+REVIEW_SEMANTIC_CONTRACT += text_transform.INSTRUCTION
 
 
 class _ReviewCompletionError(ValueError):
@@ -1705,7 +1707,9 @@ _SEMANTIC_REPAIR_RULES = {
 }
 
 
-def _completed_review_values(result, source_evidence=()):
+def _completed_review_values(result, source_evidence=(), *, text_transformations=(),
+                            active_prompt='', instructions=(), active_literals=None,
+                            resulting_prompt=None):
     written = result.get('line').strip() if isinstance(result.get('line'), str) else ''
     values = result.get('semantics')
     if not written or len(written) > 2000:
@@ -1741,10 +1745,13 @@ def _completed_review_values(result, source_evidence=()):
     if uncovered:
         raise _ReviewCompletionError('incomplete_completed_coverage', field='semantics[].source',
             rule='Semantic source spans must cover the entire line, including every identity qualifier and operation.', observed=uncovered)
+    allowed = text_transform.authorized_literals(list(text_transformations) if isinstance(text_transformations, tuple) else text_transformations,
+        values, active_prompt=active_prompt, instructions=instructions,
+        active_literals=active_literals, resulting_prompt=resulting_prompt)
     for index, value in enumerate(values):
-        if source_evidence and value['literal_text'] and not any(value['literal_text'] in s for s in source_evidence):
+        if source_evidence and value['literal_text'] and value['literal_text'] not in allowed and not any(value['literal_text'] in s for s in source_evidence):
             raise _ReviewCompletionError('changed_literal_text', field='semantics[%d].literal_text' % index,
-                rule='Restore the exact user-requested printed characters from the current clarification chain in both line and semantics; do not translate or substitute characters.', observed=value['literal_text'])
+                rule='Keep exact printed characters unless the current user explicitly requested a transformation. For an authorized translation/rewrite/correction, return grounded text_transformations and synchronize line/semantics; otherwise restore the original characters.', observed=value['literal_text'])
     return values
 
 
@@ -1890,13 +1897,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
             return {**answer, 'options': []}
         if review_calls < 2:
             try:
-                repaired = run_review(context + '\nCOMPLETE CLARIFICATION CHOICES ONLY:\n'
-                    'Keep this question and the original user intent unchanged. Return 2-4 distinct, '
-                    'short, actionable answers matching this question in options, answer_mode=choices. '
-                    'Do not execute, accept or rewrite the editing request. If the answer truly '
-                    'requires original free text and honest alternatives cannot be offered, return '
-                    'answer_mode=free_text, options=[]. Do not invent names, literal text, or people.\n'
-                    'QUESTION: ' + answer['reply'])
+                repaired = run_review(context + choice_repair_instruction(answer['reply']))
                 options = _options(repaired.get('options'))
                 if len(options) >= 2:
                     return {**answer, 'options': options, 'answer_mode': 'choices'}
@@ -1917,7 +1918,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     if (answering and result.get('verdict') in ('keep', 'clarify', 'drop')) or completed_edit:
         # Follow the current clarification chain back to its original input,
         # without borrowing literal content from earlier unrelated wishes.
-        evidence = [line]
+        evidence = [line, prompt]
         for turn in reversed(history[:-1]):
             if turn['role'] == 'user':
                 evidence.append(turn['text'])
@@ -1934,7 +1935,16 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
                 if selected_context.get('selected_option'):
                     raise _ReviewCompletionError('missing_clarification_detail',field='missing_information',
                         rule='The user already selected an outcome. Return a complete edit, or name the specific essential fact only the user can supply. An invalid model field is not missing user intent.')
-            values = _completed_review_values(value, evidence)
+            final_sections = [s['text'] for s in sections]
+            for change in value.get('merged') or []:
+                if (isinstance(change, dict) and type(change.get('section')) is int
+                        and 1 <= change['section'] <= len(final_sections) and isinstance(change.get('text'), str)):
+                    final_sections[change['section'] - 1] = change['text']
+            values = _completed_review_values(value, evidence,
+                text_transformations=value.get('text_transformations', []),
+                active_prompt='；'.join(s['text'] for s in sections),
+                instructions=[line, selected_context.get('original') or ''],
+                resulting_prompt='；'.join(final_sections + [value.get('line') or '']))
             validate_selected_literal(values, line, history)
         try:
             validate_answer(result)

@@ -2,9 +2,9 @@
 import copy
 import json
 import logging
-from photo_agent import request_semantics
+from photo_agent import request_semantics, text_transform
 from photo_agent.chat_plan import apply_plan_patch
-from photo_agent.clarification_choices import validate_selected_literal, answer_context, answer_instruction, completion_retry
+from photo_agent.clarification_choices import validate_selected_literal, answer_context, answer_instruction, completion_retry, choice_repair_instruction, question_presentation
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,7 @@ constraints are verbatim nonempty substrings of source. All required fields must
 be present; complete and owner_required are booleans. Never invent a person ID.
 '''
 INSTRUCTION += request_semantics.COMPLETION_INSTRUCTION
+INSTRUCTION += text_transform.INSTRUCTION
 
 
 def schema(base):
@@ -68,8 +69,9 @@ def schema(base):
     out['schema']['required'].append('request')
     out['schema']['properties']['request']={
         'type':'object','additionalProperties':False,
-        'required':['kind','line','semantics','question_kind','answer_mode','missing_information'],
+        'required':['kind','line','semantics','question_kind','answer_mode','missing_information','text_transformations'],
         'properties':{
+            'text_transformations':text_transform.SCHEMA,
             'missing_information':{'type':'string'},
             'kind':{'type':'string','enum':['none','edit','clarify']},
             'line':{'type':'string'},
@@ -114,6 +116,8 @@ def validate(result,plan,history,validate_completion,options,debug=False):
     except (TypeError,ValueError):raise ContractError('invalid_patch_json','patch_json','Return a valid plan patch JSON object.')
     if not isinstance(patch,dict):raise ContractError('invalid_patch_json','patch_json','Return a JSON object.')
     kind=req['kind']
+    if req.get('text_transformations') and kind != 'edit':
+        raise ContractError('text_transformation_requires_edit', 'request.text_transformations', 'Only a complete validated edit may transform printed text; use [] for commands and questions.')
     selected=answer_context(history,next((m.get('text') or '' for m in reversed(history) if m.get('role')=='user'),''))
     if kind=='none':
         if 'user_prompt' in patch or 'literal_texts' in patch:
@@ -138,13 +142,24 @@ def validate(result,plan,history,validate_completion,options,debug=False):
         # The application owns raw history. No text reasoning or edit inference
         # belongs here: hypothetical non-person semantics are not executable.
         req={**req} if req['question_kind']=='person' else {**req,'line':original,'semantics':[]}
-        return {**result,'request':req,'clarification':dict(line=req['line'],
+        return {**result,'request':req,
+            'options':[] if req.get('answer_mode')=='free_text' else options(result.get('options')),
+            'clarification':dict(line=req['line'],
             semantics=req.get('semantics') or [],original=original,question=result.get('reply') or '')}
     written=req.get('line')
     if patch.get('user_prompt')!=written:
         raise ContractError('prompt_line_mismatch','patch_json.user_prompt','Write the same complete active prompt in request.line and patch_json.user_prompt.')
     evidence=[plan.get('user_prompt') or '']+[m.get('text') or '' for m in history if m.get('role')=='user']
-    values=[] if written=='' and req.get('semantics')==[] else validate_completion(dict(line=written,semantics=req.get('semantics')),evidence)
+    latest=next((m.get('text') or '' for m in reversed(history) if m.get('role')=='user'),'')
+    transform_args = dict(text_transformations=req['text_transformations'],
+        active_prompt=plan.get('user_prompt') or '', active_literals=plan.get('literal_texts'),
+        instructions=[latest, selected.get('original') or ''], resulting_prompt=written) if req.get('text_transformations') else {}
+    if written=='' and req.get('semantics')==[]:
+        if req.get('text_transformations'):
+            raise ContractError('empty_text_transformation', 'request.text_transformations', 'An empty resulting prompt cannot contain a transformation; use [] for cancellation.')
+        values=[]
+    else:
+        values=validate_completion(dict(line=written,semantics=req.get('semantics')),evidence,**transform_args)
     answer=next((m.get('text') or '' for m in reversed(history) if m.get('role')=='user'),'')
     validate_selected_literal(values,answer,history)
     literals=list(dict.fromkeys(v['literal_text'] for v in values if v['literal_text']))
@@ -177,6 +192,15 @@ def resolve(context,plan,history,run_model,validate_completion,options,debug=Fal
         feedback=getattr(exc,'feedback',dict(code=str(exc),field='request',rule='Return a consistent complete request.'))
         logger.warning('Chat session contract rejected: %s field=%s feedback=%s',
                        feedback['code'], feedback['field'], json.dumps(feedback, ensure_ascii=False))
+    if feedback['code'] == 'clarification_choices_missing':
+        # The question already passed intent/side-effect checks. Repair only
+        # its presentation, never turn an unanswered question into an edit.
+        try:
+            repaired=run_model(context+choice_repair_instruction(result.get('reply') or ''))
+        except (ValueError,TimeoutError,RuntimeError,OSError):
+            repaired={}
+        presented=question_presentation(result,repaired,options)
+        return validate(presented,plan,history,validate_completion,options,debug)
     try:
         repaired=run_model(context+'\nREPAIR SESSION REQUEST CONTRACT:\n'
             'This is an output validation error, not evidence that the user is unclear. '

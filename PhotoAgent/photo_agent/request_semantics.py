@@ -98,7 +98,8 @@ These are structural examples, not vocabulary rules. Apply to arbitrary edits,
 objects, protections and exact printed strings. Preserve every compatible
 operation once; update only the property/person the user changed or cancelled.
 Never pass validation by dropping an operation/identity/negative/constraint,
-changing literal characters, or assigning the whole line to unrelated operations.
+changing literal characters without validated user-authorized text_transformations,
+or assigning the whole line to unrelated operations.
 Repair ALL entries together, including source, target, action and coverage;
 then synchronize the final line and user_prompt patch where present.
 '''
