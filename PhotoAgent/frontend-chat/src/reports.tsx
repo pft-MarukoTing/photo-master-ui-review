@@ -130,7 +130,8 @@ export function StatusPill({ report, class: cls }: { report: ReportEntry; class?
 }
 
 // 記得是哪段對話的回報才打得開：聊天模式送的，或面板模式送、那張照片有對話的。
-const opensHere = (r: ReportEntry) => !!r.owner && !!(r.session_id || r.batch_id);
+// 在首頁、上傳頁送的沒有對話，打開看的是當時頁面的樣子。
+const opensHere = (r: ReportEntry) => !!r.page || (!!r.owner && !!(r.session_id || r.batch_id));
 
 function when(ts: number) {
   const d = new Date(ts * 1000);
@@ -139,7 +140,8 @@ function when(ts: number) {
 
 function ReportRow({ r, current, onOpen }: { r: ReportEntry; current: boolean; onOpen: (r: ReportEntry) => void }) {
   const open = opensHere(r);
-  const where = r.source === "chat" ? "聊天模式" : r.path === "aipoc" ? "AIPoC" : "面板模式";
+  const page = r.page === "home" ? " · 首頁" : r.page === "upload" ? " · 上傳頁" : "";
+  const where = r.source === "chat" ? `聊天模式${page}` : r.path === "aipoc" ? "AIPoC" : "面板模式";
   const prompt = (r.version_params?.user_prompt as string | undefined) || r.user_prompt;
   // 跟面板模式的回報清單同一套挑法（renderReportsList, app.js）：只做了分析的 job 用原圖，
   // 有結果的用結果圖，沒有 job 的一般回報用後端從對話挑的那張。AIPoC 那條路沒有縮圖可用。
@@ -148,6 +150,7 @@ function ReportRow({ r, current, onOpen }: { r: ReportEntry; current: boolean; o
     : r.analyze_job_id ? urls.sourceThumb(r.analyze_job_id)
     : r.job_id ? urls.resultThumb(r.job_id)
     : !r.thumbnail ? ""
+    : "src" in r.thumbnail ? r.thumbnail.src
     : r.thumbnail.run ? urls.resultThumb(r.thumbnail.job_id, r.thumbnail.run)
     : urls.sourceThumb(r.thumbnail.job_id);
   const [broken, setBroken] = useState<string | null>(null);

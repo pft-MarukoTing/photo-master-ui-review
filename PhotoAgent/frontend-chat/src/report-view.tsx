@@ -7,6 +7,7 @@
 // 被回報的那張；在總覽回報的（只有 batch_id）就停在總覽。
 // 預設看的是回報當下存下來的那份對話，使用者回報之後再做的操作不會混進來；標頭的
 // 「回報時｜現在」可以切到對話現在的樣子。這功能上線前的回報沒存，只能看現在的。
+// 在首頁、上傳頁回報的還沒有對話，改看回報當下記下的頁面（report-page.ts）。
 import { useLayoutEffect, useEffect, useState } from "preact/hooks";
 import { api, setUser, urls, type ReportRef } from "./api";
 import {
@@ -25,6 +26,7 @@ import {
 import { AssistantMsg, BatchUploadBubble, ChatPanel, ClickBubble, UserMsg } from "./chat";
 import { resolveUser } from "./identity";
 import { Icon } from "./icons";
+import type { ReportPage } from "./report-page";
 import { leaveReport, ReportsButton, saveStatus, StatusPill } from "./reports";
 import { StepIndicator } from "./results";
 import { settingsChanges } from "./settings";
@@ -51,6 +53,8 @@ type Loaded = {
   caps: Capabilities;
   debugUi: boolean;
   analyses: Record<string, Analysis>;
+  // 首頁、上傳頁的回報：沒有 session，只有當時頁面上的東西。
+  page: ReportPage | null;
 };
 
 // 回報的那一刻：時間軸上標一條線，底下是回報說明。
@@ -79,7 +83,7 @@ export function ReportView({ reportId }: { reportId: string }) {
     (async () => {
       try {
         setUser(await resolveUser());
-        const [{ sessions, overview, report, live, kept }, caps, cfg] = await Promise.all([
+        const [{ sessions, overview, report, live, kept, page }, caps, cfg] = await Promise.all([
           api.reportSession(reportId, wantLive),
           api.capabilities(),
           api.config(),
@@ -113,7 +117,7 @@ export function ReportView({ reportId }: { reportId: string }) {
         );
         // 打開一筆未讀的就算讀過了，跟從清單點進來一樣（舊版「查看對話」的連結不會改狀態）。
         if (!wantLive && (report.status || "unread") === "unread") saveStatus(report, "read", () => {});
-        setData({ sessions, overview: (overview as SavedOverview | null) || null, report, live, kept, caps, debugUi: !!cfg.debugUi, analyses });
+        setData({ sessions, overview: (overview as SavedOverview | null) || null, report, live, kept, caps, debugUi: !!cfg.debugUi, analyses, page: page || null });
         setSelected(null);
         setSwitching(false);
       } catch (e) {
@@ -165,7 +169,7 @@ export function ReportView({ reportId }: { reportId: string }) {
               <span class="report-view-badge">唯讀</span>
               <span class="report-view-owner">{report.owner} 的對話</span>
               <StatusPill report={report} />
-              <nav class="mode-switch report-view-when" aria-label="看哪個時間點的對話">
+              {!data.page && <nav class="mode-switch report-view-when" aria-label="看哪個時間點的對話">
                 <button
                   type="button"
                   class={`mode-switch-opt${!data.live ? " is-active" : ""}`}
@@ -186,7 +190,7 @@ export function ReportView({ reportId }: { reportId: string }) {
                 >
                   現在
                 </button>
-              </nav>
+              </nav>}
             </div>
           )}
           <div class="report-view-actions">
@@ -197,7 +201,7 @@ export function ReportView({ reportId }: { reportId: string }) {
                 <span class="btn-label">面板模式</span>
               </a>
             ) : (
-              <a class="btn btn-secondary btn-sm" aria-disabled="true" title={report ? (view === OVERVIEW ? "先在左邊選一張，才有面板可看" : "這張還沒有分析結果，沒有面板可看") : undefined}>
+              <a class="btn btn-secondary btn-sm" aria-disabled="true" title={report ? (data?.page ? "在首頁或上傳頁回報的，還沒有面板可看" : view === OVERVIEW ? "先在左邊選一張，才有面板可看" : "這張還沒有分析結果，沒有面板可看") : undefined}>
                 <Icon name="layout" size={14} />
                 <span class="btn-label">面板模式</span>
               </a>
@@ -212,7 +216,8 @@ export function ReportView({ reportId }: { reportId: string }) {
       <main>
         {error && <p class="report-view-status">{error}</p>}
         {!error && !data && <p class="report-view-status">正在讀取對話…</p>}
-        {data && !view && <p class="report-view-status">這段對話裡沒有照片。</p>}
+        {data?.page && <PageReport page={data.page} report={data.report} />}
+        {data && !data.page && !view && <p class="report-view-status">這段對話裡沒有照片。</p>}
         {data && view && <ReportBody data={data} view={view} selected={selected} onPick={pick} onSelect={setSelected} />}
       </main>
     </>
@@ -454,5 +459,82 @@ function OverviewLog({ data, thumbs }: { data: Loaded; thumbs: Map<string, strin
       </AssistantMsg>
       {at < 0 ? items : <>{items.slice(0, at)}<ReportMark report={report} live={data.live} />{items.slice(at)}</>}
     </ChatPanel>
+  );
+}
+
+// 首頁、上傳頁的回報：照記下來的頁面排回去。首頁只有一句話；上傳頁左邊是當時的照片，
+// 右邊是聊天區每一則的文字和圖，按鈕改寫成「給的選項」，最後是回報的線。
+function PageReport({ page, report }: { page: ReportPage; report: ReportRef }) {
+  if (page.page === "home") {
+    return (
+      <div class="report-view-page-home">
+        <p class="report-view-status">在首頁回報的，當時還沒開始對話。</p>
+        <ReportMark report={report} live={false} />
+      </div>
+    );
+  }
+  const photos = page.photos || [];
+  const total = page.total || photos.length;
+  const more = total - photos.length;
+  return (
+    <>
+      {total > 0 && <StepIndicator step={1} state="done" pre />}
+      <section id="upload-section" class="section visible">
+        <div class={`container upload-container${total > 0 ? " has-flow" : ""}`}>
+          <div class="upload-grid">
+            <div class="upload-content-row is-chat">
+              {total > 1 ? (
+                <aside class="batch-sidebar" id="batch-sidebar">
+                  <div class="batch-sidebar-header">
+                    <h2 class="batch-sidebar-title">我的照片</h2>
+                  </div>
+                  <div class="batch-sidebar-list" aria-label="當時的照片">
+                    {photos.map((src, i) => (
+                      <span key={i} class="history-cube batch-sidebar-item">
+                        <span class="rc-media"><img src={src} alt="" /></span>
+                      </span>
+                    ))}
+                    {more > 0 && <p class="chat-text chat-muted">{`還有 ${more} 張沒有記下來`}</p>}
+                  </div>
+                </aside>
+              ) : photos[0] ? (
+                <div class="prechat-stage">
+                  <div class="prechat-shot"><img src={photos[0]} alt="當時的照片" /></div>
+                </div>
+              ) : null}
+              <ChatPanel class="home-chat" sub="上傳頁" footer={null} live={false}>
+                {(page.messages || []).map((m, i) =>
+                  m.user ? (
+                    <UserMsg key={i}>
+                      {m.images.length ? (
+                        <BatchUploadBubble srcs={m.images} text={m.lines.join(" ")} />
+                      ) : (
+                        <div class="chat-bubble">{m.lines.join(" ") || m.chips.join("、")}</div>
+                      )}
+                    </UserMsg>
+                  ) : (
+                    <AssistantMsg key={i}>
+                      {m.images.length > 0 && (
+                        <div class="chat-upload-stack" aria-hidden="true">
+                          {m.images.map((src, j) => <img key={j} src={src} alt="" />)}
+                        </div>
+                      )}
+                      {m.lines.map((l, j) => <p key={j} class="chat-text">{l}</p>)}
+                      {m.chips.length > 0 && <p class="chat-text chat-muted">{`給的選項：${m.chips.join("、")}`}</p>}
+                    </AssistantMsg>
+                  ),
+                )}
+                {!!page.settings?.length && (
+                  <AssistantMsg>
+                    <p class="chat-text chat-muted">{`當時的設定：${page.settings.join("、")}`}</p>
+                  </AssistantMsg>
+                )}
+                <ReportMark report={report} live={false} />
+              </ChatPanel>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
   );
 }

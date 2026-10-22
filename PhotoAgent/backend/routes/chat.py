@@ -49,7 +49,7 @@ from backend.services.account import (
 )
 from backend.services.compatibility import get_min_compatible_version
 from backend.services.put_job import download_bytes, enqueue, get_session_id, lost_job_error
-from backend.services.report import get_report_by_id, get_report_chat, is_admin
+from backend.services.report import get_report_by_id, get_report_chat, get_report_page, is_admin
 from backend.services.template_params import get_engine_params_template
 from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, image_to_data_url
@@ -588,7 +588,7 @@ def get_session(session_id):
 
 
 # What the read-only view shows of the report itself.
-REPORT_VIEW_FIELDS = ("report_id", "user", "owner", "ts", "note", "job_id", "session_id", "photo_id", "batch_id", "status")
+REPORT_VIEW_FIELDS = ("report_id", "user", "owner", "ts", "note", "job_id", "session_id", "photo_id", "batch_id", "status", "page")
 
 
 def _reported_chat():
@@ -624,7 +624,22 @@ def _reported_chat():
 
 @chat_bp.get("/report-session")
 def report_session():
-    chat, report = _reported_chat()
+    try:
+        chat, report = _reported_chat()
+    except _RequestError as exc:
+        # Filed from 首頁 or the upload page (record_report's "page"): no
+        # conversation, or a batch whose photos never got one -- the view
+        # shows the page as it was instead (save_report_page). A batch that
+        # did get going still opens as the conversation above.
+        report = get_report_by_id(request.args.get("report") or "") if exc.status == 404 else None
+        if not (report or {}).get("page"):
+            raise
+        report = {**report, "report_id": request.args.get("report")}
+        return jsonify({
+            "sessions": [], "overview": None, "live": False, "kept": True,
+            "page": get_report_page(report["report_id"]) or {"page": report["page"]},
+            "report": {key: report.get(key) for key in REPORT_VIEW_FIELDS},
+        })
     return jsonify({
         **chat,
         # Whether there is a report-time copy to switch back to from live.

@@ -1,5 +1,6 @@
 import type { Capabilities, Dict, Message, Plan, Session, SessionSummary } from "./types";
 import type { SideAnswer, SideQuestion } from "./side-reference";
+import type { ReportPage } from "./report-page";
 
 // The chat page is served at <BASE>/chat/, next to the old UI at <BASE>/.
 export const BASE = location.pathname.replace(/\/chat(\/.*)?$/, "");
@@ -34,6 +35,8 @@ export interface ReportChat {
   sessionId?: string | null;
   photoId?: string | null;
   batchId?: string | null;
+  // 首頁、上傳頁還沒有對話：送出時改記當下頁面上有什麼（report-page.ts）。
+  page?: () => Promise<ReportPage>;
 }
 
 // 回報本身（/chat/report-session 跟對話一起回來的那幾欄）。ts 是秒。
@@ -48,6 +51,8 @@ export interface ReportRef {
   photo_id?: string | null;
   batch_id?: string | null;
   status?: ReportStatus;
+  // 在首頁、上傳頁送的（沒有對話，記的是頁面）。
+  page?: ReportPage["page"] | null;
 }
 
 // 回報清單（舊版回報抽屜同一支 /reports/<user>）的一筆。source 是 "chat" 才是聊天
@@ -62,7 +67,8 @@ export interface ReportEntry extends ReportRef {
   // 這個 job 只做了分析、沒有結果圖，縮圖改用它的原圖。
   analyze_job_id?: string | null;
   // 沒有 job 的聊天回報，後端從對話裡挑一張當縮圖（_chat_report_thumbnail, api.py）；run 是 null 就是原圖。
-  thumbnail?: { job_id: string; run: number | null } | null;
+  // 在上傳頁送的，src 是當時第一張照片的小圖（data URL）。
+  thumbnail?: { job_id: string; run: number | null } | { src: string } | null;
 }
 
 export function getUser() {
@@ -132,7 +138,7 @@ export const api = {
   // admin at the conversation itself: owner is whose session it is (name is
   // whatever the reporter typed, which may not be), and the ids are what is
   // on screen.
-  report: (name: string, jobId: string | null, note: string, chat: ReportChat) => {
+  report: (name: string, jobId: string | null, note: string, chat: ReportChat, page?: ReportPage) => {
     const form = new FormData();
     form.append("user", name);
     if (jobId) form.append("job_id", jobId);
@@ -143,6 +149,11 @@ export const api = {
     if (chat.sessionId) form.append("session_id", chat.sessionId);
     if (chat.photoId) form.append("photo_id", chat.photoId);
     if (chat.batchId) form.append("batch_id", chat.batchId);
+    if (page) {
+      form.append("page", page.page);
+      // 檔案，不是一般欄位：後端（Werkzeug）對一般欄位的大小限制，十幾張小圖就會超過。
+      form.append("page_state", new Blob([JSON.stringify(page)], { type: "application/json" }), "page.json");
+    }
     return request<{ reported: boolean; report_id: string }>(`${API}/photo-agent/report`, { method: "POST", body: form });
   },
   demoImages: () => request<{ images: string[] }>(`${API}/photo-agent/demo-images`),
@@ -275,7 +286,7 @@ export const api = {
   // 預設是回報當下存下來的那份；live 改讀對話現在的樣子。kept：這筆有沒有存當下那份
   // （這功能上線前的回報沒有，只能看現在的）。
   reportSession: (reportId: string, live = false) =>
-    request<{ sessions: Session[]; overview: Dict | null; report: ReportRef; live: boolean; kept: boolean }>(
+    request<{ sessions: Session[]; overview: Dict | null; report: ReportRef; live: boolean; kept: boolean; page?: ReportPage | null }>(
       `${CHAT}/report-session${q({ report: reportId, ...(live ? { live: "1" } : {}) })}`,
     ),
   // 回報清單，只有管理者讀得到（不是管理者就 403，順便當成「是不是管理者」的判斷）。

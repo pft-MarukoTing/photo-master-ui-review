@@ -35,6 +35,12 @@ REPORT_CHATS_KEY = "yce_ai:photoAgent:report_chats"
 # session it is -- the report's own "user" is whatever name the reporter typed
 # into the form, which need not be the account the session lives under.
 REPORT_CHAT_FIELDS = ("owner", "session_id", "photo_id", "batch_id")
+# Filed from the chat UI's 首頁 or upload page, where there is no conversation
+# yet to copy: the entry's "page" says which, and this keeps what the upload
+# page had on it (the photos picked, the wishes typed and what the AI said to
+# them, settings changed), keyed by report_id like REPORT_CHATS_KEY.
+REPORT_PAGES_KEY = "yce_ai:photoAgent:report_pages"
+REPORT_PAGES = ("home", "upload")
 
 _ADMIN_USERS = {
     name.strip().lower()
@@ -124,6 +130,8 @@ def record_report(username, job_id, path, note=None, user_prompt=None, screensho
     for key in REPORT_CHAT_FIELDS:
         if (chat or {}).get(key):
             entry[key] = chat[key]
+    if (chat or {}).get("page") in REPORT_PAGES:
+        entry["page"] = chat["page"]
     if job_id:
         case = _case_for_report(_history_owner(entry), job_id)
         if case:
@@ -164,6 +172,24 @@ def get_report_chat(report_id):
     copies were kept, or one whose copy failed)."""
     try:
         raw = pf_redis_client.hget(REPORT_CHATS_KEY, report_id)
+        return json.loads(raw) if raw else None
+    except Exception:
+        return None
+
+
+def save_report_page(report_id, page):
+    """Best-effort, like save_report_chat: without it the read-only view of a
+    首頁/upload-page report shows just the report itself."""
+    try:
+        pf_redis_client.hset(REPORT_PAGES_KEY, report_id, json.dumps(page))
+    except Exception:
+        pass
+
+
+def get_report_page(report_id):
+    """save_report_page's copy for report_id, or None."""
+    try:
+        raw = pf_redis_client.hget(REPORT_PAGES_KEY, report_id)
         return json.loads(raw) if raw else None
     except Exception:
         return None
@@ -222,12 +248,13 @@ def delete_report(report_id):
     any) is a separate lifecycle (see account.py's own history-vs-job
     split) and is never touched here. Any S3 screenshot the report carried
     is left in place; it's just no longer reachable via report_screenshot
-    once its entry is gone. The conversation copy (save_report_chat) goes
-    with it; the job-info copy (_snapshot_reported_job) is dropped once no
+    once its entry is gone. The conversation copy (save_report_chat) and the
+    page copy (save_report_page) go with it; the job-info copy (_snapshot_reported_job) is dropped once no
     report points at that job any more."""
     entry = get_report_by_id(report_id)
     pf_redis_client.hdel(REPORTS_KEY, report_id)
     pf_redis_client.hdel(REPORT_CHATS_KEY, report_id)
+    pf_redis_client.hdel(REPORT_PAGES_KEY, report_id)
     # The job copy goes with the last report pointing at that job.
     job_id = (entry or {}).get("job_id")
     if job_id and not _job_still_reported(job_id):

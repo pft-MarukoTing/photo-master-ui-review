@@ -52,6 +52,7 @@ import { Icon } from "./icons";
 import { CASE_PREFIX, rowId, ConfirmModal, Gallery, Header, HistoryDrawer, HomeIntro, type GallerySelection, type GalleryTab } from "./home";
 import { handoffPatch, takeHandoff, writeHandoff } from "./handoff";
 import { resolveUser } from "./identity";
+import { captureUploadPage, type ReportPage } from "./report-page";
 import { ResultsCanvas, SplitGrip, StepIndicator, VersionViewer, stepState, versionJob } from "./results";
 import {
   categoriesFor,
@@ -3271,12 +3272,19 @@ export function App() {
   const toOldUi = () => {
     if (caps && photo?.case_id) writeHandoff(photo.case_id, photo.plan, caps, analyses[photo.photo_id]?.analysis);
   };
+  // 首頁、上傳頁還沒有對話，回報改記當下頁面上的樣子（report-page.ts）。
+  const reportPage = phase === "home"
+    ? async (): Promise<ReportPage> => ({ page: "home" })
+    : phase === "chat"
+      ? () => captureUploadPage((batch || (source ? [source] : [])).map(thumbSrc),
+        caps && settings ? settingsChanges(caps, defaultSettings(caps, prefs || undefined), settings) : [])
+      : undefined;
   const header = (
     <Header
       jobId={phase === "session" ? photo?.active_version?.job_id || photo?.analyze_job_id || null : null}
       reportChat={phase === "session"
         ? { sessionId, photoId: photo?.photo_id, batchId: session?.batch_id }
-        : { batchId: phase === "chat" && batch ? batchId.current : null }}
+        : { batchId: phase === "chat" && batch ? batchId.current : null, page: reportPage }}
       onHome={async () => {
         if (await confirmLeave("回到首頁")) goHome();
       }}

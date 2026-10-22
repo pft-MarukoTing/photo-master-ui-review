@@ -75,7 +75,9 @@ function ReportModal(props: { jobId: string | null; chat: ReportChat; onClose: (
     setBusy(true);
     setError("");
     try {
-      await api.report(name.trim(), props.jobId, note.trim(), props.chat);
+      // 頁面的樣子抄不到也照樣送，只是管理者那邊只看得到回報本身。
+      const page = props.chat.page && (await props.chat.page().catch(() => undefined));
+      await api.report(name.trim(), props.jobId, note.trim(), props.chat, page || undefined);
       setDone(true);
     } catch (err) {
       setError((err as Error).message || "回報失敗，請稍後再試。");

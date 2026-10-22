@@ -21,7 +21,7 @@ from backend.services.account import attach_case_analysis, create_account, clear
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, derive_preview_key, derive_view_key, cache_thumbnail, upload_report_screenshot, lost_job_error
-from backend.services.report import REPORT_CHAT_FIELDS, delete_report, get_report, get_report_by_id, get_reported_job_info, get_report_chat, get_reports, is_admin, record_report, save_report_chat, update_report_status
+from backend.services.report import REPORT_CHAT_FIELDS, REPORT_PAGES, delete_report, get_report, get_report_by_id, get_reported_job_info, get_report_chat, get_report_page, get_reports, is_admin, record_report, save_report_chat, save_report_page, update_report_status
 from backend.services.template_params import get_engine_params_template
 
 api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
@@ -465,13 +465,71 @@ def report_job():
     # admin can open it (REPORT_CHAT_FIELDS, backend/services/report.py).
     source = "chat" if body.get("source") == "chat" else None
     chat = {key: str(body.get(key))[:128] for key in REPORT_CHAT_FIELDS if body.get(key)} if source else _panel_case_chat(body)
+    page = _reported_page(body) if source else None
+    if page:
+        chat = {**(chat or {}), "page": page["page"]}
     report_id = record_report(
         name, job_id, body.get("path") or "local",
         note=body.get("note"), user_prompt=body.get("user_prompt"), screenshot_key=screenshot_key,
         source=source, chat=chat
     )
     _save_reported_chat(report_id, chat)
+    if page:
+        save_report_page(report_id, page)
     return jsonify({"reported": True, "report_id": report_id})
+
+
+REPORT_PAGE_MAX_BYTES = 2 * 1024 * 1024
+REPORT_PAGE_MAX_IMAGE = 64 * 1024
+
+
+def _reported_page(body):
+    """The chat UI's 首頁/upload page as it stood at the report
+    (frontend-chat/src/report-page.ts), for a report with no conversation to
+    copy. Kept to plain strings and small data: image URLs -- anything the
+    admin's read-only view puts in an <img> -- must be small inline JPEG/PNG
+    thumbnails, so a reporter can't point the admin's browser elsewhere."""
+    kind = body.get("page")
+    if kind not in REPORT_PAGES:
+        return None
+    page = {"page": kind}
+    # A file part, not a field: Werkzeug caps plain form fields well below
+    # what a dozen thumbnails add up to.
+    upload = request.files.get("page_state")
+    if kind != "upload" or not upload:
+        return page
+    data = upload.read(REPORT_PAGE_MAX_BYTES + 1)
+    if len(data) > REPORT_PAGE_MAX_BYTES:
+        return page
+    try:
+        state = json.loads(data)
+    except ValueError:
+        return page
+    if not isinstance(state, dict):
+        return page
+
+    def image(src):
+        ok = isinstance(src, str) and len(src) <= REPORT_PAGE_MAX_IMAGE and src.startswith(("data:image/jpeg;base64,", "data:image/png;base64,"))
+        return src if ok else None
+
+    def texts(items, limit, size):
+        return [str(x)[:size] for x in (items if isinstance(items, list) else [])[:limit] if isinstance(x, (str, int, float))]
+
+    page["photos"] = [src for src in map(image, (state.get("photos") if isinstance(state.get("photos"), list) else [])[:12]) if src]
+    total = state.get("total")
+    page["total"] = total if isinstance(total, int) and total >= 0 else len(page["photos"])
+    page["settings"] = texts(state.get("settings"), 20, 200)
+    messages = state.get("messages") if isinstance(state.get("messages"), list) else []
+    page["messages"] = [
+        {
+            "user": bool(m.get("user")),
+            "lines": texts(m.get("lines"), 40, 2000),
+            "images": [src for src in map(image, (m.get("images") if isinstance(m.get("images"), list) else [])[:4]) if src],
+            "chips": texts(m.get("chips"), 12, 80),
+        }
+        for m in messages[:80] if isinstance(m, dict)
+    ]
+    return page
 
 
 def _save_reported_chat(report_id, chat):
@@ -509,7 +567,7 @@ def reports(user):
         return jsonify({"error": "limit and offset must be integers"}), 400
     reports, has_more = get_reports(limit=limit, offset=offset)
     for entry in reports:
-        thumbnail = _chat_report_thumbnail(entry)
+        thumbnail = _page_report_thumbnail(entry) or _chat_report_thumbnail(entry)
         if thumbnail:
             entry["thumbnail"] = thumbnail
     return jsonify({"reports": reports, "has_more": has_more})
@@ -551,6 +609,15 @@ def _chat_report_analyze_job(entry):
         return None
     photo = next((p for p in (session or {}).get("photos", []) if p.get("photo_id") == photo_id), None)
     return (photo or {}).get("analyze_job_id")
+
+
+def _page_report_thumbnail(entry):
+    """A report filed from the upload page: its first photo, from the page
+    copy (_reported_page), as {src: <data URL>}. 首頁 ones have none."""
+    if entry.get("page") != "upload":
+        return None
+    photos = (get_report_page(entry["report_id"]) or {}).get("photos") or []
+    return {"src": photos[0]} if photos else None
 
 
 def _chat_report_thumbnail(entry):
