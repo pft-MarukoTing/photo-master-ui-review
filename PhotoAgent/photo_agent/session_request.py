@@ -2,6 +2,7 @@
 import copy
 import json
 import logging
+import config
 from photo_agent import request_semantics, text_transform
 from photo_agent.chat_plan import apply_plan_patch
 from photo_agent.clarification_choices import validate_selected_literal, answer_context, answer_instruction, completion_retry, choice_repair_instruction, question_presentation
@@ -181,6 +182,12 @@ def _retry_result(selected):
 def resolve(context,plan,history,run_model,validate_completion,options,debug=False):
     selected=answer_context(history,next((m.get('text') or '' for m in reversed(history) if m.get('role')=='user'),''))
     marker='PENDING CLARIFICATION: '
+    if config.ENABLE_CHAT_PATCH_CONTINUE and pending(history).get('patch_continue'):
+        context=context.replace(marker,
+            'UNAPPLIED CHAT CONTINUATION: The pending original request has not changed PLAN. '
+            'Use its saved targets and confirmed answers with the current answer to complete a fresh patch. '
+            'Do not ask already answered questions again. Internal contract defects must be repaired '
+            'by the model, not treated as missing user intent.\n'+marker,1)
     context=context.replace(marker,answer_instruction(selected)+'\n'+marker,1) if marker in context else context+'\n'+answer_instruction(selected)
     try:result=run_model(context)
     except (TimeoutError,RuntimeError,OSError):
@@ -201,6 +208,7 @@ def resolve(context,plan,history,run_model,validate_completion,options,debug=Fal
             repaired={}
         presented=question_presentation(result,repaired,options)
         return validate(presented,plan,history,validate_completion,options,debug)
+    repaired = None
     try:
         repaired=run_model(context+'\nREPAIR SESSION REQUEST CONTRACT:\n'
             'This is an output validation error, not evidence that the user is unclear. '
@@ -219,6 +227,9 @@ def resolve(context,plan,history,run_model,validate_completion,options,debug=Fal
         failure=getattr(exc,'feedback',dict(code=str(exc),field='request'))
         logger.warning('Chat session repair failed; no changes applied: %s field=%s feedback=%s',
                        failure['code'], failure['field'], json.dumps(failure, ensure_ascii=False))
+        if config.ENABLE_CHAT_PATCH_CONTINUE:
+            from photo_agent.patch_continue import continue_dialogue
+            return continue_dialogue(context, history, result, repaired, run_model)
         if selected:
             return _retry_result(selected)
         # Keep the conversation, never turn invalid output into a plan change.

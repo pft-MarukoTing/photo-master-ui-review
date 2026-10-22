@@ -21,6 +21,9 @@ ENABLE_CHAT_PREVIEW_INTRODUCTION = False
 # Chat only: require confirmation of subject-relative versus image-relative body sides.
 # Off preserves left/right wording as an ordinary edit; person selection still applies.
 ENABLE_CHAT_BODY_SIDE_CLARIFICATION = False
+# Continue dialogue only after chat_ask contract validation and repair fail.
+# Off preserves the existing terminal failure/retry behavior.
+ENABLE_CHAT_PATCH_CONTINUE = True
 # Optional extra visual pass for Chat requests. Enable during rollout to
 # clarify absent/uncertain edit targets; no extra call when disabled or empty.
 ENABLE_CHAT_REQUEST_FEASIBILITY = False

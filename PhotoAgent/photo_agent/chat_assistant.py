@@ -1130,6 +1130,10 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
             raise TimeoutError('session_request_deadline_exceeded')
         return model(text) if model is not None else call_model(text, timeout=remaining)
     result = session_request.resolve(context, plan, history, run_model, _completed_review_values, _options, debug)
+    if config.ENABLE_CHAT_PATCH_CONTINUE and result.get('patch_continue'):
+        # This is display-only, not a proposal. Bypass ordinary option cleanup,
+        # success wording and command heuristics only for this terminal branch.
+        return result
     req = result.get('request') or {}
     if req.get('kind') == 'clarify':
         options = _options(result.get('options'))

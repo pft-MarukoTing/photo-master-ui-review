@@ -6058,7 +6058,8 @@ export function SessionView(props: {
     const c = m.card!;
     return (
       <>
-        {c.text && <p class="chat-text">{said(c.text)}</p>}
+        {c.clarification?.patch_continue && <p class="chat-text">這項需求尚未套用，可以繼續回答或補充需求。</p>}
+        {c.text && <p class="chat-text">{c.clarification?.patch_continue ? c.text : said(c.text)}</p>}
         {c.proposal && (
           <ProposalCard
             proposal={c.proposal}

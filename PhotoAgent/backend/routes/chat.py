@@ -2413,6 +2413,11 @@ def ask_photo(session_id, photo_id):
         if not isinstance(answer_to, str) or previous.get("id") != answer_to or previous.get("role") != "assistant" or (previous.get("card") or {}).get("type") != "llm_reply" or not (previous.get("card") or {}).get("question_kind"):
             raise _RequestError("this clarification is no longer current", 409)
         asked["card"]["answers_question_id"] = answer_to
+        if ((previous.get('card') or {}).get('clarification') or {}).get('patch_continue') and agent_config.ENABLE_CHAT_PATCH_CONTINUE:
+            if text in (previous.get('card') or {}).get('options', []):
+                # Only this display-only continuation preserves a clicked LLM
+                # label verbatim, including whitespace, for selected_option.
+                asked['text'] = text
     history = prior[-chat_assistant.HISTORY_LEN:] + [asked]
     return _answer(user, session_id, photo, history, screen, [asked])
 
@@ -2788,7 +2793,7 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
     if answer["reply"] or proposal or not answer["render"]:
         messages.append(store.make_message("assistant", card={
             "type": "llm_reply", "photo_id": photo_id,
-            "text": answer["reply"] or "我不太確定要怎麼調整，可以直接在面板上修改。", "proposal": proposal,
+            "text": answer["reply"] if agent_config.ENABLE_CHAT_PATCH_CONTINUE and (answer.get('clarification') or {}).get('patch_continue') else answer["reply"] or "我不太確定要怎麼調整，可以直接在面板上修改。", "proposal": proposal,
             "options": answer["options"],
             **({"question_kind": answer["question_kind"], "answer_mode": answer.get("answer_mode"),
                 "clarification": answer.get("clarification")} if answer.get("question_kind") else {}),
