@@ -14039,7 +14039,7 @@
     }
     // Say what was left out rather than quietly importing a subset.
     if (skipped.length) {
-      showError(tr("已略過 {length} 個無法讀取的子資料夾：{v2}{v3}", { length: skipped.length, v2: skipped.slice(0, 5).join("、"), v3: skipped.length > 5 ? " …" : "" }));
+      showError(tr("已略過 {length} 個無法讀取的子資料夾：{v2}{v3}", { length: skipped.length, v2: skipped.slice(0, 5).join(tr("、")), v3: skipped.length > 5 ? " …" : "" }));
     }
     return images;
   }

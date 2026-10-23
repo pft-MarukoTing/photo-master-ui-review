@@ -152,7 +152,7 @@ export function pickedStyles(a: Analysis | null, caps: Capabilities, plan: Plan)
   return (a ? styleGroups(a, caps) : caps.style_options)
     .map((g) => {
       const v = plan.style_options?.[g.id] || g.default;
-      return v === g.default ? "" : `${g.label}：${g.choices.find((c) => c.value === v)?.label || v}`;
+      return v === g.default ? "" : t("{label}：{v2}", { label: g.label, v2: g.choices.find((c) => c.value === v)?.label || v });
     })
     .filter(Boolean);
 }

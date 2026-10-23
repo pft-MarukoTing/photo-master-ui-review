@@ -116,25 +116,25 @@ def resolve_prompt_faces(analysis, prompt_faces):
         ref = _text(face.get("ref")) if isinstance(face, dict) else ""
         if not box or not ref:
             if isinstance(face, dict) and "preview_person_id" in face:
-                raise ValueError("指定人物的引用資料無效，請重新指定。")
+                raise ValueError(i18n.tr("指定人物的引用資料無效，請重新指定。"))
             continue
         if "preview_person_id" in face:
             identity = analysis.get("_subject_preview_identity") or {}
             if any(face.get(k) != identity.get(k) for k in ("preview_job_id", "source_sha256")):
-                raise ValueError("指定人物的預覽與此照片不符，請重新指定。")
+                raise ValueError(i18n.tr("指定人物的預覽與此照片不符，請重新指定。"))
             person_id = face["preview_person_id"]
             if (not isinstance(person_id, str) or not identity.get("preview_job_id")
                     or not identity.get("source_sha256")):
-                raise ValueError("指定人物的引用資料無效，請重新指定。")
+                raise ValueError(i18n.tr("指定人物的引用資料無效，請重新指定。"))
             index = (analysis.get("_preview_person_bindings") or {}).get(person_id)
             subjects = analysis.get("subjects") or []
             if (type(index) is not int or not 0 <= index < len(subjects)
                     or subjects[index].get("preview_person_id") != person_id
                     or sum(s.get("preview_person_id") == person_id for s in subjects) != 1):
-                raise ValueError("指定的人物未完成身份確認，請重新指定或清除該需求。")
+                raise ValueError(i18n.tr("指定的人物未完成身份確認，請重新指定或清除該需求。"))
             label = _text(subjects[index].get("label"))
             if not label:
-                raise ValueError("指定人物的名稱不可用，請重新指定。")
+                raise ValueError(i18n.tr("指定人物的名稱不可用，請重新指定。"))
             where = _text(face.get("where"))
             rewrites[ref] = f"{label}（{where}）" if where else label
             continue
@@ -143,7 +143,7 @@ def resolve_prompt_faces(analysis, prompt_faces):
             # the same photo/job, never by overlap or a provisional array index.
             identity = analysis.get("_subject_preview_identity") or {}
             if any(face.get(k) != identity.get(k) for k in ("preview_job_id", "source_sha256")):
-                raise ValueError("指定人物的預覽與此照片不符，請重新指定。")
+                raise ValueError(i18n.tr("指定人物的預覽與此照片不符，請重新指定。"))
             detection = face["detection_index"]
             review = next((r for r in analysis.get("local_face_review", [])
                            if r.get("detection_index") == detection), None)
@@ -152,10 +152,10 @@ def resolve_prompt_faces(analysis, prompt_faces):
             if (type(index) is not int or not 0 <= index < len(subjects)
                     or review.get("is_real_face") is not True
                     or subjects[index].get("local_detection_index") != detection):
-                raise ValueError("指定的人物未納入本次分析，請重新確認需求。")
+                raise ValueError(i18n.tr("指定的人物未納入本次分析，請重新確認需求。"))
             label = _text(subjects[index].get("label"))
             if not label:
-                raise ValueError("指定人物的名稱不可用，請重新指定。")
+                raise ValueError(i18n.tr("指定人物的名稱不可用，請重新指定。"))
             where = _text(face.get("where"))
             rewrites[ref] = f"{label}（{where}）" if where else label
             continue

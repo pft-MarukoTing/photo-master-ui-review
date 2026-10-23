@@ -4226,7 +4226,7 @@ function PhotoLoadMsg({ done, total }: { done: number; total: number }) {
   const pct = Math.round((done / total) * 100);
   return (
     <AssistantMsg atomic>
-      <p class="chat-text">收到你選的 {total} 張照片，正在上傳…</p>
+      <p class="chat-text">{t("收到你選的 {total} 張照片，正在上傳…", { total })}</p>
       <div class="chat-upload-progress" role="progressbar" aria-label={t("上傳進度")} aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
         <span style={{ width: `${pct}%` }} />
       </div>
@@ -4391,7 +4391,7 @@ export function BatchPreSidebar(props: {
                 {sources.slice(0, 4).map((s) => <img key={sourceSrc(s)} src={thumbSrc(s)} alt="" />)}
               </span>
               <span class="batch-overview-text">
-                <b>總覽 · {sources.length} 張</b>
+                <b>{t("總覽 · {n} 張", { n: sources.length })}</b>
               </span>
               <Icon name="next" size={14} />
             </button>
@@ -4443,7 +4443,7 @@ export function BatchPreSidebar(props: {
         {progress.length > 1 && (
           <div class="batch-grid-filters batch-sidebar-filters" role="group" aria-label={t("依狀態篩選")}>
             <button type="button" class={`batch-grid-filter${filter === "all" ? " is-on" : ""}`} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
-              全部 {sources.length}
+              {t("全部 {n}", { n: sources.length })}
             </button>
             {progress.map((x) => (
               <button
@@ -4700,7 +4700,7 @@ function BatchOverviewGrid(props: {
         {ghostCells(ghostsShown)}
         {folded ? (
           <button type="button" class="batch-grid-more" onClick={() => (props.onMore && matchMedia(DRAWER_MEDIA).matches ? props.onMore() : setOpen(true))}>
-            +{listed.length + ghosts - shown.length - ghostsShown} 張<br />顯示全部
+            {t("+{n} 張", { n: listed.length + ghosts - shown.length - ghostsShown })}<br />{t("顯示全部")}
           </button>
         ) : null}
       </div>
@@ -4808,7 +4808,7 @@ function BatchAddButton(props: { full: boolean; onAdd: (files: File[]) => void; 
               }}
             >
               <Icon name="up" size={16} />
-              自行上傳照片
+              {t("自行上傳照片")}
             </button>
             <button
               type="button"
@@ -4820,7 +4820,7 @@ function BatchAddButton(props: { full: boolean; onAdd: (files: File[]) => void; 
               }}
             >
               <Icon name="photos" size={18} />
-              從範例照片挑選
+              {t("從範例照片挑選")}
             </button>
           </div>
         )}
@@ -5454,7 +5454,7 @@ function PreChat(props: {
           <AssistantMsg>
             <p class="chat-text">{t("要整體美化，還是僅依你的需求修改？")}</p>
             <p class="chat-text chat-muted">
-              {ONLY_PROMPT_LABEL}：只動你寫到的地方，其他保持原樣。{WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。
+              {t("{only}：只動你寫到的地方，其他保持原樣。{full}：照你的需求修改，光線、人像、構圖也一起調整。", { only: t(ONLY_PROMPT_LABEL), full: t(WITH_ANALYSIS_LABEL) })}
             </p>
             <div class="chat-choices">
               {[
@@ -6721,7 +6721,7 @@ export function SessionView(props: {
             {offerCheck && (
               <>
                 <p class="chat-text">
-                  這版只照你的需求改，沒有分析整張照片。需要我幫你分析，看看還有哪些地方可以修嗎？
+                  {t("這版只照你的需求改，沒有分析整張照片。需要我幫你分析，看看還有哪些地方可以修嗎？")}
                   {offerStyle && t("也可以點「風格」，幫這版調整光線、角度之類的風格。")}
                 </p>
                 <div class="chat-choices">
@@ -6917,9 +6917,9 @@ export function SessionView(props: {
       <AssistantMsg>
         <p class="chat-text">{t("要整體美化，還是僅依你的需求修改？")}</p>
         <p class="chat-text chat-muted">
-          {ONLY_PROMPT_LABEL}：
+          {t("{label}：", { label: t(ONLY_PROMPT_LABEL) })}
           {styles.length ? t("只動你寫到的地方，加上你挑的風格（{styles}），其他保持原樣。", { styles: styles.join(t("、")) }) : t("只動你寫到的地方，其他保持原樣。")}
-          {WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。
+          {t("{full}：照你的需求修改，光線、人像、構圖也一起調整。", { full: t(WITH_ANALYSIS_LABEL) })}
         </p>
         {/* 問題的答案直接接在問題底下。 */}
         <div class="chat-choices">
@@ -7127,7 +7127,7 @@ function AnswerList(props: {
               disabled={!props.open || props.busy}
               onClick={() => props.onPick(l)}
             >
-              <span class="chat-line-text">{l}</span>
+              <span class="chat-line-text">{shownLabel(l)}</span>
               {l === props.picked && <Icon name="check" size={14} />}
             </button>
           </li>

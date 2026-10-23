@@ -772,4 +772,5 @@ window.PHOTOAGENT_CATALOGS.en = {
   "取得回報失敗：HTTP {status}": "Couldn't retrieve the report: HTTP {status}",
   "依狀態篩選": "Filter by status",
   "重要區域": "Key area",
+  "AI 美化失敗。": "AI retouching failed.",
 };

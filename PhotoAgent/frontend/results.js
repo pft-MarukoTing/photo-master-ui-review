@@ -3311,7 +3311,7 @@ window.PhotoAgentResults = (() => {
     els.toolText.textContent = joinParts([
       analysis.roi_anchor || tr("ROI 是主體最重要、不可被裁掉的視覺區域。"),
       analysis.roi_box ? tr("{v1}。", { v1: formatBox("ROI box", analysis.roi_box) }) : "",
-      analysis.subject_extent_box ? tr("{v1}。", { v1: formatBox("主體範圍", analysis.subject_extent_box) }) : "",
+      analysis.subject_extent_box ? tr("{v1}。", { v1: formatBox(tr("主體範圍"), analysis.subject_extent_box) }) : "",
       Array.isArray(analysis.protected_regions) && analysis.protected_regions.length
         ? tr("保護區域：{v1}。", { v1: analysis.protected_regions.slice(0, 5).map((r) => r.label || r.reason || tr("重要區域")).join(tr("、")) })
         : "",

@@ -140,7 +140,7 @@ window.PhotoAgentApi = (() => {
         // kept on the Error itself so friendlyError() (app.js) can key a
         // canned message off it even when error_message is too technical to
         // show as-is (e.g. ai_service_timeout).
-        const err = new Error(tr("{v1}（Job ID: {jobId}）", { v1: data.error_message || data.error || "AI 美化失敗。", jobId }));
+        const err = new Error(tr("{v1}（Job ID: {jobId}）", { v1: data.error_message || data.error || tr("AI 美化失敗。"), jobId }));
         err.code = data.error;
         throw err;
       }
@@ -203,7 +203,7 @@ window.PhotoAgentApi = (() => {
       throw new Error(`${data.error || tr("取得結果失敗：HTTP {status}", { status: response.status })}${tr("（Job ID: {jobId}）", { jobId })}`);
     }
     if (data.status === "error") {
-      const err = new Error(tr("{v1}（Job ID: {jobId}）", { v1: data.error_message || data.error || "AI 美化失敗。", jobId }));
+      const err = new Error(tr("{v1}（Job ID: {jobId}）", { v1: data.error_message || data.error || tr("AI 美化失敗。"), jobId }));
       err.code = data.error;
       throw err;
     }

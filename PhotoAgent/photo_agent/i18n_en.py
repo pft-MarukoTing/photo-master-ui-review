@@ -304,6 +304,12 @@ TEXT = {
     "主菜。": "The main dish.",
     "；": "; ",
     "跳過分析的結果沒有構圖可以重新規劃。": "A result that skipped the analysis has no composition to replan.",
+    # chat_brief's person-reference errors
+    "指定人物的名稱不可用，請重新指定。": "The selected person's name isn't available. Please choose again.",
+    "指定人物的引用資料無效，請重新指定。": "The selected person's reference is invalid. Please choose again.",
+    "指定人物的預覽與此照片不符，請重新指定。": "The selected person's preview doesn't match this photo. Please choose again.",
+    "指定的人物未完成身份確認，請重新指定或清除該需求。": "The selected person hasn't been confirmed. Please choose again or clear the request.",
+    "指定的人物未納入本次分析，請重新確認需求。": "The selected person isn't part of this analysis. Please confirm the request again.",
 }
 
 
