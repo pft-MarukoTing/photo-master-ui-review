@@ -157,6 +157,16 @@ class ReframeTextTest(unittest.TestCase):
     def test_chinese_is_unchanged(self):
         import image_tools
         self.assertEqual(image_tools._reframing_detail("重新構圖：調整為4:5，收窄左右邊界"), "收窄左右邊界")
+        self.assertEqual(image_tools._aspect_ratio_reason("auto", "4:5", None, None, True), "AI 未提出裁切建議，維持原圖比例。")
+
+    def test_geometry_notes_in_english(self):
+        import image_tools
+        with i18n.use("en"):
+            reason = image_tools._aspect_ratio_reason("4:5", "4:5", 0.8, None, False)
+            plan = i18n.tr("以{ratio}輸出比例重新構圖；{detail}", ratio="4:5", detail="Trim the coats.")
+            self.assertEqual(image_tools._reframing_detail(plan), "Trim the coats.")
+        self.assertTrue(reason.startswith("The output ratio was changed to “4:5”"))
+        self.assertNotRegex(reason, r"[一-鿿]")
 
 
 class CatalogTest(unittest.TestCase):

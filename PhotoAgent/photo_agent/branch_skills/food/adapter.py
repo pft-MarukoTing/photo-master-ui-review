@@ -82,7 +82,7 @@ def _fitted_crop(framing, hero, protected, image_size):
 def framing_fields(framing, hero, image_size):
     """The geometry fields local cropping reads, built so only the hero and keep_in_frame hold the crop open."""
     keep = framing["keep_in_frame"]
-    protected = [{**k["box"], "label": k["label"], "reason": "構圖必須完整保留。"} for k in keep]
+    protected = [{**k["box"], "label": k["label"], "reason": i18n.tr("構圖必須完整保留。")} for k in keep]
     crop = _fitted_crop(framing, hero, protected, image_size)
     return {
         "recommended_aspect_ratio": framing["aspect_ratio"],
@@ -95,7 +95,7 @@ def framing_fields(framing, hero, image_size):
         "layout_method": framing["composition"],
         "composition_strategy": framing["framing_goal"],
         "crop_recommendation": framing["framing_goal"],
-        "roi_box": {**hero["box"], "reason": "主菜。"} if hero else None,
+        "roi_box": {**hero["box"], "reason": i18n.tr("主菜。")} if hero else None,
     }
 
 
@@ -128,9 +128,9 @@ def to_analysis(result, photo_facts, image_size):
         portrait_framing="不適用",
         edit_intent=result["edit_brief"],
         alignment_strategy=result["alignment_strategy"]["decision"],
-        distraction_strategy="；".join(i["plan"] for i in result["review_items"] if i["kind"] == "distraction"),
+        distraction_strategy=i18n.tr("；").join(i["plan"] for i in result["review_items"] if i["kind"] == "distraction"),
         subjects=[{"label": k["label"], "box": k["box"], "prominence": index + 1, "is_person": False,
-                   "local_detection_index": -1, "skin": "不適用", "reason": "構圖必須完整保留。"}
+                   "local_detection_index": -1, "skin": "不適用", "reason": i18n.tr("構圖必須完整保留。")}
                   for index, k in enumerate(keep)],
         local_face_review=[],
         crop_risk={"needs_validation": False, "risk_level": "low", "reasons": []},

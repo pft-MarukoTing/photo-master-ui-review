@@ -413,7 +413,7 @@ def reframe_stage(
     returning to a ratio already planned costs no further call.
     """
     if analysis.get("_skipped_analysis"):
-        raise RuntimeError("跳過分析的結果沒有構圖可以重新規劃。", RESULT_INVALID_PARAMETER)
+        raise RuntimeError(i18n.tr("跳過分析的結果沒有構圖可以重新規劃。"), RESULT_INVALID_PARAMETER)
     pref = str(aspect_ratio or "auto").strip().lower()
     base = with_reframing_proposal(analysis)
     planned_for = str(base.get("_aspect_ratio_pref_at_analysis") or "auto").strip().lower()

@@ -771,4 +771,5 @@ window.PHOTOAGENT_CATALOGS.en = {
   "這個版本依照你的個人化需求修圖，可以在這裡修改需求、調整風格或設定": "This version follows My Requests. You can change your requests, style or settings here.",
   "取得回報失敗：HTTP {status}": "Couldn't retrieve the report: HTTP {status}",
   "依狀態篩選": "Filter by status",
+  "重要區域": "Key area",
 };

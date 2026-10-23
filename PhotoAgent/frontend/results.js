@@ -3313,7 +3313,7 @@ window.PhotoAgentResults = (() => {
       analysis.roi_box ? tr("{v1}。", { v1: formatBox("ROI box", analysis.roi_box) }) : "",
       analysis.subject_extent_box ? tr("{v1}。", { v1: formatBox("主體範圍", analysis.subject_extent_box) }) : "",
       Array.isArray(analysis.protected_regions) && analysis.protected_regions.length
-        ? tr("保護區域：{v1}。", { v1: analysis.protected_regions.slice(0, 5).map((r) => r.label || r.reason || "重要區域").join("、") })
+        ? tr("保護區域：{v1}。", { v1: analysis.protected_regions.slice(0, 5).map((r) => r.label || r.reason || tr("重要區域")).join(tr("、")) })
         : "",
       pending ? tr("尚未執行美化，確認後將開始 AI 影像美化。") : (data.localOnly ? tr("目前使用本機處理，未執行 AI 影像生成。") : tr("目前已執行 AI 影像美化。"))
     ]);

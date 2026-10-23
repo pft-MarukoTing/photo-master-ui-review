@@ -501,7 +501,9 @@ def _reframing_detail(text):
     value = re.sub(r"^\s*重新構圖\s*[:：]\s*", "", value)
     # The same start as another language writes it (_reframing_text's
     # 「維持原圖比例，」「調整為…，」 through i18n), so it is not written twice.
-    for lead in (*i18n.translated_leads("維持原圖比例，{detail}"), *i18n.translated_leads("調整為{ratio}，{detail}")):
+    for lead in (*i18n.translated_leads("維持原圖比例，{detail}"), *i18n.translated_leads("調整為{ratio}，{detail}"),
+                 *i18n.translated_leads("維持原圖輸出比例並重新構圖；{detail}"),
+                 *i18n.translated_leads("以{ratio}輸出比例重新構圖；{detail}")):
         value = lead.sub("", value)
     value = re.sub(
         r"^\s*(?:以\s*" + _RATIO_TOKEN_RE.pattern + r"\s*輸出比例|維持原圖輸出比例並)"
@@ -552,13 +554,13 @@ def _sync_reframing_review_contract(context: dict, ratio_label: str, crop_box: d
         fallback = _reframing_detail(
             (ctx.get("crop_box") or {}).get("reason") or ctx.get("crop_recommendation")
         )
-        plan_detail = plan_detail or recipe_detail or fallback or "依已解析的裁切框改善主體集中度與邊緣落點。"
+        plan_detail = plan_detail or recipe_detail or fallback or i18n.tr("依已解析的裁切框改善主體集中度與邊緣落點。")
         recipe_detail = recipe_detail or plan_detail
         if ratio_label == "original":
-            plan[index] = f"維持原圖輸出比例並重新構圖；{plan_detail}"
+            plan[index] = i18n.tr("維持原圖輸出比例並重新構圖；{detail}", detail=plan_detail)
             recipe[index] = "重新構圖：" + i18n.tr("維持原圖比例，{detail}", detail=recipe_detail)
         else:
-            plan[index] = f"以{ratio_label}輸出比例重新構圖；{plan_detail}"
+            plan[index] = i18n.tr("以{ratio}輸出比例重新構圖；{detail}", ratio=ratio_label, detail=plan_detail)
             recipe[index] = "重新構圖：" + i18n.tr("調整為{ratio}，{detail}", ratio=ratio_label, detail=recipe_detail)
     ctx["correction_plan"] = plan
     ctx["retouch_recipe"] = recipe
@@ -576,30 +578,24 @@ def _aspect_ratio_reason(pref, label, measured, resolved_crop, planned_for_pref)
     """
     if pref == "auto":
         if measured is None:
-            return "AI 未提出裁切建議，維持原圖比例。"
+            return i18n.tr("AI 未提出裁切建議，維持原圖比例。")
         if resolved_crop is not None:
-            return (
-                f"本機依 AI 建議裁切框的實際比例（{measured:.3f}）於支援清單中選出最接近的「{label}」；"
-                "並完成 ROI／保護區域約束後確認此裁切可執行。"
-            )
-        return (
-            f"本機依 AI 建議裁切框的實際比例（{measured:.3f}）選擇候選比例，"
-            "但套用 ROI／保護區域約束後裁切擴回完整畫面，因此維持原圖比例。"
-        )
+            return i18n.tr("本機依 AI 建議裁切框的實際比例（{measured}）於支援清單中選出最接近的「{label}」；並完成 ROI／保護區域約束後確認此裁切可執行。",
+                           measured=f"{measured:.3f}", label=label)
+        return i18n.tr("本機依 AI 建議裁切框的實際比例（{measured}）選擇候選比例，但套用 ROI／保護區域約束後裁切擴回完整畫面，因此維持原圖比例。",
+                       measured=f"{measured:.3f}")
     if pref == "original":
         if resolved_crop is not None:
-            return "使用者選擇維持原圖比例；本機完成 ROI／保護區域約束後確認此同比例裁切可執行。"
-        return "AI 未提出裁切建議，維持原圖比例。"
+            return i18n.tr("使用者選擇維持原圖比例；本機完成 ROI／保護區域約束後確認此同比例裁切可執行。")
+        return i18n.tr("AI 未提出裁切建議，維持原圖比例。")
+    done = (i18n.tr("本機完成 ROI／保護區域約束後確認此裁切可執行。") if resolved_crop is not None
+            else i18n.tr("本機幾何解析後不需要額外構圖裁切。"))
     if planned_for_pref:
-        return (
-            f"分析時即以使用者指定的輸出比例「{label}」規劃構圖；"
-            + ("本機完成 ROI／保護區域約束後確認此裁切可執行。" if resolved_crop is not None
-               else "本機幾何解析後不需要額外構圖裁切。")
-        )
+        return i18n.tr("分析時即以使用者指定的輸出比例「{label}」規劃構圖；", label=label) + done
     return (
-        f"使用者在分析後改選輸出比例「{label}」，構圖說明仍為分析時比例所寫；"
-        + ("本機將原裁切提案 fit 到此比例並完成 ROI／保護區域約束。" if resolved_crop is not None
-           else "本機幾何解析後不需要額外構圖裁切。")
+        i18n.tr("使用者在分析後改選輸出比例「{label}」，構圖說明仍為分析時比例所寫；", label=label)
+        + (i18n.tr("本機將原裁切提案 fit 到此比例並完成 ROI／保護區域約束。") if resolved_crop is not None
+           else i18n.tr("本機幾何解析後不需要額外構圖裁切。"))
     )
 
 
@@ -816,10 +812,11 @@ def apply_derived_aspect_ratio(
         # keeps the complete frame: nothing is cropped because nothing needs to
         # be, which is not the same as "no reframing happened".
         no_crop_reason = (
-            f"分析判定主體已填滿畫面，改以向{'上下' if expanding and extension_plan['axis'] == 'height' else '左右'}"
-            f"延伸場景達成「{label}」，原畫面完整保留、不裁切。"
+            (i18n.tr("分析判定主體已填滿畫面，改以向上下延伸場景達成「{label}」，原畫面完整保留、不裁切。", label=label)
+             if extension_plan["axis"] == "height" else
+             i18n.tr("分析判定主體已填滿畫面，改以向左右延伸場景達成「{label}」，原畫面完整保留、不裁切。", label=label))
             if expanding else
-            "本機幾何解析後沒有可執行的構圖裁切，維持完整畫面。"
+            i18n.tr("本機幾何解析後沒有可執行的構圖裁切，維持完整畫面。")
         )
         ctx["crop_box"] = {
             **source_crop,
@@ -838,7 +835,7 @@ def apply_derived_aspect_ratio(
         ctx["crop_recommendation"] = no_crop_reason
         ctx["composition_strategy"] = (
             no_crop_reason if expanding else
-            "本機幾何解析後選擇完整原圖構圖，不執行裁切。"
+            i18n.tr("本機幾何解析後選擇完整原圖構圖，不執行裁切。")
         )
 
     candidates = analysis.get("crop_candidates")
@@ -1034,10 +1031,9 @@ def output_geometry_warnings(
     if crop_ratio and not expanding:
         drift = crop_ratio / requested - 1
         if abs(drift) > GEOMETRY_RATIO_TOLERANCE:
-            warnings.append(
-                f"裁切框比例與要求的輸出畫布不一致（裁切區 {crop_ratio:.3f} vs 要求 {requested:.3f}，"
-                f"差 {drift:+.1%}）：修圖模型只能靠壓縮或拉伸畫面來同時滿足兩者。"
-            )
+            warnings.append(i18n.tr(
+                "裁切框比例與要求的輸出畫布不一致（裁切區 {crop} vs 要求 {requested}，差 {drift}）：修圖模型只能靠壓縮或拉伸畫面來同時滿足兩者。",
+                crop=f"{crop_ratio:.3f}", requested=f"{requested:.3f}", drift=f"{drift:+.1%}"))
 
     try:
         out_w, out_h = get_image_dimensions(base64.b64decode(output_b64))
@@ -1049,10 +1045,9 @@ def output_geometry_warnings(
     out_ratio = out_w / out_h
     drift = out_ratio / requested - 1
     if abs(drift) > GEOMETRY_RATIO_TOLERANCE:
-        warnings.append(
-            f"輸出畫布比例與要求不一致（實際 {out_w}x{out_h} = {out_ratio:.3f} vs 要求 "
-            f"{requested:.3f}，差 {drift:+.1%}）。"
-        )
+        warnings.append(i18n.tr(
+            "輸出畫布比例與要求不一致（實際 {size} = {actual} vs 要求 {requested}，差 {drift}）。",
+            size=f"{out_w}x{out_h}", actual=f"{out_ratio:.3f}", requested=f"{requested:.3f}", drift=f"{drift:+.1%}"))
 
     return warnings
 
@@ -1338,12 +1333,11 @@ def apply_framing_size(context: dict, size: str) -> dict:
     # model does not reassert "the four women" as the subject to keep. The image
     # itself still carries identity/lighting context; these strings only steer
     # what to feature.
-    focus_label = label or "單一最突出的主體"
-    ctx["main_subject"] = f"{focus_label}(單一主體特寫,其餘人物/元素刻意裁切出畫面)"
-    ctx["photo_summary"] = (
-        f"單一主體特寫,以{focus_label}為主角並填滿畫面。原始場景可能包含多個人物或元素,"
-        f"但此特寫刻意只聚焦於此主體。"
-    )
+    focus_label = label or i18n.tr("單一最突出的主體")
+    ctx["main_subject"] = i18n.tr("{label}(單一主體特寫,其餘人物/元素刻意裁切出畫面)", label=focus_label)
+    ctx["photo_summary"] = i18n.tr(
+        "單一主體特寫,以{label}為主角並填滿畫面。原始場景可能包含多個人物或元素,但此特寫刻意只聚焦於此主體。",
+        label=focus_label)
     # Marker consumed by QA so the scene description's other
     # people/elements don't get reasserted as content to preserve.
     ctx["_framing_focus"] = {"size": "closer", "label": label}
