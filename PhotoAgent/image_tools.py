@@ -477,6 +477,7 @@ def derive_aspect_ratio_from_crop(crop_box: dict, image_width: int, image_height
 
 _CROP_AXIS_NAMES = {"crop", "cropping", "framing", "reframing"}
 _RATIO_TOKEN_RE = re.compile(r"(?<!\d)\d+\s*[:：]\s*\d+(?!\d)")
+_CJK_RE = re.compile(r"[一-鿿]")
 
 
 def _crop_review_indices(context: dict):
@@ -556,6 +557,10 @@ def _sync_reframing_review_contract(context: dict, ratio_label: str, crop_box: d
         )
         plan_detail = plan_detail or recipe_detail or fallback or i18n.tr("依已解析的裁切框改善主體集中度與邊緣落點。")
         recipe_detail = recipe_detail or plan_detail
+        if not i18n.is_source() and _CJK_RE.search(recipe_detail) and plan_detail and not _CJK_RE.search(plan_detail):
+            # The model wrote the user-facing item in Chinese anyway; its own
+            # plan for the same crop is in the user's language.
+            recipe_detail = plan_detail
         if ratio_label == "original":
             plan[index] = i18n.tr("維持原圖輸出比例並重新構圖；{detail}", detail=plan_detail)
             recipe[index] = "重新構圖：" + i18n.tr("維持原圖比例，{detail}", detail=recipe_detail)

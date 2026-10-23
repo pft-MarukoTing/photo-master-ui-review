@@ -9,7 +9,7 @@ export const EN: Record<string, string> = {
   "；": "; ",
   "：": ": ",
   "。": ". ",
-  "好，": "OK, ",
+  "好，": "OK. ",
   "{v1}：": "{v1}: ",
   "「{v1}」": "“{v1}”",
   "{name}（{where}）": "{name} ({where})",

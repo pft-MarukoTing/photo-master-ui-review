@@ -159,6 +159,20 @@ class ReframeTextTest(unittest.TestCase):
         self.assertEqual(image_tools._reframing_detail("重新構圖：調整為4:5，收窄左右邊界"), "收窄左右邊界")
         self.assertEqual(image_tools._aspect_ratio_reason("auto", "4:5", None, None, True), "AI 未提出裁切建議，維持原圖比例。")
 
+    def test_a_chinese_reframe_item_falls_back_to_the_english_plan(self):
+        import image_tools
+        ctx = {"correction_plan": ["Trim the extreme-left balcony area while keeping her whole."],
+               "correction_axes": [["crop"]], "correction_inverse": ["keep the frame"],
+               "retouch_recipe": ["重新構圖：收窄左側多餘陽台空間，讓女性更集中。"]}
+        box = {"x": 0.1, "y": 0, "w": 0.9, "h": 1, "enabled": True}
+        with i18n.use("en"):
+            out = image_tools._sync_reframing_review_contract(ctx, "4:3", box)
+        self.assertEqual(out["retouch_recipe"][0],
+                         "重新構圖：change to 4:3. Trim the extreme-left balcony area while keeping her whole.")
+        # Chinese keeps the model's own Chinese item.
+        zh = image_tools._sync_reframing_review_contract(ctx, "4:3", box)
+        self.assertEqual(zh["retouch_recipe"][0], "重新構圖：調整為4:3，收窄左側多餘陽台空間，讓女性更集中。")
+
     def test_geometry_notes_in_english(self):
         import image_tools
         with i18n.use("en"):
