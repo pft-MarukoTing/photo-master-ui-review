@@ -1520,11 +1520,15 @@ def aipoc_analyze_batch():
     # regardless of batch size, while still capping how many images hit the
     # OpenAI API at once.
     file_bytes = [(image.filename, image.read()) for image in images]
+    # Pool threads do not inherit the request's language.
+    lang = i18n.current()
 
     def _analyze_one(entry):
         filename, data = entry
         try:
-            return {"filename": filename, "analysis": analyze_stage(data, aspect_ratio=aspect_ratio, advanced_options=advanced_options)}
+            with i18n.use(lang):
+                analysis = analyze_stage(data, aspect_ratio=aspect_ratio, advanced_options=advanced_options)
+            return {"filename": filename, "analysis": analysis}
         except Exception as exc:
             return {"filename": filename, "error": str(exc)}
 

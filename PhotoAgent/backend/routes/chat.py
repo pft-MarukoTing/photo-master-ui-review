@@ -25,6 +25,7 @@ never change again, so they are left out of both.
 from photo_agent import chat_analysis
 from photo_agent import side_reference
 from backend.services import side_reference_store
+import contextvars
 import copy
 import json
 import re
@@ -3168,7 +3169,9 @@ def _start_face_wishes(photo, analysis):
     prompt = plan.get("user_prompt") or ""
     if not prompt.strip() or plan.get("face_requests") or photo.get("preview_conversation"):
         return None
-    return _FACE_WISH_POOL.submit(chat_queue.run, {"stage": chat_jobs.STAGE_FACE_WISHES, "prompt": prompt, "analysis": analysis})
+    # Pool threads do not inherit the caller's language: hand it over.
+    return _FACE_WISH_POOL.submit(contextvars.copy_context().run, chat_queue.run,
+                                  {"stage": chat_jobs.STAGE_FACE_WISHES, "prompt": prompt, "analysis": analysis})
 
 
 def _bind_face_wishes(user, session_id, photo, analysis, pending, *, ask=True, host=None):
@@ -3578,6 +3581,12 @@ def _watch(app):
 
 def _watch_session(user, session_id):
     session = store.load_session(user, session_id)
+    # No request here to say the language: the session's own, from when it was made.
+    with i18n.use((session or {}).get("lang")):
+        _watch_loaded(user, session_id, session)
+
+
+def _watch_loaded(user, session_id, session):
     if session is not None and any(store.waiting(p) for p in session["photos"]):
         _advance_session(user, session_id)
         session = store.load_session(user, session_id)

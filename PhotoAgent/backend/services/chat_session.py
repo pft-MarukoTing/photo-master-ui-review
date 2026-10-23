@@ -33,6 +33,7 @@ import time
 import uuid
 
 from backend.services.account import _user_base
+from photo_agent import i18n
 from photo_agent.chat_plan import default_plan, default_settings
 
 SESSION_TTL_SECONDS = 30 * 24 * 3600
@@ -157,6 +158,10 @@ def create_session(user, batch_id=None, client_key=None):
     session_id = new_id("s")
     meta = {"session_id": session_id, "user": user, "created_at": time.time(), "photo_order": [], "active_photo_id": None,
             "batch_id": batch_id}
+    if not i18n.is_source():
+        # The language the page was in: what the backend writes for this
+        # session outside a request (the watcher) is written in it too.
+        meta["lang"] = i18n.current()
     _write(user, session_id, {"meta": meta, "defaults": default_settings()})
     if client_key:
         # Written before it is claimed, so whichever session a key names
@@ -394,6 +399,8 @@ def add_photos(user, session_id, meta, photos):
     as loaded; its photo_order is extended here."""
     order = list(meta["photo_order"]) + [p["photo_id"] for p in photos]
     new_meta = {k: meta.get(k) for k in ("session_id", "user", "created_at", "batch_id")}
+    if meta.get("lang"):
+        new_meta["lang"] = meta["lang"]
     new_meta["photo_order"] = order
     new_meta["active_photo_id"] = meta.get("active_photo_id") or (order[0] if order else None)
     fields = {"meta": new_meta}

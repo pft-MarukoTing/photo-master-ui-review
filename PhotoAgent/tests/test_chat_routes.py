@@ -227,6 +227,24 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(res.status_code, 201)
         return res.get_json()["session_id"]
 
+    def test_a_session_keeps_the_language_it_was_made_in(self):
+        res = self.client.post("/api/photo-agent/chat/sessions", json={"user": USER},
+                               headers={"X-PhotoAgent-Lang": "en"})
+        self.assertEqual(res.get_json()["lang"], "en")
+        # Adding photos rewrites the session's meta: the language stays.
+        sid = res.get_json()["session_id"]
+        self.add_photos(sid)
+        self.assertEqual(chat_session.load_session(USER, sid)["lang"], "en")
+        # A Chinese one stays as it always was.
+        self.assertNotIn("lang", chat_session.load_session(USER, self.new_session()))
+
+    def test_the_watcher_writes_in_the_sessions_language(self):
+        seen = []
+        with patch.object(chat.store, "load_session", lambda user, sid: {"lang": "en", "photos": []}), \
+                patch.object(chat, "_watch_loaded", lambda user, sid, session: seen.append(chat.i18n.current())):
+            chat._watch_session(USER, "s1")
+        self.assertEqual(seen, ["en"])
+
     def add_photos(self, sid, n=1):
         data = {"user": USER, "image": [(io.BytesIO(b"img"), f"p{i}.jpg") for i in range(n)]}
         res = self.client.post(self.url(sid, "/photos"), data=data, content_type="multipart/form-data")
