@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "./api";
 import type { Box } from "./face";
@@ -56,7 +57,7 @@ export function useSubjectPreview(key: string | null, model: string, load: Load)
     publish({ key: identity, ready: false });
     watchdog = setTimeout(() => {
       publish({ key: identity, ready: true, result: current.current.result,
-        error: current.current.result?.reusable ? undefined : "人物預覽等待較久，仍可繼續聊天或分析。" });
+        error: current.current.result?.reusable ? undefined : t("人物預覽等待較久，仍可繼續聊天或分析。") });
       stopped = true;
       clearTimeout(timer);
     }, MAX_WAIT_MS);
@@ -78,7 +79,7 @@ export function useSubjectPreview(key: string | null, model: string, load: Load)
         if (!valid()) return;
         if (Date.now() >= deadline) {
           publish({ key: identity, ready: true, result: current.current.result,
-                    error: current.current.result?.reusable ? undefined : "人物預覽等待較久，仍可繼續聊天或分析。" });
+                    error: current.current.result?.reusable ? undefined : t("人物預覽等待較久，仍可繼續聊天或分析。") });
           return;
         }
         try {
@@ -101,14 +102,14 @@ export function useSubjectPreview(key: string | null, model: string, load: Load)
         } catch {
           const previous = current.current.result;
           publish({ key: identity, ready: true, result: previous,
-            error: previous?.reusable ? undefined : "人物預覽暫時不可用，仍可進行分析。" });
+            error: previous?.reusable ? undefined : t("人物預覽暫時不可用，仍可進行分析。") });
           stopped = true;
           clearTimeout(watchdog);
         }
       };
       timer = setTimeout(poll, POLL_MS);
     }).catch(() => {
-      publish({ key: identity, ready: true, error: "人物預覽暫時不可用，仍可進行分析。" });
+      publish({ key: identity, ready: true, error: t("人物預覽暫時不可用，仍可進行分析。") });
       stopped = true;
       clearTimeout(watchdog);
     });
@@ -122,7 +123,7 @@ export function useSubjectPreview(key: string | null, model: string, load: Load)
     async forSubmission(_maxWaitMs = 0) {
       // Freeze only the completed result available at the click. A pending
       // job ID must never let the upload route adopt a later preview snapshot.
-      if (current.current.key !== identity) throw new Error("照片已更換，請重新選擇分析或一鍵美化。");
+      if (current.current.key !== identity) throw new Error(t("照片已更換，請重新選擇分析或一鍵美化。"));
       const r = current.current.result;
       return r?.state === "ready" && r.reusable
         ? { preview_job_id: r.preview_job_id, source_sha256: r.source_sha256 } : undefined;

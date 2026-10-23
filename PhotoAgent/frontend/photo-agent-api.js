@@ -83,7 +83,7 @@ window.PhotoAgentApi = (() => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `提交失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("提交失敗：HTTP {status}", { status: response.status }));
     }
     // The local path returns job_id; the AIPoC path returns task_id.
     return data.job_id || data.task_id;
@@ -129,7 +129,7 @@ window.PhotoAgentApi = (() => {
       lastConnectivityError = null;
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(`${data.error || `查詢狀態失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
+        throw new Error(`${data.error || tr("查詢狀態失敗：HTTP {status}", { status: response.status })}${tr("（Job ID: {jobId}）", { jobId })}`);
       }
       if (data.status === "success") return true;
       if (data.status === "error") {
@@ -140,7 +140,7 @@ window.PhotoAgentApi = (() => {
         // kept on the Error itself so friendlyError() (app.js) can key a
         // canned message off it even when error_message is too technical to
         // show as-is (e.g. ai_service_timeout).
-        const err = new Error(`${data.error_message || data.error || "AI 美化失敗。"}（Job ID: ${jobId}）`);
+        const err = new Error(tr("{v1}（Job ID: {jobId}）", { v1: data.error_message || data.error || "AI 美化失敗。", jobId }));
         err.code = data.error;
         throw err;
       }
@@ -177,14 +177,14 @@ window.PhotoAgentApi = (() => {
     // rather than the generic timeout below, which implies the job itself is
     // just taking unusually long.
     if (lastConnectivityError) throw lastConnectivityError;
-    throw new Error(`處理逾時，請稍後再試。（Job ID: ${jobId}）`);
+    throw new Error(tr("處理逾時，請稍後再試。（Job ID: {jobId}）", { jobId }));
   }
 
   async function getJobResult(jobId, { path = "local" } = {}) {
     const response = await fetchWithRetry(`${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.status !== "success") {
-      const err = new Error(`${data.error_message || data.error || `取得結果失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
+      const err = new Error(`${data.error_message || data.error || tr("取得結果失敗：HTTP {status}", { status: response.status })}${tr("（Job ID: {jobId}）", { jobId })}`);
       err.code = data.error;
       throw err;
     }
@@ -200,10 +200,10 @@ window.PhotoAgentApi = (() => {
     const response = await fetchWithRetry(`${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(`${data.error || `取得結果失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
+      throw new Error(`${data.error || tr("取得結果失敗：HTTP {status}", { status: response.status })}${tr("（Job ID: {jobId}）", { jobId })}`);
     }
     if (data.status === "error") {
-      const err = new Error(`${data.error_message || data.error || "AI 美化失敗。"}（Job ID: ${jobId}）`);
+      const err = new Error(tr("{v1}（Job ID: {jobId}）", { v1: data.error_message || data.error || "AI 美化失敗。", jobId }));
       err.code = data.error;
       throw err;
     }
@@ -282,7 +282,7 @@ window.PhotoAgentApi = (() => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `送出分析失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("送出分析失敗：HTTP {status}", { status: response.status }));
     }
     return data.job_id;
   }
@@ -309,7 +309,7 @@ window.PhotoAgentApi = (() => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `送出分析失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("送出分析失敗：HTTP {status}", { status: response.status }));
     }
     // Entries align 1:1 with files by order; each has job_id or an error.
     return data.jobs || [];
@@ -339,7 +339,7 @@ window.PhotoAgentApi = (() => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `送出分析失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("送出分析失敗：HTTP {status}", { status: response.status }));
     }
     return data.job_id;
   }
@@ -348,7 +348,7 @@ window.PhotoAgentApi = (() => {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/analyze/result/${encodeURIComponent(jobId)}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.status !== "success") {
-      throw new Error(`${data.error || `取得分析結果失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
+      throw new Error(`${data.error || tr("取得分析結果失敗：HTTP {status}", { status: response.status })}${tr("（Job ID: {jobId}）", { jobId })}`);
     }
     return data; // { status, result: { analysis } }
   }
@@ -382,7 +382,7 @@ window.PhotoAgentApi = (() => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(`${data.error || `送出後續處理失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
+      throw new Error(`${data.error || tr("送出後續處理失敗：HTTP {status}", { status: response.status })}${tr("（Job ID: {jobId}）", { jobId })}`);
     }
     return data.job_id;
   }
@@ -417,7 +417,7 @@ window.PhotoAgentApi = (() => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `送出重跑失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("送出重跑失敗：HTTP {status}", { status: response.status }));
     }
     return data.job_id;
   }
@@ -449,7 +449,7 @@ window.PhotoAgentApi = (() => {
     }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `送出重新構圖失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("送出重新構圖失敗：HTTP {status}", { status: response.status }));
     }
     return data; // local: { job_id }; aipoc: { status, analysis }
   }
@@ -472,7 +472,7 @@ window.PhotoAgentApi = (() => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.status !== "success") {
-      throw new Error(data.error || `AIPoC 分析失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("AIPoC 分析失敗：HTTP {status}", { status: response.status }));
     }
     return data; // { status, analysis }
   }
@@ -495,7 +495,7 @@ window.PhotoAgentApi = (() => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `AIPoC 分析失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("AIPoC 分析失敗：HTTP {status}", { status: response.status }));
     }
     // Entries align 1:1 with files by order; each has analysis (inline) or error.
     return data.jobs || [];
@@ -548,7 +548,7 @@ window.PhotoAgentApi = (() => {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/decrypt-user-id?user_id=${encodeURIComponent(userId)}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `解析帳號失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("解析帳號失敗：HTTP {status}", { status: response.status }));
     }
     return data.user; // decrypted username
   }
@@ -563,7 +563,7 @@ window.PhotoAgentApi = (() => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `建立帳號失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("建立帳號失敗：HTTP {status}", { status: response.status }));
     }
     return data; // { user, created }
   }
@@ -573,7 +573,7 @@ window.PhotoAgentApi = (() => {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/history/${encodeURIComponent(user)}?${params}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `取得處理紀錄失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("取得處理紀錄失敗：HTTP {status}", { status: response.status }));
     }
     return data; // { user, jobs: [{ job_id, path, ts, preset, image_key }] }
   }
@@ -596,7 +596,7 @@ window.PhotoAgentApi = (() => {
     );
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `取得處理紀錄失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("取得處理紀錄失敗：HTTP {status}", { status: response.status }));
     }
     // { user, case: { ...summary, image_key, versions: [{ version_id, kind,
     //   created_at, based_on, params, path, runs: [job_id], results: [...] }] } }
@@ -612,7 +612,7 @@ window.PhotoAgentApi = (() => {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/chat/sessions?${params}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `取得對話紀錄失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("取得對話紀錄失敗：HTTP {status}", { status: response.status }));
     }
     return data; // { sessions: [{ session_id, photo_count, thumbnails, status, rendered_count, case_ids, ... }] }
   }
@@ -624,7 +624,7 @@ window.PhotoAgentApi = (() => {
     );
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `取得對話紀錄失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("取得對話紀錄失敗：HTTP {status}", { status: response.status }));
     }
     return data; // { session_id, photos: [{ photo_id, case_id, analyze_job_id, status, active_version, ... }], ... }
   }
@@ -639,7 +639,7 @@ window.PhotoAgentApi = (() => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `刪除紀錄失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("刪除紀錄失敗：HTTP {status}", { status: response.status }));
     }
     return data;
   }
@@ -654,7 +654,7 @@ window.PhotoAgentApi = (() => {
     );
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `刪除紀錄失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("刪除紀錄失敗：HTTP {status}", { status: response.status }));
     }
     return data;
   }
@@ -668,7 +668,7 @@ window.PhotoAgentApi = (() => {
     );
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `刪除所有紀錄失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("刪除所有紀錄失敗：HTTP {status}", { status: response.status }));
     }
     return data;
   }
@@ -714,7 +714,7 @@ window.PhotoAgentApi = (() => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `回報失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("回報失敗：HTTP {status}", { status: response.status }));
     }
     return data; // { reported: true, report_id }
   }
@@ -728,7 +728,7 @@ window.PhotoAgentApi = (() => {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/reports/${encodeURIComponent(user)}?${params}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const err = new Error(data.error || `取得回報清單失敗：HTTP ${response.status}`);
+      const err = new Error(data.error || tr("取得回報清單失敗：HTTP {status}", { status: response.status }));
       err.status = response.status;
       throw err;
     }
@@ -743,7 +743,7 @@ window.PhotoAgentApi = (() => {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/reports/${encodeURIComponent(user)}/${encodeURIComponent(reportId)}${query}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const err = new Error(data.error || `取得回報失敗：HTTP ${response.status}`);
+      const err = new Error(data.error || tr("取得回報失敗：HTTP {status}", { status: response.status }));
       err.status = response.status;
       throw err;
     }
@@ -763,7 +763,7 @@ window.PhotoAgentApi = (() => {
     );
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `更新回報狀態失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("更新回報狀態失敗：HTTP {status}", { status: response.status }));
     }
     return data; // { report: {...} }
   }
@@ -777,7 +777,7 @@ window.PhotoAgentApi = (() => {
     );
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `刪除回報失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("刪除回報失敗：HTTP {status}", { status: response.status }));
     }
     return data;
   }
@@ -798,7 +798,7 @@ window.PhotoAgentApi = (() => {
     const response = await fetch(`${BASE_URL}${pathPrefix(path)}/status/${encodeURIComponent(jobId)}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `查詢狀態失敗：HTTP ${response.status}`);
+      throw new Error(data.error || tr("查詢狀態失敗：HTTP {status}", { status: response.status }));
     }
     return data;
   }

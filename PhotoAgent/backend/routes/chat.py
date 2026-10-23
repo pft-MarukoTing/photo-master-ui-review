@@ -56,7 +56,7 @@ from backend.services.report import get_report_by_id, get_report_chat, get_repor
 from backend.services.template_params import get_engine_params_template
 from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, image_to_data_url
-from photo_agent import capabilities, chat_assistant, chat_jobs
+from photo_agent import capabilities, chat_assistant, chat_jobs, i18n
 import config as agent_config
 from photo_agent.preview_context import (
     MAX_UPLOAD_BYTES, PREVIEW_CONTEXT_FIELD, source_sha256, preview_versions, validate_preview_binding, validate_preview_context,
@@ -1035,7 +1035,7 @@ def _semantic_action_answer(state, wish_ids, text):
     """Interpret a supplement server-side; never accept client semantic fields."""
     from photo_agent import request_semantics
     if not isinstance(text, str) or not text.strip() or len(text) > 1000:
-        raise ValueError('請補充想調整的動作。')
+        raise ValueError(i18n.tr('請補充想調整的動作。'))
     replacements = {}
     for clause in state['clauses']:
         if clause['wish_id'] not in wish_ids or not clause.get('semantic_required'):
@@ -1048,13 +1048,13 @@ def _semantic_action_answer(state, wish_ids, text):
                 'combined_source': request_semantics.evidence(clause) + '；補充：' + text.strip(),
                 'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
         except Exception as exc:
-            raise ValueError('這項修改還沒確認完成，請稍後再試一次。') from exc
+            raise ValueError(i18n.tr('這項修改還沒確認完成，請稍後再試一次。')) from exc
         try:
             replacements[clause['wish_id']] = request_semantics.apply_answer(clause, text.strip(), raw)
         except ValueError as exc:
             if str(exc) == 'new_action_message':
                 raise
-            raise ValueError('還需要確認這項修改的內容，請再補充想調整的對象或動作。') from exc
+            raise ValueError(i18n.tr('還需要確認這項修改的內容，請再補充想調整的對象或動作。')) from exc
     return replacements
 
 
@@ -1151,7 +1151,7 @@ def _preview_artifact(info, binding):
         return snapshot, raw.get("timing", {})
     except Exception:
         current_app.logger.warning("Preview artifact unavailable job=%s", binding["preview_job_id"])
-        raise _RequestError("人物預覽暫時無法讀取，仍可進行分析。", 502)
+        raise _RequestError(i18n.tr("人物預覽暫時無法讀取，仍可進行分析。"), 502)
 
 
 @chat_bp.post("/previews")
@@ -1164,12 +1164,12 @@ def create_preview():
         raise _RequestError("image file is required")
     data = image.read(MAX_UPLOAD_BYTES + 1)
     if not data or len(data) > MAX_UPLOAD_BYTES:
-        raise _RequestError("照片大小需介於 1 byte 與 30 MB。", 413)
+        raise _RequestError(i18n.tr("照片大小需介於 1 byte 與 30 MB。"), 413)
     try:
         from image_tools import get_image_dimensions
         get_image_dimensions(data)  # existing HEIC/EXIF decoder, not face detection
     except Exception:
-        raise _RequestError("無法讀取照片，請使用有效的圖片檔案。", 422)
+        raise _RequestError(i18n.tr("無法讀取照片，請使用有效的圖片檔案。"), 422)
     params, error = _parse_and_validate_params(request.form)
     if error:
         raise _RequestError(error)
@@ -1182,7 +1182,7 @@ def create_preview():
     try:
         enqueue(engine, src_content=[data], job_id=job_id)
     except Exception:
-        raise _RequestError("無法開始人物預覽，仍可稍後進行分析。", 503)
+        raise _RequestError(i18n.tr("無法開始人物預覽，仍可稍後進行分析。"), 503)
     current_app.logger.info("Preview selected_to_enqueue_seconds=%.4f job=%s",
                             time.time() - binding["created_at"], job_id)
     return jsonify({"preview_job_id": job_id, "source_sha256": binding["source_sha256"],
@@ -1200,8 +1200,8 @@ def preview_status(preview_job_id):
     artifact = _preview_snapshot(info, binding)
     if artifact is None:
         if status == "error":
-            return jsonify({**body, "state": "error", "message": "人物預覽未完成，仍可進行分析。"})
-        return jsonify({**body, "state": "pending", "message": "正在初步辨識照片中的人物。"})
+            return jsonify({**body, "state": "error", "message": i18n.tr("人物預覽未完成，仍可進行分析。")})
+        return jsonify({**body, "state": "pending", "message": i18n.tr("正在初步辨識照片中的人物。")})
     snapshot, timing = artifact
     preview = snapshot["subject_preview"]
     classified = {d["detection_index"]: d for d in preview.get("detections", [])}
@@ -1217,7 +1217,7 @@ def preview_status(preview_job_id):
         "reusable": True,
         "coordinate_space": snapshot["coordinate_space"],
         "completed_at": timing.get("completed_at") or (end_ts / 1000 if type(end_ts) in (int, float) else None),
-        "message": "人物初步辨識完成。" if preview["state"] == "ready" else "人物預覽暫時不可用，仍可進行分析。"})
+        "message": i18n.tr("人物初步辨識完成。") if preview["state"] == "ready" else i18n.tr("人物預覽暫時不可用，仍可進行分析。")})
 
 
 @chat_bp.get("/previews/<preview_job_id>/image")
@@ -1233,7 +1233,7 @@ def preview_image(preview_job_id):
             raise ValueError("source_unavailable")
         return Response(create_preview_bytes(data), mimetype="image/jpeg")
     except Exception:
-        raise _RequestError("無法讀取人物預覽圖片。", 502)
+        raise _RequestError(i18n.tr("無法讀取人物預覽圖片。"), 502)
 
 @chat_bp.post("/sessions/<session_id>/photos")
 def add_photos(session_id):
@@ -1330,13 +1330,13 @@ def _add_photos(user, session_id, session, images, client_key=None):
                     if resolved is not None:
                         snapshot, _ = resolved
                         if strict_ready and snapshot['format_version'] != 3:
-                            raise _RequestError('人物預覽版本不符，請重新預覽。', 409)
+                            raise _RequestError(i18n.tr('人物預覽版本不符，請重新預覽。'), 409)
                         photo_params["precomputed_preview"] = snapshot
                     elif strict_ready:
-                        raise _RequestError('人物清單暫時無法交接，請重試預覽。', 409)
+                        raise _RequestError(i18n.tr('人物清單暫時無法交接，請重試預覽。'), 409)
                 except _RequestError as exc:
                     if strict_ready:
-                        raise _RequestError("人物清單暫時無法交接，請重試預覽。", 409) from exc
+                        raise _RequestError(i18n.tr("人物清單暫時無法交接，請重試預覽。"), 409) from exc
                     pass
             # Freeze unresolved accepted requests even when the bridge has not
             # finished. Formal analysis starts now; actual editing is guarded.
@@ -1505,10 +1505,10 @@ def _start_analysis(user, session_id, photo, why):
                 acts = json.loads(acts)
             context = acts[0]['params'].get('precomputed_preview') if acts else None
             if not context:
-                raise _RequestError('人物清單暫時無法交接，請重新上傳照片。', 409)
+                raise _RequestError(i18n.tr('人物清單暫時無法交接，請重新上傳照片。'), 409)
             context = validate_preview_context(context, src_keys=photo['src_keys'])
             if context['binding']['user'] != user:
-                raise _RequestError('人物預覽不屬於目前使用者。', 409)
+                raise _RequestError(i18n.tr('人物預覽不屬於目前使用者。'), 409)
             params['precomputed_preview'] = context
     initial = get_job_info(photo['analyze_job_id'], keyToGet=['acts']) or {}
     initial_acts = initial.get('acts') or []
@@ -1518,7 +1518,7 @@ def _start_analysis(user, session_id, photo, why):
     if not sha and getattr(agent_config, 'ENABLE_CHAT_REQUEST_FEASIBILITY', False) and photo['plan'].get('user_prompt'):
         data, error = download_bytes(photo['src_keys'][0], photo['analyze_job_id'])
         if error or not data:
-            raise _RequestError('原圖暫時無法讀取，請稍後再試。', 409)
+            raise _RequestError(i18n.tr('原圖暫時無法讀取，請稍後再試。'), 409)
         sha = source_sha256(data)
         photo['source_sha256'] = sha
     if sha:
@@ -1836,11 +1836,11 @@ def _conversation_render_problem(photo):
     if blocked:
         return ('unresolved_visual_target', blocked[0]['question'], 409)
     if state and conversation_domain.pending(state):
-        return ('unresolved_people', '請先確認個人化需求指定的人物，再開始美化。', 409)
+        return ('unresolved_people', i18n.tr('請先確認個人化需求指定的人物，再開始美化。'), 409)
     if state and (state.get('question') or {}).get('kind') in ('scope', 'wish'):
         return ('protected_scope', state['question']['text'], 409)
     if state and any(c.get('protected_ids') or (c['status'] == conversation_domain.OUTSIDE_CONFIRMED and c['scope'] == 'protection') for c in state['clauses']) and not photo['plan'].get('overwrite_prompt'):
-        return ('protected_scope', '有保持原樣的人物，請先選擇僅依需求修改，確認保護範圍。', 409)
+        return ('protected_scope', i18n.tr('有保持原樣的人物，請先選擇僅依需求修改，確認保護範圍。'), 409)
     return None
 
 
@@ -1857,7 +1857,7 @@ def _confirmation_notice(photo, problem):
 def _confirmation_deferred_notice(photo):
     return store.make_message('assistant', card={'type': 'llm_reply',
         'photo_id': photo['photo_id'],
-        'text': '我會先照你的原句處理，完成後再和你確認需要調整的對象。'})
+        'text': i18n.tr('我會先照你的原句處理，完成後再和你確認需要調整的對象。')})
 
 
 def _render_without_guessed_targets(photo):
@@ -1898,7 +1898,7 @@ def _prepare_render(photo, *, defer_unconfirmed=False):
     a stable code the chat page can word for the user."""
     plan = photo["plan"]
     if any("detection_index" in f or "preview_person_id" in f for f in plan.get("prompt_faces", [])):
-        return None, ("unresolved_preview_person", "指定人物尚未確認，請重新指定或清除該需求。", 409)
+        return None, ("unresolved_preview_person", i18n.tr("指定人物尚未確認，請重新指定或清除該需求。"), 409)
     params, error = _parse_and_validate_params(build_render_form(plan, "finish"),
         chat_body_side_clarification=agent_config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION)
     if error:
@@ -1935,7 +1935,7 @@ def _prepare_render(photo, *, defer_unconfirmed=False):
         required_ids = {person_id for clause in active_clauses
                         for person_id in (clause.get('target_ids') or clause.get('protected_ids') or [])}
         if required_ids - {person['preview_person_id'] for person in people}:
-            return None, ('unresolved_preview_person', '指定人物尚未完成正式身份確認。', 409)
+            return None, ('unresolved_preview_person', i18n.tr('指定人物尚未完成正式身份確認。'), 409)
         bindings = analysis.get('_preview_person_bindings') or {}
         subjects = analysis.get('subjects') or []
         named = []
@@ -1948,7 +1948,7 @@ def _prepare_render(photo, *, defer_unconfirmed=False):
                 continue
             idx = person.get('subject_index') if person.get('identity_source') == 'formal_analysis' else bindings.get(person['preview_person_id'])
             if type(idx) is not int or not 0 <= idx < len(subjects) or (person.get('identity_source') != 'formal_analysis' and subjects[idx].get('preview_person_id') != person['preview_person_id']):
-                return None, ('unresolved_preview_person', '指定人物尚未完成正式身份確認。', 409)
+                return None, ('unresolved_preview_person', i18n.tr('指定人物尚未完成正式身份確認。'), 409)
             named.append({**person, 'label': subjects[idx]['label']})
         if people:
             canonical = conversation_domain.executable(state, people)
@@ -2131,16 +2131,16 @@ def confirm_photo_conversation(session_id, photo_id):
     previous_prompt = (state.get('effective_prompt') or conversation_domain.executable(state, state.get('people', []))) if state else ''
     q = state.get('question') if state else None
     if not q or q['question_id'] != body.get('question_id') or q['wish_ids'] != body.get('wish_ids') or type(body.get('revision')) is not int or state['revision'] != body.get('revision'):
-        raise _RequestError('人物確認已過時，請重新選擇。', 409)
+        raise _RequestError(i18n.tr('人物確認已過時，請重新選擇。'), 409)
     if q.get('kind') == 'visual':
         text = body.get('text')
         if body.get('subject_indices') or body.get('target_ids') or not isinstance(text, str) or not text.strip() or len(text) > 1000:
-            raise _RequestError('請說明這筆需求要如何調整，或取消這筆需求。', 409)
+            raise _RequestError(i18n.tr('請說明這筆需求要如何調整，或取消這筆需求。'), 409)
         if not any(c['wish_id'] in q['wish_ids'] for c in state['clauses']):
-            raise _RequestError('需求確認結果已過時，請重新分析。', 409)
+            raise _RequestError(i18n.tr('需求確認結果已過時，請重新分析。'), 409)
         retry = text == '重新分析這筆需求'
         if retry and not getattr(agent_config, 'ENABLE_CHAT_REQUEST_FEASIBILITY', False):
-            raise _RequestError('需求影像確認目前未啟用；可以先取消這筆需求。', 409)
+            raise _RequestError(i18n.tr('需求影像確認目前未啟用；可以先取消這筆需求。'), 409)
         cancel = text == '取消這筆需求'
         if not retry:
             for c in state['clauses']:
@@ -2163,7 +2163,7 @@ def confirm_photo_conversation(session_id, photo_id):
         state['revision'] += 1
         state = conversation_domain.refresh_state(state)
         if not store.claim(user, session_id, f'visual:{photo_id}:{body["revision"]}:{q["question_id"]}'):
-            raise _RequestError('需求確認已過時，請重新整理。', 409)
+            raise _RequestError(i18n.tr('需求確認已過時，請重新整理。'), 409)
         photo['preview_conversation'] = state
         existing = photo['plan'].get('user_prompt') or ''
         remaining = existing.replace(previous_prompt, state['effective_prompt'], 1).strip('；') if previous_prompt and previous_prompt in existing else '；'.join(dict.fromkeys(x for x in (existing, state['effective_prompt']) if x))
@@ -2173,7 +2173,7 @@ def confirm_photo_conversation(session_id, photo_id):
         store.save_photo_state(user, session_id, photo)
         store.append_messages(user, session_id, [store.make_message('user', text, card={'type':'ask','photo_id':photo_id}),
             store.make_message('assistant', card={'type':'llm_reply','photo_id':photo_id,
-                'text':'已取消這筆需求，其他需求保留。' if cancel else state['question']['text'] if state.get('question') and conversation_domain.pending(state) else '收到，我會重新確認修改目標。'})])
+                'text':i18n.tr('已取消這筆需求，其他需求保留。') if cancel else state['question']['text'] if state.get('question') and conversation_domain.pending(state) else i18n.tr('收到，我會重新確認修改目標。')})])
         if retry or (not cancel and not conversation_domain.pending(state)):
             _start_analysis(user, session_id, photo, 'check')
         return jsonify({'conversation':photo['preview_conversation']})
@@ -2202,7 +2202,7 @@ def confirm_photo_conversation(session_id, photo_id):
     elif q.get('kind') not in ('scope', 'wish', 'edit_scope', 'semantic'):
         analysis, error = _load_analysis(_analysis_job_id(photo))
         if error or not indices:
-            raise _RequestError('請先選擇已完成分析的人物。', 409)
+            raise _RequestError(i18n.tr('請先選擇已完成分析的人物。'), 409)
         subjects = analysis.get('subjects') or []
         for index in indices:
             if index >= len(subjects):
@@ -2223,7 +2223,7 @@ def confirm_photo_conversation(session_id, photo_id):
     target_semantics = _confirmed_target_semantics(state, ids)
     claim = f'conversation:{photo_id}:{state["revision"]}:{q["question_id"]}'
     if not store.claim(user, session_id, claim):
-        raise _RequestError('人物確認已過時，請重新選擇。', 409)
+        raise _RequestError(i18n.tr('人物確認已過時，請重新選擇。'), 409)
     lifecycle_choice = q.get('kind') == 'wish' and q.get('lifecycle_text')
     if lifecycle_choice:
         state = conversation_domain.confirm_revision_choice(state,state['people'],body['selected_wish'],q['lifecycle_text'])
@@ -2251,7 +2251,7 @@ def confirm_photo_conversation(session_id, photo_id):
     if not lifecycle_choice:
         state['reply'] = conversation_domain.acknowledged_reply(state['clauses'], state['people'])
     if q.get('kind') == 'edit_scope' and body.get('edit_scope') == 'cancel':
-        state['reply'] = '已取消這項髮絲整理需求。'
+        state['reply'] = i18n.tr('已取消這項髮絲整理需求。')
     photo['preview_conversation'] = state
     _refresh_visual_question(photo)
     existing_prompt = photo['plan'].get('user_prompt') or ''
@@ -2267,7 +2267,7 @@ def confirm_photo_conversation(session_id, photo_id):
     photo['plan'] = {**photo['plan'], 'user_prompt': merged_prompt[:USER_PROMPT_MAX_LEN]}
     store.save_photo_plan(user, session_id, photo_id, photo['plan'])
     store.save_photo_state(user, session_id, photo)
-    store.append_messages(user, session_id, [store.make_message('user', '不在已辨識的人物清單中' if outside else '指定了這筆需求的對象',
+    store.append_messages(user, session_id, [store.make_message('user', i18n.tr('不在已辨識的人物清單中') if outside else i18n.tr('指定了這筆需求的對象'),
         card={'type': 'ask', 'photo_id': photo_id, 'subject_indices': indices}),
         store.make_message('assistant', card={'type': 'llm_reply', 'photo_id': photo_id,
             'text': state['question']['text'] if state['question'] else state['reply'],
@@ -2293,7 +2293,7 @@ def _ask_render(user, session_id, photo):
     elif photo["status"] != "ready":
         return [store.make_message("assistant", card={
             "type": "render_failed", "photo_id": photo["photo_id"], "reason": "photo_busy",
-            "error": "這張照片正在處理中，完成後再試一次。"})]
+            "error": i18n.tr("這張照片正在處理中，完成後再試一次。")})]
     else:
         prepared, problem = _prepare_render(photo)
         if problem:
@@ -2644,7 +2644,7 @@ def _apply_directly(user, session_id, photo, reply):
         current_app.logger.warning("could not apply %s directly: %s", proposal["id"], error)
         proposal.pop("direct", None)
         proposal.pop("undo", None)
-        reply["card"]["text"] = "可以幫你這樣調整，確認後套用。"
+        reply["card"]["text"] = i18n.tr("可以幫你這樣調整，確認後套用。")
         return []
     photo_id = photo["photo_id"]
     if plan.get('side_reference_token'):
@@ -2663,7 +2663,9 @@ def _apply_directly(user, session_id, photo, reply):
     if _reframe_if_needed(user, session_id, photo):
         # 改了比例就先重新構圖，這時底下沒有能按的鍵：先不指下一步，構圖好了
         # 那則（reframe_done）再把項目和美化接上。
-        reply["card"]["text"] = NEXT_STEP_RE.sub("", reply["card"]["text"]) + REFRAMING_NOTE
+        next_step = i18n.pattern("next_step", NEXT_STEP_RE)
+        text = next_step.sub("", reply["card"]["text"]) if next_step else reply["card"]["text"]
+        reply["card"]["text"] = i18n.sentences(text, i18n.tr(REFRAMING_NOTE))
     return messages
 
 
@@ -2805,7 +2807,7 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
         if current_photo["plan"] != base_plan:
             proposal = None
             answer = {**answer, "render": False, "close": False, "open": "", "options": [],
-                "reply": "設定已在這段時間更新，這次需求尚未套用，請依最新設定再送出。"}
+                "reply": i18n.tr("設定已在這段時間更新，這次需求尚未套用，請依最新設定再送出。")}
         else:
             photo = current_photo
     # A completed/revised model proposal is another entry into the same guard.
@@ -2822,7 +2824,7 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
     if answer["reply"] or proposal or not answer["render"]:
         messages.append(store.make_message("assistant", card={
             "type": "llm_reply", "photo_id": photo_id,
-            "text": answer["reply"] if agent_config.ENABLE_CHAT_PATCH_CONTINUE and (answer.get('clarification') or {}).get('patch_continue') else answer["reply"] or "我不太確定要怎麼調整，可以直接在面板上修改。", "proposal": proposal,
+            "text": answer["reply"] if agent_config.ENABLE_CHAT_PATCH_CONTINUE and (answer.get('clarification') or {}).get('patch_continue') else answer["reply"] or i18n.tr("我不太確定要怎麼調整，可以直接在面板上修改。"), "proposal": proposal,
             "options": answer["options"],
             **({"question_kind": answer["question_kind"], "answer_mode": answer.get("answer_mode"),
                 "clarification": answer.get("clarification")} if answer.get("question_kind") else {}),
@@ -2985,17 +2987,18 @@ def prompt_review():
         # The model is not a gate the user can be left standing behind: the
         # line goes in, and the session checks it again with an analysis in
         # hand.
-        return jsonify({"accepted": True, "reply": "這句我先保留，稍後會一起確認對象與修改內容。", "semantic_pending": True})
+        return jsonify({"accepted": True, "reply": i18n.tr("這句我先保留，稍後會一起確認對象與修改內容。"), "semantic_pending": True})
     # The verdict and the sentence come back together, so the list and the
     # reply cannot disagree: a line the user is told was taken down is one the
     # model said to keep.
     accepted = answer["kept"]
-    reply = PROMPT_REVIEW_START_REPLIES.get(answer["start"]) or answer["reply"]
+    reply = i18n.tr(PROMPT_REVIEW_START_REPLIES.get(answer["start"]) or "") or answer["reply"]
     if not reply and not accepted and not any(answer[k] for k in ('start', 'ask', 'offer')):
         answer = {**answer, 'ask': True, 'options': []}
-        reply = chat_assistant.INTERPRETATION_CLARIFY_REPLY
+        reply = i18n.tr(chat_assistant.INTERPRETATION_CLARIFY_REPLY)
     if not reply:
-        reply = PROMPT_REVIEW_KEPT_REPLY if accepted else chat_assistant.CLARIFY_REPLY
+        reply = (chat_assistant._cat(i18n.tr(chat_assistant.KEPT_REPLY), i18n.tr(chat_assistant.KEPT_NEXT))
+                 if accepted else i18n.tr(chat_assistant.CLARIFY_REPLY))
     out = {"accepted": accepted, "reply": reply}
     if accepted and answer.get('interpreted') is True:
         out['interpreted'] = True
@@ -3210,9 +3213,9 @@ def _bind_face_wishes(user, session_id, photo, analysis, pending, *, ask=True, h
             return []
         photo["plan"] = new_plan
         store.save_photo_plan(user, session_id, photo["photo_id"], new_plan)
-        text = f"{label}會幫{'、'.join(bound)}調整。"
+        text = i18n.tr("{label}會幫{who}調整。", label=i18n.label(label), who=i18n.tr("、").join(bound))
     if unbound and ask:
-        text += f"{label}要幫哪一位調整？"
+        text = i18n.tr("{a}{b}", a=text, b=i18n.tr("{label}要幫哪一位調整？", label=i18n.label(label)))
         options = list(names.values())
     if not text:
         return []
@@ -3373,7 +3376,7 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
         if state and not state.get('people'):
             refs = analysis.get('_local_face_boxes') or []
             state['people'] = [{ 'preview_person_id': subject.get('preview_person_id') or f'formal_{i}',
-                'identity_source': 'formal_analysis', 'subject_index': i, 'label': subject.get('label') or f'人物 {i+1}',
+                'identity_source': 'formal_analysis', 'subject_index': i, 'label': subject.get('label') or i18n.tr('人物 {n}', n=i + 1),
                 'box': refs[i].get('box', {'x': 0, 'y': 0, 'w': 1, 'h': 1}) if i < len(refs) else {'x': 0, 'y': 0, 'w': 1, 'h': 1}}
                 for i, subject in enumerate(analysis.get('subjects') or []) if subject.get('is_person', True)]
             photo['preview_conversation'] = state

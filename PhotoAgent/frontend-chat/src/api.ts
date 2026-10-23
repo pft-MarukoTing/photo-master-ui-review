@@ -1,3 +1,4 @@
+import { lang } from "./i18n";
 import type { Capabilities, Dict, Message, Plan, Session, SessionSummary } from "./types";
 import type { SideAnswer, SideQuestion } from "./side-reference";
 import type { ReportPage } from "./report-page";
@@ -76,7 +77,10 @@ export function getUser() {
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(url, init);
+  // The backend writes its replies, errors and analyses in the page's language.
+  const headers = new Headers(init.headers);
+  headers.set("X-PhotoAgent-Lang", lang);
+  const res = await fetch(url, { ...init, headers });
   let body: Dict = {};
   try {
     body = await res.json();

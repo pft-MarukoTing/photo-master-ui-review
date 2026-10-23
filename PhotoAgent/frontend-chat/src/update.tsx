@@ -3,14 +3,15 @@
 // this tab loaded with. Unlike the old UI there is no need to hold the
 // banner back while a job runs -- a chat's jobs live in its server-side
 // session, so a reload just reopens it.
+import { t } from "./i18n";
 import { useEffect, useState } from "preact/hooks";
 import { BASE } from "./api";
 
 const POLL_INTERVAL_MS = 30 * 1000;
 
 const MESSAGES = {
-  frontend: "網站有新版本，請重新整理頁面以取得最新內容。",
-  worker: "後端處理伺服器已更新，執行中的工作可能已中斷，請立即重新整理頁面。",
+  frontend: t("網站有新版本，請重新整理頁面以取得最新內容。"),
+  worker: t("後端處理伺服器已更新，執行中的工作可能已中斷，請立即重新整理頁面。"),
 };
 
 type Kind = keyof typeof MESSAGES;
@@ -65,7 +66,7 @@ export function UpdateBanner() {
         {MESSAGES[kind]}
       </span>
       <button type="button" id="update-banner-refresh" class="update-banner-refresh" onClick={() => location.reload()}>
-        重新整理
+        {t("重新整理")}
       </button>
     </div>
   );

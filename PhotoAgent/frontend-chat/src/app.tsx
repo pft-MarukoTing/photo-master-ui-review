@@ -1,3 +1,4 @@
+import { t, shownLabel } from "./i18n";
 import { nextDisplayOrder } from "./display-order";
 import { sideChoice, type SideAnswer, type SideQuestion } from "./side-reference";
 // The chat page: home (intro + gallery), the pre-session chat that picks a
@@ -59,6 +60,7 @@ import {
   introFor,
   CATEGORIES,
   categoryOf,
+  nameOf,
   OptionsCard,
   pickedStyles,
   PROMPT_MAX,
@@ -168,7 +170,7 @@ function clauseAction(c: PreviewClause, persons: PrePerson[]): string {
   const text = c.display_text || c.text;
   // For object edits referent may name the object, not its owner. Only the
   // selected person's label may be replaced by an avatar in that case.
-  const names = [persons.map(p => p.name || p.where).join("、"),
+  const names = [persons.map(p => p.name || p.where).join(t("、")),
     c.semantic?.target_kind === "object" ? "" : c.referent].filter(Boolean);
   const referent = names.find(name => text.includes(name));
   const at = referent ? text.indexOf(referent) : -1;
@@ -190,8 +192,8 @@ function resolvedNotes(notes: Note[], result: PreviewConversationResult, who: (i
     if (actionPending && !effective.length)
       return note.actionPending && note.resolvedWish === "" ? note : { ...note, resolvedWish: "", actionPending: true };
     if (!clauses.length || (!semantic && clauses.some(c => c.edit_scope_pending || c.edit_description_pending || ["pending", "ambiguous", "unmatched"].includes(c.status)))) return note;
-    const text = effective.map(c => c.display_text || c.text).join("；");
-    const withdrawalText = text || Array.from(new Set(clauses.map(c => c.cancelled_from?.text || c.display_text).filter(Boolean))).join("；") || note.withdrawalText;
+    const text = effective.map(c => c.display_text || c.text).join(t("；"));
+    const withdrawalText = text || Array.from(new Set(clauses.map(c => c.cancelled_from?.text || c.display_text).filter(Boolean))).join(t("；")) || note.withdrawalText;
     const placed = effective.map(c => {
       const ids = c.display_target_ids?.length ? c.display_target_ids : c.target_ids.length ? c.target_ids : c.protected_ids;
       const persons = who(ids);
@@ -211,7 +213,7 @@ const LISTED_MAX = 300;
 // 這麼久以內抓過的最近照片可以直接沿用，不用再問一次。
 const SESSIONS_FRESH_MS = 5000;
 
-const WHO_ANSWERED_REPLY = "好，這個我記下來了。還有其他想改的地方嗎？沒有的話，可以從下面選「分析」或「一鍵美化」喔！";
+const WHO_ANSWERED_REPLY = t("好，這個我記下來了。還有其他想改的地方嗎？沒有的話，可以從下面選「分析」或「一鍵美化」喔！");
 
 // What a note asks for, as the list shows it and the prompt carries it.
 const wishText = (n: Note) => n.resolvedWish ?? n.wish ?? n.text;
@@ -302,10 +304,10 @@ function withReviewSettings(s: Settings, r: { aspect_ratio?: string; advanced_op
 // 使用者從清單裡拿掉需求，AI 就回一句。把使用者打的字劃掉是在改畫面，回話才
 // 是在對話——上面那句「我記下來了」還在原地，是真的講過的；底下這句接著說現在
 // 不算數了，兩句合起來才是完整的經過。
-function goneReply(t: { gone: Note[]; left: number }) {
-  const what = `「${t.gone[0].dropped?.text || t.gone[0].withdrawalText || wishText(t.gone[0])}」`;
-  if (t.gone.length > 1) return "好，個人化需求都清掉了，美化時就不另外加了。";
-  return t.left ? `好，${what}就不做了，其他的照舊。` : `好，${what}就不做了，目前沒有其他個人化需求。`;
+function goneReply(turn: { gone: Note[]; left: number }) {
+  const what = t("「{v1}」", { v1: turn.gone[0].dropped?.text || turn.gone[0].withdrawalText || wishText(turn.gone[0]) });
+  if (turn.gone.length > 1) return t("好，個人化需求都清掉了，美化時就不另外加了。{back}", { back: "" });
+  return turn.left ? t("好，{what}就不做了，其他的照舊。{back}", { what, back: "" }) : t("好，{what}就不做了，目前沒有其他個人化需求。{back}", { what, back: "" });
 }
 
 // How a person is written into plan.user_prompt. Nothing has been analyzed yet,
@@ -315,11 +317,11 @@ function goneReply(t: { gone: Note[]; left: number }) {
 // What the prompt calls this person. Before an analysis there is no name, so
 // the position is the whole of it; the server swaps the same string for
 // 「<名字>（<位置>）」 once it knows who that face is.
-const faceRef = (p: PrePerson) => (p.name ? `${p.name}（${p.where}）` : p.where);
+const faceRef = (p: PrePerson) => (p.name ? t("{name}（{where}）", { name: p.name, where: p.where }) : p.where);
 // Several people on one line: each written out, joined by 「、」, so the server
 // still finds and renames every one of them.
-const facesRef = (ps: PrePerson[]) => ps.map(faceRef).join("、");
-const whoPrefix = (ps: PrePerson[]) => (ps.length ? `${facesRef(ps)}：` : "");
+const facesRef = (ps: PrePerson[]) => ps.map(faceRef).join(t("、"));
+const whoPrefix = (ps: PrePerson[]) => (ps.length ? t("{v1}：", { v1: facesRef(ps) }) : "");
 // What one note says while it is the line being checked.
 const noteLine = (n: Note) => whoPrefix(n.persons) + n.text;
 
@@ -370,7 +372,7 @@ function promptSections(ns: Note[], edits: PromptEdits = {}): Section[] {
   });
   return [...out.entries()].flatMap(([key, sec]) => {
     const parts = [edits[key]?.text.trim() || "", ...sec.parts].filter(Boolean);
-    const text = parts.join(key ? "、" : "；");
+    const text = parts.join(key ? t("、") : t("；"));
     return text ? [{ key, persons: sec.persons, text, first: sec.first }] : [];
   });
 }
@@ -378,10 +380,10 @@ function promptSections(ns: Note[], edits: PromptEdits = {}): Section[] {
 // 一段在 user_prompt 裡的樣子。指定了人的那段前面寫上是誰，段裡不能有「；」，
 // 不然後面那半句就不知道是在講誰。
 const sectionLine = (sec: Section) => sec.key
-  ? whoPrefix(sec.persons) + sec.text.replace(/；/g, "、") : sec.text;
+  ? whoPrefix(sec.persons) + sec.text.replace(/；/g, t("、")) : sec.text;
 
 const notesPrompt = (ns: Note[], edits: PromptEdits = {}) =>
-  promptSections(ns, edits).map(sectionLine).join("；");
+  promptSections(ns, edits).map(sectionLine).join(t("；"));
 
 function noteLiteralTexts(ns: Note[], prompt: string): string[] {
   return [...new Set(ns.filter(liveNote).flatMap(n => n.literalTexts || []))].filter(text => prompt.includes(text));
@@ -399,23 +401,23 @@ function sideTokenFor(ns: Note[]): string | undefined {
 function reviewHistory(ns: Note[], events: PreviewReplyEvent[] = []): ReviewTurn[] {
   const groups: ReviewTurn[][] = [];
   const noteFor = new Map<ReviewTurn, Note>();
-  for (const t of conversation(ns, events)) {
-    if ("previewReply" in t) {
-      if (t.previewReply.kind === "notes") continue; // Display history is not another instruction.
-      groups.push(t.previewReply.kind === "settings"
-        ? [{ role: "user", text: "設定" }, { role: "assistant", text: t.previewReply.text }]
-        : [{ role: t.previewReply.role || "assistant", text: t.previewReply.text }]);
-    } else if ("gone" in t) {
-      groups.push([{ role: "assistant", text: goneReply(t) }]);
+  for (const turn of conversation(ns, events)) {
+    if ("previewReply" in turn) {
+      if (turn.previewReply.kind === "notes") continue; // Display history is not another instruction.
+      groups.push(turn.previewReply.kind === "settings"
+        ? [{ role: "user", text: t("設定") }, { role: "assistant", text: turn.previewReply.text }]
+        : [{ role: turn.previewReply.role || "assistant", text: turn.previewReply.text }]);
+    } else if ("gone" in turn) {
+      groups.push([{ role: "assistant", text: goneReply(turn) }]);
     } else {
-      const group: ReviewTurn[] = t.part === "reply" ? [] : [{ role: "user", text: noteLine(t.ask) }];
-      if (t.part !== "user" && t.ask.reply) group.push({ role: "assistant", text: t.ask.reply,
-        ...(t.ask.asked ? { question: true, options: t.ask.asked.options } : {}),
-        ...(t.ask.offered ? { question: true, offer: true, options: t.ask.offered.options } : {}),
+      const group: ReviewTurn[] = turn.part === "reply" ? [] : [{ role: "user", text: noteLine(turn.ask) }];
+      if (turn.part !== "user" && turn.ask.reply) group.push({ role: "assistant", text: turn.ask.reply,
+        ...(turn.ask.asked ? { question: true, options: turn.ask.asked.options } : {}),
+        ...(turn.ask.offered ? { question: true, offer: true, options: turn.ask.offered.options } : {}),
       });
-      for (const message of group) noteFor.set(message, t.ask);
+      for (const message of group) noteFor.set(message, turn.ask);
       const previous = groups[groups.length - 1];
-      if (t.part === "reply" && previous?.length && noteFor.get(previous[0]) === t.ask) previous.push(...group);
+      if (turn.part === "reply" && previous?.length && noteFor.get(previous[0]) === turn.ask) previous.push(...group);
       else groups.push(group);
     }
   }
@@ -444,34 +446,36 @@ function reviewHistory(ns: Note[], events: PreviewReplyEvent[] = []): ReviewTurn
 // 到了 session 沒有這兩顆，指著它們的那句（連同前面那句「還有其他想改的地方嗎？」）
 // 不跟過去；整則只剩那句就回一聲「好。」。
 const UPLOAD_BUTTONS_RE = /(還有其他想改的地方嗎？)?[^。！？!?]*(「分析」|「一鍵美化」|分析還是一鍵美化)[^。！？!?]*[。！？!?]?/g;
-const carriedReply = (text: string) => text.replace(UPLOAD_BUTTONS_RE, "").trim() || "好。";
+// The same sentence in English (photo_agent/i18n_en.py's KEPT_NEXT).
+const UPLOAD_BUTTONS_EN_RE = /(Anything else you'd like to change\?\s*)?[^.!?]*(“Analyze”|“One-Tap Retouch”)[^.!?]*[.!?]?/g;
+const carriedReply = (text: string) => text.replace(UPLOAD_BUTTONS_RE, "").replace(UPLOAD_BUTTONS_EN_RE, "").trim() || t("好。");
 
 function carriedLog(ns: Note[], photoId: string, later: Note | null, events: PreviewReplyEvent[] = []) {
   const out: { role: "user" | "assistant"; text?: string; card: Dict }[] = [];
   const reply = (text: string) =>
     out.push({ role: "assistant", card: { type: "llm_reply", photo_id: photoId, pre: true, text: carriedReply(text) } });
-  for (const t of conversation(ns, events)) {
-    if ("previewReply" in t) {
-      if (t.previewReply.kind === "notes") {
+  for (const turn of conversation(ns, events)) {
+    if ("previewReply" in turn) {
+      if (turn.previewReply.kind === "notes") {
         out.push({ role: "assistant", card: { type: "personalized_snapshot", photo_id: photoId,
-          pre: true, snapshot_id: t.previewReply.id, sections: t.previewReply.sections || [] } });
+          pre: true, snapshot_id: turn.previewReply.id, sections: turn.previewReply.sections || [] } });
         continue;
       }
-      if (t.previewReply.kind === "settings") out.push({ role: "user", text: "設定", card: { type: "ask", pre: true, photo_id: photoId } });
-      if (t.previewReply.role === "user") out.push({ role: "user", text: t.previewReply.text, card: { type: "ask", pre: true, photo_id: photoId } });
-      else reply(t.previewReply.text);
+      if (turn.previewReply.kind === "settings") out.push({ role: "user", text: t("設定"), card: { type: "ask", pre: true, photo_id: photoId } });
+      if (turn.previewReply.role === "user") out.push({ role: "user", text: turn.previewReply.text, card: { type: "ask", pre: true, photo_id: photoId } });
+      else reply(turn.previewReply.text);
       continue;
     }
-    if ("gone" in t) {
-      reply(goneReply(t));
+    if ("gone" in turn) {
+      reply(goneReply(turn));
       continue;
     }
-    const n = t.ask;
+    const n = turn.ask;
     const card: Dict = { type: "ask", photo_id: photoId, pre: true };
     if (n.persons.length) card.faces = n.persons.map((p) => ({ box: p.box, thumbnail_box: p.thumbnail_box, preview_person_id: p.preview_person_id, where: p.where }));
     if (n === later) card.waiting = true;
-    if (t.part !== "reply") out.push({ role: "user", text: n.text, card });
-    if (t.part !== "user" && n.reply) reply(n.reply);
+    if (turn.part !== "reply") out.push({ role: "user", text: n.text, card });
+    if (turn.part !== "user" && n.reply) reply(n.reply);
   }
   return out;
 }
@@ -554,28 +558,32 @@ export type OverviewTurn =
 // 後端給的是總覽鍵上的名字（「全部分析」「一鍵美化其餘 N」），舊的對話紀錄裡可能還是單張的名字，
 // 或改名前的「…剩餘 N」。
 function overviewStartOf(label: string): "analyze" | "render" | undefined {
+  // An option the server wrote in the user's language.
+  for (const [zh, start] of [["幫我分析", "analyze"], ["全部分析", "analyze"], ["一鍵美化", "render"],
+    ["全部一鍵美化", "render"], ["再美化", "render"], ["全部再美化", "render"]] as const)
+    if (label === t(zh)) return start;
   if (/^(幫我分析|全部分析|分析(?:其餘|剩餘) \d+)$/.test(label)) return "analyze";
   if (/^(一鍵美化|全部一鍵美化|一鍵美化(?:其餘|剩餘) \d+|再美化|全部再美化|再美化 \d+ 張)$/.test(label)) return "render";
 }
 // 總覽說的需求放進每張對話時，AI 在那張裡回的話。
-const OVERVIEW_NOTE_REPLY = "好，這句是在總覽說的，這張也會照著修。只想改這張的話，直接在這裡說。";
+const OVERVIEW_NOTE_REPLY = t("好，這句是在總覽說的，這張也會照著修。只想改這張的話，直接在這裡說。");
 // 單張對話裡不重播總覽那幾句，連續的收成這一則；說了什麼看底下的需求卡。
-const OVERVIEW_SUMMARY = "你在總覽提的需求，這張也會照著修，整理在下面。針對這張的改動，可以在這裡說。";
-const fromOverview = (t: Turn) => "ask" in t && t.ask.reply === OVERVIEW_NOTE_REPLY;
+const OVERVIEW_SUMMARY = t("你在總覽提的需求，這張也會照著修，整理在下面。針對這張的改動，可以在這裡說。");
+const fromOverview = (turn: Turn) => "ask" in turn && turn.ask.reply === OVERVIEW_NOTE_REPLY;
 
 // 「我的照片」每張的狀態：開始了照 session 裡真的跑到哪，還沒開始的看有沒有講過需求。
 function batchItemState(r: BatchRun | undefined, p: Photo | null, wished: boolean, failed = false): { key: string; text: string } {
   return p
     ? photoState(p, failed)
     : r?.error
-      ? { key: "error", text: "失敗" }
+      ? { key: "error", text: t("失敗") }
       : r?.done
-        ? { key: "analyzed", text: "已開始" }
+        ? { key: "analyzed", text: t("已開始") }
         : r
-          ? { key: "uploading", text: "上傳中" }
+          ? { key: "uploading", text: t("上傳中") }
           : wished
-            ? { key: "", text: "有需求" }
-            : { key: "", text: "未開始" };
+            ? { key: "", text: t("有需求") }
+            : { key: "", text: t("未開始") };
 }
 
 // 總覽算進度用的：還沒開始、還在跑（上傳、分析、美化）、分析好、美化好、失敗。
@@ -647,7 +655,7 @@ function withoutPreviewIdentity({ preview_person_id, detection_index, preview_jo
 }
 
 // 上限不先講，選超過了再問（見 askOverLimit）。
-const GREETING = "嗨！先選想美化的照片，可以一次選多張。要自己上傳，還是從範例照片挑？";
+const GREETING = t("嗨！先選想美化的照片，可以一次選多張。要自己上傳，還是從範例照片挑？");
 
 // 帶著個人化需求按一鍵美化時問的兩條路。僅依需求修改 = overwrite_prompt：修圖
 // 只拿個人化需求當指令；整體美化 = 照分析修完，需求一起加上去（原本的做法）。
@@ -695,7 +703,7 @@ async function uploadKeyed(id: string, blob: Blob, name: string, preview: Upload
   try {
     const up = await api.uploadPhoto(id, blob, name, preview, wishes, { signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS), clientKey, sideToken });
     const added = up.photos?.[0];
-    if (!added) throw new UploadFailed(up.errors?.[0]?.error || "上傳失敗");
+    if (!added) throw new UploadFailed(up.errors?.[0]?.error || t("上傳失敗"));
     return added as { photo_id: string; analyze_job_id: string };
   } catch (e) {
     if (!(e instanceof ApiError && e.body?.error === "upload_in_progress")) throw e;
@@ -714,13 +722,13 @@ function errorText(e: unknown): string {
   if (e instanceof ApiError) {
     if (e.status === 409 && ["unresolved_people", "unresolved_visual_target", "protected_scope"].includes(e.body?.reason))
       return notice(e.message);
-    if (e.body?.error === "photos_not_ready") return "照片還在處理中，請稍候再試。";
+    if (e.body?.error === "photos_not_ready") return t("照片還在處理中，請稍候再試。");
     return e.message;
   }
-  if (e instanceof DOMException && e.name === "TimeoutError") return "系統回應逾時，請再試一次。";
+  if (e instanceof DOMException && e.name === "TimeoutError") return t("系統回應逾時，請再試一次。");
   // fetch 連不上時瀏覽器丟的 TypeError（Chrome／Firefox／Safari 各自的字樣），別把英文原文秀出去。
   if (e instanceof TypeError && /Failed to fetch|NetworkError|Load failed/i.test(e.message))
-    return "連不上伺服器，請確認網路後再試一次。";
+    return t("連不上伺服器，請確認網路後再試一次。");
   return e instanceof Error ? e.message : String(e);
 }
 
@@ -792,7 +800,7 @@ function fullSrc(s: Source) {
 async function sourceBlob(s: Source, signal?: AbortSignal): Promise<{ blob: Blob; name: string }> {
   if (s.kind === "file") return { blob: s.file, name: s.file.name };
   const res = await fetch(fullSrc(s), { signal });
-  if (!res.ok) throw new Error(`無法讀取範例照片（HTTP ${res.status}）`);
+  if (!res.ok) throw new Error(t("無法讀取範例照片（HTTP {status}）", { status: res.status }));
   return { blob: await res.blob(), name: s.kind === "demo" ? s.name : `${s.job}.jpg` };
 }
 
@@ -1031,7 +1039,7 @@ export function App() {
   // shows, so that is how a face gets put into words here.
   const preOrder = [...preFaces].sort((a, b) => a.box.x + a.box.w / 2 - (b.box.x + b.box.w / 2));
   const preWhere = (subjectIndex: number) =>
-    `照片中從左邊數來第 ${preOrder.findIndex((q) => q.subjectIndex === subjectIndex) + 1} 位`;
+    t("照片中從左邊數來第 {v1} 位", { v1: preOrder.findIndex((q) => q.subjectIndex === subjectIndex) + 1 });
   // Picker indices are local display positions. References serialize opaque
   // server person IDs, independent of formal subject order.
   const prePickable = preFaces.map((p) => ({
@@ -1197,7 +1205,7 @@ export function App() {
         }
       }
       let s = await api.getSession(id);
-      if (!s.photos.length) throw new Error("這個對話沒有照片");
+      if (!s.photos.length) throw new Error(t("這個對話沒有照片"));
       if (caseId) s = await applyHandoff(s, caseId);
       setSession(s);
       setSelected(null);
@@ -1311,11 +1319,11 @@ export function App() {
   function confirmLeave(where: string): Promise<boolean> {
     if (!unsentHome) return Promise.resolve(true);
     const what = parkedLeft
-      ? `還有 ${parkedLeft} 張照片`
-      : notes.length ? "剛剛選的照片和打的需求" : "剛剛選的照片";
+      ? t("還有 {parkedLeft} 張照片", { parkedLeft })
+      : notes.length ? t("剛剛選的照片和打的需求") : t("剛剛選的照片");
     return new Promise((resolve) =>
       setLeaveAsk({
-        message: `${what}還沒開始美化，${where}就會清掉。確定嗎？`,
+        message: t("{what}還沒開始美化，{where}就會清掉。確定嗎？", { what, where }),
         answer: (ok) => {
           setLeaveAsk(null);
           resolve(ok);
@@ -1327,9 +1335,9 @@ export function App() {
   function askNewChat() {
     setLeaveAsk({
       message: parkedLeft
-        ? `要開新對話處理另一張照片嗎？已經開始的照片可以從「最近照片」再打開，還沒開始的 ${parkedLeft} 張會清掉。`
-        : "要開新對話處理另一張照片嗎？目前這段對話可以從「最近照片」再打開。",
-      confirmLabel: "開新對話",
+        ? t("要開新對話處理另一張照片嗎？已經開始的照片可以從「最近照片」再打開，還沒開始的 {parkedLeft} 張會清掉。", { parkedLeft })
+        : t("要開新對話處理另一張照片嗎？目前這段對話可以從「最近照片」再打開。"),
+      confirmLabel: t("開新對話"),
       answer: (ok) => {
         setLeaveAsk(null);
         if (ok) newChat();
@@ -1337,7 +1345,7 @@ export function App() {
     });
   }
   async function openOtherSession(id: string) {
-    if (await confirmLeave("打開另一張")) openSession(id);
+    if (await confirmLeave(t("打開另一張"))) openSession(id);
   }
   useEffect(() => {
     if (!unsentHome) return;
@@ -1472,17 +1480,17 @@ export function App() {
   async function removeRows(ids: string[] | "all"): Promise<boolean> {
     const message =
       ids === "all"
-        ? "確定要刪除所有處理紀錄嗎？此操作無法復原。"
+        ? t("確定要刪除所有處理紀錄嗎？此操作無法復原。")
         : ids.length > 1
-          ? `確定要刪除這 ${ids.length} 筆處理紀錄嗎？`
-          : "確定要刪除這筆處理紀錄嗎？";
+          ? t("確定要刪除這 {length} 筆處理紀錄嗎？", { length: ids.length })
+          : t("確定要刪除這筆處理紀錄嗎？");
     if (!(await ask(message))) return false;
     // 合成一格的那一批，刪的是整批的對話。
     if (ids !== "all") ids = ids.flatMap((id) => sessions?.find((r) => rowId(r) === id)?.session_ids ?? [id]);
     try {
       await api.deleteRows(ids);
     } catch {
-      await ask(ids === "all" ? "刪除所有紀錄失敗，請稍後再試。" : "刪除紀錄失敗，請稍後再試。", true);
+      await ask(ids === "all" ? t("刪除所有紀錄失敗，請稍後再試。") : t("刪除紀錄失敗，請稍後再試。"), true);
       return false;
     }
     const gone = (id: string) => ids === "all" || ids.includes(id);
@@ -1573,9 +1581,9 @@ export function App() {
     if (!(typed || tuned)) return Promise.resolve(true);
     return new Promise<boolean>((resolve) =>
       setLeaveAsk({
-        message: "換成這張照片的話，剛剛打的需求和選的設定都會清掉。確定要換嗎？",
-        confirmLabel: "更換",
-        cancelLabel: "取消",
+        message: t("換成這張照片的話，剛剛打的需求和選的設定都會清掉。確定要換嗎？"),
+        confirmLabel: t("更換"),
+        cancelLabel: t("取消"),
         answer: (yes) => {
           setLeaveAsk(null);
           resolve(yes);
@@ -1590,7 +1598,7 @@ export function App() {
       setLeaveAsk({
         message,
         confirmLabel,
-        cancelLabel: "重新選",
+        cancelLabel: t("重新選"),
         answer: (yes) => {
           setLeaveAsk(null);
           resolve(yes);
@@ -1607,8 +1615,8 @@ export function App() {
     if (
       images.length > MAX_BATCH &&
       !(await askOverLimit(
-        `你選了 ${images.length} 張照片，一次最多 ${MAX_BATCH} 張。要先上傳最前面的 ${MAX_BATCH} 張，還是重新選？`,
-        `上傳前 ${MAX_BATCH} 張`,
+        t("你選了 {n} 張照片，一次最多 {MAX_BATCH} 張。要先上傳最前面的 {MAX_BATCH} 張，還是重新選？", { n: images.length, MAX_BATCH }),
+        t("上傳前 {MAX_BATCH} 張", { MAX_BATCH }),
       ))
     ) return;
     const pick = ++lastPick.current;
@@ -1619,7 +1627,7 @@ export function App() {
     const entry = await startBatch(
       [first],
       images.length < files.length
-          ? notice(`有 ${files.length - images.length} 個檔案不是圖片，先略過。`)
+          ? notice(t("有 {v1} 個檔案不是圖片，先略過。", { v1: files.length - images.length }))
           : "",
       taken.length,
     );
@@ -1686,7 +1694,7 @@ export function App() {
       logUpload(added);
     }
     setError(batch.length >= MAX_BATCH && names.length
-      ? notice(`已經選滿 ${MAX_BATCH} 張了。想新增照片的話，建議先移除幾張，或按「全部清除」重新選，再新增其他照片。`) : "");
+      ? notice(t("已經選滿 {MAX_BATCH} 張了。想新增照片的話，建議先移除幾張，或按「全部清除」重新選，再新增其他照片。", { MAX_BATCH })) : "");
   }
 
   // 開多張的上傳頁，上傳多張和範例照片多選共用。message 是開好之後要提醒的話。
@@ -1768,9 +1776,9 @@ export function App() {
     if (!batch || busy || submitting || loadingPhotos) return;
     const n = batch.length;
     setLeaveAsk({
-      message: `確定要清除這 ${n} 張照片嗎？`,
-      confirmLabel: "清除",
-      cancelLabel: "取消",
+      message: t("確定要清除這 {n} 張照片嗎？", { n }),
+      confirmLabel: t("清除"),
+      cancelLabel: t("取消"),
       answer: (yes) => {
         setLeaveAsk(null);
         if (!yes) return;
@@ -1792,8 +1800,8 @@ export function App() {
       room > 0 &&
       images.length > room &&
       !(await askOverLimit(
-        `你選了 ${images.length} 張照片，一次最多 ${MAX_BATCH} 張，現在還能再加 ${room} 張。要先加最前面的 ${room} 張，還是重新選？`,
-        `加前 ${room} 張`,
+        t("你選了 {n} 張照片，一次最多 {MAX_BATCH} 張，現在還能再加 {room} 張。要先加最前面的 {room} 張，還是重新選？", { n: images.length, MAX_BATCH, room }),
+        t("加前 {room} 張", { room }),
       ))
     ) return;
     // 問的時候整批被清掉了就不加。
@@ -1811,9 +1819,9 @@ export function App() {
     }
     setError(
       images.length && !taken.length
-        ? notice(`已經選滿 ${MAX_BATCH} 張了。想新增照片的話，建議先移除幾張，或按「全部清除」重新選，再新增其他照片。`)
+        ? notice(t("已經選滿 {MAX_BATCH} 張了。想新增照片的話，建議先移除幾張，或按「全部清除」重新選，再新增其他照片。", { MAX_BATCH }))
         : images.length < files.length
-          ? notice(`有 ${files.length - images.length} 個檔案不是圖片，先略過。`)
+          ? notice(t("有 {v1} 個檔案不是圖片，先略過。", { v1: files.length - images.length }))
           : "",
     );
     if (entry !== null) await addAsLoaded(taken.slice(1), entry);
@@ -2018,7 +2026,7 @@ export function App() {
       if (live()) setBatchRuns((rs) => (rs[p.key] ? { ...rs, [p.key]: f(rs[p.key]) } : rs));
     };
     const say = (line: string) => patchRun((r) => (r.done || r.error ? r : { ...r, lines: [...r.lines, line] }));
-    setBatchRuns((rs) => ({ ...rs, [p.key]: { mode: p.mode, overwrite: p.overwrite, since: Date.now(), lines: ["正在上傳照片…"] } }));
+    setBatchRuns((rs) => ({ ...rs, [p.key]: { mode: p.mode, overwrite: p.overwrite, since: Date.now(), lines: [t("正在上傳照片…")] } }));
     let uploaded = "";
     let id = "";
     const bid = batchId.current || undefined;
@@ -2044,7 +2052,7 @@ export function App() {
       clientKey, live, sideClarificationEnabled ? sideTokenFor(log) : undefined);
       const pid = added.photo_id;
       uploaded = pid;
-      say(p.mode === "analyze" ? "照片傳好了，準備開始分析…" : p.overwrite ? "照片傳好了，準備開始調整…" : "照片傳好了，準備開始美化…");
+      say(p.mode === "analyze" ? t("照片傳好了，準備開始分析…") : p.overwrite ? t("照片傳好了，準備開始調整…") : t("照片傳好了，準備開始美化…"));
       if (p.faces) seedDetectedFaces(urls.sourceImage(added.analyze_job_id), p.faces);
       const carried = carriedLog(log, pid, p.later, p.events);
       if (carried.length) await api.postMessages(id, carried, step());
@@ -2070,7 +2078,7 @@ export function App() {
       batchQueue.current = run.catch(() => {});
       return run.catch(async (e) => {
         if (uploaded || n >= UPLOAD_RETRY_DELAYS_MS.length || !retriable(e) || !live()) throw e;
-        if (n === 0) say("連線不穩，重新上傳中…");
+        if (n === 0) say(t("連線不穩，重新上傳中…"));
         await wait(UPLOAD_RETRY_DELAYS_MS[n]);
         if (!live()) throw e;
         return attempt(n + 1);
@@ -2135,9 +2143,9 @@ export function App() {
         .sort((a, b) => a - b).map((i) => i + 1);
       if (nums.length) {
         setLeaveAsk({
-          message: `第 ${nums.join("、")} 張有需求，還沒選要整體美化還是僅依需求修改，會用「整體美化」送出。要繼續嗎？`,
-          confirmLabel: "繼續",
-          cancelLabel: "先去選",
+          message: t("第 {v1} 張有需求，還沒選要整體美化還是僅依需求修改，會用「整體美化」送出。要繼續嗎？", { v1: nums.join(t("、")) }),
+          confirmLabel: t("繼續"),
+          cancelLabel: t("先去選"),
           // 先去選：回到總覽，在那裡問一次怎麼套用，選了就接著美化。
           answer: (ok) => {
             setLeaveAsk(null);
@@ -2341,17 +2349,18 @@ export function App() {
     const keys = batch.map(sourceSrc);
     const pending = keys.filter(unstarted).length;
     const unrendered = keys.filter(needsRender).length;
-    const where = drawerLayout ? "上面的照片" : "左邊的「我的照片」";
+    // Labels and places as the user reads them: the reply quotes them.
+    const where = drawerLayout ? t("上面的照片") : t("左邊的「我的照片」");
     // 每張都美化過了：不提分析，這句發到每一張，鍵是「全部再美化」。
     const finished = overviewFinished();
     const doneN = keys.filter((k) => !!doneLive(k)).length;
     const scope = finished
-      ? { photos: keys.length, unrendered: doneN, analyze: "", render: redoLabel(doneN, keys.length), where, redo: true }
+      ? { photos: keys.length, unrendered: doneN, analyze: "", render: shownLabel(redoLabel(doneN, keys.length)), where, redo: true }
       : {
         photos: keys.length,
         unrendered,
-        analyze: pending ? allLabel("analyze", pending, keys.length) : "",
-        render: unrendered ? allLabel("render", unrendered, keys.length) : "",
+        analyze: pending ? shownLabel(allLabel("analyze", pending, keys.length)) : "",
+        render: unrendered ? shownLabel(allLabel("render", unrendered, keys.length)) : "",
         where,
       };
     let r: Awaited<ReturnType<typeof api.promptReview>>;
@@ -2381,7 +2390,7 @@ export function App() {
       // 「幫我美化」就是按那顆：接下來那則「開始了」會講，這裡不多回一句。
       done({ kept: false, reply: "" });
     } else {
-      done({ kept: false, reply: r.reply || "好，那就先不加這句。", options: r.ask || r.offer ? r.options || [] : [], offer: !!r.offer });
+      done({ kept: false, reply: r.reply || t("好，那就先不加這句。"), options: r.ask || r.offer ? r.options || [] : [], offer: !!r.offer });
     }
     // 說了比例、或開關人像修正的（「做成限動」「閉眼不用修」）改總覽的設定；只講這些的不進清單。
     if (allSettings && (r.aspect_ratio || r.advanced_options))
@@ -2542,9 +2551,9 @@ export function App() {
     });
     if (!own.length) return;
     setLeaveAsk({
-      message: `第 ${own.map((x) => x.i + 1).join("、")} 張在單張頁改過設定，要換成總覽的設定，還是保留它們自己的？`,
-      confirmLabel: "換成總覽的",
-      cancelLabel: "保留各自的",
+      message: t("第 {v1} 張在單張頁改過設定，要換成總覽的設定，還是保留它們自己的？", { v1: own.map((x) => x.i + 1).join(t("、")) }),
+      confirmLabel: t("換成總覽的"),
+      cancelLabel: t("保留各自的"),
       answer: (yes) => {
         setLeaveAsk(null);
         for (const x of own) {
@@ -2633,7 +2642,7 @@ export function App() {
   const lastPick = useRef(0);
   async function pickFile(file: File) {
     if (!file.type.startsWith("image/") && !isHeic(file)) {
-      setError(notice("請選擇圖片檔。"));
+      setError(notice(t("請選擇圖片檔。")));
       return;
     }
     const pick = ++lastPick.current;
@@ -2641,7 +2650,7 @@ export function App() {
     if (pick !== lastPick.current) return;
     const s: Source = { kind: "file", file, url: URL.createObjectURL(preview) };
     if (phase === "session") {
-      if (await confirmLeave("換這張")) newChat(s);
+      if (await confirmLeave(t("換這張"))) newChat(s);
     } else if (phase !== "chat") {
       setPhase("chat");
       choose(s);
@@ -2792,12 +2801,12 @@ export function App() {
       let r = routeReviewQuestion(reviewed, previewConversationEnabled);
       if (asking && r.accepted && !r.withdrawn && !r.line && !r.verbatim) {
         r = { ...r, accepted: false, ask: true, options: [],
-          reply: "這項需求還沒整理完整，請再說明想調整的效果。" };
+          reply: t("這項需求還沒整理完整，請再說明想調整的效果。") };
       }
       const settled: Note = {
         ...note,
         replyOrder: nextDisplayOrder(),
-        reply: r.reply || (r.accepted ? "好，這些會當成個人化需求，美化時一起套用。" : "好，那就先不加個人化需求。"),
+        reply: r.reply || (r.accepted ? t("好，這些會當成個人化需求，美化時一起套用。") : t("好，那就先不加個人化需求。")),
         replyPeople: prePickable.map(p => ({ ...p })),
         // 只是撤回前面那項的一句不進清單：前面那項拿掉，就是照原樣了。
         kept: r.accepted && !r.withdrawn,
@@ -2851,16 +2860,16 @@ export function App() {
         setNotes([...retryBase, { ...note, kept: false, replyOrder: nextDisplayOrder(),
           ...(stale ? { text: asking?.asked?.side_question?.original_text || asking?.text || note.text } : {}),
           asked: !stale && asking?.asked || { options: ["重新確認左右需求"], kind: "content", subtype: "body_side_reference" },
-          sideToken: stale ? undefined : asking?.sideToken, reply: stale ? "照片或設定已更新，請重新確認這項左右需求。" : "左右確認尚未完成，請重試目前的選項。" }]);
+          sideToken: stale ? undefined : asking?.sideToken, reply: stale ? t("照片或設定已更新，請重新確認這項左右需求。") : t("左右確認尚未完成，請重試目前的選項。") }]);
         return null;
       }
       if (asking) {
         setNotes([...base, { ...note, kept: false, asked: { options: [], kind: "meaning" }, replyOrder: nextDisplayOrder(),
-          reply: "這項需求還沒整理完整，請再說明想調整的效果。" }]);
+          reply: t("這項需求還沒整理完整，請再說明想調整的效果。") }]);
         return null;
       }
       const kept = { ...note, ...completed(), kept: true, ...(preview.identity ? { actionPending: true, resolvedWish: "" } : {}), replyOrder: nextDisplayOrder(),
-        reply: "好，這些會當成個人化需求，美化時一起套用。",
+        reply: t("好，這些會當成個人化需求，美化時一起套用。"),
         replyPeople: prePickable.map(p => ({ ...p })) };
       setNotes([...base, kept]);
       return [...base, kept];
@@ -2882,10 +2891,10 @@ export function App() {
     const persons = preRefs(subjectIndices);
     if (!preWhoAsk || !persons.length) return;
     if (preWhoAsk.asked?.subtype === "body_side_reference") {
-      void reviewNote(persons.length > 1 ? "這幾位" : "這位", subjectIndices, notes, false);
+      void reviewNote(persons.length > 1 ? t("這幾位") : t("這位"), subjectIndices, notes, false);
       return;
     }
-    const text = persons.length > 1 ? "這幾位" : "這位";
+    const text = persons.length > 1 ? t("這幾位") : t("這位");
     setNotes([...notes, { order: nextDisplayOrder(), replyOrder: nextDisplayOrder(), text, wish: preWhoAsk.wish ?? preWhoAsk.text, persons, selectionSource: "user_selection", reply: WHO_ANSWERED_REPLY, kept: true }]);
   }
 
@@ -2897,16 +2906,16 @@ export function App() {
     if (!source || !caps || !settings || busy || submissionLock.current) return;
     const sidePending = sideClarificationEnabled && [...log].reverse().find(n => !n.dropped && !n.askedResolved && n.asked?.subtype === "body_side_reference");
     if (sidePending && !sidePending.sideToken) {
-      setError(notice("左右需求尚未保存，請先按「重新確認左右需求」重試。"));
+      setError(notice(t("左右需求尚未保存，請先按「重新確認左右需求」重試。")));
       return;
     }
     if (mode === "render" && sidePending) {
-      setError(notice("請先確認身體部位左右的參考角度，再開始美化；也可以先分析。"));
+      setError(notice(t("請先確認身體部位左右的參考角度，再開始美化；也可以先分析。")));
       return;
     }
     if (mode === "render" && bridgeQuestion && bridge.result?.clauses.some(c =>
         bridgeQuestion.wish_ids.includes(c.wish_id) && c.scope === "protection")) {
-      setError(notice("請先確認個人化需求指定的人物，再開始美化。"));
+      setError(notice(t("請先確認個人化需求指定的人物，再開始美化。")));
       return;
     }
     if (mode === "render" && overwrite === undefined && (bridge.result?.effective_prompt ?? notesPrompt(log, segEdits)).trim()) {
@@ -2935,7 +2944,7 @@ export function App() {
     const previewDecision = previewEnabled ? preview.forSubmission() : Promise.resolve(undefined);
     const since = Date.now();
     const say = (line: string) => setStarting((s) => s && { ...s, lines: [...s.lines, line] });
-    setStarting({ mode, overwrite, since, lines: ["正在上傳照片…"] });
+    setStarting({ mode, overwrite, since, lines: [t("正在上傳照片…")] });
     setSubmitting({ sources: [source], mode, since });
     void run(async () => {
       const previewIdentity = await previewDecision;
@@ -2953,7 +2962,7 @@ export function App() {
       // 跟多張一樣：每個請求都有時限，傳上去之前逾時、斷線的原地等一下再試（同一把 clientKey，
       // 不會多建一段、多傳一張），試完還不行才算失敗。換了照片就不再試。
       const same = () => sourceIdentity.current === selectedSource;
-      const changed = () => new Error("照片已更換，請重新選擇分析或一鍵美化。");
+      const changed = () => new Error(t("照片已更換，請重新選擇分析或一鍵美化。"));
       const step = () => AbortSignal.timeout(STEP_TIMEOUT_MS);
       if (singleKey.current?.source !== selectedSource) singleKey.current = { source: selectedSource, key: newClientKey() };
       const clientKey = singleKey.current.key;
@@ -2984,12 +2993,12 @@ export function App() {
           break;
         } catch (e) {
           if (n >= UPLOAD_RETRY_DELAYS_MS.length || !retriable(e) || !same()) throw e;
-          if (n === 0) say("連線不穩，重新上傳中…");
+          if (n === 0) say(t("連線不穩，重新上傳中…"));
           await wait(UPLOAD_RETRY_DELAYS_MS[n]);
         }
       }
       if (!same()) return;
-      say(mode === "analyze" ? "照片傳好了，準備開始分析…" : overwrite ? "照片傳好了，準備開始調整…" : "照片傳好了，準備開始美化…");
+      say(mode === "analyze" ? t("照片傳好了，準備開始分析…") : overwrite ? t("照片傳好了，準備開始調整…") : t("照片傳好了，準備開始美化…"));
       // 上傳頁面已經偵測過這張的人臉，session 頁沒有分析時就直接用，不再偵測一次。
       // 對話裡「上傳了 1 張照片」那格縮圖也是同一回事，一起先抓。
       const primedSource = Promise.all([
@@ -3248,7 +3257,7 @@ export function App() {
       <>
         <Header onHome={() => location.reload()} onHistory={() => {}} showHome={false} />
         <main>
-          <div class="container chat-boot-error">無法載入：{bootError}</div>
+          <div class="container chat-boot-error">{t("無法載入：{error}", { error: bootError })}</div>
         </main>
       </>
     );
@@ -3289,7 +3298,7 @@ export function App() {
         ? { sessionId, photoId: photo?.photo_id, batchId: session?.batch_id }
         : { batchId: phase === "chat" && batch ? batchId.current : null, page: reportPage }}
       onHome={async () => {
-        if (await confirmLeave("回到首頁")) goHome();
+        if (await confirmLeave(t("回到首頁"))) goHome();
       }}
       onHistory={() => {
         refreshSessions();
@@ -3300,8 +3309,9 @@ export function App() {
       onNewChat={phase === "session" || (phase === "chat" && batch) ? askNewChat : undefined}
       showHistory={phase !== "home"}
       showChangelog={phase === "home"}
+      showLang={phase === "home"}
       onSettings={phase === "home" ? undefined : () => setPrefsOpen(true)}
-      beforeLeave={() => confirmLeave("打開回報")}
+      beforeLeave={() => confirmLeave(t("打開回報"))}
     />
   );
   // 還沒進對話的話，上傳頁的設定跟著一起換，這張照片就照新的跑。對話中也當下生效：
@@ -3349,16 +3359,16 @@ export function App() {
   const confirmEl = leaveAsk && (
     <ConfirmModal
       message={leaveAsk.message}
-      confirmLabel={leaveAsk.confirmLabel || "繼續"}
-      cancelLabel={leaveAsk.cancelLabel || "留在這裡"}
+      confirmLabel={leaveAsk.confirmLabel || t("繼續")}
+      cancelLabel={leaveAsk.cancelLabel || t("留在這裡")}
       onAnswer={leaveAsk.answer}
     />
   );
   const askEl = deleteAsk && (
     <ConfirmModal
       message={deleteAsk.message}
-      confirmLabel={deleteAsk.notice ? "確定" : "刪除"}
-      cancelLabel={deleteAsk.notice ? undefined : "取消"}
+      confirmLabel={deleteAsk.notice ? t("確定") : t("刪除")}
+      cancelLabel={deleteAsk.notice ? undefined : t("取消")}
       onAnswer={deleteAsk.done}
     />
   );
@@ -3384,7 +3394,7 @@ export function App() {
     <ChatPanel
       key={batch ? preFull : undefined}
       class={`home-chat${source ? "" : " is-solo"}`}
-      sub={batchIndex >= 0 ? `第 ${batchIndex + 1} 張` : "新對話"}
+      sub={batchIndex >= 0 ? t("第 {v1} 張", { v1: batchIndex + 1 }) : t("新對話")}
       photo={source ? { src: thumbSrc(source), onOpen: () => setViewing(true) } : undefined}
       onDropFiles={busy || loadingPhotos ? undefined : batch ? appendFiles : pickFiles}
       footer={
@@ -3399,7 +3409,7 @@ export function App() {
             // 多張頁上這裡是「再加幾張」，不是換掉這張。
             onFile={batch ? (f) => appendFiles([f]) : pickFile}
             onFiles={batch ? appendFiles : pickFiles}
-            attachTitle={batch ? "新增照片" : undefined}
+            attachTitle={batch ? t("新增照片") : undefined}
             // Only once there is a photo to replace; before that the
             // greeting's two chips are the choice, right above.
             // 多張頁上這顆是「再加幾張」，一樣問要上傳還是挑範例照片。
@@ -3431,18 +3441,18 @@ export function App() {
             // 由長到短，Composer 挑輸入框放得下的那句。
             placeholder={
               (preDisplayPeople.length ? prePointed.length : 0) && preWhoAsk
-                ? ["選好了就直接送出，也可以再打字補充", "選好就送出，或再打字補充"]
+                ? [t("選好了就直接送出，也可以再打字補充"), t("選好就送出，或再打字補充")]
                 : !source || (preDisplayPeople.length ? prePointed.length : 0) || preScanning
                 ? undefined
                 : openAsk(notes)
                   ? openAsk(notes)!.asked!.options.length
-                    ? ["直接打字回答，或點上面的選項", "打字回答，或點上面的選項"]
+                    ? [t("直接打字回答，或點上面的選項"), t("打字回答，或點上面的選項")]
                     : preWhoAsk && preDisplayPeople.length > 1
-                      ? ["點上面的頭像選人，或直接打字回答", "點上面的頭像，或打字回答", "點頭像或打字回答"]
-                      : "直接打字回答"
+                      ? [t("點上面的頭像選人，或直接打字回答"), t("點上面的頭像，或打字回答"), t("點頭像或打字回答")]
+                      : t("直接打字回答")
                   : preDisplayPeople.length > 1
-                  ? ["想怎麼美化這張照片？點頭像可以指定要改誰", "想怎麼美化？點頭像可以指定人", "想怎麼美化這張照片？"]
-                  : ["想怎麼美化這張照片？也可以留空直接開始", "想怎麼美化？留空也可以直接開始", "想怎麼美化這張照片？"]
+                  ? [t("想怎麼美化這張照片？點頭像可以指定要改誰"), t("想怎麼美化？點頭像可以指定人"), t("想怎麼美化這張照片？")]
+                  : [t("想怎麼美化這張照片？也可以留空直接開始"), t("想怎麼美化？留空也可以直接開始"), t("想怎麼美化這張照片？")]
             }
           />
         </>
@@ -3513,7 +3523,7 @@ export function App() {
           const order = nextDisplayOrder();
           setSettingsEvents(events => [...events, { id: `settings-${order}`, order,
             after: conversation(notes).length, kind: "settings", settings: { ...settings, advanced_options: { ...settings.advanced_options } },
-            text: "好，調整下面的設定，完成後選擇要分析還是一鍵美化。", showPeople: false }]);
+            text: t("好，調整下面的設定，完成後選擇要分析還是一鍵美化。"), showPeople: false }]);
           setStep("settings");
         }}
         onStart={startSession}
@@ -3547,9 +3557,9 @@ export function App() {
     const firstUpload = first?.kind === "upload" ? first.srcs : batch.map(sourceSrc);
     const have = new Set(batch.map(sourceSrc));
     // 照片在哪：手機和直拿的平板在對話上面那格，桌機在左邊「我的照片」。
-    const spot = drawerLayout ? "上面" : "左邊";
+    const spot = drawerLayout ? t("上面@@按鈕位置") : t("左邊@@按鈕位置");
     // 叫人去點照片時講畫面上看得到的名字；手機上那格沒有標題，說「上面」就夠。
-    const where = drawerLayout ? "上面" : "左邊的「我的照片」";
+    const where = drawerLayout ? t("上面@@照片位置") : t("左邊的「我的照片」@@照片位置");
     const thumbOf = new Map(batch.map((s) => [sourceSrc(s), thumbSrc(s)]));
     const uploadThumbs = (srcs: string[]) => srcs.filter((s) => have.has(s)).map((s) => thumbOf.get(s) || s);
     // 最底下那句跟著現在的進度，點出接下來能做什麼：還在跑的等它們、沒開始的按哪顆、開始過一些
@@ -3565,55 +3575,60 @@ export function App() {
     const redoN = finished ? batch.filter((s) => redo.has(sourceSrc(s)) && !!doneLive(sourceSrc(s))).length : 0;
     // 「全部再美化」每張都美化過就給；沒改過時照原本的再跑一次，提示和鍵的說明會講。
     const redoAll = finished ? redoKeys().length : 0;
-    const redoTitle = redoN ? "總覽改過需求或設定的那幾張，照改過的再美化一次"
-      : "還沒改過需求或設定，會照原本的再美化一次，結果可能跟上次不太一樣";
+    const redoTitle = redoN ? t("總覽改過需求或設定的那幾張，照改過的再美化一次")
+      : t("還沒改過需求或設定，會照原本的再美化一次，結果可能跟上次不太一樣");
     const redoLbl = redoLabel(redoKeys().length, batch.length);
     const labels = { analyze: allLabel("analyze", pending, batch.length), render: allLabel("render", renderableAll, batch.length), redo: redoLbl };
     const chipsNow: OverviewChips | null = drawerLayout ? null
       : finished ? { pending: false, renderable: false, finished: true, redo: !!redoAll, labels }
       : pending || renderable ? { pending: !!pending, renderable: !!renderable, labels } : null;
-    const btn = chipsNow ? "下面" : spot;
+    const btn = chipsNow ? t("下面@@按鈕位置") : spot;
+    // A button's name quoted in a sentence.
+    const q = (label: string) => t("「{v1}」", { v1: shownLabel(label) });
+    const [qa, qr, qd] = [q(labels.analyze), q(labels.render), q(redoLbl)];
     let statusHint = "";
     if (running) {
       statusHint = notYet
-        ? `還有 ${notYet} 張沒開始，可以按${btn}的「${labels.analyze}」先看我打算怎麼修，或按${btn}的「${labels.render}」直接美化，也可以從${where}選取照片個別調整。`
+        ? t("還有 {n} 張沒開始，可以按{btn}的{analyze}先看我打算怎麼修，或按{btn}的{render}直接美化，也可以從{where}選取照片個別調整。", { n: notYet, btn, analyze: qa, render: qr, where })
         // 在跑的以外，分析好還沒美化的也給下一步，不用等前面那幾張跑完。
         : analyzed
           // 接在「開始了」後面才說「另外」；單獨一則（例如設定改完）先講還有幾張在跑。
-          ? `${lastTurn?.kind === "running" ? "另外 " : `${running} 張還在處理，`}${analyzed} 張分析好了，還沒美化，按${btn}的「${labels.render}」就會接著美化，也可以從${where}選取照片個別調整。`
+          ? lastTurn?.kind === "running"
+            ? t("另外 {n} 張分析好了，還沒美化，按{btn}的{render}就會接著美化，也可以從{where}選取照片個別調整。", { n: analyzed, btn, render: qr, where })
+            : t("{running} 張還在處理，{n} 張分析好了，還沒美化，按{btn}的{render}就會接著美化，也可以從{where}選取照片個別調整。", { running, n: analyzed, btn, render: qr, where })
         // 剛說完「開始了」，那句已經講過跑完會說、去哪看進度，不再重複一次。
         : lastTurn?.kind === "running" || lastTurn?.kind === "start"
           ? ""
-          : `還有 ${running} 張處理中，完成後我會在這裡說；想看哪張的進度，從${where}選取那張。`;
+          : t("還有 {n} 張處理中，完成後我會在這裡說；想看哪張的進度，從{where}選取那張。", { n: running, where });
     } else if (finished) {
       // 剛報完「跑完了」，看結果那句已經講過，只補還能怎麼改。
       // 剛跑完、排著的需求也套用好了：只講按哪顆，不再從「想再調整」講起。
       const applied = lastTurn?.kind === "done" && redoN > 0;
-      const again = redoN ? `改好了按${btn}的「${redoLbl}」重新美化。`
-        : `改好了按${btn}的「${redoLbl}」重新美化；沒改直接按，會照原本的需求和設定再美化一次，結果可能跟上次不太一樣。`;
+      const again = redoN ? t("改好了按{btn}的{redo}重新美化。", { btn, redo: qd })
+        : t("改好了按{btn}的{redo}重新美化；沒改直接按，會照原本的需求和設定再美化一次，結果可能跟上次不太一樣。", { btn, redo: qd });
       statusHint = applied
-        ? `剛剛說的已經套用到每一張，按${btn}的「${redoLbl}」就照這樣重新美化。`
-        : `${lastTurn?.kind === "done" ? "" : `每張都美化好了，從${where}選取照片就能看結果。`}`
-        + `想再調整，直接打字告訴我，或按${btn}的「設定」，會套用到每一張；${again}`
-        + (failed && lastTurn?.kind !== "done" ? `另外有 ${failed} 張沒有成功，選取那張可以看原因。` : "");
+        ? t("剛剛說的已經套用到每一張，按{btn}的{redo}就照這樣重新美化。", { btn, redo: qd })
+        : `${lastTurn?.kind === "done" ? "" : t("每張都美化好了，從{where}選取照片就能看結果。", { where })}`
+        + t("想再調整，直接打字告訴我，或按{btn}的{settings}，會套用到每一張；{again}", { btn, settings: q("設定"), again })
+        + (failed && lastTurn?.kind !== "done" ? t("另外有 {n} 張沒有成功，選取那張可以看原因。", { n: failed }) : "");
     } else if (!untouched) {
       // 剛報完「跑完了」，分析好、失敗幾張那句已經講過，這裡只補它沒提到的、還沒開始的那幾張。
       const afterDone = lastTurn?.kind === "done";
       const next = notYet
-        ? `按${btn}的「${labels.render}」會把還沒美化的都美化好；只想先看分析，按${btn}的「${labels.analyze}」。`
-        : `要接著美化，按${btn}的「${labels.render}」。`;
+        ? t("按{btn}的{render}會把還沒美化的都美化好；只想先看分析，按{btn}的{analyze}。", { btn, render: qr, analyze: qa })
+        : t("要接著美化，按{btn}的{render}。", { btn, render: qr });
       if (afterDone) {
-        statusHint = !todo && !analyzed && !failed ? "" : `${todo ? `另外還有 ${todo} 張還沒分析。` : ""}${next}`;
+        statusHint = !todo && !analyzed && !failed ? "" : `${todo ? t("另外還有 {n} 張還沒分析。", { n: todo }) : ""}${next}`;
       } else {
         const left = [
-          todo && `${todo} 張還沒分析`,
-          analyzed && `${analyzed} 張分析好了，還沒美化`,
-          failed && `${failed} 張沒有成功，可以再送一次`,
+          todo && t("{n} 張還沒分析", { n: todo }),
+          analyzed && t("{n} 張分析好了，還沒美化", { n: analyzed }),
+          failed && t("{n} 張沒有成功，可以再送一次", { n: failed }),
         ].filter(Boolean);
-        statusHint = left.length ? `目前${left.join("；")}。${next}` : `每張都美化好了，從${where}選取照片就能看結果。`;
+        statusHint = left.length ? `${t("目前{list}。", { list: left.join(t("；")) })}${next}` : t("每張都美化好了，從{where}選取照片就能看結果。", { where });
       }
     } else if (overview.length > 1) {
-      statusHint = `可以按${btn}的「${labels.analyze}」先看我打算怎麼修，或按${btn}的「${labels.render}」直接美化；想怎麼修也可以直接打字告訴我，會套用到每一張。`;
+      statusHint = t("可以按{btn}的{analyze}先看我打算怎麼修，或按{btn}的{render}直接美化；想怎麼修也可以直接打字告訴我，會套用到每一張。", { btn, analyze: qa, render: qr });
     }
     // 最後一則是「開始了」或「跑完了」時，下一步接在同一句後面講，不另起一則。
     // 剛按了「全部…」、送出的那幾張還沒換成處理中，或照片還在載入時，進度還不準，先不講也不定下來；
@@ -3625,7 +3640,7 @@ export function App() {
       || overview.some((t) => t.kind === "wish" && !!t.queued && !t.gone)
       || (lastTurn?.kind === "start" && lastTurn.keys.some((k) =>
         at(k) === "todo" || (lastTurn.mode === "render" && at(k) === "analyzed")));
-    const named = (finished && !!statusHint) || statusHint.includes(`「${labels.analyze}」`) || statusHint.includes(`「${labels.render}」`);
+    const named = (finished && !!statusHint) || statusHint.includes(qa) || statusHint.includes(qr);
     // 打字問的那則，下一步跟著回話走：沒收下的，後端回話時就附好選項（答完沒問什麼的也補上開始鍵）；
     // 收下的，「全部…」那排接在回話底下。不再另起一則講一樣的話——不然每打一句，最底下就又多一句。
     const snap = lastTurn?.kind === "wish" ? { text: "", chips: chipsNow } : { text: statusHint, chips: named ? chipsNow : null };
@@ -3633,7 +3648,7 @@ export function App() {
     const said = !lastTurn ? (settling ? undefined : snap) : turnHints.current[lastTurn.id];
     const hint = said?.text || "";
     const hintInTurn = !!hint && (lastTurn?.kind === "running" || lastTurn?.kind === "done");
-    const hintFor = (t: OverviewTurn) => turnHints.current[t.id]?.text || "";
+    const hintFor = (turn: OverviewTurn) => turnHints.current[turn.id]?.text || "";
     // 桌機上「全部…」在左邊「我的照片」，離對話有段距離：講完能做什麼的那一則底下直接放同一組鍵，
     // 不用把視線移過去找。最新那一則的鍵照現在能按的給；之後有新的對話，鍵留在原處定格成紀錄。
     // 手機的照片格就在對話上面，不另外放。
@@ -3646,17 +3661,17 @@ export function App() {
       return (
         <div class="chat-choices chat-actions">
           <div class="chat-actions-aux">
-            <Chip label="設定" icon="tune" kind="ghost" settled={!live} disabled={overviewHeld} onClick={overviewEditSettings} />
+            <Chip label={t("設定")} icon="tune" kind="ghost" settled={!live} disabled={overviewHeld} onClick={overviewEditSettings} />
           </div>
           <div class="chat-actions-main">
             {has.pending ? (
               <Chip label={lb.analyze} icon="search" kind={live ? "primary" : undefined} settled={!live} disabled={overviewHeld}
-                title="還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送"
+                title={t("還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送")}
                 onClick={() => overviewStart("analyze")} />
             ) : null}
             {has.renderable ? (
               <Chip label={lb.render} icon="spark" kind={live ? "primary" : undefined} settled={!live} disabled={overviewHeld}
-                title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
+                title={t("還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送")}
                 onClick={() => overviewStart("render")} />
             ) : null}
             {has.redo ? (
@@ -3674,20 +3689,20 @@ export function App() {
       turnHints.current[introKey] = { text: "", chips: chipsNow, pending, renderable: !!renderable };
     const intro = turnHints.current[introKey];
     const introPending = intro ? intro.pending : pending;
-    const introBtn = (intro ? intro.chips : chipsNow) ? "下面" : spot;
+    const introBtn = (intro ? intro.chips : chipsNow) ? t("下面@@按鈕位置") : spot;
     const introLive = !hint && overview.every((t) => t === first && t.kind === "upload");
-    const settingsSaid = (t: Extract<OverviewTurn, { kind: "settings" }>) => {
-      const changed = caps && t.from && t.settings ? settingsChanges(caps, t.from, t.settings, t.model) : [];
-      return !changed.length ? "設定沒有改動。"
-        : t.redo ? `好，${changed.join("、")}，每一張再美化時都會照這個。`
-        : `好，${changed.join("、")}，會套用到每張還沒美化的照片。`;
+    const settingsSaid = (turn: Extract<OverviewTurn, { kind: "settings" }>) => {
+      const changed = caps && turn.from && turn.settings ? settingsChanges(caps, turn.from, turn.settings, turn.model) : [];
+      return !changed.length ? t("設定沒有改動。")
+        : turn.redo ? t("好，{changed}，每一張再美化時都會照這個。", { changed: changed.join(t("、")) })
+        : t("好，{changed}，會套用到每張還沒美化的照片。", { changed: changed.join(t("、")) });
     };
     // 總覽：沒有中間那格預覽，對話直接佔滿。桌機的照片和「全部…」都在左邊「我的照片」，
     // 對話上面不再擺一份；「我的照片」收成抽屜時，才在對話上面放成果格。
     const overviewPanel = !source && (
       <ChatPanel
         class="home-chat is-overview"
-        sub="總覽"
+        sub={t("總覽")}
         top={drawerLayout &&
           <BatchOverviewGrid
             key={sourceSrc(batch[0])}
@@ -3722,7 +3737,7 @@ export function App() {
           <Composer
               onFile={(f) => appendFiles([f])}
               onFiles={appendFiles}
-              attachTitle="新增照片"
+              attachTitle={t("新增照片")}
               onSample={showSamples}
               disabled={overviewHeld || !(pending || renderable || running || finished)}
               onSend={async (text) => {
@@ -3731,144 +3746,150 @@ export function App() {
                 return true;
               }}
               clearKey={preClear}
-              placeholder={pending ? ["想怎麼美化這幾張？會套用到每一張", "想怎麼美化這幾張？"]
-                : renderable ? ["還沒美化的這幾張想怎麼修？會套用到每一張", "還沒美化的這幾張想怎麼修？"]
-                : finished ? ["想再怎麼修這幾張？會套用到每一張", "想再怎麼修這幾張？"]
+              placeholder={pending ? [t("想怎麼美化這幾張？會套用到每一張"), t("想怎麼美化這幾張？")]
+                : renderable ? [t("還沒美化的這幾張想怎麼修？會套用到每一張"), t("還沒美化的這幾張想怎麼修？")]
+                : finished ? [t("想再怎麼修這幾張？會套用到每一張"), t("想再怎麼修這幾張？")]
                 // 輸入框跟著現在的狀態走：還有在跑的說在跑，全部好了才說好了。
-                : running ? `還有 ${running} 張處理中，從${where}選取照片看進度`
-                : `每張都美化好了，從${where}選取照片看結果`}
+                : running ? t("還有 {n} 張處理中，從{where}選取照片看進度", { n: running, where })
+                : t("每張都美化好了，從{where}選取照片看結果", { where })}
             />
         }
       >
         <UserMsg>
           <BatchUploadBubble
             srcs={uploadThumbs(firstUpload)}
-            text={`上傳了 ${photoLoad && first && photoLoad.entry === first.id ? photoLoad.total : firstUpload.length} 張照片`}
+            text={t("上傳了 {n} 張照片", { n: photoLoad && first && photoLoad.entry === first.id ? photoLoad.total : firstUpload.length })}
           />
         </UserMsg>
         {/* 先說收到幾張、這頁是什麼：一次處理全部的按鈕在上面的照片格底下，這裡只指過去，
             再講怎麼回來——使用者第一次看到總覽，要先知道這裡講的話會落到每一張上。 */}
         {photoLoad && first && photoLoad.entry === first.id ? <PhotoLoadMsg {...photoLoad} /> : <AssistantMsg>
-          <p class="chat-text">收到你上傳的 {firstUpload.length} 張照片了。</p>
+          <p class="chat-text">{t("收到你上傳的 {n} 張照片了。", { n: firstUpload.length })}</p>
           {/* 「設定」跟著「全部…」出現，有那兩顆才提；都分析過了就只剩美化的設定好換。 */}
           <p class="chat-text">{introPending
-            ? `這裡是這批照片的總覽：${introBtn}可以一次分析或美化全部，也可以先按「設定」統一換引擎或長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打字告訴我，會套用到還沒開始的每一張。`
+            ? t("這裡是這批照片的總覽：{btn}可以一次分析或美化全部，也可以先按「設定」統一換引擎或長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打字告訴我，會套用到還沒開始的每一張。", { btn: introBtn })
             : (intro ? intro.renderable : renderable)
-              ? `這裡是這批照片的總覽：${introBtn}可以一次美化全部，也可以先按「設定」統一換美化引擎或長寬比；只想改某一張，從${where}選取那張就好。`
-              : `這裡是這批照片的總覽：${introBtn}可以一次處理全部，也可以從${where}選取某一張個別調整。`}</p>
-          <p class="chat-text chat-muted">之後想回來這裡，點{photosSpot()}「我的照片」最上面的「總覽」。</p>
+              ? t("這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換美化引擎或長寬比；只想改某一張，從{where}選取那張就好。", { btn: introBtn, where })
+              : t("這裡是這批照片的總覽：{btn}可以一次處理全部，也可以從{where}選取某一張個別調整。", { btn: introBtn, where })}</p>
+          <p class="chat-text chat-muted">{t("之後想回來這裡，點{where}「我的照片」最上面的「總覽」。", { where: photosSpot() })}</p>
           {chipRow(intro?.chips, introLive)}
         </AssistantMsg>}
-        {overview.map((t, i) => {
+        {overview.map((ot, i) => {
           const latest = i === overview.length - 1;
-          if (t === overview[0] && t.kind === "upload") return null;
-          if (t.kind === "upload") return (
-            <div key={t.id}>
-              <UserMsg><BatchUploadBubble srcs={uploadThumbs(t.srcs)} text={`新增了 ${photoLoad?.entry === t.id ? photoLoad.total : t.srcs.length} 張照片`} /></UserMsg>
-              {photoLoad?.entry === t.id ? <PhotoLoadMsg {...photoLoad} /> : <AssistantMsg>
-                <p class="chat-text">{`好，加進來了，${t.srcs.length > 1 ? "這幾張" : "這張"}加到${where}裡了。`}</p>
+          if (ot === overview[0] && ot.kind === "upload") return null;
+          if (ot.kind === "upload") return (
+            <div key={ot.id}>
+              <UserMsg><BatchUploadBubble srcs={uploadThumbs(ot.srcs)} text={t("新增了 {n} 張照片", { n: photoLoad?.entry === ot.id ? photoLoad.total : ot.srcs.length })} /></UserMsg>
+              {photoLoad?.entry === ot.id ? <PhotoLoadMsg {...photoLoad} /> : <AssistantMsg>
+                <p class="chat-text">{ot.srcs.length > 1 ? t("好，加進來了，這幾張加到{where}裡了。", { where }) : t("好，加進來了，這張加到{where}裡了。", { where })}</p>
               </AssistantMsg>}
             </div>
           );
-          if (t.kind === "remove") return (
-            <AssistantMsg key={t.id}>
-              <p class="chat-text chat-muted">{`移除了 ${t.count} 張，現在一共 ${t.left} 張。`}</p>
+          if (ot.kind === "remove") return (
+            <AssistantMsg key={ot.id}>
+              <p class="chat-text chat-muted">{t("移除了 {count} 張，現在一共 {left} 張。", { count: ot.count, left: ot.left })}</p>
             </AssistantMsg>
           );
-          if (t.kind === "running") {
-            const n = t.keys.filter((k) => have.has(k)).length;
+          if (ot.kind === "running") {
+            const n = ot.keys.filter((k) => have.has(k)).length;
             return n ? (
-              <AssistantMsg key={t.id}>
-                <p class="chat-text">{`有 ${n} 張開始${t.verb}了，完成後我會在這裡說；想看哪張的進度，從${where}選取那張。${hintFor(t)}`}</p>
-                {chipRow(turnHints.current[t.id]?.chips, latest)}
+              <AssistantMsg key={ot.id}>
+                <p class="chat-text">{(ot.verb === "分析" ? t("有 {n} 張開始分析了，完成後我會在這裡說；想看哪張的進度，從{where}選取那張。", { n, where })
+                  : ot.verb === "美化" ? t("有 {n} 張開始美化了，完成後我會在這裡說；想看哪張的進度，從{where}選取那張。", { n, where })
+                  : t("有 {n} 張開始處理了，完成後我會在這裡說；想看哪張的進度，從{where}選取那張。", { n, where })) + hintFor(ot)}</p>
+                {chipRow(turnHints.current[ot.id]?.chips, latest)}
               </AssistantMsg>
             ) : null;
           }
-          if (t.kind === "done") {
+          if (ot.kind === "done") {
             const parts = [
-              t.rendered && `${t.rendered} 張美化好了`,
-              t.analyzed && `${t.analyzed} 張分析好了`,
-              t.failed && `${t.failed} 張沒有成功`,
+              ot.rendered && t("{n} 張美化好了", { n: ot.rendered }),
+              ot.analyzed && t("{n} 張分析好了", { n: ot.analyzed }),
+              ot.failed && t("{n} 張沒有成功", { n: ot.failed }),
             ].filter(Boolean);
             return (
-              <AssistantMsg key={t.id}>
-                <p class="chat-text">{`剛剛送出的都處理完成了${parts.length ? `，目前 ${parts.join("、")}` : ""}。${hintFor(t).replace(/。$/, "；")}${t.failed
-                  ? `沒成功的在${where}會標「失敗」，選取那張可以看原因。`
-                  : `想看哪張的結果，從${where}選取那張。`}`}</p>
-                {chipRow(turnHints.current[t.id]?.chips, latest)}
+              <AssistantMsg key={ot.id}>
+                <p class="chat-text">{(parts.length ? t("剛剛送出的都處理完成了，目前 {list}。", { list: parts.join(t("、")) }) : t("剛剛送出的都處理完成了。"))
+                  + hintFor(ot).replace(/。$/, "；")
+                  + (ot.failed ? t("沒成功的在{where}會標「失敗」，選取那張可以看原因。", { where }) : t("想看哪張的結果，從{where}選取那張。", { where }))}</p>
+                {chipRow(turnHints.current[ot.id]?.chips, latest)}
               </AssistantMsg>
             );
           }
-          if (t.kind === "wish") return (
-            <div key={t.id} class="note-turn">
-              <AskBubble text={t.text} />
-              {t.pending ? (
-                <AssistantMsg atomic><div class="chat-typing" role="status" aria-label="思考中"><span /><span /><span /></div></AssistantMsg>
-              ) : t.kept === false ? (
+          if (ot.kind === "wish") return (
+            <div key={ot.id} class="note-turn">
+              <AskBubble text={ot.text} />
+              {ot.pending ? (
+                <AssistantMsg atomic><div class="chat-typing" role="status" aria-label={t("思考中")}><span /><span /><span /></div></AssistantMsg>
+              ) : ot.kept === false ? (
                 // 沒收下：問題、閒聊、撤回只回話；它問回來的就把答案排在底下，點了當成打的下一句。
                 // 「幫我分析」「一鍵美化」就是總覽那兩顆鍵，點了直接按。開始了的那句由「開始了」那則講。
-                t.reply ? (
+                ot.reply ? (
                   <AssistantMsg>
-                    <p class="chat-text">{t.reply}</p>
-                    {!!t.options?.length && (() => {
+                    <p class="chat-text">{ot.reply}</p>
+                    {!!ot.options?.length && (() => {
                       const nx = overview[i + 1];
                       return (
-                        <AnswerList options={t.options} picked={!latest && nx?.kind === "wish" ? nx.text : null} open={latest} busy={overviewHeld}
+                        <AnswerList options={ot.options} picked={!latest && nx?.kind === "wish" ? nx.text : null} open={latest} busy={overviewHeld}
                           onPick={(o) => { const m = overviewStartOf(o); return m ? overviewStart(m) : void overviewSay(o); }}
                           onOwn={(o) => void overviewSay(o)} />
                       );
                     })()}
                     {/* 沒問什麼的（撤回、回答完）也照樣給現在按得到的鍵，不讓對話停在這裡。 */}
-                    {!t.options?.length && chipRow(turnHints.current[t.id]?.chips, latest)}
+                    {!ot.options?.length && chipRow(turnHints.current[ot.id]?.chips, latest)}
                   </AssistantMsg>
                 ) : null
               ) : (
                 <AssistantMsg>
                   <p class="chat-text">
                     {/* 排著的那句維持說的當下那樣；跑完套用好了，由「跑完了」那則一起講。 */}
-                    {t.held ? <>
-                    {t.line && `好，記下了：${t.line}。`}
-                    {`${t.line ? "" : "好，"}這幾張還在美化，等美化好我會把這句套用到每一張，到時按「全部再美化」就會照這樣重新美化。`}
-                    </> : t.count && t.reply ? t.reply : <>
-                    {t.line && `好，記下了：${t.line}。`}
-                    {t.count && t.redo
-                      ? `${t.line ? "" : "好，"}這句會套用在 ${t.count} 張上，按「${t.count >= batch.length ? "全部再美化" : `再美化 ${t.count} 張`}」就照這樣重新美化。只想改某一張，從${where}選取那張調整。`
-                      : t.count
-                      ? `${t.line ? "" : "好，"}這句會套用在 ${t.count} 張還沒美化的照片上。${t.skipped ? `已經在美化或美化好的 ${t.skipped} 張不會套用。` : ""}只想改某一張，從${where}選取那張調整。`
-                      : "每張都已經在美化或美化好了，這句不會套用；要改哪一張，到那張的結果頁說就好。"}
+                    {ot.held ? <>
+                    {ot.line && t("好，記下了：{line}。", { line: ot.line })}
+                    {ot.line ? t("這幾張還在美化，等美化好我會把這句套用到每一張，到時按「全部再美化」就會照這樣重新美化。")
+                      : t("好，這幾張還在美化，等美化好我會把這句套用到每一張，到時按「全部再美化」就會照這樣重新美化。")}
+                    </> : ot.count && ot.reply ? ot.reply : <>
+                    {ot.line && t("好，記下了：{line}。", { line: ot.line })}
+                    {(ot.line ? "" : t("好，@@接句")) + (ot.count && ot.redo
+                      ? t("這句會套用在 {n} 張上，按{redo}就照這樣重新美化。只想改某一張，從{where}選取那張調整。",
+                        { n: ot.count, redo: t("「{v1}」", { v1: shownLabel(ot.count >= batch.length ? "全部再美化" : `再美化 ${ot.count} 張`) }), where })
+                      : ot.count
+                      ? t("這句會套用在 {n} 張還沒美化的照片上。", { n: ot.count })
+                        + (ot.skipped ? t("已經在美化或美化好的 {n} 張不會套用。", { n: ot.skipped }) : "")
+                        + t("只想改某一張，從{where}選取那張調整。", { where })
+                      : t("每張都已經在美化或美化好了，這句不會套用；要改哪一張，到那張的結果頁說就好。"))}
                     </>}
                   </p>
-                  {t.gone && <p class="chat-text chat-muted">這句後來撤回或被新的需求取代了，已經從每張拿掉。</p>}
-                  {!t.gone && chipRow(turnHints.current[t.id]?.chips, latest)}
+                  {ot.gone && <p class="chat-text chat-muted">{t("這句後來撤回或被新的需求取代了，已經從每張拿掉。")}</p>}
+                  {!ot.gone && chipRow(turnHints.current[ot.id]?.chips, latest)}
                 </AssistantMsg>
               )}
             </div>
           );
-          if (t.kind === "settings") return (
-            <div key={t.id} class="settings-turn">
-              <UserMsg><ClickBubble icon="tune" label="設定" /></UserMsg>
+          if (ot.kind === "settings") return (
+            <div key={ot.id} class="settings-turn">
+              <UserMsg><ClickBubble icon="tune" label={t("設定")} /></UserMsg>
               {latest && caps && settings ? (
                 <AssistantMsg>
-                  <p class="chat-text">{t.redo
-                    ? "好，調整下面的設定，會套用到每一張，再美化時生效。"
-                    : t.model
-                    ? "好，調整下面的設定，會套用到每張還沒美化的照片；分析引擎只有還沒分析的用得到。"
-                    : "好，調整下面的設定，會套用到每張還沒美化的照片。"}</p>
-                  <SettingsEditor caps={caps} settings={settings} onChange={overviewSettings} hideModel={!t.model} />
+                  <p class="chat-text">{ot.redo
+                    ? t("好，調整下面的設定，會套用到每一張，再美化時生效。")
+                    : ot.model
+                    ? t("好，調整下面的設定，會套用到每張還沒美化的照片；分析引擎只有還沒分析的用得到。")
+                    : t("好，調整下面的設定，會套用到每張還沒美化的照片。")}</p>
+                  <SettingsEditor caps={caps} settings={settings} onChange={overviewSettings} hideModel={!ot.model} />
                 </AssistantMsg>
               ) : (
                 // 這輪過了就不再擺設定卡，用一句話講改了什麼。
-                <AssistantMsg><p class="chat-text">{settingsSaid(t)}</p></AssistantMsg>
+                <AssistantMsg><p class="chat-text">{settingsSaid(ot)}</p></AssistantMsg>
               )}
             </div>
           );
-          if (t.kind === "ask") return (
-            <div key={t.id}>
-              <UserMsg><ClickBubble icon="spark" label={t.label || "全部一鍵美化"} /></UserMsg>
+          if (ot.kind === "ask") return (
+            <div key={ot.id}>
+              <UserMsg><ClickBubble icon="spark" label={ot.label || "全部一鍵美化"} /></UserMsg>
               <AssistantMsg>
-                <p class="chat-text">有幾張講了需求，要整體美化，還是僅依需求修改？在單張頁已經選過的，照它自己選的。</p>
+                <p class="chat-text">{t("有幾張講了需求，要整體美化，還是僅依需求修改？在單張頁已經選過的，照它自己選的。")}</p>
                 <p class="chat-text chat-muted">
-                  {ONLY_PROMPT_LABEL}：只動寫到的地方，其他保持原樣。{WITH_ANALYSIS_LABEL}：照需求修改，光線、人像、構圖也一起調整。
+                  {t("{only}：只動寫到的地方，其他保持原樣。{full}：照需求修改，光線、人像、構圖也一起調整。", { only: t(ONLY_PROMPT_LABEL), full: t(WITH_ANALYSIS_LABEL) })}
                 </p>
                 <div class="chat-choices">
                   {[
@@ -3878,8 +3899,8 @@ export function App() {
                     <Chip
                       label={o.label}
                       icon="spark"
-                      kind={t.overwrite === o.overwrite ? "picked" : t.overwrite === undefined && !o.overwrite ? "primary" : undefined}
-                      settled={t.overwrite !== undefined}
+                      kind={ot.overwrite === o.overwrite ? "picked" : ot.overwrite === undefined && !o.overwrite ? "primary" : undefined}
+                      settled={ot.overwrite !== undefined}
                       disabled={overviewHeld}
                       onClick={() => overviewRenderMode(o.overwrite)}
                     />
@@ -3891,11 +3912,15 @@ export function App() {
           // 選了怎麼套用就接著開始，按鈕上面那句已經是使用者的選擇，不再重複一顆。
           const asked = overview[i - 1]?.kind === "ask";
           return (
-            <div key={t.id}>
-              {!asked && <UserMsg><ClickBubble icon={t.mode === "analyze" ? "search" : t.redo ? "redo" : "spark"} label={t.label || (t.mode === "analyze" ? "全部分析" : "全部一鍵美化")} /></UserMsg>}
+            <div key={ot.id}>
+              {!asked && <UserMsg><ClickBubble icon={ot.mode === "analyze" ? "search" : ot.redo ? "redo" : "spark"} label={ot.label || (ot.mode === "analyze" ? "全部分析" : "全部一鍵美化")} /></UserMsg>}
               <AssistantMsg>
                 <p class="chat-text">
-                  {`好，${t.count} 張開始${t.mode === "analyze" ? "分析" : t.same ? "照原本的需求和設定重新美化" : t.redo ? "重新美化" : t.overwrite ? "調整" : "美化"}了，全部完成後我會在這裡說；想看哪張的進度，從${where}選取那張。`}
+                  {t(ot.mode === "analyze" ? "好，{n} 張開始分析了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。"
+                    : ot.same ? "好，{n} 張開始照原本的需求和設定重新美化了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。"
+                    : ot.redo ? "好，{n} 張開始重新美化了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。"
+                    : ot.overwrite ? "好，{n} 張開始調整了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。"
+                    : "好，{n} 張開始美化了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。", { n: ot.count, where })}
                 </p>
               </AssistantMsg>
             </div>
@@ -3907,7 +3932,7 @@ export function App() {
         )}
         {/* 有照片還在跑，對話最底下就一直點點點，讓人知道還在做事；全部跑完、報完「跑完了」就收掉。 */}
         {running > 0 && (
-          <AssistantMsg atomic><div class="chat-typing" role="status" aria-label={`還有 ${running} 張在處理`}><span /><span /><span /></div></AssistantMsg>
+          <AssistantMsg atomic><div class="chat-typing" role="status" aria-label={t("還有 {n} 張在處理", { n: running })}><span /><span /><span /></div></AssistantMsg>
         )}
         {error && <ErrorMsg text={error} />}
       </ChatPanel>
@@ -3985,11 +4010,11 @@ export function App() {
               <div class="upload-grid">
               <div class="upload-content-row is-chat">
                 <PreStage source={submitting.sources[0]} />
-                <ChatPanel class="home-chat has-photo" sub={submitting.mode === "analyze" ? "分析" : "一鍵美化"} footer={null}>
+                <ChatPanel class="home-chat has-photo" sub={submitting.mode === "analyze" ? t("分析") : t("一鍵美化")} footer={null}>
                   <AssistantMsg>
-                    <p class="chat-text">{submitting.mode === "analyze" ? "正在準備分析照片" : "正在準備一鍵美化"}</p>
+                    <p class="chat-text">{submitting.mode === "analyze" ? t("正在準備分析照片") : t("正在準備一鍵美化")}</p>
                     <WorkingCard done={starting?.lines.slice(0, -1) || []}
-                      now={starting?.lines[starting.lines.length - 1] || "正在上傳照片…"}
+                      now={starting?.lines[starting.lines.length - 1] || t("正在上傳照片…")}
                       since={submitting.since} />
                   </AssistantMsg>
                 </ChatPanel>
@@ -4162,7 +4187,7 @@ function PreStage({ source }: { source: Source }) {
   return (
     <div class="prechat-stage">
       <div class="prechat-shot">
-        <img src={fullSrc(source)} alt="待美化的照片" />
+        <img src={fullSrc(source)} alt={t("待美化的照片")} />
       </div>
     </div>
   );
@@ -4172,7 +4197,7 @@ function PreStage({ source }: { source: Source }) {
 // 桌機是左邊那一欄。
 const DRAWER_LAYOUT = "(max-width:900px),(max-width:1200px) and (orientation:portrait)";
 function photosSpot() {
-  return matchMedia(DRAWER_LAYOUT).matches ? "左上角" : "左邊";
+  return matchMedia(DRAWER_LAYOUT).matches ? t("左上角") : t("左邊");
 }
 
 // 跟著視窗變：轉平板或拉寬視窗時，版面和對話裡的「上面／左邊」一起換。
@@ -4202,10 +4227,10 @@ function PhotoLoadMsg({ done, total }: { done: number; total: number }) {
   return (
     <AssistantMsg atomic>
       <p class="chat-text">收到你選的 {total} 張照片，正在上傳…</p>
-      <div class="chat-upload-progress" role="progressbar" aria-label="上傳進度" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+      <div class="chat-upload-progress" role="progressbar" aria-label={t("上傳進度")} aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
         <span style={{ width: `${pct}%` }} />
       </div>
-      <p class="chat-text chat-muted">{`${done} / ${total} 張 · ${pct}%`}　上傳完就可以開始了，先稍等一下。</p>
+      <p class="chat-text chat-muted">{t("{done} / {total} 張 · {pct}%", { done, total, pct })}　{t("上傳完就可以開始了，先稍等一下。")}</p>
     </AssistantMsg>
   );
 }
@@ -4335,15 +4360,15 @@ export function BatchPreSidebar(props: {
     <>
       <div class={`batch-sidebar-backdrop${open ? " drawer-open" : ""}`} onClick={close} />
       <aside class={`batch-sidebar${open ? " drawer-open" : ""}${props.overview ? " is-overview" : ""}`} id="batch-sidebar">
-        <button type="button" class="batch-sidebar-close-btn" aria-label="收起照片列表" onClick={close}>
+        <button type="button" class="batch-sidebar-close-btn" aria-label={t("收起照片列表")} onClick={close}>
           <Icon name="x" size={16} />
         </button>
         <div class="batch-sidebar-header">
-          <h2 class="batch-sidebar-title">我的照片</h2>
+          <h2 class="batch-sidebar-title">{t("我的照片")}</h2>
           <div class="batch-sidebar-actions">
           {props.onAdd && <BatchAddButton full={full} onAdd={props.onAdd} onSamples={props.onSamples} onBefore={() => setOpen(false)} />}
           {props.onClear && (
-            <button type="button" class="batch-download-all-btn" title="全部清除" aria-label="全部清除" data-danger onClick={props.onClear}>
+            <button type="button" class="batch-download-all-btn" title={t("全部清除")} aria-label={t("全部清除")} data-danger onClick={props.onClear}>
               <Icon name="trash" size={14} />
             </button>
           )}
@@ -4357,7 +4382,7 @@ export function BatchPreSidebar(props: {
             <button
               type="button"
               aria-current={props.overview ? "page" : undefined}
-              title="回到總覽，全部一起分析、美化或調整設定"
+              title={t("回到總覽，全部一起分析、美化或調整設定")}
               class={`batch-overview-entry${props.overview ? " is-on" : ""}`}
               disabled={props.disabled && !props.overview}
               onClick={goOverview}
@@ -4375,7 +4400,7 @@ export function BatchPreSidebar(props: {
             // 每次進到總覽重新掛一次，那兩顆就再跳一下，提示這裡可以一次處理全部。
             <div key={props.overview ? "overview" : "single"} class={`batch-sidebar-all${props.overview && !held ? " is-nudge" : ""}`}>
               {props.onSettings ? <Chip
-                label="設定"
+                label={t("設定")}
                 icon="tune"
                 kind="ghost"
                 disabled={held}
@@ -4389,7 +4414,7 @@ export function BatchPreSidebar(props: {
                 icon="search"
                 kind="primary"
                 disabled={held}
-                title="還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送"
+                title={t("還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送")}
                 onClick={() => startAll("analyze")}
               /> : null}
               {renderable ? <Chip
@@ -4397,7 +4422,7 @@ export function BatchPreSidebar(props: {
                 icon="spark"
                 kind="primary"
                 disabled={held}
-                title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
+                title={t("還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送")}
                 onClick={() => startAll("render")}
               /> : null}
               {props.redo && props.onRedo ? <Chip
@@ -4416,7 +4441,7 @@ export function BatchPreSidebar(props: {
         </div>
         {/* 篩的是底下的列表，就貼在列表上面、不跟著捲；只有一種狀態時沒得篩，不出現。 */}
         {progress.length > 1 && (
-          <div class="batch-grid-filters batch-sidebar-filters" role="group" aria-label="依狀態篩選">
+          <div class="batch-grid-filters batch-sidebar-filters" role="group" aria-label={t("依狀態篩選")}>
             <button type="button" class={`batch-grid-filter${filter === "all" ? " is-on" : ""}`} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
               全部 {sources.length}
             </button>
@@ -4437,7 +4462,7 @@ export function BatchPreSidebar(props: {
           class="batch-sidebar-list"
           ref={list}
           role="tablist"
-          aria-label="選好的照片"
+          aria-label={t("選好的照片")}
           onScroll={(e) => (batchListScroll = { batch: batchKey, top: (e.currentTarget as HTMLDivElement).scrollTop })}
         >
           {sources.map((s, i) => {
@@ -4453,7 +4478,7 @@ export function BatchPreSidebar(props: {
                 type="button"
                 role="tab"
                 aria-selected={on}
-                aria-label={`第 ${i + 1} 張，${state.text}`}
+                aria-label={t("第 {v1} 張，{text}", { v1: i + 1, text: state.text })}
                 class={`history-cube batch-sidebar-item${state.key ? ` ${state.key}` : ""}${on ? " selected" : ""}${isFresh(key) ? " is-fresh" : ""}`}
                 disabled={props.disabled && !on}
                 onClick={() => pick(s)}
@@ -4477,7 +4502,7 @@ export function BatchPreSidebar(props: {
       <button
         type="button"
         class={`batch-drawer-trigger${props.hop ? " is-hop" : ""}${ping ? " is-ping" : ""}${home ? " is-home" : ""}`}
-        aria-label={`我的照片（${sources.length} 張）`}
+        aria-label={t("我的照片（{length} 張）", { length: sources.length })}
         onClick={() => setOpen(true)}
         onAnimationEnd={() => props.onHopped?.()}
       >
@@ -4494,25 +4519,25 @@ export function BatchPreSidebar(props: {
 // 「顯示全部」打開一個蓋住整頁的照片面板，在那裡挑。
 // 用詞跟「最近照片」的磚一樣（home.tsx 的 SESSION_BADGES）：分析好還沒美化的叫待美化。
 const GRID_GROUPS: { key: BatchProgress; label: string }[] = [
-  { key: "error", label: "失敗" },
-  { key: "analyzed", label: "待美化" },
-  { key: "running", label: "處理中" },
-  { key: "todo", label: "未開始" },
-  { key: "done", label: "美化完成" },
+  { key: "error", label: t("失敗") },
+  { key: "analyzed", label: t("待美化") },
+  { key: "running", label: t("處理中") },
+  { key: "todo", label: t("未開始") },
+  { key: "done", label: t("美化完成") },
 ];
 
 // 每格左下的狀態：跟「最近照片」同一顆（.session-tile-badge），同樣的字、符號和顏色。
 // 處理中照實際在做的說分析中、美化中或上傳中；還沒開始的沒有對應的磚，用不帶顏色的那顆。
 function gridBadge(progress: BatchProgress, state: { key: string; text: string }): { cls: string; text: string } {
   switch (progress) {
-    case "error": return { cls: "is-failed", text: "失敗" };
-    case "analyzed": return { cls: "is-ready", text: "待美化" };
-    case "done": return { cls: "is-done", text: "美化完成" };
+    case "error": return { cls: "is-failed", text: t("失敗") };
+    case "analyzed": return { cls: "is-ready", text: t("待美化") };
+    case "done": return { cls: "is-done", text: t("美化完成") };
     case "running":
-      return state.key === "processing" ? { cls: "is-rendering", text: "美化中" }
-        : state.key === "uploading" ? { cls: "is-analyzing", text: "上傳中" }
-        : { cls: "is-analyzing", text: "分析中" };
-    default: return { cls: "", text: "未開始" };
+      return state.key === "processing" ? { cls: "is-rendering", text: t("美化中") }
+        : state.key === "uploading" ? { cls: "is-analyzing", text: t("上傳中") }
+        : { cls: "is-analyzing", text: t("分析中") };
+    default: return { cls: "", text: t("未開始") };
   }
 }
 
@@ -4612,16 +4637,16 @@ function BatchOverviewGrid(props: {
     <div class="batch-sidebar-actions batch-grid-tools">
       {props.onAdd && <BatchAddButton full={items.length >= MAX_BATCH} onAdd={props.onAdd} onSamples={props.onSamples} onBefore={() => setOpen(false)} end />}
       {props.onClear && (
-        <button type="button" class="batch-download-all-btn" title="全部清除" aria-label="全部清除" data-danger onClick={props.onClear}>
+        <button type="button" class="batch-download-all-btn" title={t("全部清除")} aria-label={t("全部清除")} data-danger onClick={props.onClear}>
           <Icon name="trash" size={14} />
         </button>
       )}
     </div>
   );
   const filters = (
-    <div class="batch-grid-filters" role="group" aria-label="依狀態篩選">
+    <div class="batch-grid-filters" role="group" aria-label={t("依狀態篩選")}>
       <button type="button" class={`batch-grid-filter${filter === "all" ? " is-on" : ""}`} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
-        全部 {items.length}
+        {t("全部 {n}", { n: items.length })}
       </button>
       {GRID_GROUPS.filter((g) => count(g.key)).map((g) => (
         <button
@@ -4645,7 +4670,7 @@ function BatchOverviewGrid(props: {
         key={x.key}
         type="button"
         class={`batch-grid-cell is-${x.progress}${isFresh(x.key) ? " is-fresh" : ""}`}
-        aria-label={`第 ${x.no} 張，${badge.text}`}
+        aria-label={t("第 {v1} 張，{text}", { v1: x.no, text: badge.text })}
         disabled={props.disabled}
         onClick={() => {
           setOpen(false);
@@ -4665,7 +4690,7 @@ function BatchOverviewGrid(props: {
     );
   };
   return (
-    <section class="batch-grid" aria-label="這批照片">
+    <section class="batch-grid" aria-label={t("這批照片")}>
       <div class="batch-grid-head">
         {filters}
         {tools}
@@ -4682,10 +4707,10 @@ function BatchOverviewGrid(props: {
       {open && (
         <>
           <div class="sample-modal-backdrop" onClick={() => setOpen(false)} />
-          <div class="sample-modal batch-grid-sheet" role="dialog" aria-modal="true" aria-label="這批照片">
+          <div class="sample-modal batch-grid-sheet" role="dialog" aria-modal="true" aria-label={t("這批照片")}>
             <div class="sample-modal-head">
-              <h2>這批照片 · {items.length} 張</h2>
-              <button type="button" class="sample-modal-close" aria-label="關閉" onClick={() => setOpen(false)}>
+              <h2>{t("這批照片 · {n} 張", { n: items.length })}</h2>
+              <button type="button" class="sample-modal-close" aria-label={t("關閉")} onClick={() => setOpen(false)}>
                 <Icon name="x" size={16} />
               </button>
             </div>
@@ -4699,15 +4724,15 @@ function BatchOverviewGrid(props: {
       {props.pending || props.renderable || props.finished ? (
         // 總覽上一次處理全部的按鈕只放這裡：固定在對話上面，不會被新訊息捲走。
         <div class="batch-grid-actions">
-          <Chip label="設定" icon="tune" kind="ghost" disabled={props.actionsHeld} onClick={props.onSettings} />
+          <Chip label={t("設定")} icon="tune" kind="ghost" disabled={props.actionsHeld} onClick={props.onSettings} />
           {props.pending ? (
             <Chip label={allLabel("analyze", props.pending, props.sources.length)} icon="search" kind="primary" disabled={props.actionsHeld}
-              title="還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送"
+              title={t("還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送")}
               onClick={() => props.onStartAll("analyze")} />
           ) : null}
           {props.renderable ? (
             <Chip label={allLabel("render", props.renderable, props.sources.length)} icon="spark" kind="primary" disabled={props.actionsHeld}
-              title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
+              title={t("還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送")}
               onClick={() => props.onStartAll("render")} />
           ) : null}
           {props.redo && props.onRedo ? (
@@ -4724,16 +4749,16 @@ function BatchOverviewGrid(props: {
 // 「我的照片」方塊左下角的狀態。用詞跟總覽的格子、「最近照片」的磚一樣（home.tsx 的 SESSION_BADGES）。
 function photoState(p: Photo, renderFailed = false): { key: string; text: string } {
   return p.status === "failed"
-    ? { key: "error", text: "失敗" }
+    ? { key: "error", text: t("失敗") }
     : p.status === "rendering" || p.queued_render || p.pending_render
-      ? { key: "processing", text: "美化中" }
+      ? { key: "processing", text: t("美化中") }
       : isBusy(p)
-        ? { key: "analyzing", text: "分析中" }
+        ? { key: "analyzing", text: t("分析中") }
         : renderFailed
-          ? { key: "error", text: "失敗" }
+          ? { key: "error", text: t("失敗") }
           : p.active_version
-          ? { key: "done", text: "美化完成" }
-          : { key: "analyzed", text: "待美化" };
+          ? { key: "done", text: t("美化完成") }
+          : { key: "analyzed", text: t("待美化") };
 }
 
 // 方塊右上角的 ×，跟首頁磚上那顆同一個做法（home.tsx 的 RemoveMark）：方塊本身是
@@ -4763,8 +4788,8 @@ function BatchAddButton(props: { full: boolean; onAdd: (files: File[]) => void; 
         <button
           type="button"
           class="batch-download-all-btn"
-          title={full ? `已經選滿 ${MAX_BATCH} 張了` : "新增照片"}
-          aria-label="新增照片"
+          title={full ? t("已經選滿 {MAX_BATCH} 張了", { MAX_BATCH }) : t("新增照片")}
+          aria-label={t("新增照片")}
           aria-haspopup={props.onSamples ? "menu" : undefined}
           aria-expanded={props.onSamples ? addMenu : undefined}
           disabled={full}
@@ -4830,8 +4855,8 @@ function SidebarRemove({ index, onRemove }: { index: number; onRemove: (i: numbe
       class="history-cube-remove"
       role="button"
       tabIndex={0}
-      aria-label={`移除第 ${index + 1} 張`}
-      title="移除"
+      aria-label={t("移除第 {v1} 張", { v1: index + 1 })}
+      title={t("移除")}
       onClick={go}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && go(e)}
     >
@@ -4871,10 +4896,10 @@ export function BatchSidebar(props: {
   const doneCount = photos.filter((p) => p.active_version).length;
   const zipHint =
     doneCount === 0
-      ? `下載所有原圖（${photos.length} 張）`
+      ? t("下載所有原圖（{length} 張）", { length: photos.length })
       : doneCount === photos.length
-        ? `下載所有已完成的結果，含每一版（${photos.length} 張）`
-        : `下載全部（已完成 ${doneCount} 張含每一版，其餘為原圖，共 ${photos.length} 張）`;
+        ? t("下載所有已完成的結果，含每一版（{length} 張）", { length: photos.length })
+        : t("下載全部（已完成 {doneCount} 張含每一版，其餘為原圖，共 {length} 張）", { doneCount, length: photos.length });
   const downloadAll = async () => {
     if (zipping) return;
     setZipping(true);
@@ -4882,7 +4907,7 @@ export function BatchSidebar(props: {
       photos.map((p) => ({ source: urls.sourceImage(p.analyze_job_id), results: resultsOf(p) })),
     );
     setZipping(false);
-    setNotice(ok ? "已下載完成。" : "打包下載失敗，請稍後再試。");
+    setNotice(ok ? t("已下載完成。") : t("打包下載失敗，請稍後再試。"));
   };
   // 換到的那張不在列表看得到的範圍裡（例如從底下那排點進來、或一開就停在後面那張），
   // 就把列表捲到剛好露出它。只動列表自己的 scrollTop，不帶著整頁跑。
@@ -4904,16 +4929,16 @@ export function BatchSidebar(props: {
     <>
       <div class={`batch-sidebar-backdrop${open ? " drawer-open" : ""}`} onClick={() => setOpen(false)} />
       <aside class={`batch-sidebar${open ? " drawer-open" : ""}`} id="batch-sidebar">
-        <button type="button" class="batch-sidebar-close-btn" aria-label="收起照片列表" onClick={() => setOpen(false)}>
+        <button type="button" class="batch-sidebar-close-btn" aria-label={t("收起照片列表")} onClick={() => setOpen(false)}>
           <Icon name="x" size={16} />
         </button>
         <div class="batch-sidebar-header">
-          <h2 class="batch-sidebar-title">我的照片</h2>
+          <h2 class="batch-sidebar-title">{t("我的照片")}</h2>
           <button
             type="button"
             class="batch-download-all-btn"
-            title={zipping ? "打包中…" : zipHint}
-            aria-label={zipping ? "打包中" : zipHint}
+            title={zipping ? t("打包中…") : zipHint}
+            aria-label={zipping ? t("打包中") : zipHint}
             disabled={zipping}
             aria-busy={zipping}
             onClick={() => void downloadAll()}
@@ -4928,12 +4953,12 @@ export function BatchSidebar(props: {
               icon="spark"
               kind="primary"
               disabled={props.busy}
-              title="還沒美化的每張照目前的設定美化，美化過的不重送"
+              title={t("還沒美化的每張照目前的設定美化，美化過的不重送")}
               onClick={props.onRenderAll}
             />
           </div>
         ) : null}
-        <div class="batch-sidebar-list" ref={list} role="tablist" aria-label="這段對話的照片">
+        <div class="batch-sidebar-list" ref={list} role="tablist" aria-label={t("這段對話的照片")}>
           {photos.map((p, i) => {
             const v = p.active_version;
             const state = photoState(p);
@@ -4944,7 +4969,7 @@ export function BatchSidebar(props: {
                 type="button"
                 role="tab"
                 aria-selected={on}
-                aria-label={`第 ${i + 1} 張，${state.text}`}
+                aria-label={t("第 {v1} 張，{text}", { v1: i + 1, text: state.text })}
                 class={`history-cube batch-sidebar-item ${state.key}${on ? " selected" : ""}`}
                 onClick={() => pick(p.photo_id)}
               >
@@ -4961,14 +4986,14 @@ export function BatchSidebar(props: {
       <button
         type="button"
         class={`batch-drawer-trigger${props.hop ? " is-hop" : ""}`}
-        aria-label={`我的照片（${photos.length} 張）`}
+        aria-label={t("我的照片（{length} 張）", { length: photos.length })}
         onClick={() => setOpen(true)}
         onAnimationEnd={() => props.onHopped?.()}
       >
         <Icon name="photos" size={18} />
         <span class="batch-drawer-trigger-count">{photos.length}</span>
       </button>
-      {notice ? <ConfirmModal message={notice} confirmLabel="確定" onAnswer={() => setNotice(null)} /> : null}
+      {notice ? <ConfirmModal message={notice} confirmLabel={t("確定")} onAnswer={() => setNotice(null)} /> : null}
     </>
   );
 }
@@ -4996,10 +5021,10 @@ type NoteSection = { key: string; line: string; text: string; persons: PrePerson
 
 function NotesSnapshot(props: { sections: HistoricalSection[] }) {
   return <div class="chat-card chat-notes" data-notes-snapshot>
-    <span class="chat-meta">個人化需求（當時內容）</span>
+    <span class="chat-meta">{t("個人化需求（當時內容）")}</span>
     <p class="chat-text">{props.sections.length ? props.sections.map((s, i) => <span>
-      {i ? "；" : ""}{s.key ? <>{s.persons.map(p => <FaceChip face={p} small />)}{s.text}</> : s.line}
-    </span>) : "目前沒有個人化需求。"}</p>
+      {i ? t("；") : ""}{s.key ? <>{s.persons.map(p => <FaceChip face={p} small />)}{s.text}</> : s.line}
+    </span>) : t("目前沒有個人化需求。")}</p>
   </div>;
 }
 
@@ -5046,7 +5071,7 @@ function NotesEditor(props: {
         ref={box}
         role="textbox"
         aria-multiline="true"
-        aria-label="個人化需求"
+        aria-label={t("個人化需求")}
         contentEditable={!held}
         onFocus={() => {
           focused.current = true;
@@ -5064,7 +5089,7 @@ function NotesEditor(props: {
       />
       {saved && (
         <div class="chat-prompt-foot">
-          <span class="chat-meta">已儲存</span>
+          <span class="chat-meta">{t("已儲存")}</span>
         </div>
       )}
     </>
@@ -5139,7 +5164,7 @@ function PreChat(props: {
   // Compatibility for an existing settings mode without a recorded event.
   const displayEvents = step === "settings" && !events.some(e => e.kind === "settings")
     ? [...events, { id: "settings-current", after: conversation(notes).length, kind: "settings" as const,
-        text: "好，調整下面的設定，完成後選擇要分析還是一鍵美化。", showPeople: false }]
+        text: t("好，調整下面的設定，完成後選擇要分析還是一鍵美化。"), showPeople: false }]
     : events;
   const log = conversation(pending ? [...notes, pending] : notes, displayEvents);
   const targetControls = (event: PreviewReplyEvent) => {
@@ -5149,19 +5174,19 @@ function PreChat(props: {
     const disabled = !active || busy;
     const ids = active ? (props.selectedTargetIds || []) : [];
     return <div class="chat-target-confirmation" data-question-id={q.question_id}>
-      {q.answered ? <p class="chat-meta">已確認：{q.answer}</p> : <div class="chat-choices">
+      {q.answered ? <p class="chat-meta">{t("已確認：{answer}", { answer: q.answer ?? "" })}</p> : <div class="chat-choices">
         {(!q.kind || q.kind === "person") && <>
           {(event.people || []).map(person => person.preview_person_id && <button type="button"
             class={`chat-chip chat-target-person${ids.includes(person.preview_person_id) ? " is-picked" : ""}`}
             disabled={disabled} aria-pressed={ids.includes(person.preview_person_id)} onClick={() => props.onTargetPoint?.(person.preview_person_id!)}>
             {person.thumb && <img src={person.thumb} alt="" />}<span>{person.name || person.where}</span>
           </button>)}
-          <Chip label="確認這筆需求的對象" disabled={disabled || !ids.length} onClick={() => props.onTargetSelection?.(ids)} />
-          <Chip label="不在已辨識的人物清單中" disabled={disabled} onClick={() => props.onTargetSelection?.([], "不在已辨識的人物清單中", undefined, undefined, undefined, "outside_preview")} />
+          <Chip label={t("確認這筆需求的對象")} disabled={disabled || !ids.length} onClick={() => props.onTargetSelection?.(ids)} />
+          <Chip label={t("不在已辨識的人物清單中")} disabled={disabled} onClick={() => props.onTargetSelection?.([], "不在已辨識的人物清單中", undefined, undefined, undefined, "outside_preview")} />
         </>}
         {q.kind === "semantic" && <>
-          <Chip label="重新確認這項需求" disabled={disabled} onClick={() => props.onTargetSelection?.([], "重新確認這項需求")} />
-          <Chip label="分析" icon="search" disabled={disabled} onClick={() => props.onStart("analyze")} />
+          <Chip label={t("重新確認這項需求")} disabled={disabled} onClick={() => props.onTargetSelection?.([], "重新確認這項需求")} />
+          <Chip label={t("分析")} icon="search" disabled={disabled} onClick={() => props.onStart("analyze")} />
         </>}
         {q.kind === "wish" && q.wish_options?.map(option => <Chip label={option.text} disabled={disabled}
           onClick={() => props.onTargetSelection?.([], option.text, undefined, option.wish_id)} />)}
@@ -5180,7 +5205,7 @@ function PreChat(props: {
     const i = settingsTurns.findIndex(e => e.id === id);
     const to = settingsTurns[i + 1]?.settings || props.settings;
     const changed = from && to ? settingsChanges(caps, from, to) : [];
-    return changed.length ? `好，${changed.join("、")}。` : "設定沒有改動。";
+    return changed.length ? t("好，{changed}。", { changed: changed.join(t("、")) }) : t("設定沒有改動。");
   };
   // 動作鍵跟在目前對話後面；沒有模型回覆的確認文字屬於原本那一輪。
   const last = log[log.length - 1];
@@ -5199,7 +5224,7 @@ function PreChat(props: {
   const went = !asking && starting ? starting.mode : null;
   const review = kept && (
     <div class="chat-card chat-notes">
-      <span class="chat-meta">個人化需求</span>
+      <span class="chat-meta">{t("個人化需求")}</span>
       <NotesEditor sections={props.sections} upTo={notes.length} held={held} onSave={props.onPrompt} />
     </div>
   );
@@ -5210,12 +5235,12 @@ function PreChat(props: {
           differ only in how far they go -- so they carry the same weight. */}
       {!asking && !went && (step === "picked" || step === "settings" || hasWishes) && (
         <div class="chat-actions-aux">
-          {(step === "picked" || step === "settings") && <Chip label="設定" icon="tune" kind="ghost" disabled={held} onClick={props.onEdit} />}
+          {(step === "picked" || step === "settings") && <Chip label={t("設定")} icon="tune" kind="ghost" disabled={held} onClick={props.onEdit} />}
           {/* 清掉的是需求，不是對話：上面那幾句連同 AI 的回覆都還在，只是不再算
               數。所以沒有需求可清時這顆就不該在——按下去畫面不會有任何變化。 */}
           {hasWishes && (
             <Chip
-              label="清除所有需求"
+              label={t("清除所有需求")}
               icon="x"
               kind="ghost"
               disabled={held}
@@ -5228,7 +5253,7 @@ function PreChat(props: {
         {/* 按了一鍵美化、正在問怎麼套用時，這排就是已經做過的選擇：定格，
             一鍵美化維持選取的樣子，跟回答過的其他提問一樣。 */}
         <Chip
-          label="分析"
+          label={t("分析")}
           icon="search"
           kind={went === "analyze" ? "picked" : asking || went ? undefined : "primary"}
           settled={!!asking || !!went}
@@ -5236,7 +5261,7 @@ function PreChat(props: {
           onClick={() => props.onStart("analyze")}
         />
         <Chip
-          label="一鍵美化"
+          label={t("一鍵美化")}
           icon="spark"
           kind={asking || went === "render" ? "picked" : went ? undefined : "primary"}
           settled={!!asking || !!went}
@@ -5255,15 +5280,15 @@ function PreChat(props: {
   );
 
   const peopleCard = (people: typeof props.people) => people.length > 0 && (
-    <div class="preview-selection" aria-label="已辨識人物">
-              <div class="subject-preview" aria-label="人物初步辨識">
+    <div class="preview-selection" aria-label={t("已辨識人物")}>
+              <div class="subject-preview" aria-label={t("人物初步辨識")}>
                 <div class="subject-preview-people">
                   {people.map((person) => (
                     <div class="subject-preview-person">
                       <span class="subject-preview-avatar">{person.thumb && <img src={person.thumb} alt="" />}</span>
                       <span data-chat-typewriter-text>{person.name || person.where}</span>
-                      {person.previewRole === "bystander" && <small class="chat-muted">背景人物</small>}
-                      {person.previewRole === "uncertain" && <small class="chat-muted">待確認</small>}
+                      {person.previewRole === "bystander" && <small class="chat-muted">{t("背景人物")}</small>}
+                      {person.previewRole === "uncertain" && <small class="chat-muted">{t("待確認")}</small>}
                     </div>
                   ))}
                 </div>
@@ -5281,7 +5306,7 @@ function PreChat(props: {
             itself -- but that is a shortcut, not the advertised path. */}
         <div class="chat-choices">
           <Chip
-            label="自行上傳照片"
+            label={t("自行上傳照片")}
             icon="up"
             kind={via === "upload" ? "picked" : undefined}
             settled={!!via}
@@ -5289,7 +5314,7 @@ function PreChat(props: {
             onClick={props.onUpload}
           />
           <Chip
-            label="從範例照片挑選"
+            label={t("從範例照片挑選")}
             icon="image"
             kind={via === "sample" ? "picked" : undefined}
             settled={!!via}
@@ -5304,22 +5329,22 @@ function PreChat(props: {
           <UserMsg>
             <UploadBubble
               src={thumbSrc(source)}
-              text={props.batch ? `第 ${props.batch.index + 1} 張` : source.kind === "file" ? "上傳了這張" : "選了這張"}
+              text={props.batch ? t("第 {v1} 張", { v1: props.batch.index + 1 }) : source.kind === "file" ? t("上傳了這張") : t("選了這張")}
               onOpen={props.onView}
             />
           </UserMsg>
 
           {/* 舊偵測流程等掃描完才講開場白，中間先接一個跟回覆需求時一樣的打字點，不讓畫面停在空白。 */}
-          {!greeted && <AssistantMsg><div class="chat-typing" aria-label="AI 正在看照片"><span /><span /><span /></div></AssistantMsg>}
+          {!greeted && <AssistantMsg><div class="chat-typing" aria-label={t("AI 正在看照片")}><span /><span /><span /></div></AssistantMsg>}
           {greeted && (
           <AssistantMsg>
-            <p class="chat-text">照片選好了。想怎麼修，直接打在下面的對話框告訴我。</p>
+            <p class="chat-text">{t("照片選好了。想怎麼修，直接打在下面的對話框告訴我。")}</p>
             {/* 底下那三顆鍵都只有兩四個字，差在哪得自己猜。這裡一顆補一句：分
                 析是先看過再決定，一鍵美化是現在就動手，設定是動手前先換工具。寫
                 「讓你看」不寫「跟你確認」——分析完照樣可以直接按美化，一項一項
                 挑是可以做的事，不是非做不可。 */}
-            <p class="chat-text">要先看我對這張照片的分析，還是直接幫你美化？</p>
-            <p class="chat-text chat-muted">分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換引擎或長寬比，先按設定。</p>
+            <p class="chat-text">{t("要先看我對這張照片的分析，還是直接幫你美化？")}</p>
+            <p class="chat-text chat-muted">{t("分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換引擎或長寬比，先按設定。")}</p>
           </AssistantMsg>
           )}
           {props.previewError && <AssistantMsg><p class="chat-text chat-muted">{props.previewError}</p></AssistantMsg>}
@@ -5333,69 +5358,69 @@ function PreChat(props: {
           話。兩種都不動使用者打的字。 */}
       {/* 開場白還在等掃描時，後面的對話也先不出來：總覽發過來的那句會比開場白
           早到，不擋的話切過來時它先整串出現，開場白掃完才補打在它上面。 */}
-      {greeted && log.map((t, i) => {
+      {greeted && log.map((turn, i) => {
         // 總覽發過來的句子：使用者那句不搬過來，連續幾句只在最後一句的位置總結一次。
-        if (fromOverview(t)) {
+        if (fromOverview(turn)) {
           const shown = log.slice(i + 1).find((x) => !(fromOverview(x) && "part" in x && x.part === "user"));
-          if (("part" in t && t.part === "user") || (shown && fromOverview(shown))) return null;
+          if (("part" in turn && turn.part === "user") || (shown && fromOverview(shown))) return null;
           return <AssistantMsg key={`overview-${i}`}><p class="chat-text">{OVERVIEW_SUMMARY}</p></AssistantMsg>;
         }
-        if ("previewReply" in t && t.previewReply.kind === "notes") {
+        if ("previewReply" in turn && turn.previewReply.kind === "notes") {
           const latest = displayEvents.filter(e => e.kind === "notes").slice(-1)[0];
-          const editable = t.previewReply.id === latest?.id && !pending && kept &&
-            sectionsIdentity(t.previewReply.sections || []) === sectionsIdentity(props.sections);
-          return <AssistantMsg key={t.previewReply.id}>{editable ? review : <NotesSnapshot sections={t.previewReply.sections || []} />}</AssistantMsg>;
+          const editable = turn.previewReply.id === latest?.id && !pending && kept &&
+            sectionsIdentity(turn.previewReply.sections || []) === sectionsIdentity(props.sections);
+          return <AssistantMsg key={turn.previewReply.id}>{editable ? review : <NotesSnapshot sections={turn.previewReply.sections || []} />}</AssistantMsg>;
         }
-        if ("ask" in t && t.ask === pending) return <div key={`note-${t.ask.order ?? notes.length}-user`} class="note-turn">
+        if ("ask" in turn && turn.ask === pending) return <div key={`note-${turn.ask.order ?? notes.length}-user`} class="note-turn">
           <AskBubble text={pending.text} faces={pending.persons} />
-          <AssistantMsg><div class="chat-typing" aria-label="AI 正在回覆"><span /><span /><span /></div></AssistantMsg>
+          <AssistantMsg><div class="chat-typing" aria-label={t("AI 正在回覆")}><span /><span /><span /></div></AssistantMsg>
         </div>;
         // AI 還在等使用者回答它的提問時，那句需求還沒講完，清單跟開始鍵都先不出
         // 來——畫面上只留問題跟回答的方式，答完才接回收尾。問「要不要幫你分析」
         // 時也一樣：選項本身就是那兩顆鍵，再擺一次只是重複。
-        const asking = "ask" in t && !!(t.ask.asked || t.ask.offered);
-        if ("previewReply" in t && t.previewReply.kind === "settings") return <div key={t.previewReply.id} class="settings-turn">
-          <UserMsg><ClickBubble icon="tune" label="設定" /></UserMsg>
-          {t.previewReply.id === activeSettingsId
+        const asking = "ask" in turn && !!(turn.ask.asked || turn.ask.offered);
+        if ("previewReply" in turn && turn.previewReply.kind === "settings") return <div key={turn.previewReply.id} class="settings-turn">
+          <UserMsg><ClickBubble icon="tune" label={t("設定")} /></UserMsg>
+          {turn.previewReply.id === activeSettingsId
             ? <AssistantMsg>
-                <p class="chat-text">{t.previewReply.text}</p>
+                <p class="chat-text">{turn.previewReply.text}</p>
                 <SettingsEditor caps={caps} settings={props.settings} onChange={props.onSettings} />
               </AssistantMsg>
-            : <AssistantMsg><p class="chat-text">{settingsSaid(t.previewReply.id, t.previewReply.settings)}</p></AssistantMsg>}
+            : <AssistantMsg><p class="chat-text">{settingsSaid(turn.previewReply.id, turn.previewReply.settings)}</p></AssistantMsg>}
         </div>;
-        if ("previewReply" in t && t.previewReply.role === "user") return <AskBubble key={t.previewReply.id} text={t.previewReply.text} faces={[]} />;
-        if ("previewReply" in t) return <AssistantMsg key={t.previewReply.id} atomic={t.previewReply.showPeople} animate={t.previewReply.showPeople}
-          onTypingComplete={t.previewReply.showPeople ? () => props.onPeoplePresented?.(t.previewReply.generation) : undefined}>
-          {t.previewReply.showPeople && t.previewReply.presentation ? <>
-            <p class="chat-text">{t.previewReply.presentation.opening}</p>
-            <div data-chat-typewriter-group>{peopleCard(t.previewReply.people || [])}</div>
-            <p class="chat-text">{t.previewReply.presentation.closing}</p>
+        if ("previewReply" in turn && turn.previewReply.role === "user") return <AskBubble key={turn.previewReply.id} text={turn.previewReply.text} faces={[]} />;
+        if ("previewReply" in turn) return <AssistantMsg key={turn.previewReply.id} atomic={turn.previewReply.showPeople} animate={turn.previewReply.showPeople}
+          onTypingComplete={turn.previewReply.showPeople ? () => props.onPeoplePresented?.(turn.previewReply.generation) : undefined}>
+          {turn.previewReply.showPeople && turn.previewReply.presentation ? <>
+            <p class="chat-text">{turn.previewReply.presentation.opening}</p>
+            <div data-chat-typewriter-group>{peopleCard(turn.previewReply.people || [])}</div>
+            <p class="chat-text">{turn.previewReply.presentation.closing}</p>
           </> : <>
-            {t.previewReply.showPeople && peopleCard(t.previewReply.people || [])}
-            <p class="chat-text">{t.previewReply.text}</p>
+            {turn.previewReply.showPeople && peopleCard(turn.previewReply.people || [])}
+            <p class="chat-text">{turn.previewReply.text}</p>
           </>}
-          {targetControls(t.previewReply)}
+          {targetControls(turn.previewReply)}
         </AssistantMsg>;
-        if ("gone" in t)
+        if ("gone" in turn)
           return (
-            <AssistantMsg key={`gone-${t.gone[0].dropped?.order ?? i}`}>
-              <p class="chat-text">{goneReply(t)}</p>
+            <AssistantMsg key={`gone-${turn.gone[0].dropped?.order ?? i}`}>
+              <p class="chat-text">{goneReply(turn)}</p>
             </AssistantMsg>
           );
         // AI 問回來的那句底下接選項。答過了（或話題已經往下走）就定格成紀錄，
         // 點過的那顆維持選取的樣子，跟開頭兩顆上傳鍵一樣。
-        const options = t.ask.asked?.options || t.ask.offered?.options || [];
+        const options = turn.ask.asked?.options || turn.ask.offered?.options || [];
         const open = i === log.length - 1 && !pending;
-        const next = notes[notes.indexOf(t.ask) + 1];
+        const next = notes[notes.indexOf(turn.ask) + 1];
         // 問「哪一位」：人就擺在問題底下，點一下就是回答，不用再到輸入框旁邊
         // 選、再按送出。答過了跟選項一樣定格，點的那位維持選取的樣子。
-        const who = t.ask.asked?.kind === "person" && !options.length ? t.ask.replyPeople || [] : [];
+        const who = turn.ask.asked?.kind === "person" && !options.length ? turn.ask.replyPeople || [] : [];
         return (
-          <div key={`note-${t.ask.order ?? notes.indexOf(t.ask)}-${t.part || "both"}`} class="note-turn">
-            {t.part !== "reply" && <AskBubble text={t.ask.text} faces={t.ask.persons} />}
-            {t.part !== "user" && t.ask !== pending && (
+          <div key={`note-${turn.ask.order ?? notes.indexOf(turn.ask)}-${turn.part || "both"}`} class="note-turn">
+            {turn.part !== "reply" && <AskBubble text={turn.ask.text} faces={turn.ask.persons} />}
+            {turn.part !== "user" && turn.ask !== pending && (
               <AssistantMsg>
-                <p class="chat-text">{said(t.ask.reply || (t.ask.kept !== false ? "好，這些會當成個人化需求，美化時一起套用。" : "好，那就先不加個人化需求。"), t.ask.replyPeople || t.ask.persons)}</p>
+                <p class="chat-text">{said(turn.ask.reply || (turn.ask.kept !== false ? t("好，這些會當成個人化需求，美化時一起套用。") : t("好，那就先不加個人化需求。")), turn.ask.replyPeople || turn.ask.persons)}</p>
                 {options.length > 0 && (
                   <AnswerList options={options} picked={open ? null : next?.text ?? null} open={open} busy={held} onPick={props.onAnswer} />
                 )}
@@ -5424,10 +5449,10 @@ function PreChat(props: {
       {asking && (
         <>
           <UserMsg>
-            <ClickBubble icon="spark" label="一鍵美化" />
+            <ClickBubble icon="spark" label={t("一鍵美化")} />
           </UserMsg>
           <AssistantMsg>
-            <p class="chat-text">要整體美化，還是僅依你的需求修改？</p>
+            <p class="chat-text">{t("要整體美化，還是僅依你的需求修改？")}</p>
             <p class="chat-text chat-muted">
               {ONLY_PROMPT_LABEL}：只動你寫到的地方，其他保持原樣。{WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。
             </p>
@@ -5453,20 +5478,22 @@ function PreChat(props: {
         <>
           <UserMsg>
             {starting.mode === "analyze" ? (
-              <ClickBubble icon="search" label="分析" />
+              <ClickBubble icon="search" label={t("分析")} />
             ) : asking ? (
-              <ClickBubble icon="spark" label={starting.overwrite ? ONLY_PROMPT_LABEL : WITH_ANALYSIS_LABEL} />
+              <ClickBubble icon="spark" label={t(starting.overwrite ? ONLY_PROMPT_LABEL : WITH_ANALYSIS_LABEL)} />
             ) : (
-              <ClickBubble icon="spark" label="一鍵美化" />
+              <ClickBubble icon="spark" label={t("一鍵美化")} />
             )}
           </UserMsg>
           {props.batch?.done ? (
             <AssistantMsg>
               <p class="chat-text">
-                這張{starting.mode === "analyze" ? "開始分析了" : starting.overwrite ? "開始調整了" : "開始美化了"}，結果頁裡可以看進度。其他照片從{photosSpot()}「我的照片」回來接著弄。
+                {t(starting.mode === "analyze" ? "這張開始分析了，結果頁裡可以看進度。其他照片從{where}「我的照片」回來接著弄。"
+                  : starting.overwrite ? "這張開始調整了，結果頁裡可以看進度。其他照片從{where}「我的照片」回來接著弄。"
+                  : "這張開始美化了，結果頁裡可以看進度。其他照片從{where}「我的照片」回來接著弄。", { where: photosSpot() })}
               </p>
               <div class="chat-choices">
-                <Chip label="看結果" icon="image" onClick={props.batch.onOpen} />
+                <Chip label={t("看結果")} icon="image" onClick={props.batch.onOpen} />
               </div>
             </AssistantMsg>
           ) : (
@@ -5499,7 +5526,7 @@ function ErrorMsg({ text }: { text: string }) {
       {NOTICES.has(text) ? (
         <p class="chat-text">{text}</p>
       ) : (
-        <p class="chat-text chat-error">出了點問題：{text}</p>
+        <p class="chat-text chat-error">{t("出了點問題：{text}", { text })}</p>
       )}
     </AssistantMsg>
   );
@@ -5510,7 +5537,7 @@ type StartProgress = { mode: "analyze" | "render"; overwrite?: boolean; since: n
 
 // ── Session ────────────────────────────────────────────────────────────────
 // 對提案單純說好。
-const YES = /^(好|好啊|好喔|好的|好呀|好哇|可以|可以啊|可以喔|ok|okay|嗯|嗯嗯|對|對啊|沒問題|就這樣|套用|確認|確定|麻煩了|麻煩你了)[。！!～~，,.\s]*$/i;
+const YES = /^(好|好啊|好喔|好的|好呀|好哇|可以|可以啊|可以喔|ok|okay|嗯|嗯嗯|對|對啊|沒問題|就這樣|套用|確認|確定|麻煩了|麻煩你了|yes|yeah|yep|sure|apply( it)?|go ahead|sounds good|please do)[。！!～~，,.\s]*$/i;
 
 // AI 在 from 之後回過一句收尾（close）沒有。
 function closedAfter(messages: Message[], from: number): boolean {
@@ -5783,7 +5810,7 @@ export function SessionView(props: {
     return { blob: await res.blob(), name: "source.jpg" };
   });
   const scanOrder = [...scan.people].sort((a, b) => a.box.x + a.box.w / 2 - (b.box.x + b.box.w / 2));
-  const scanWhere = (i: number) => `照片中從左邊數來第 ${scanOrder.findIndex((q) => q.subjectIndex === i) + 1} 位`;
+  const scanWhere = (i: number) => t("照片中從左邊數來第 {v1} 位", { v1: scanOrder.findIndex((q) => q.subjectIndex === i) + 1 });
   const people = localPick ? scan.people : facePeople(analysis);
   // 風格裡的「姿勢」只給拍到人的照片，平常看分析的 subject_category；沒有分析
   // 時改看本地偵測有沒有找到人。
@@ -5889,7 +5916,7 @@ export function SessionView(props: {
     const chips = cats
       .filter((c) => !skip.includes(c))
       .map((c) => (
-        <Chip label={CATEGORIES[c].label} icon={CATEGORIES[c].icon} disabled={busy} onClick={() => openCategory(c)} />
+        <Chip label={nameOf(c)} icon={CATEGORIES[c].icon} disabled={busy} onClick={() => openCategory(c)} />
       ));
     if (rendering !== endIdx || !endRow || placed) return chips;
     placed = true;
@@ -5910,7 +5937,7 @@ export function SessionView(props: {
     if (!analysis || !nextCat)
       return (
         <>
-          <p class="chat-text">{said(pre)}這樣就可以了，按下面的「{renderLabel}」我就開始美化。想再看哪一項，點一下也行。</p>
+          <p class="chat-text">{said(pre)}{t("這樣就可以了，按下面的「{label}」我就開始美化。想再看哪一項，點一下也行。", { label: t(renderLabel) })}</p>
           <div class="chat-choices">{catChips(opts.except)}</div>
         </>
       );
@@ -5922,13 +5949,13 @@ export function SessionView(props: {
         </p>
         <div class="chat-choices">
           <Chip
-            label={`看${termOf(nextCat)}`}
+            label={t("看{v1}", { v1: termOf(nextCat) })}
             icon={CATEGORIES[nextCat].icon}
             disabled={busy}
             onClick={() => openCategory(nextCat)}
           />
           <Chip
-            label={guideQueue[1] ? `略過，看${termOf(guideQueue[1])}` : "不用看了"}
+            label={guideQueue[1] ? t("略過，看{v1}", { v1: termOf(guideQueue[1]) }) : t("不用看了")}
             icon="arrow"
             kind="ghost"
             disabled={busy}
@@ -5936,7 +5963,7 @@ export function SessionView(props: {
           />
         </div>
         {opts.hint !== null && (
-          <p class="chat-text chat-muted">不想一項一項看的話，按下面的「{renderLabel}」我就直接開始修。</p>
+          <p class="chat-text chat-muted">{t("不想一項一項看的話，按下面的「{label}」我就直接開始修。", { label: t(renderLabel) })}</p>
         )}
       </>
     );
@@ -5953,9 +5980,9 @@ export function SessionView(props: {
       {(baseCats.length > 0 || pickable.length > 1) && (
         <p class="chat-text chat-muted">
           {baseCats.length > 0
-            ? `不想一項一項看的話，按下面的「${startLabel}」我就直接開始修；也可以打字告訴我想怎麼改。`
-            : "直接打字告訴我想怎麼改就可以。"}
-          {pickable.length > 1 && "想只調整其中一位，點輸入框上方的頭像。"}
+            ? t("不想一項一項看的話，按下面的「{startLabel}」我就直接開始修；也可以打字告訴我想怎麼改。", { startLabel: t(startLabel) })
+            : t("直接打字告訴我想怎麼改就可以。")}
+          {pickable.length > 1 && t("想只調整其中一位，點輸入框上方的頭像。")}
         </p>
       )}
     </>
@@ -6024,7 +6051,7 @@ export function SessionView(props: {
       await choose(pendingProposal, "apply");
       return true;
     }
-    return props.onAsk(text || (si.length > 1 ? "這幾位" : "這位"), si, screen, askFaces(si),
+    return props.onAsk(text || (si.length > 1 ? t("這幾位") : t("這位")), si, screen, askFaces(si),
       lastCard?.question_kind && !(caps.features?.body_side_clarification === false && lastCard.clarification_subtype === "body_side_reference") ? messages[messages.length - 1].id : undefined,
       caps.features?.body_side_clarification !== false && lastCard?.clarification_subtype === "body_side_reference" ? sideChoice(lastCard.side_question, text) : undefined);
   }
@@ -6066,7 +6093,7 @@ export function SessionView(props: {
     const c = m.card!;
     return (
       <>
-        {c.clarification?.patch_continue && <p class="chat-text">這項需求尚未套用，可以繼續回答或補充需求。</p>}
+        {c.clarification?.patch_continue && <p class="chat-text">{t("這項需求尚未套用，可以繼續回答或補充需求。")}</p>}
         {c.text && <p class="chat-text">{c.clarification?.patch_continue ? c.text : said(c.text)}</p>}
         {c.proposal && (
           <ProposalCard
@@ -6143,8 +6170,8 @@ export function SessionView(props: {
                         face={face}
                         avatarOnly
                         picked={picked}
-                        title={face.name ? `就是${face.name}` : "就是這位"}
-                        onClick={open && !busy ? () => props.onAsk("這位", [face.subjectIndex], screen, askFaces([face.subjectIndex]), c.question_kind ? messages[idx].id : undefined) : undefined}
+                        title={face.name ? t("就是{name}", { name: face.name }) : t("就是這位")}
+                        onClick={open && !busy ? () => props.onAsk(t("這位"), [face.subjectIndex], screen, askFaces([face.subjectIndex]), c.question_kind ? messages[idx].id : undefined) : undefined}
                       />
                     );
                   }
@@ -6172,8 +6199,8 @@ export function SessionView(props: {
                     face={face}
                     avatarOnly
                     picked={!open && nextSi.length === 1 && nextSi[0] === face.subjectIndex}
-                    title={face.name ? `就是${face.name}` : "就是這位"}
-                    onClick={open && !busy ? () => props.onAsk("這位", [face.subjectIndex], screen, askFaces([face.subjectIndex]), c.question_kind ? messages[idx].id : undefined) : undefined}
+                    title={face.name ? t("就是{name}", { name: face.name }) : t("就是這位")}
+                    onClick={open && !busy ? () => props.onAsk(t("這位"), [face.subjectIndex], screen, askFaces([face.subjectIndex]), c.question_kind ? messages[idx].id : undefined) : undefined}
                   />
                 ))}
               </div>
@@ -6187,7 +6214,7 @@ export function SessionView(props: {
   }
 
   const typing = (
-    <div class="chat-typing" aria-label="AI 正在回覆">
+    <div class="chat-typing" aria-label={t("AI 正在回覆")}>
       <span />
       <span />
       <span />
@@ -6257,18 +6284,18 @@ export function SessionView(props: {
   // 擺著，讓人知道還可以看整張照片有哪些地方能修。
   const offerAnalyze = editing ? promptOnlyRound : !!photo.plan.overwrite_prompt && !!promptNow;
   const analyzeChip = offerAnalyze ? (
-    <Chip label="幫我分析" icon="search" disabled={busy || !ready} onClick={checkOriginal} />
+    <Chip label={t("幫我分析")} icon="search" disabled={busy || !ready} onClick={checkOriginal} />
   ) : null;
   if (editing && (photo.status === "ready" || (reframing && !renderQueued))) {
     // 調整中只放美化：項目在對話裡點，「看美化項目」再按一次會把這輪的起點重設掉。
     // 改了還沒美化的提示掛在美化鍵上，不再另外寫一行字。
     const label = startLabel;
-    const pending = dirtyCats.length ? `改了${dirtyCats.map((c) => CATEGORIES[c].label).join("、")}，還沒美化` : undefined;
+    const pending = dirtyCats.length ? t("改了{v1}，還沒美化", { v1: dirtyCats.map((c) => nameOf(c)).join(t("、")) }) : undefined;
     actionChips = (
       <>
         {analyzeChip}
         <Chip
-          label={label}
+          label={t(label)}
           icon="spark"
           kind="primary"
           badge={pending}
@@ -6283,17 +6310,17 @@ export function SessionView(props: {
   } else if (versions.length && current) {
     actionChips = (
       <>
-        <Chip label="看美化項目" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
+        <Chip label={t("看美化項目")} icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
         {analyzeChip}
-        <Chip label="再美化" icon="redo" kind="primary" disabled={busy} onClick={() => setConfirmRerun(true)} />
+        <Chip label={t("再美化")} icon="redo" kind="primary" disabled={busy} onClick={() => setConfirmRerun(true)} />
       </>
     );
     bar = offerAnalyze ? ["看美化項目", "幫我分析", "再美化"] : ["看美化項目", "再美化"];
   } else if (lastOutcome?.card?.type === "render_failed") {
     actionChips = (
       <>
-        <Chip label="看美化項目" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
-        <Chip label="再試一次" icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再試一次", "redo")} />
+        <Chip label={t("看美化項目")} icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
+        <Chip label={t("再試一次")} icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再試一次", "redo")} />
       </>
     );
     bar = ["看美化項目", "再試一次"];
@@ -6337,14 +6364,14 @@ export function SessionView(props: {
     <div class="chat-target-confirmation"><div class="chat-choices">
       {(!question.kind || question.kind === "person") && <>
         {active && <FacePicker people={pickable} pointed={confirmationIndices} onPoint={setConfirmationIndices} />}
-        <Chip label="確認這筆需求的對象" disabled={!active || busy || !confirmationIndices.length} onClick={() => void props.onConfirmPeople(confirmationIndices)} />
-        <Chip label="不在已辨識的人物清單中" disabled={!active || busy} onClick={() => void props.onConfirmPeople([], undefined, undefined, undefined, "outside_preview")} />
+        <Chip label={t("確認這筆需求的對象")} disabled={!active || busy || !confirmationIndices.length} onClick={() => void props.onConfirmPeople(confirmationIndices)} />
+        <Chip label={t("不在已辨識的人物清單中")} disabled={!active || busy} onClick={() => void props.onConfirmPeople([], undefined, undefined, undefined, "outside_preview")} />
       </>}
       {question.kind === "visual" && <>
-        <Chip label="重新分析這筆需求" disabled={!active || busy} onClick={() => void props.onConfirmPeople([], undefined, undefined, undefined, undefined, "重新分析這筆需求")} />
-        <Chip label="取消這筆需求" disabled={!active || busy} onClick={() => void props.onConfirmPeople([], undefined, undefined, undefined, undefined, "取消這筆需求")} />
+        <Chip label={t("重新分析這筆需求")} disabled={!active || busy} onClick={() => void props.onConfirmPeople([], undefined, undefined, undefined, undefined, "重新分析這筆需求")} />
+        <Chip label={t("取消這筆需求")} disabled={!active || busy} onClick={() => void props.onConfirmPeople([], undefined, undefined, undefined, undefined, "取消這筆需求")} />
       </>}
-      {question.kind === "semantic" && <Chip label="重新確認這項需求" disabled={!active || busy} onClick={() => void props.onConfirmPeople([])} />}
+      {question.kind === "semantic" && <Chip label={t("重新確認這項需求")} disabled={!active || busy} onClick={() => void props.onConfirmPeople([])} />}
       {question.kind === "scope" && question.options?.map((label, i) => <Chip label={label} disabled={!active || busy}
         onClick={() => void props.onConfirmPeople([], i === 0 ? "features" : "all")} />)}
       {question.kind === "wish" && question.wish_options?.map(option => <Chip label={option.text} disabled={!active || busy}
@@ -6365,7 +6392,7 @@ export function SessionView(props: {
         return (
           <>
             <UserMsg meta={clockLabel(m.created_at)}>
-              <UploadBubble src={thumb} text={`上傳了 ${c.photo_ids?.length || 1} 張照片`} />
+              <UploadBubble src={thumb} text={t("上傳了 {v1} 張照片", { v1: c.photo_ids?.length || 1 })} />
             </UserMsg>
           </>
         );
@@ -6375,15 +6402,15 @@ export function SessionView(props: {
           const answer = answerIn(idx);
           return answer ? <AssistantMsg>{answer}{endActions(idx)}</AssistantMsg> : null;
         }
-        if (!analysis) return <AssistantMsg><p class="chat-text">分析完成。</p>{endActions(idx)}</AssistantMsg>;
+        if (!analysis) return <AssistantMsg><p class="chat-text">{t("分析完成。")}</p>{endActions(idx)}</AssistantMsg>;
         return (
           <AssistantMsg>
             {skippedAnalysis ? null : brief ? (
               <BriefCard brief={brief} />
             ) : photo.pending_brief ? (
-              <p class="chat-text chat-muted">正在整理分析重點…</p>
+              <p class="chat-text chat-muted">{t("正在整理分析重點…")}</p>
             ) : (
-              <p class="chat-text">分析完成。</p>
+              <p class="chat-text">{t("分析完成。")}</p>
             )}
             {answerIn(idx)}
             {fresh && !holding(idx) && !textPending(idx) && !deferGuide && lastStepIdx < 0 && firstGuide()}
@@ -6405,7 +6432,7 @@ export function SessionView(props: {
         const renders = messages.slice(0, idx).filter((x) => x.card?.type === "render_done").length;
         // 版號在右邊的美化紀錄裡看得到，話裡再數一次只是把人往回拉。這裡只說
         // 「又開了一輪」，以及舊的那版不會被蓋掉。
-        const roundLine = fromApply ? "已套用，開始新的一輪調整。" : "";
+        const roundLine = fromApply ? t("已套用，開始新的一輪調整。") : "";
         // 「這是上次的…」只在這一項還是上一版美化時的樣子才說；這一輪已經改過
         // （對話裡、卡片上、面板裡都算），就照一般的說法介紹現在的內容。
         // 收起來的面板看的是離開它時的設定，跟它自己那一輪的起點比；不然下一輪
@@ -6417,12 +6444,12 @@ export function SessionView(props: {
           !(startedWith && changedCats(startedWith, shownWith).has(cat));
         // 只照需求改完按「風格」開的：先講清楚挑了會怎麼套用。
         const lead = c.via === "style"
-          ? "想加個風格的話，先挑類別再選；下一版會照你的需求改，再加上這裡選的風格。"
+          ? t("想加個風格的話，先挑類別再選；下一版會照你的需求改，再加上這裡選的風格。")
           : !answersApply
           ? introFor(cat, analysis, planAt(idx), again)
           : fromApply
-            ? `先看剛套用的${termOf(cat)}，改動的地方已經標起來了。`
-            : `好，已套用。這是更新後的${termOf(cat)}，改動的地方已經標起來了。`;
+            ? t("先看剛套用的{v1}，改動的地方已經標起來了。", { v1: termOf(cat) })
+            : t("好，已套用。這是更新後的{v1}，改動的地方已經標起來了。", { v1: termOf(cat) });
         const recap = live ? "" : topicRecap(cat, analysisOf(cat), caps, planAt(idx));
         // 後面的話跟著項目和「美化」鍵（回覆、提案、構圖好了都會帶），這張面板就
         // 不再接一次，不然同一排按鈕會連著出現兩次。
@@ -6432,7 +6459,7 @@ export function SessionView(props: {
             {/* via reply：AI 的回覆說了幫他打開，使用者沒按過，不畫他的點擊泡泡。 */}
             {!answersApply && c.via !== "reply" && (
               <UserMsg meta={clockLabel(m.created_at)}>
-                <ClickBubble icon={CATEGORIES[cat].icon} label={CATEGORIES[cat].label} />
+                <ClickBubble icon={CATEGORIES[cat].icon} label={nameOf(cat)} />
               </UserMsg>
             )}
             <AssistantMsg>
@@ -6457,7 +6484,7 @@ export function SessionView(props: {
                     idx === lastStepIdx && (
                       <>
                         <p class="chat-text">
-                          {cats.length > 1 ? "調整好後，可以接著看其他項目，或按下面的「美化」我就開始。" : "改好後按下面的「美化」我就開始。"}
+                          {cats.length > 1 ? t("調整好後，可以接著看其他項目，或按下面的「美化」我就開始。") : t("改好後按下面的「美化」我就開始。")}
                         </p>
                         {cats.length > 1 && <div class="chat-choices">{catChips(cat)}</div>}
                       </>
@@ -6465,9 +6492,9 @@ export function SessionView(props: {
                   ) : (
                     <>
                       <p class="chat-text">
-                        {cats.length > 1 ? "調整好後，可以接著看其他項目，或按下面的「美化」我就開始" : "改好後按下面的「美化」我就開始"}
-                        {fromApply && renders ? "，之前的版本會留在美化紀錄" : ""}。
-                        {offerAnalyze && "想看整張照片還有哪些地方可以修，也可以按「幫我分析」。"}
+                        {cats.length > 1 ? t("調整好後，可以接著看其他項目，或按下面的「美化」我就開始") : t("改好後按下面的「美化」我就開始")}
+                        {fromApply && renders ? t("，之前的版本會留在美化紀錄") : ""}{t("。")}
+                        {offerAnalyze && t("想看整張照片還有哪些地方可以修，也可以按「幫我分析」。")}
                       </p>
                       {cats.length > 1 && <div class="chat-choices">{catChips(cat)}</div>}
                     </>
@@ -6484,7 +6511,7 @@ export function SessionView(props: {
                   {editing && idx > roundStart && (
                     <div class="chat-choices">
                       <Chip
-                        label={`再看${termOf(cat)}`}
+                        label={t("再看{v1}", { v1: termOf(cat) })}
                         icon={CATEGORIES[cat].icon}
                         kind="ghost"
                         disabled={busy}
@@ -6505,11 +6532,11 @@ export function SessionView(props: {
         return (
           <>
             <UserMsg meta={clockLabel(m.created_at)}>
-              <ClickBubble icon="arrow" label={`略過${termOf(cat)}`} />
+              <ClickBubble icon="arrow" label={t("略過{v1}", { v1: termOf(cat) })} />
             </UserMsg>
             {fresh && idx === lastStepIdx && (
               <AssistantMsg>
-                {guideTail({ lead: "好，" })}
+                {guideTail({ lead: t("好，") })}
                 {endActions(idx)}
               </AssistantMsg>
             )}
@@ -6533,23 +6560,23 @@ export function SessionView(props: {
         const openLine =
           c.via === "proposal"
             ? showChips
-              ? "已套用，想直接美化，還是再調下面這幾項？"
-              : "已套用，開始新的一輪調整。"
+              ? t("已套用，想直接美化，還是再調下面這幾項？")
+              : t("已套用，開始新的一輪調整。")
             : check
-              ? "好，這是我分析整張照片的結果："
-              : "好，下面是目前的美化設定。";
+              ? t("好，這是我分析整張照片的結果：")
+              : t("好，下面是目前的美化設定。");
         return (
           <>
             {/* requested：補跑分析等出來的，按「幫我分析」那一下在 analysis_requested 卡上了。 */}
             {c.via !== "proposal" && !c.requested && (
               <UserMsg meta={clockLabel(m.created_at)}>
-                <ClickBubble icon={check ? "search" : "pencil"} label={check ? "幫我分析" : "看美化項目"} />
+                <ClickBubble icon={check ? "search" : "pencil"} label={check ? t("幫我分析") : t("看美化項目")} />
               </UserMsg>
             )}
             <AssistantMsg>
               <p class="chat-text">{openLine}</p>
-              {check && (brief ? <BriefCard brief={brief} /> : photo.pending_brief && <p class="chat-text chat-muted">正在整理分析重點…</p>)}
-              {check && live && !!promptNow && <p class="chat-text chat-muted">你的需求會留著，這次會連同分析的建議一起美化。</p>}
+              {check && (brief ? <BriefCard brief={brief} /> : photo.pending_brief && <p class="chat-text chat-muted">{t("正在整理分析重點…")}</p>)}
+              {check && live && !!promptNow && <p class="chat-text chat-muted">{t("你的需求會留著，這次會連同分析的建議一起美化。")}</p>}
               {/* 「幫我分析」想知道的是還有哪裡能修，摘要已經回答了；下一步多半是照著美化，
                   所以先只給「看美化項目／美化」，想細調再展開項目。後面已經接著別的話
                   （打開項目、打字問 AI），下一步由那則帶，這裡就不掛了。 */}
@@ -6558,10 +6585,10 @@ export function SessionView(props: {
                   <>
                     <p class="chat-text">
                       {cats.length > 1
-                        ? `想調整哪一項點下面，改好按「${goLabel}」我就開始。`
+                        ? t("想調整哪一項點下面，改好按「{goLabel}」我就開始。", { goLabel: t(goLabel) })
                         : cats.length
-                          ? `點下面的「${CATEGORIES[cats[0]].label}」就可以改，改好按「${goLabel}」我就開始。`
-                          : `按下面的「${goLabel}」我就開始。`}
+                          ? t("點下面的「{v1}」就可以改，改好按「{goLabel}」我就開始。", { v1: nameOf(cats[0]), goLabel: t(goLabel) })
+                          : t("按下面的「{goLabel}」我就開始。", { goLabel: t(goLabel) })}
                     </p>
                     <div class="chat-choices">{catChips()}</div>
                   </>
@@ -6569,11 +6596,11 @@ export function SessionView(props: {
                   <>
                     {/* 跟成品卡「想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」」同一個說法。 */}
                     {!!cats.length && (
-                      <p class="chat-text">想調整美化項目，按「看美化項目」；想直接開始美化，按「{goLabel}」。</p>
+                      <p class="chat-text">{t("想調整美化項目，按「看美化項目」；想直接開始美化，按「{goLabel}」。", { goLabel: t(goLabel) })}</p>
                     )}
                     <div class="chat-choices">
                       {!!cats.length && (
-                        <Chip label="看美化項目" icon="pencil" disabled={busy} onClick={() => setExpandedCheck(m.id)} />
+                        <Chip label={t("看美化項目")} icon="pencil" disabled={busy} onClick={() => setExpandedCheck(m.id)} />
                       )}
                       {rendering === endIdx && endRow && !placed ? ((placed = true), actionChips) : null}
                     </div>
@@ -6585,23 +6612,24 @@ export function SessionView(props: {
                       建議永遠是看原圖分析的，不會因為已經修過一版就換；開關則是上一版的。 */}
                   {c.via !== "proposal" && !check && promptOnlyRound && (
                     <p class="chat-text chat-muted">
-                      這版只照你的需求改，所以這輪只能改個人化需求{cats.includes("style") ? "，或加個風格" : ""}。想整張一起美化的話，按「幫我分析」。
+                      {cats.includes("style") ? t("這版只照你的需求改，所以這輪只能改個人化需求，或加個風格。想整張一起美化的話，按「幫我分析」。")
+                        : t("這版只照你的需求改，所以這輪只要改個人化需求就好。想整張一起美化的話，按「幫我分析」。")}
                     </p>
                   )}
                   {c.via !== "proposal" && !check && !promptOnlyRound && (
                     <p class="chat-text chat-muted">
-                      裡面的項目都是看原圖分析出來的，有小圓點的是建議調整的地方；哪些開著、哪些關著，則沿用上次美化的設定。
+                      {t("裡面的項目都是看原圖分析出來的，有小圓點的是建議調整的地方；哪些開著、哪些關著，則沿用上次美化的設定。")}
                     </p>
                   )}
                   {/* 「美化」跟著項目那排一起出來，這句要排在按鈕上面才對得上「下面」；問句留在最後，緊接著按鈕。 */}
                   <p class="chat-text chat-muted">
-                    改好按下面的「美化」我就開始{n ? "，之前的版本會留在美化紀錄" : ""}。
+                    {t("改好按下面的「美化」我就開始")}{n ? t("，之前的版本會留在美化紀錄") : ""}{t("。")}
                   </p>
                   {showChips && c.via !== "proposal" && (
                     <p class="chat-text">
                       {cats.length > 1
-                        ? `可以調整${cats.map((x) => CATEGORIES[x].label).join("、")}，想先看哪一項？`
-                        : `點下面的「${CATEGORIES[cats[0]].label}」就可以改。`}
+                        ? t("可以調整{v1}，想先看哪一項？", { v1: cats.map((x) => nameOf(x)).join(t("、")) })
+                        : t("點下面的「{v1}」就可以改。", { v1: nameOf(cats[0]) })}
                     </p>
                   )}
                   {showChips && (
@@ -6620,10 +6648,10 @@ export function SessionView(props: {
         return (
           <>
             <UserMsg meta={clockLabel(m.created_at)}>
-              <ClickBubble icon="x" label="取消調整" />
+              <ClickBubble icon="x" label={t("取消調整")} />
             </UserMsg>
             <AssistantMsg>
-              <p class="chat-text">好，設定已還原成調整前的樣子。</p>
+              <p class="chat-text">{t("好，設定已還原成調整前的樣子。")}</p>
               {endActions(idx)}
             </AssistantMsg>
           </>
@@ -6631,7 +6659,7 @@ export function SessionView(props: {
       case "analysis_requested":
         return (
           <UserMsg meta={clockLabel(m.created_at)}>
-            <ClickBubble icon="search" label="幫我分析" />
+            <ClickBubble icon="search" label={t("幫我分析")} />
           </UserMsg>
         );
       case "analysis_failed":
@@ -6639,13 +6667,13 @@ export function SessionView(props: {
         if (c.reanalysis)
           return (
             <AssistantMsg>
-              <p class="chat-text chat-error">這次分析沒有成功：{jobErrorText(c.error, c.error_code).text}</p>
+              <p class="chat-text chat-error">{t("這次分析沒有成功：{error}", { error: jobErrorText(c.error, c.error_code).text })}</p>
               <p class="chat-text">
-                {c.queued_render_cancelled ? "排定的美化也先取消了。" : ""}照你需求修的版本都還在，可以再試一次分析。
+                {c.queued_render_cancelled ? t("排定的美化也先取消了。") : ""}{t("照你需求修的版本都還在，可以再試一次分析。")}
               </p>
               {idx === messages.length - 1 && !busy && (
                 <div class="chat-choices">
-                  <Chip label="再試一次" icon="search" disabled={!ready} onClick={checkOriginal} />
+                  <Chip label={t("再試一次")} icon="search" disabled={!ready} onClick={checkOriginal} />
                 </div>
               )}
               {endActions(idx)}
@@ -6654,8 +6682,8 @@ export function SessionView(props: {
         return (
           <AssistantMsg>
             <p class="chat-text chat-error">
-              這張照片分析沒有成功：{jobErrorText(c.error, c.error_code).text}
-              {c.queued_render_cancelled ? "。排定的美化也一併取消了。" : ""}
+              {t("這張照片分析沒有成功：{error}", { error: jobErrorText(c.error, c.error_code).text })}
+              {c.queued_render_cancelled ? t("。排定的美化也一併取消了。") : ""}
             </p>
             {endActions(idx)}
           </AssistantMsg>
@@ -6665,7 +6693,7 @@ export function SessionView(props: {
         const l = renderLabelFor([m.id]) || (c.label ? { label: c.label, icon: "spark", meta } : { label: "美化", icon: "spark", meta });
         return (
           <UserMsg meta={[l.meta, clockLabel(m.created_at)].filter(Boolean).join(" · ")}>
-            <ClickBubble icon={l.icon} label={l.label} />
+            <ClickBubble icon={l.icon} label={t(l.label)} />
           </UserMsg>
         );
       }
@@ -6694,7 +6722,7 @@ export function SessionView(props: {
               <>
                 <p class="chat-text">
                   這版只照你的需求改，沒有分析整張照片。需要我幫你分析，看看還有哪些地方可以修嗎？
-                  {offerStyle && "也可以點「風格」，幫這版調整光線、角度之類的風格。"}
+                  {offerStyle && t("也可以點「風格」，幫這版調整光線、角度之類的風格。")}
                 </p>
                 <div class="chat-choices">
                   <Chip label="好，幫我分析" icon="search" disabled={busy || !ready} onClick={checkOriginal} />
@@ -6713,10 +6741,10 @@ export function SessionView(props: {
         return (
           <>
             <UserMsg meta={clockLabel(m.created_at)}>
-              <ClickBubble icon="x" label="不用了" />
+              <ClickBubble icon="x" label={t("不用了")} />
             </UserMsg>
             <AssistantMsg>
-              <p class="chat-text">好。還有想改的地方，直接輸入告訴我就行；想讓我分析整張照片，也隨時跟我說。</p>
+              <p class="chat-text">{t("好。還有想改的地方，直接輸入告訴我就行；想讓我分析整張照片，也隨時跟我說。")}</p>
               {/* 「幫我分析」在 endActions 那排裡（offerAnalyze），這裡不再放一顆。 */}
               {endActions(idx)}
             </AssistantMsg>
@@ -6727,10 +6755,10 @@ export function SessionView(props: {
         const err = jobErrorText(c.error, c.error_code);
         return (
           <AssistantMsg>
-            <p class="chat-text chat-error">這次美化沒有成功：{err.text}。</p>
+            <p class="chat-text chat-error">{t("這次美化沒有成功：{error}。", { error: err.text })}</p>
             {/* 被安全審查擋下的，同一張照片再試多半還是一樣。 */}
             {err.safety && idx === messages.length - 1 && !busy && (
-              <p class="chat-text">可以回到首頁換一張照片，或按「看美化項目」換個方式再試。</p>
+              <p class="chat-text">{t("可以回到首頁換一張照片，或按「看美化項目」換個方式再試。")}</p>
             )}
             {endActions(idx)}
           </AssistantMsg>
@@ -6740,13 +6768,13 @@ export function SessionView(props: {
         return (
           <AssistantMsg>
             <p class="chat-text">
-              已{reframeBy(c.aspect_ratio)}重新構圖。
+              {t("已{by}重新構圖。", { by: reframeBy(c.aspect_ratio) })}
               {idx === messages.length - 1 && !isBusy(photo)
                 ? editing
                   ? cats.length
-                    ? `還想調整其他項目可以點下面的項目，或按「${goLabel}」我就開始。`
-                    : `按下面的「${goLabel}」我就開始。`
-                  : "按下面的按鈕就會用新構圖美化。"
+                    ? t("還想調整其他項目可以點下面的項目，或按「{goLabel}」我就開始。", { goLabel: t(goLabel) })
+                    : t("按下面的「{goLabel}」我就開始。", { goLabel: t(goLabel) })
+                  : t("按下面的按鈕就會用新構圖美化。")
                 : ""}
             </p>
             {/* 調整中構圖好了：跟一般回覆一樣把項目接在底下，美化接在最後。 */}
@@ -6760,11 +6788,12 @@ export function SessionView(props: {
         return (
           <AssistantMsg>
             <p class="chat-text chat-error">
-              {reframeBy(c.aspect_ratio)}重新構圖沒有成功：{jobErrorText(c.error, c.error_code).text}。比例先改回「{aspectLabel(caps, c.previous)}」
-              {c.queued_render_cancelled ? "，排定的美化也一併取消了" : ""}。
+              {t("{by}重新構圖沒有成功：{error}。比例先改回「{ratio}」", {
+                by: reframeBy(c.aspect_ratio), error: jobErrorText(c.error, c.error_code).text, ratio: aspectLabel(caps, c.previous) })}
+              {c.queued_render_cancelled ? t("，排定的美化也一併取消了") : ""}{t("。")}
             </p>
             {idx === messages.length - 1 && !isBusy(photo) && (
-              <p class="chat-text">可以再選一次比例試試，或照現在的構圖按下面的按鈕美化。</p>
+              <p class="chat-text">{t("可以再選一次比例試試，或照現在的構圖按下面的按鈕美化。")}</p>
             )}
             {endActions(idx)}
           </AssistantMsg>
@@ -6789,7 +6818,7 @@ export function SessionView(props: {
       case "llm_error":
         return (
           <AssistantMsg>
-            <p class="chat-text chat-muted">AI 暫時無法回覆，可以直接點選項調整。</p>
+            <p class="chat-text chat-muted">{t("AI 暫時無法回覆，可以直接點選項調整。")}</p>
             {endActions(idx)}
           </AssistantMsg>
         );
@@ -6799,7 +6828,7 @@ export function SessionView(props: {
         // 直接套用不是使用者按的，不畫一顆他沒按過的按鈕；卡片自己寫著「已套用」。
         if (c.auto) return null;
         const l = PROPOSAL_CHOICES[c.choice as ProposalChoice];
-        const lead = c.choice === "apply" ? "好，已套用。" : c.choice === "undo" ? "好，已復原。" : "好，這次不套用。";
+        const lead = c.choice === "apply" ? t("好，已套用。") : c.choice === "undo" ? t("好，已復原。") : t("好，這次不套用。");
         // 套用 is normally answered by the changed panel opening below it. When
         // nothing followed (no field the panels show, or the post failed), say
         // where to go next rather than leaving the bubble hanging.
@@ -6807,7 +6836,7 @@ export function SessionView(props: {
         return (
           <>
             <UserMsg meta={clockLabel(m.created_at)}>
-              <ClickBubble icon={l.icon} label={l.label} />
+              <ClickBubble icon={l.icon} label={t(l.label)} />
             </UserMsg>
             {idx === guideAt && (
               <AssistantMsg>
@@ -6819,12 +6848,12 @@ export function SessionView(props: {
               <AssistantMsg>
                 <p class="chat-text">
                   {c.choice === "undo"
-                    ? "好，已復原。想怎麼改再告訴我。"
+                    ? t("好，已復原。想怎麼改再告訴我。")
                     : c.choice !== "apply"
-                    ? "好，這次不套用。想怎麼改再告訴我。"
+                    ? t("好，這次不套用。想怎麼改再告訴我。")
                     : editing && cats.length
-                      ? "好，已套用。想看改了什麼、或接著調整其他項目，點下面的項目；改好按「美化」我就開始。"
-                      : "好，已套用。想再改什麼直接告訴我，或按下面的「美化」我就開始。"}
+                      ? t("好，已套用。想看改了什麼、或接著調整其他項目，點下面的項目；改好按「美化」我就開始。")
+                      : t("好，已套用。想再改什麼直接告訴我，或按下面的「美化」我就開始。")}
                 </p>
                 {c.choice === "apply" && editing && !!cats.length && <div class="chat-choices">{catChips()}</div>}
                 {endActions(idx)}
@@ -6842,7 +6871,7 @@ export function SessionView(props: {
   // First words, before the server's own messages start.
   const intro = (
     <AssistantMsg>
-      <p class="chat-text">嗨！先選想美化的照片，可以一次選多張。</p>
+      <p class="chat-text">{t("嗨！先選想美化的照片，可以一次選多張。")}</p>
     </AssistantMsg>
   );
 
@@ -6854,21 +6883,21 @@ export function SessionView(props: {
   const skipping = photo.status === "analyzing" && !!photo.analysis_skipped && !photo.reanalysis;
   const promptOnly = !!photo.plan.overwrite_prompt && !!photo.plan.user_prompt?.trim();
   const busyCopy = skipping
-    ? { stage: "rendering", title: "正在調整照片", lines: promptSubMessages() }
+    ? { stage: "rendering", title: t("正在調整照片"), lines: promptSubMessages() }
     : photo.status === "analyzing"
-      ? { stage: "analyzing", title: "正在分析照片", lines: analyzeSubMessages(renderQueued, !!waiting) }
+      ? { stage: "analyzing", title: t("正在分析照片"), lines: analyzeSubMessages(renderQueued, !!waiting) }
       : reframing
         ? {
             stage: "reframing",
-            title: "正在重新構圖",
+            title: t("正在重新構圖"),
             lines: [
-              renderQueued ? "重新構圖完成後會自動開始美化…" : reframeLoadingMessage(photo.pending_reframe?.aspect_ratio),
+              renderQueued ? t("重新構圖完成後會自動開始美化…") : reframeLoadingMessage(photo.pending_reframe?.aspect_ratio),
             ],
           }
         : photo.status === "rendering"
           ? {
               stage: "rendering",
-              title: promptOnly ? "正在調整照片" : "正在美化照片",
+              title: promptOnly ? t("正在調整照片") : t("正在美化照片"),
               lines: promptOnly ? promptSubMessages() : renderSubMessages(),
             }
           : null;
@@ -6886,15 +6915,15 @@ export function SessionView(props: {
     const styles = pickedStyles(analysis, caps, photo.plan);
     working = (
       <AssistantMsg>
-        <p class="chat-text">要整體美化，還是僅依你的需求修改？</p>
+        <p class="chat-text">{t("要整體美化，還是僅依你的需求修改？")}</p>
         <p class="chat-text chat-muted">
           {ONLY_PROMPT_LABEL}：
-          {styles.length ? `只動你寫到的地方，加上你挑的風格（${styles.join("、")}），其他保持原樣。` : "只動你寫到的地方，其他保持原樣。"}
+          {styles.length ? t("只動你寫到的地方，加上你挑的風格（{styles}），其他保持原樣。", { styles: styles.join(t("、")) }) : t("只動你寫到的地方，其他保持原樣。")}
           {WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。
         </p>
         {/* 問題的答案直接接在問題底下。 */}
         <div class="chat-choices">
-          <Chip label="先不美化" icon="x" disabled={busy} onClick={() => setAskMode(null)} />
+          <Chip label={t("先不美化")} icon="x" disabled={busy} onClick={() => setAskMode(null)} />
           <Chip
             label={ONLY_PROMPT_LABEL}
             icon={askMode.icon}
@@ -6915,10 +6944,10 @@ export function SessionView(props: {
   } else if (confirmRerun && photo.status === "ready" && adjusting) {
     working = (
       <AssistantMsg>
-        <p class="chat-text">這一輪還沒改任何設定，美化會用和上一版相同的設定重新產生，結果可能差不多。要直接美化，還是繼續看美化項目？</p>
+        <p class="chat-text">{t("這一輪還沒改任何設定，美化會用和上一版相同的設定重新產生，結果可能差不多。要直接美化，還是繼續看美化項目？")}</p>
         <div class="chat-choices">
-          <Chip label="繼續看" icon="pencil" disabled={busy} onClick={() => setConfirmRerun(false)} />
-          <Chip label="照原設定美化" icon="spark" kind="primary" disabled={busy} onClick={() => props.onRender("美化", "spark")} />
+          <Chip label={t("繼續看")} icon="pencil" disabled={busy} onClick={() => setConfirmRerun(false)} />
+          <Chip label={t("照原設定美化")} icon="spark" kind="primary" disabled={busy} onClick={() => props.onRender("美化", "spark")} />
         </div>
       </AssistantMsg>
     );
@@ -6926,10 +6955,10 @@ export function SessionView(props: {
   } else if (confirmRerun && photo.status === "ready" && !adjusting) {
     working = (
       <AssistantMsg>
-        <p class="chat-text">設定和上一版一樣，再美化一次會用相同的設定重新產生，結果可能和上一版差不多。要直接再美化，還是先看美化項目？</p>
+        <p class="chat-text">{t("設定和上一版一樣，再美化一次會用相同的設定重新產生，結果可能和上一版差不多。要直接再美化，還是先看美化項目？")}</p>
         <div class="chat-choices">
-          <Chip label="先看美化項目" icon="pencil" disabled={busy} onClick={enterAdjust} />
-          <Chip label="照原設定再美化" icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再美化", "redo")} />
+          <Chip label={t("先看美化項目")} icon="pencil" disabled={busy} onClick={enterAdjust} />
+          <Chip label={t("照原設定再美化")} icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再美化", "redo")} />
         </div>
       </AssistantMsg>
     );
@@ -6958,7 +6987,7 @@ export function SessionView(props: {
     props.onAnswerWaiting(waiting.id, screen);
   });
 
-  const sub = [timeLabel(session.created_at), `${session.photos.length} 張照片`, `${versions.length} 個版本`].join(" · ");
+  const sub = [timeLabel(session.created_at), t("{length} 張照片", { length: session.photos.length }), t("{length} 個版本", { length: versions.length })].join(" · ");
 
   // 唯讀檢視：回報的那一刻落在哪一則之前（都比它早就在最後），打開時捲到那裡。
   const reportAt = props.readOnly?.reportAt;
@@ -7116,12 +7145,12 @@ function AnswerList(props: {
                 type="text"
                 maxLength={props.copy ? LINE_MAX : ANSWER_MAX}
                 value={draft}
-                placeholder={props.copy ? "自己寫一句" : "或是自己輸入"}
-                aria-label={props.copy ? "自己寫一句文案" : "自己輸入回答"}
+                placeholder={props.copy ? t("自己寫一句") : t("或是自己輸入")}
+                aria-label={props.copy ? t("自己寫一句文案") : t("自己輸入回答")}
                 disabled={props.busy}
                 onInput={(e) => setDraft((e.target as HTMLInputElement).value)}
               />
-              <button type="submit" class="chat-line-send" disabled={props.busy || !draft.trim()} aria-label={props.copy ? "用這句" : "送出"} title={props.copy ? "用這句" : "送出"}>
+              <button type="submit" class="chat-line-send" disabled={props.busy || !draft.trim()} aria-label={props.copy ? t("用這句") : t("送出")} title={props.copy ? t("用這句") : t("送出")}>
                 <Icon name="up" size={14} />
               </button>
             </form>

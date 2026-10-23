@@ -134,7 +134,7 @@
   // at but not continued from -- continue_job rejects its analysis. The
   // single-image flow's own counterpart is showArchivedAnalysisNotice, whose
   // 重新分析/重新一鍵美化 actions drive the single flow and don't apply here.
-  const BATCH_ARCHIVED_VERSION_NOTICE = "這一組是用舊版分析產生的，無法以它繼續美化。請在「美化紀錄」切回最新一組後再美化。";
+  const BATCH_ARCHIVED_VERSION_NOTICE = tr("這一組是用舊版分析產生的，無法以它繼續美化。請在「美化紀錄」切回最新一組後再美化。");
 
   // Shows/hides and enables/disables the arrows for whatever the current RUN
   // is -- called after every updateRunSwitcher and whenever the index changes.
@@ -343,9 +343,9 @@
         // known where the backend actually told us (viewAnalyzeHistoryRecord's
         // /analyze/result call) -- null elsewhere (fresh analyze, imported
         // result folders, ...), where the two numbers alone still tell the story.
-        const parts = [`產生版本 v${compatibilityVersion}`];
-        if (currentCompatibilityVersion != null) parts.push(`系統版本 v${currentCompatibilityVersion}`);
-        els.resultCompatibilityVersion.textContent = parts.join(" / ") + (compatible === false ? "（已過舊，建議重新處理）" : "");
+        const parts = [tr("產生版本 v{compatibilityVersion}", { compatibilityVersion })];
+        if (currentCompatibilityVersion != null) parts.push(tr("系統版本 v{currentCompatibilityVersion}", { currentCompatibilityVersion }));
+        els.resultCompatibilityVersion.textContent = parts.join(" / ") + (compatible === false ? tr("（已過舊，建議重新處理）") : "");
       }
     }
   }
@@ -576,31 +576,31 @@
   // it), and the closing "。" becomes "…".
   const PROGRESS_FEED_TIPS = {
     analysis: [
-      "分析背景的光線與明暗分布", "檢視照片的構圖與取景細節",
-      "分析畫面主體與背景的視覺關係", "檢視照片整體的色彩與色調",
-      "分析亮部與暗部的細節層次", "檢視畫面中的視覺焦點",
-      "分析照片邊緣的留白與干擾元素", "檢視背景細節對主體的影響",
-      "分析光線方向與畫面的整體氛圍", "檢視構圖中的空間與視覺平衡",
-      "整理照片中值得保留的特色", "整理光線、色彩與構圖的改善建議",
-      "檢視前景、中景與遠景的層次關係", "分析畫面中冷色與暖色的搭配",
-      "檢視陰影區域的細節與可見度", "分析高光與反光對畫面的影響",
-      "檢視主體輪廓與周圍環境的區隔", "分析畫面中線條的延伸與視線引導",
-      "檢視不同區域的色彩飽和度", "分析照片中材質與紋理的呈現",
-      "檢視取景角度與透視的視覺效果", "分析畫面中光色變化的協調程度",
-      "檢視重要細節是否受到邊緣裁切影響", "分析背景元素的排列與疏密關係"
+      tr("分析背景的光線與明暗分布"), tr("檢視照片的構圖與取景細節"),
+      tr("分析畫面主體與背景的視覺關係"), tr("檢視照片整體的色彩與色調"),
+      tr("分析亮部與暗部的細節層次"), tr("檢視畫面中的視覺焦點"),
+      tr("分析照片邊緣的留白與干擾元素"), tr("檢視背景細節對主體的影響"),
+      tr("分析光線方向與畫面的整體氛圍"), tr("檢視構圖中的空間與視覺平衡"),
+      tr("整理照片中值得保留的特色"), tr("整理光線、色彩與構圖的改善建議"),
+      tr("檢視前景、中景與遠景的層次關係"), tr("分析畫面中冷色與暖色的搭配"),
+      tr("檢視陰影區域的細節與可見度"), tr("分析高光與反光對畫面的影響"),
+      tr("檢視主體輪廓與周圍環境的區隔"), tr("分析畫面中線條的延伸與視線引導"),
+      tr("檢視不同區域的色彩飽和度"), tr("分析照片中材質與紋理的呈現"),
+      tr("檢視取景角度與透視的視覺效果"), tr("分析畫面中光色變化的協調程度"),
+      tr("檢視重要細節是否受到邊緣裁切影響"), tr("分析背景元素的排列與疏密關係")
     ],
     edit: [
-      "調整整體光線與明暗層次", "平衡亮部與暗部的細節",
-      "校正白平衡與整體色溫", "細修畫面的色調與飽和度",
-      "優化光線，讓畫面更自然", "處理陰影區域的細節表現",
-      "讓色彩過渡更加平順", "提升主體的清晰度與立體感",
-      "強化畫面中的細節與質感", "修飾主體的質感與邊緣",
-      "調整背景與主體的層次關係", "保留原圖中的重要細節",
-      "檢查整體畫面的協調與完整"
+      tr("調整整體光線與明暗層次"), tr("平衡亮部與暗部的細節"),
+      tr("校正白平衡與整體色溫"), tr("細修畫面的色調與飽和度"),
+      tr("優化光線，讓畫面更自然"), tr("處理陰影區域的細節表現"),
+      tr("讓色彩過渡更加平順"), tr("提升主體的清晰度與立體感"),
+      tr("強化畫面中的細節與質感"), tr("修飾主體的質感與邊緣"),
+      tr("調整背景與主體的層次關係"), tr("保留原圖中的重要細節"),
+      tr("檢查整體畫面的協調與完整")
     ]
   };
   // Edit tips play once; then this one sentence stays on top until the edit ends.
-  const PROGRESS_FEED_EDIT_WAIT = "美化仍在進行中，請稍候";
+  const PROGRESS_FEED_EDIT_WAIT = tr("美化仍在進行中，請稍候");
   let progressFeedState = null;
   const progressFeedRecords = new WeakMap();
   const progressFeedViews = new WeakMap();
@@ -801,14 +801,14 @@
     // One-click editing uses only the scheduler's local edit tips, even on
     // paths where an analysis or personal direction is already available.
     if (tipsOnly) return [];
-    const progress = runCount > 1 ? `（已完成 ${doneCount}/${runCount} 張）` : "";
+    const progress = runCount > 1 ? tr("（已完成 {doneCount}/{runCount} 張）", { doneCount, runCount }) : "";
     const shownAnalysis = stripDisabledTopicItems(analysis, selections?.advanced_options);
     const messages = window.PhotoAgentResults.buildPlannedEditMessages({
       analysis: shownAnalysis, selections: selections || {}, userPrompt, overwritePrompt, aiPhotoEditing });
     // Play the submitted choices first, without a generic preamble. The
     // scheduler only cycles edit tips once this entire snapshot is consumed.
     if (messages.length) return messages;
-    return [aiPhotoEditing ? `AI 正在產生美化結果${progress}。` : `正在進行本機影像處理${progress}。`];
+    return [aiPhotoEditing ? tr("AI 正在產生美化結果{progress}。", { progress }) : tr("正在進行本機影像處理{progress}。", { progress })];
   }
 
   const timingDetails = document.querySelector("#timing-details");
@@ -1084,7 +1084,7 @@
       } else if (report?.job_id || report?.analyze_job_id) {
         await openReportInPanel(report, els.resultReportStatus);
       } else {
-        showNoticeModal("打不開這筆回報：可能沒有管理者權限，或回報已經刪掉了。");
+        showNoticeModal(tr("打不開這筆回報：可能沒有管理者權限，或回報已經刪掉了。"));
       }
     } finally {
       document.removeEventListener("photoagent:sectionchange", onSection);
@@ -1178,10 +1178,10 @@
   // the user agreed to drop it.
   async function confirmDropReview(message) {
     if (!isReviewDirty()) return true;
-    return showConfirmModal(message, { confirmLabel: "繼續", cancelLabel: "留在這裡", danger: false });
+    return showConfirmModal(message, { confirmLabel: tr("繼續"), cancelLabel: tr("留在這裡"), danger: false });
   }
-  const DROP_REVIEW_FOR_PHOTO = "這張照片還沒美化的調整會清掉。確定要打開另一張嗎？";
-  const DROP_REVIEW_FOR_VERSION = "還沒美化的調整會換成這一版的設定。確定要切換嗎？";
+  const DROP_REVIEW_FOR_PHOTO = tr("這張照片還沒美化的調整會清掉。確定要打開另一張嗎？");
+  const DROP_REVIEW_FOR_VERSION = tr("還沒美化的調整會換成這一版的設定。確定要切換嗎？");
 
   // True when the edits were handed over and the chat page will pick them up.
   function writeModeHandoff(caseKey) {
@@ -1284,7 +1284,7 @@
       entry = null;
     }
     if (!entry) {
-      showNoticeModal("找不到這張照片的處理紀錄。");
+      showNoticeModal(tr("找不到這張照片的處理紀錄。"));
       return;
     }
     try {
@@ -1531,7 +1531,7 @@
     };
     const openModal = (kind) => {
       closeModal();
-      modalTitle.textContent = kind === "model" ? "模型設定" : "人像修正設定";
+      modalTitle.textContent = kind === "model" ? tr("模型設定") : tr("人像修正設定");
       if (kind === "model") menuGroups.forEach((group) => modalBody.appendChild(group));
       else {
         modalBody.appendChild(portraitFold);
@@ -1735,7 +1735,7 @@
     if (ratio && ratio !== "auto") {
       parts.push(findAspectRatioOption(ratio)?.label || ratio);
     }
-    return parts.join(" · ") || "設定";
+    return parts.join(" · ") || tr("設定");
   }
 
   function updateApCaseSettingsTrigger() {
@@ -1763,8 +1763,8 @@
     // shown the values and left the user to work out which.
     const summary = apCaseSettingsSummaryText();
     const label = dirty
-      ? `開啟設定：${summary}（設定與目前結果不同）`
-      : `開啟設定：${summary}`;
+      ? tr("開啟設定：{summary}（設定與目前結果不同）", { summary })
+      : tr("開啟設定：{summary}", { summary });
     btn.title = label;
     btn.setAttribute("aria-label", label);
   }
@@ -2025,13 +2025,13 @@
       const sourceFile = selectedFile;
       const sourceUrl = selectedFileSourceUrl;
       if (!sourceFile && !sourceUrl) {
-        showError("這筆紀錄沒有可重新分析的原始照片。");
+        showError(tr("這筆紀錄沒有可重新分析的原始照片。"));
         restore();
         return;
       }
       const confirmed = await showConfirmModal(
-        "換分析引擎必須重新分析這張照片，目前的分析結果和建議都會被取代。要繼續嗎？",
-        { confirmLabel: "重新分析", danger: false, costSteps: [analysisPreflightStep()] }
+        tr("換分析引擎必須重新分析這張照片，目前的分析結果和建議都會被取代。要繼續嗎？"),
+        { confirmLabel: tr("重新分析"), danger: false, costSteps: [analysisPreflightStep()] }
       );
       if (!confirmed) {
         restore();
@@ -2043,7 +2043,7 @@
       try {
         await restartArchivedCase(sourceFile, sourceUrl, false, { settings });
       } catch (error) {
-        showError(`無法重新載入原始照片，請稍後再試。\n${friendlyError(error)}`);
+        showError(tr("無法重新載入原始照片，請稍後再試。") + "\n" + friendlyError(error));
         restore();
       }
     });
@@ -2131,7 +2131,7 @@
     if (shapeRow.childElementCount) {
       const scale = document.createElement("li");
       scale.className = "ar-scale";
-      ["← 直式", "方形", "橫式 →"].forEach((text) => {
+      [tr("← 直式"), tr("方形"), tr("橫式 →")].forEach((text) => {
         const span = document.createElement("span");
         span.textContent = text;
         scale.appendChild(span);
@@ -2292,13 +2292,13 @@
     const jobId = batchRecord ? batchRecord.analyzeJobId : singleFlowState.analyzeJobId;
     const file = batchRecord ? batchRecord.file : selectedFile;
     if (!(path === "local" && jobId) && !file) {
-      showError("這筆紀錄沒有可重新構圖的原始照片。");
+      showError(tr("這筆紀錄沒有可重新構圖的原始照片。"));
       restore();
       return;
     }
     const confirmed = await showConfirmModal(
-      "改變長寬比需要依新比例重新構圖，會再呼叫一次分析模型並產生額外費用；畫面建議的其他項目維持不變。要繼續嗎？",
-      { confirmLabel: "重新構圖", danger: false }
+      tr("改變長寬比需要依新比例重新構圖，會再呼叫一次分析模型並產生額外費用；畫面建議的其他項目維持不變。要繼續嗎？"),
+      { confirmLabel: tr("重新構圖"), danger: false }
     );
     if (!confirmed) {
       restore();
@@ -2325,7 +2325,7 @@
         pendingReframeOffers.set(owner, value);
       }
     } catch (error) {
-      showError(`重新構圖失敗：${error.message || error}`);
+      showError(tr("重新構圖失敗：{v1}", { v1: error.message || error }));
       if (reframeOwnerOnScreen() === owner) restore();
     } finally {
       reframesInFlight.delete(owner);
@@ -2364,12 +2364,12 @@
   // Asks whether to run 美化 on the new composition now; 立即美化 presses the
   // panel's own 美化 button so the usual cost confirm and submit path apply.
   async function offerEditAfterReframe(owner, pref) {
-    const done = pref === "auto" ? "已由 AI 選擇比例並完成重新構圖。"
-      : pref === "original" ? "已依原圖比例完成重新構圖。"
-        : `已依 ${pref} 完成重新構圖。`;
+    const done = pref === "auto" ? tr("已由 AI 選擇比例並完成重新構圖。")
+      : pref === "original" ? tr("已依原圖比例完成重新構圖。")
+        : tr("已依 {pref} 完成重新構圖。", { pref });
     const editNow = await showConfirmModal(
-      `${done}要直接以新構圖美化照片，還是先繼續調整其他建議？`,
-      { confirmLabel: "立即美化", cancelLabel: "繼續調整", danger: false }
+      tr("{done}要直接以新構圖美化照片，還是先繼續調整其他建議？", { done }),
+      { confirmLabel: tr("立即美化"), cancelLabel: tr("繼續調整"), danger: false }
     );
     const btn = els.inlineAnalysisContinueBtn;
     if (!editNow || !btn || btn.hidden || btn.disabled) return;
@@ -2399,16 +2399,16 @@
     els.apRecipeList?.querySelectorAll("li").forEach((li) => {
       const input = li.querySelector('input[type="checkbox"]');
       const label = labelOf(li);
-      if (input && checkedByLabel.has(label) && !/^重新構圖\s*[:：]/.test(label)) {
+      if (input && checkedByLabel.has(label) && !REFRAME_LABEL_RE.test(label)) {
         input.checked = checkedByLabel.get(label);
       }
     });
   }
 
   function reframeLoadingMessage(pref) {
-    if (pref === "auto") return "由 AI 選擇比例並重新構圖中…";
-    if (pref === "original") return "依原圖比例重新構圖中…";
-    return `依 ${pref} 重新構圖中…`;
+    if (pref === "auto") return tr("由 AI 選擇比例並重新構圖中…");
+    if (pref === "original") return tr("依原圖比例重新構圖中…");
+    return tr("依 {pref} 重新構圖中…", { pref });
   }
 
   // Shows the reframing indicators only for the photo on screen; the batch-wide
@@ -2420,14 +2420,14 @@
     if (els.reframeLoading) els.reframeLoading.hidden = !busy;
     if (els.reframeLoadingText) els.reframeLoadingText.textContent = busy ? reframeLoadingMessage(pref) : "";
     els.apRecipeList?.querySelectorAll("li").forEach((li) => {
-      const reframeItem = /^重新構圖\s*[:：]/.test(li.querySelector(".step-cb-label")?.textContent || "");
+      const reframeItem = REFRAME_LABEL_RE.test(li.querySelector(".step-cb-label")?.textContent || "");
       const reframing = busy && reframeItem;
       li.classList.toggle("is-reframing", reframing);
       li.querySelector(".reframe-busy-label")?.remove();
       if (reframing) {
         const note = document.createElement("span");
         note.className = "reframe-busy-label";
-        note.textContent = "重新構圖中…";
+        note.textContent = tr("重新構圖中…");
         li.querySelector("label")?.appendChild(note);
       }
     });
@@ -2456,8 +2456,8 @@
     const state = singleFlowState;
     if (!state?.analysis?._skipped_analysis || !state.analyzeJobId) return;
     const confirmed = await showConfirmModal(
-      "AI 會分析整張照片，整理出修圖建議；你寫的個人化需求會保留。要繼續嗎？",
-      { confirmLabel: "開始分析", danger: false, costSteps: [analysisPreflightStep()] }
+      tr("AI 會分析整張照片，整理出修圖建議；你寫的個人化需求會保留。要繼續嗎？"),
+      { confirmLabel: tr("開始分析"), danger: false, costSteps: [analysisPreflightStep()] }
     );
     if (!confirmed || singleFlowState !== state) return;
     // The case on screen, not singleFlowState: stepping to another version
@@ -2488,7 +2488,7 @@
       adoptSkippedCaseAnalysis(analysis, jobId);
       landed = true;
     } catch (error) {
-      if (historyViewToken === myToken) showError(`分析失敗：${error.message || error}`);
+      if (historyViewToken === myToken) showError(tr("分析失敗：{v1}", { v1: error.message || error }));
     } finally {
       // Left alone once another record took the screen: opening it already
       // tore this loading card down and put its own view up.
@@ -2523,7 +2523,7 @@
     setFlowStage("analyzing");
     setAnalysisPreviewDisabled(true);
     if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
-    setProcTitle("正在分析照片");
+    setProcTitle(tr("正在分析照片"));
     startProcSubRotation(analyzeSubMessages);
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
     if (els.versionStrip) els.versionStrip.hidden = true;
@@ -2562,16 +2562,16 @@
     updateInlineAnalysisContinueBtnState();
   }
 
-  const SKIP_HINT_TEXT = "這個版本只依照個人化需求修圖，沒有分析整張照片，所以沒有 AI 的修圖建議。可以直接在下方修改個人化需求；想要 AI 給建議的話，請按「美化」左邊的「幫我分析」。";
+  const SKIP_HINT_TEXT = tr("這個版本只依照個人化需求修圖，沒有分析整張照片，所以沒有 AI 的修圖建議。可以直接在下方修改個人化需求；想要 AI 給建議的話，請按「美化」左邊的「幫我分析」。");
 
   function setSkipHintBusy(busy) {
     if (els.apSkipAnalyzeBtn) {
       els.apSkipAnalyzeBtn.disabled = busy;
-      els.apSkipAnalyzeBtn.textContent = busy ? "分析中…" : "幫我分析";
+      els.apSkipAnalyzeBtn.textContent = busy ? tr("分析中…") : tr("幫我分析");
     }
     if (els.apSkipHintText) {
       els.apSkipHintText.textContent = busy
-        ? "正在分析整張照片，完成後建議會顯示在這裡。"
+        ? tr("正在分析整張照片，完成後建議會顯示在這裡。")
         : SKIP_HINT_TEXT;
     }
     const btn = els.inlineAnalysisContinueBtn;
@@ -2662,70 +2662,70 @@
     playful: {
       notices: [{
         categories: ["smile_issue"],
-        setting: "笑容：開朗笑",
-        reason: "讓表情與活潑、輕鬆的姿勢一致"
+        setting: tr("笑容：開朗笑"),
+        reason: tr("讓表情與活潑、輕鬆的姿勢一致")
       }]
     },
     candid: {
       notices: [{
         categories: ["gaze_issue"],
-        setting: "眼神對焦：關閉",
-        reason: "保留自然、非擺拍的鏡頭外視線"
+        setting: tr("眼神對焦：關閉"),
+        reason: tr("保留自然、非擺拍的鏡頭外視線")
       }]
     },
     elegant: {
       notices: [{
         categories: ["smile_issue"],
-        setting: "笑容：微笑",
-        reason: "讓表情維持優雅、自然且不過度張揚"
+        setting: tr("笑容：微笑"),
+        reason: tr("讓表情維持優雅、自然且不過度張揚")
       }]
     },
     dynamic: {
       notices: [
         {
           categories: ["gaze_issue"],
-          setting: "眼神對焦：關閉",
-          reason: "讓視線配合自然的動態瞬間"
+          setting: tr("眼神對焦：關閉"),
+          reason: tr("讓視線配合自然的動態瞬間")
         },
         {
           categories: ["hair_issue"],
-          setting: "亂髮偵測：保留髮絲動態",
-          reason: "保留人物移動時自然的髮絲方向"
+          setting: tr("亂髮偵測：保留髮絲動態"),
+          reason: tr("保留人物移動時自然的髮絲方向")
         }
       ]
     },
     cool: {
       notices: [{
         categories: ["smile_issue"],
-        setting: "笑容：不笑",
-        reason: "維持冷靜、俐落的姿態氛圍"
+        setting: tr("笑容：不笑"),
+        reason: tr("維持冷靜、俐落的姿態氛圍")
       }]
     },
     vsign: {
       notices: [{
         categories: ["smile_issue"],
-        setting: "笑容：開朗笑",
-        reason: "讓表情與 V-Sign 的輕鬆、開朗氛圍一致"
+        setting: tr("笑容：開朗笑"),
+        reason: tr("讓表情與 V-Sign 的輕鬆、開朗氛圍一致")
       }]
     },
     cheer: {
       notices: [{
         categories: ["smile_issue"],
-        setting: "笑容：開朗笑",
-        reason: "讓表情與開放、歡呼的姿勢一致"
+        setting: tr("笑容：開朗笑"),
+        reason: tr("讓表情與開放、歡呼的姿勢一致")
       }]
     }
   };
 
   const POSE_OPTION_LABELS = {
-    playful: "俏皮", candid: "自然抓拍", strong: "強勢", elegant: "優雅",
-    dynamic: "動感", cool: "酷帥", vsign: "勝利手勢", cheer: "歡呼"
+    playful: tr("俏皮"), candid: tr("自然抓拍"), strong: tr("強勢"), elegant: tr("優雅"),
+    dynamic: tr("動感"), cool: tr("酷帥"), vsign: tr("勝利手勢"), cheer: tr("歡呼")
   };
 
   const POSE_RESTORE_NOTICES = {
-    gaze_issue: "眼神對焦：已還原為原本設定",
-    hair_issue: "亂髮偵測：已還原為原本設定",
-    smile_issue: "笑容：已還原為原本設定"
+    gaze_issue: tr("眼神對焦：已還原為原本設定"),
+    hair_issue: tr("亂髮偵測：已還原為原本設定"),
+    smile_issue: tr("笑容：已還原為原本設定")
   };
 
   function showPoseSuggestionNotice(pose, definition, changes) {
@@ -2739,12 +2739,12 @@
     let title;
     if (!applicable.length && previousPoseLabel) {
       title = pose === "default"
-        ? `已取消 ${previousPoseLabel} 的自動調整`
-        : `已切換為 ${poseLabel}`;
+        ? tr("已取消 {previousPoseLabel} 的自動調整", { previousPoseLabel })
+        : tr("已切換為 {poseLabel}", { poseLabel });
     } else if (restoredCategories.length) {
-      title = `已配合 ${poseLabel} 調整個人設定`;
+      title = tr("已配合 {poseLabel} 調整個人設定", { poseLabel });
     } else {
-      title = `已配合 ${poseLabel} 自動調整`;
+      title = tr("已配合 {poseLabel} 自動調整", { poseLabel });
     }
     const lines = [title];
     restoredCategories.forEach((category) => {
@@ -2752,7 +2752,7 @@
       if (notice) lines.push(notice);
     });
     applicable.forEach((notice) => {
-      lines.push(notice.setting, `原因：${notice.reason}`);
+      lines.push(notice.setting, tr("原因：{reason}", { reason: notice.reason }));
     });
     showNoticeModal(lines.join("\n"));
   }
@@ -3085,7 +3085,7 @@
     name.textContent = sub ? `↳ ${label}` : label;
     const val = document.createElement("span");
     val.className = "timing-value";
-    val.textContent = typeof duration === "number" ? `${(duration / 1000).toFixed(1)}s` : "未執行";
+    val.textContent = typeof duration === "number" ? `${(duration / 1000).toFixed(1)}s` : tr("未執行");
     row.appendChild(name);
     row.appendChild(val);
     container.appendChild(row);
@@ -3111,7 +3111,7 @@
     const totalRow = document.createElement("div");
     totalRow.className = "timing-row timing-total";
     const totalName = document.createElement("span");
-    totalName.textContent = "合計";
+    totalName.textContent = tr("合計");
     const totalVal = document.createElement("span");
     totalVal.className = "timing-value";
     totalVal.textContent = `${(total / 1000).toFixed(1)}s`;
@@ -3588,7 +3588,7 @@
       const link = document.getElementById(id);
       if (!link) continue;
       link.toggleAttribute("aria-disabled", busy);
-      link.title = busy ? "分析或美化完成後才能切換" : "切換到對話模式";
+      link.title = busy ? tr("分析或美化完成後才能切換") : tr("切換到對話模式");
     }
     // #page-scroll-hint gates on this stage (PAGE_SCROLL_HINT_STAGES), and
     // entering/leaving 修圖中 happens in place on the results page -- no
@@ -3717,8 +3717,8 @@
       // is its own source photo in that case, so only hide the button when
       // neither is available.
       els.downloadLink.hidden = !selectedFile && !selectedFileSourceUrl;
-      els.downloadLink.title = "下載原圖";
-      els.downloadLink.setAttribute("aria-label", "下載原圖");
+      els.downloadLink.title = tr("下載原圖");
+      els.downloadLink.setAttribute("aria-label", tr("下載原圖"));
     }
     // Same debug-only gate revealResultsIfNeeded applies once the edit stage
     // finishes -- the analyze-stage prompts (photo_analysis/
@@ -3781,7 +3781,7 @@
       async function continueHandler() {
         if (historyViewToken !== myToken) { clearPendingResultsWait(); return; }
         const est = preflightEditEstimate(singleFlowState.imageModel, singleFlowState.imageQuality);
-        const confirmed = await showPreflightCostModal([{ label: "美化花費", modelLabel: est.label, cost: est.cost }]);
+        const confirmed = await showPreflightCostModal([{ label: tr("美化花費"), modelLabel: est.label, cost: est.cost }]);
         if (!confirmed) return;
         clearPendingResultsWait();
         resolve();
@@ -4165,11 +4165,11 @@
           // with #preflight-cost-modal's own row styling rather than a
           // plain-text sentence.
           const confirmed = await showConfirmModal(
-            "你沒有做任何修改，確定要再執行一次美化嗎？",
-            { confirmLabel: "美化", danger: false, costSteps: [{ label: "美化花費", modelLabel: est.label, cost: est.cost }] });
+            tr("你沒有做任何修改，確定要再執行一次美化嗎？"),
+            { confirmLabel: tr("美化"), danger: false, costSteps: [{ label: tr("美化花費"), modelLabel: est.label, cost: est.cost }] });
           if (!confirmed) return;
         } else {
-          const costConfirmed = await showPreflightCostModal([{ label: "美化花費", modelLabel: est.label, cost: est.cost }]);
+          const costConfirmed = await showPreflightCostModal([{ label: tr("美化花費"), modelLabel: est.label, cost: est.cost }]);
           if (!costConfirmed) return;
         }
         clearInlineAnalysisWait();
@@ -4214,7 +4214,7 @@
         script.onload = () => resolve(window.libheif);
         script.onerror = () => {
           libheifLoadPromise = null; // allow retrying on a later selection
-          reject(new Error("HEIC 預覽元件載入失敗"));
+          reject(new Error(tr("HEIC 預覽元件載入失敗")));
         };
         document.head.appendChild(script);
       });
@@ -4247,7 +4247,7 @@
         script.onload = () => resolve(window.html2canvas);
         script.onerror = () => {
           html2canvasLoadPromise = null; // allow retrying next time the sheet opens
-          reject(new Error("截圖元件載入失敗"));
+          reject(new Error(tr("截圖元件載入失敗")));
         };
         document.head.appendChild(script);
       });
@@ -4407,7 +4407,7 @@
         // Past ~8s something is stuck, not just slow -- reportModal's
         // existing "無法擷取畫面預覽" fallback is a fine outcome; an
         // indefinitely hung 回報 modal is not.
-        new Promise((_, reject) => setTimeout(() => reject(new Error("擷取畫面逾時")), 8000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error(tr("擷取畫面逾時"))), 8000))
       ]);
 
       // Encode JPEG under size cap (quality-first then downscale).
@@ -4416,7 +4416,7 @@
       // If encoding produced nothing (very unlikely), fall back to PNG.
       return await new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/png"));
     } catch (err) {
-      console.error("回報截圖擷取失敗", err);
+      console.error(tr("回報截圖擷取失敗"), err);
       return null;
     }
   }
@@ -4433,7 +4433,7 @@
       const buffer = await file.arrayBuffer();
       const decoder = new instance.HeifDecoder();
       const images = decoder.decode(new Uint8Array(buffer));
-      if (!images.length) throw new Error("HEIC 檔案沒有可解碼的影像");
+      if (!images.length) throw new Error(tr("HEIC 檔案沒有可解碼的影像"));
       const image = images[0];
       const width = image.get_width();
       const height = image.get_height();
@@ -4446,7 +4446,7 @@
 
       await new Promise((resolve, reject) => {
         image.display(imageData, (displayData) => {
-          if (!displayData) reject(new Error("HEIC 解碼失敗"));
+          if (!displayData) reject(new Error(tr("HEIC 解碼失敗")));
           else resolve();
         });
       });
@@ -4490,7 +4490,7 @@
   async function setSelectedFile(file) {
     hideError();
     if (!isSupportedImageFile(file)) {
-      showError("請選擇 JPG、PNG、WebP 或 HEIC/HEIF 圖片。");
+      showError(tr("請選擇 JPG、PNG、WebP 或 HEIC/HEIF 圖片。"));
       return;
     }
 
@@ -4796,9 +4796,9 @@
       // fallback buildPendingSourceZip's debug-mode path applies.
       const blob = selectedFile || await fetchWithRetry(selectedFileSourceUrl).then((response) => response.blob());
       await saveImageToDevice(blob, (selectedFile && selectedFile.name) || buildDownloadImageFilename());
-      showNoticeModal("已下載完成。");
+      showNoticeModal(tr("已下載完成。"));
     } catch (error) {
-      showError("下載失敗，請稍後再試。");
+      showError(tr("下載失敗，請稍後再試。"));
     }
   }
 
@@ -4820,9 +4820,9 @@
     }
     try {
       await saveImageToDevice(record.file, record.file.name || buildDownloadImageFilename());
-      showNoticeModal("已下載完成。");
+      showNoticeModal(tr("已下載完成。"));
     } catch (error) {
-      showError("下載失敗，請稍後再試。");
+      showError(tr("下載失敗，請稍後再試。"));
     }
   }
 
@@ -4864,7 +4864,7 @@
     els.downloadLink.hidden = !lastResult;
     lastDoneRunsCount = (runs || []).filter((run) => run.status === "done").length;
     closeDownloadMenu();
-    const hint = lastDoneRunsCount > 1 ? `下載選項（共 ${lastDoneRunsCount} 張）` : "下載結果";
+    const hint = lastDoneRunsCount > 1 ? tr("下載選項（共 {lastDoneRunsCount} 張）", { lastDoneRunsCount }) : tr("下載結果");
     els.downloadLink.title = hint;
     els.downloadLink.setAttribute("aria-label", hint);
   }
@@ -4953,7 +4953,7 @@
     if (els.reportModalScreenshotCaptureBtn) {
       els.reportModalScreenshotCaptureBtn.hidden = false;
       els.reportModalScreenshotCaptureBtn.disabled = false;
-      els.reportModalScreenshotCaptureBtn.textContent = "擷取目前畫面";
+      els.reportModalScreenshotCaptureBtn.textContent = tr("擷取目前畫面");
     }
   }
 
@@ -4970,10 +4970,10 @@
       if (els.reportModalScreenshotCaptureBtn) {
         els.reportModalScreenshotCaptureBtn.hidden = false;
         els.reportModalScreenshotCaptureBtn.disabled = false;
-        els.reportModalScreenshotCaptureBtn.textContent = "重新擷取";
+        els.reportModalScreenshotCaptureBtn.textContent = tr("重新擷取");
       }
       if (els.reportModalScreenshotStatus) {
-        els.reportModalScreenshotStatus.textContent = "無法擷取畫面預覽，回報仍可送出。";
+        els.reportModalScreenshotStatus.textContent = tr("無法擷取畫面預覽，回報仍可送出。");
         els.reportModalScreenshotStatus.hidden = false;
       }
       if (els.reportModalScreenshot) els.reportModalScreenshot.hidden = true;
@@ -5006,7 +5006,7 @@
     const myTarget = reportModalTarget;
     if (els.reportModalScreenshotCaptureBtn) {
       els.reportModalScreenshotCaptureBtn.disabled = true;
-      els.reportModalScreenshotCaptureBtn.textContent = "擷取中…";
+      els.reportModalScreenshotCaptureBtn.textContent = tr("擷取中…");
     }
     // No image ready yet for this attempt -- keep the preview box hidden
     // and surface progress via the status line instead.
@@ -5014,7 +5014,7 @@
     if (els.reportModalScreenshotPreviewBtn) els.reportModalScreenshotPreviewBtn.hidden = true;
     if (els.reportModalScreenshotDeleteBtn) els.reportModalScreenshotDeleteBtn.hidden = true;
     if (els.reportModalScreenshotStatus) {
-      els.reportModalScreenshotStatus.textContent = "擷取畫面中…";
+      els.reportModalScreenshotStatus.textContent = tr("擷取畫面中…");
       els.reportModalScreenshotStatus.hidden = false;
     }
     const blob = await captureReportScreenshot(myTarget.jobId, myTarget.path, myTarget.sourceRun);
@@ -5058,9 +5058,9 @@
       userPrompt
     };
     reportModalTarget = target;
-    if (els.reportModalTitle) els.reportModalTitle.textContent = lastResult ? "回報此結果" : "回報問題";
+    if (els.reportModalTitle) els.reportModalTitle.textContent = lastResult ? tr("回報此結果") : tr("回報問題");
     if (els.reportModalNote) {
-      els.reportModalNote.placeholder = lastResult ? "請描述這筆結果的問題…" : "請描述遇到的問題…";
+      els.reportModalNote.placeholder = lastResult ? tr("請描述這筆結果的問題…") : tr("請描述遇到的問題…");
     }
     if (els.reportModalName) els.reportModalName.value = getCurrentUser() || "";
     if (els.reportModalNote) els.reportModalNote.value = "";
@@ -5101,7 +5101,7 @@
     if (!reportModalTarget) return;
     const name = normalizeUsername(els.reportModalName ? els.reportModalName.value : "");
     if (!name) {
-      showReportModalError("請輸入你的名稱。");
+      showReportModalError(tr("請輸入你的名稱。"));
       return;
     }
     const note = (els.reportModalNote ? els.reportModalNote.value : "").trim();
@@ -5115,9 +5115,9 @@
       // screenshot attached.
       await reportJob(name, target.jobId, target.path, note, target.userPrompt, reportModalScreenshotBlob, await reportCaseRef(target));
       closeReportModal();
-      showNoticeModal("已回報，我們會盡快確認這筆結果。");
+      showNoticeModal(tr("已回報，我們會盡快確認這筆結果。"));
     } catch (err) {
-      showReportModalError(err.message || "回報失敗，請稍後再試。");
+      showReportModalError(err.message || tr("回報失敗，請稍後再試。"));
     } finally {
       if (els.reportModalSubmitBtn) els.reportModalSubmitBtn.disabled = false;
     }
@@ -5135,7 +5135,7 @@
   function showDownloadProgress() {
     if (!els.downloadProgressToast) return;
     if (els.downloadProgressFill) els.downloadProgressFill.style.width = "0%";
-    if (els.downloadProgressLabel) els.downloadProgressLabel.textContent = "打包下載中…";
+    if (els.downloadProgressLabel) els.downloadProgressLabel.textContent = tr("打包下載中…");
     els.downloadProgressToast.hidden = false;
     // A short delay so the 0% state is painted before transitioning to 25%
     // -- rAF would be the "proper" way to wait for that paint, but it never
@@ -5154,8 +5154,8 @@
     if (els.downloadProgressFill) els.downloadProgressFill.style.width = `${pct}%`;
     if (els.downloadProgressLabel) {
       els.downloadProgressLabel.textContent = total > 1
-        ? `打包下載中…（${done}/${total}）`
-        : "打包下載中…";
+        ? tr("打包下載中…（{done}/{total}）", { done, total })
+        : tr("打包下載中…");
     }
   }
 
@@ -5182,14 +5182,14 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       success = true;
     } catch (error) {
-      showError("打包下載失敗，請稍後再試。");
+      showError(tr("打包下載失敗，請稍後再試。"));
     } finally {
       hideDownloadProgress(success);
     }
     // Confirms the zip actually landed -- otherwise the only feedback is the
     // progress toast quietly fading out, easy to miss for a multi-select
     // download that took a while to build.
-    if (success) showNoticeModal("已下載完成。");
+    if (success) showNoticeModal(tr("已下載完成。"));
   }
 
   // Single current-result download: just the generated image itself, not a
@@ -5208,9 +5208,9 @@
       await saveImageToDevice(blob, buildDownloadImageFilename(format.ext));
       // Same completion notice downloadZip shows -- this path bypasses that
       // shared function (a single image needs no zip), so it needs its own.
-      showNoticeModal("已下載完成。");
+      showNoticeModal(tr("已下載完成。"));
     } catch (error) {
-      showError("下載失敗，請稍後再試。");
+      showError(tr("下載失敗，請稍後再試。"));
     }
   }
 
@@ -5375,11 +5375,11 @@
   function filterBatchImageFiles(files) {
     const images = files.filter((file) => isSupportedImageFile(file));
     if (!images.length) {
-      showError("請選擇 JPG、PNG、WebP 或 HEIC/HEIF 圖片。");
+      showError(tr("請選擇 JPG、PNG、WebP 或 HEIC/HEIF 圖片。"));
       return null;
     }
     if (images.length !== files.length) {
-      showError("已略過非圖片檔案。");
+      showError(tr("已略過非圖片檔案。"));
     }
     return images;
   }
@@ -5482,7 +5482,7 @@
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "dz-thumb-remove";
-    removeBtn.setAttribute("aria-label", "移除照片");
+    removeBtn.setAttribute("aria-label", tr("移除照片"));
     removeBtn.textContent = "×";
     removeBtn.addEventListener("click", (event) => {
       event.preventDefault();
@@ -5512,10 +5512,10 @@
     const addMore = document.createElement("div");
     addMore.className = "dz-add-more";
     addMore.setAttribute("role", "button");
-    addMore.setAttribute("aria-label", "新增照片");
+    addMore.setAttribute("aria-label", tr("新增照片"));
     addMore.innerHTML = `
       <span class="dz-add-more-icon">+</span>
-      <span class="dz-add-more-label">新增照片</span>
+      <span class="dz-add-more-label">${tr("新增照片")}</span>
     `;
     els.dzMulti.appendChild(addMore);
   }
@@ -5590,17 +5590,17 @@
   // category OpenAI adds later) falls back to a generic explanation rather
   // than guessing a specific reason that might be wrong.
   const SAFETY_VIOLATION_LABELS = {
-    sexual: "照片可能包含裸露或性暗示內容",
-    violence: "照片可能包含暴力或血腥內容",
-    "self-harm": "照片可能包含自我傷害相關內容",
-    self_harm: "照片可能包含自我傷害相關內容",
-    hate: "照片可能包含仇恨或歧視相關內容",
-    harassment: "照片可能包含騷擾相關內容"
+    sexual: tr("照片可能包含裸露或性暗示內容"),
+    violence: tr("照片可能包含暴力或血腥內容"),
+    "self-harm": tr("照片可能包含自我傷害相關內容"),
+    self_harm: tr("照片可能包含自我傷害相關內容"),
+    hate: tr("照片可能包含仇恨或歧視相關內容"),
+    harassment: tr("照片可能包含騷擾相關內容")
   };
 
   function friendlyError(error) {
     if (error.message === "Failed to fetch") {
-      return "目前無法連線到伺服器，請稍後再試，或確認網路連線是否正常。";
+      return tr("目前無法連線到伺服器，請稍後再試，或確認網路連線是否正常。");
     }
     // error.code is the backend's short error code (see server.py's
     // process_for_api except block); ai_service_timeout means the AI
@@ -5608,7 +5608,7 @@
     // -- error.message for this case is a raw requests.Timeout string,
     // too technical to show as-is.
     if (error.code === "ai_service_timeout") {
-      return "系統回應逾時，請稍後再試一次。";
+      return tr("系統回應逾時，請稍後再試一次。");
     }
     const msg = error.message || "";
     // OpenAI's images/edits API rejects requests its safety system flags --
@@ -5625,11 +5625,11 @@
         : [];
       const knownReasons = violations.map((v) => SAFETY_VIOLATION_LABELS[v]).filter(Boolean);
       const reasonText = knownReasons.length
-        ? knownReasons.join("、") + "，"
-        : "這通常是因為照片中包含平台內容政策不允許編輯的元素（例如可辨識的受著作權保護角色/商標，或其他敏感內容），";
-      return `這張照片目前無法完成美化——${reasonText}基於平台政策無法編輯這類內容。請嘗試更換照片，或調整美化風格後再試一次。`;
+        ? knownReasons.join(tr("、")) + tr("，")
+        : tr("這通常是因為照片中包含平台內容政策不允許編輯的元素（例如可辨識的受著作權保護角色/商標，或其他敏感內容），");
+      return tr("這張照片目前無法完成美化——{reasonText}基於平台政策無法編輯這類內容。請嘗試更換照片，或調整美化風格後再試一次。", { reasonText });
     }
-    return msg || "發生未知錯誤。";
+    return msg || tr("發生未知錯誤。");
   }
 
   // Analyze once + edit `runCount` times, ALL inside ONE backend job
@@ -5743,7 +5743,7 @@
       return;
     }
     if (!selectedFile) {
-      showError("請先上傳一張照片。");
+      showError(tr("請先上傳一張照片。"));
       return;
     }
     setCurrentCaseTimes({ uploadedAt: Date.now() / 1000 });
@@ -5778,7 +5778,7 @@
     if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = false;
     procVisual.classList.remove("done");
     procVisual.style.height = "";
-    if (procTitle) procTitle.textContent = "正在分析照片";
+    if (procTitle) procTitle.textContent = tr("正在分析照片");
     startProcSubRotation(analyzeSubMessages);
     showSection("processing");
 
@@ -5809,12 +5809,12 @@
           const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, advancedOptions });
           analysis = analyzeData.analysis;
           const t = analysis.timings || {};
-          recordAnalyzeTiming("初步分析", Date.now() - stepStart, [
-            { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
+          recordAnalyzeTiming(tr("初步分析"), Date.now() - stepStart, [
+            { label: tr("Step 2：照片分析"), duration: secToMs(t["Step 2 - photo_analysis"]) }
           ]);
         } else {
           analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, user: getCurrentUser() });
-          recordAnalyzeTiming("送出分析任務", Date.now() - stepStart);
+          recordAnalyzeTiming(tr("送出分析任務"), Date.now() - stepStart);
 
           stepStart = Date.now();
           await pollJobStatus(analyzeJobId, { path: "local" });
@@ -5824,10 +5824,10 @@
           const analyzeResult = await getAnalyzeResult(analyzeJobId);
           analysis = analyzeResult.result.analysis;
           const t = analysis.timings || {};
-          recordAnalyzeTiming("分析中", analyzeWaitDuration, [
-            { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
+          recordAnalyzeTiming(tr("分析中"), analyzeWaitDuration, [
+            { label: tr("Step 2：照片分析"), duration: secToMs(t["Step 2 - photo_analysis"]) }
           ]);
-          recordAnalyzeTiming("取得分析結果", Date.now() - stepStart);
+          recordAnalyzeTiming(tr("取得分析結果"), Date.now() - stepStart);
         }
       }
 
@@ -5980,7 +5980,7 @@
 
     setAnalysisPreviewDisabled(true);
     procVisual.classList.remove("done");
-    setProcTitle(useCombinedJob ? "正在分析照片" : (aiPhotoEditing ? "AI 正在美化" : "正在處理照片"));
+    setProcTitle(useCombinedJob ? tr("正在分析照片") : (aiPhotoEditing ? tr("AI 正在美化") : tr("正在處理照片")));
     // Same split the title above already makes, so the two can't drift: a
     // combined job (一鍵修圖 on the local path) does its OWN analysis inside
     // this one job and is still analyzing at this point -- onCombinedStage
@@ -6006,7 +6006,7 @@
       // processing screen's title, and the shared step indicator) that would
       // otherwise describe THIS job on whatever the user is now looking at.
       if (!isCurrent()) return;
-      setProcTitle(aiPhotoEditing ? "AI 正在美化" : "正在處理照片");
+      setProcTitle(aiPhotoEditing ? tr("AI 正在美化") : tr("正在處理照片"));
       // The backend reporting its analyze->edit switch is the only honest
       // moment to move the indicator on for a combined job: there's no
       // client-side transition to hang it off, and anything earlier (e.g.
@@ -6097,13 +6097,13 @@
             run.result = runData.result;
             const t = (runData.result["extra-info"] || {}).timings || {};
             run.timings = [
-              { label: "分析並美化", duration: Date.now() - stepStart, children: [
-                { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) },
-                { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
-                { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-                { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
-                { label: "Step 5b：眼部修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
-                { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
+              { label: tr("分析並美化"), duration: Date.now() - stepStart, children: [
+                { label: tr("Step 2：照片分析"), duration: secToMs(t["Step 2 - photo_analysis"]) },
+                { label: tr("Step 3：使用者補充指令"), duration: secToMs(t["Step 3 - user_instruction_review"]) },
+                { label: tr("Step 4：裁切驗證"), duration: secToMs(t["Step 4 - crop_validation"]) },
+                { label: tr("Step 5：美化執行"), duration: secToMs(t["Step 5 - image_edit"]) },
+                { label: tr("Step 5b：眼部修正"), duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
+                { label: tr("Step 6：品質檢查"), duration: secToMs(t["Step 6 - quality_check"]) }
               ] }
             ];
             doneCount += 1;
@@ -6127,7 +6127,7 @@
       }
 
       if (!myRuns.some((r) => r.status === "done")) {
-        throw new Error(myRuns.find((r) => r.error)?.error || "全部處理失敗，請稍後再試。");
+        throw new Error(myRuns.find((r) => r.error)?.error || tr("全部處理失敗，請稍後再試。"));
       }
       // Remember the first successfully-done RUN's analysis + job id so a
       // later re-run (回到流程) goes through the normal two-stage continueJob
@@ -6161,7 +6161,7 @@
       // Timings go into one shared list (dom.js) that belongs to whichever
       // record is on screen -- once the user has moved to another record,
       // this job's entries would show up in THAT record's 處理時間.
-      if (isCurrent()) addTiming("提交後續處理", Date.now() - stepStart);
+      if (isCurrent()) addTiming(tr("提交後續處理"), Date.now() - stepStart);
 
       stepStart = Date.now();
       await pollJobStatus(finalJobId, { path: processingPath });
@@ -6170,25 +6170,25 @@
       stepStart = Date.now();
       ({ image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath }));
       const t = (result["extra-info"] || {}).timings || {};
-      if (isCurrent()) addTiming("AI 美化中", finishWaitDuration, [
-        { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
-        { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-        { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
-        { label: "Step 5b：眼部修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
-        { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
+      if (isCurrent()) addTiming(tr("AI 美化中"), finishWaitDuration, [
+        { label: tr("Step 3：使用者補充指令"), duration: secToMs(t["Step 3 - user_instruction_review"]) },
+        { label: tr("Step 4：裁切驗證"), duration: secToMs(t["Step 4 - crop_validation"]) },
+        { label: tr("Step 5：美化執行"), duration: secToMs(t["Step 5 - image_edit"]) },
+        { label: tr("Step 5b：眼部修正"), duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
+        { label: tr("Step 6：品質檢查"), duration: secToMs(t["Step 6 - quality_check"]) }
       ]);
-      if (isCurrent()) addTiming("取得結果", Date.now() - stepStart);
+      if (isCurrent()) addTiming(tr("取得結果"), Date.now() - stepStart);
 
       const extraInfo = result["extra-info"] || {};
       const usedImageModelLabel = extraInfo.image_model
         ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
-        : "本機處理";
+        : tr("本機處理");
       const usedAnalysisModelLabel = extraInfo.analysis_model
         ? (window.PhotoAgentConfig.analysisModels[extraInfo.analysis_model] || extraInfo.analysis_model)
         : window.PhotoAgentConfig.analysisModel;
       const usedModelLabel = isDebugUiActive
       ? `${usedAnalysisModelLabel} + ${usedImageModelLabel}`
-      : "AI 智能美化";
+      : tr("AI 智能美化");
 
       const data = {
         image: imageUrl,
@@ -6262,7 +6262,7 @@
       }, POLL_CONCURRENCY);
 
       if (!myRuns.some((r) => r.status === "done")) {
-        throw new Error(myRuns.find((r) => r.error)?.error || "全部處理失敗，請稍後再試。");
+        throw new Error(myRuns.find((r) => r.error)?.error || tr("全部處理失敗，請稍後再試。"));
       }
       if (isCurrent()) await showSingleResult();
     }
@@ -6328,15 +6328,15 @@
       const t = (result["extra-info"] || {}).timings || {};
       run.timings = [
         ...(analyzeTimings || []),
-        { label: "提交後續處理", duration: submitMs },
-        { label: "AI 美化中", duration: pollMs, children: [
-          { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
-          { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-          { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
-          { label: "Step 5b：眼部修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
-          { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
+        { label: tr("提交後續處理"), duration: submitMs },
+        { label: tr("AI 美化中"), duration: pollMs, children: [
+          { label: tr("Step 3：使用者補充指令"), duration: secToMs(t["Step 3 - user_instruction_review"]) },
+          { label: tr("Step 4：裁切驗證"), duration: secToMs(t["Step 4 - crop_validation"]) },
+          { label: tr("Step 5：美化執行"), duration: secToMs(t["Step 5 - image_edit"]) },
+          { label: tr("Step 5b：眼部修正"), duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
+          { label: tr("Step 6：品質檢查"), duration: secToMs(t["Step 6 - quality_check"]) }
         ] },
-        { label: "取得結果", duration: fetchMs }
+        { label: tr("取得結果"), duration: fetchMs }
       ];
     } catch (error) {
       run.status = "error";
@@ -6406,13 +6406,13 @@
     const extraInfo = result["extra-info"] || {};
     const usedImageModelLabel = extraInfo.image_model
       ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
-      : "本機處理";
+      : tr("本機處理");
     const usedAnalysisModelLabel = extraInfo.analysis_model
       ? (window.PhotoAgentConfig.analysisModels[extraInfo.analysis_model] || extraInfo.analysis_model)
       : window.PhotoAgentConfig.analysisModel;
     const usedModelLabel = isDebugUiActive
       ? `${usedAnalysisModelLabel} + ${usedImageModelLabel}`
-      : "AI 智能美化";
+      : tr("AI 智能美化");
 
     const data = {
       image: pick.imageUrl,
@@ -6722,11 +6722,11 @@
           if (entry && entry.analysis) {
             r.analysis = entry.analysis;
             const t = entry.analysis.timings || {};
-            r.analyzeTimings = [{ label: "初步分析", duration: secToMs(t["Step 2 - photo_analysis"]) }];
+            r.analyzeTimings = [{ label: tr("初步分析"), duration: secToMs(t["Step 2 - photo_analysis"]) }];
             r.status = "analyzed";
           } else {
             r.status = "error";
-            r.error = (entry && entry.error) || "分析失敗";
+            r.error = (entry && entry.error) || tr("分析失敗");
           }
           updateBatchSidebarItem(r);
           refreshIfSelected(r);
@@ -6757,7 +6757,7 @@
             r.analyzeSubmittedAt = Date.now();
           } else {
             r.status = "error";
-            r.error = (entry && entry.error) || "送出分析失敗";
+            r.error = (entry && entry.error) || tr("送出分析失敗");
           }
           updateBatchSidebarItem(r);
           refreshIfSelected(r);
@@ -6873,13 +6873,13 @@
           run.result = runData.result;
           const t = (runData.result["extra-info"] || {}).timings || {};
           run.timings = [
-            { label: "分析並美化", duration: Date.now() - stepStart, children: [
-              { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) },
-              { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
-              { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-              { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
-              { label: "Step 5b：眼部修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
-              { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
+            { label: tr("分析並美化"), duration: Date.now() - stepStart, children: [
+              { label: tr("Step 2：照片分析"), duration: secToMs(t["Step 2 - photo_analysis"]) },
+              { label: tr("Step 3：使用者補充指令"), duration: secToMs(t["Step 3 - user_instruction_review"]) },
+              { label: tr("Step 4：裁切驗證"), duration: secToMs(t["Step 4 - crop_validation"]) },
+              { label: tr("Step 5：美化執行"), duration: secToMs(t["Step 5 - image_edit"]) },
+              { label: tr("Step 5b：眼部修正"), duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
+              { label: tr("Step 6：品質檢查"), duration: secToMs(t["Step 6 - quality_check"]) }
             ] }
           ];
           // Remember the first successfully-done RUN's analysis + job id so
@@ -6917,8 +6917,8 @@
       const analyzeResult = await getAnalyzeResult(record.analyzeJobId);
       record.analysis = analyzeResult.result.analysis;
       const t = (record.analysis && record.analysis.timings) || {};
-      record.analyzeTimings = [{ label: "分析中", duration: Date.now() - stepStart, children: [
-        { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
+      record.analyzeTimings = [{ label: tr("分析中"), duration: Date.now() - stepStart, children: [
+        { label: tr("Step 2：照片分析"), duration: secToMs(t["Step 2 - photo_analysis"]) }
       ] }];
       record.status = "analyzed";
     } catch (error) {
@@ -6940,7 +6940,7 @@
     els.batchContinueAllBtn.hidden = !pending;
     if (els.batchContinueAllLabel) {
       els.batchContinueAllLabel.textContent =
-        pending === batchRecords.length ? "全部美化" : `美化其餘 ${pending} 張`;
+        pending === batchRecords.length ? tr("全部美化") : tr("美化其餘 {pending} 張", { pending });
     }
   }
 
@@ -7036,7 +7036,7 @@
     // instead of continueBatchRecords's own silent empty-targets return.
     const targets = analyzedBatchRecords();
     if (!targets.length) {
-      showNoticeModal("目前沒有可批次執行的案例。");
+      showNoticeModal(tr("目前沒有可批次執行的案例。"));
       return;
     }
     continueBatchRecords(targets);
@@ -7136,15 +7136,15 @@
       const t = (result["extra-info"] || {}).timings || {};
       run.timings = [
         ...(record.analyzeTimings || []),
-        { label: "提交後續處理", duration: submitMs },
-        { label: "AI 美化中", duration: pollMs, children: [
-          { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
-          { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-          { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
-          { label: "Step 5b：眼部修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
-          { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
+        { label: tr("提交後續處理"), duration: submitMs },
+        { label: tr("AI 美化中"), duration: pollMs, children: [
+          { label: tr("Step 3：使用者補充指令"), duration: secToMs(t["Step 3 - user_instruction_review"]) },
+          { label: tr("Step 4：裁切驗證"), duration: secToMs(t["Step 4 - crop_validation"]) },
+          { label: tr("Step 5：美化執行"), duration: secToMs(t["Step 5 - image_edit"]) },
+          { label: tr("Step 5b：眼部修正"), duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
+          { label: tr("Step 6：品質檢查"), duration: secToMs(t["Step 6 - quality_check"]) }
         ] },
-        { label: "取得結果", duration: fetchMs }
+        { label: tr("取得結果"), duration: fetchMs }
       ];
     } catch (error) {
       run.status = "error";
@@ -7286,10 +7286,10 @@
     if (batchRecords.length === 0) return;
     const doneCount = doneBatchRecordsWithResult().length;
     const hint = doneCount === 0
-      ? `下載所有原圖（${batchRecords.length} 張）`
+      ? tr("下載所有原圖（{length} 張）", { length: batchRecords.length })
       : doneCount === batchRecords.length
-        ? `下載所有已完成的結果（${doneCount} 張）`
-        : `下載全部（已完成 ${doneCount} 張，其餘為原圖，共 ${batchRecords.length} 張）`;
+        ? tr("下載所有已完成的結果（{doneCount} 張）", { doneCount })
+        : tr("下載全部（已完成 {doneCount} 張，其餘為原圖，共 {length} 張）", { doneCount, length: batchRecords.length });
     els.batchDownloadAllBtn.title = hint;
     els.batchDownloadAllBtn.setAttribute("aria-label", hint);
   }
@@ -7378,8 +7378,8 @@
     row.innerHTML = "";
     row.hidden = counts.length < 2;
     if (!row.hidden) {
-      row.appendChild(pill("all", `全部 ${items.length}`));
-      counts.forEach(({ g, n }) => row.appendChild(pill(g.key, `${g.label} ${n}`, `is-${g.key}`)));
+      row.appendChild(pill("all", tr("全部 {n}", { n: items.length })));
+      counts.forEach(({ g, n }) => row.appendChild(pill(g.key, `${tr(g.label)} ${n}`, `is-${g.key}`)));
     }
     items.forEach((x) => { x.hidden = batchSidebarFilter !== "all" && x.dataset.stage !== batchSidebarFilter; });
   }
@@ -7412,17 +7412,17 @@
     const badge = document.createElement("span");
     badge.className = "rc-badge";
     badge.textContent = {
-      analyzing: "分析中",
-      analyzed: "已分析",
-      processing: "美化中",
-      done: "已美化",
-      error: "失敗",
-      archived: "可更新"
+      analyzing: tr("分析中"),
+      analyzed: tr("已分析"),
+      processing: tr("美化中"),
+      done: tr("已美化"),
+      error: tr("失敗"),
+      archived: tr("可更新")
     }[record.status] || "";
     if (record.status !== "archived" && runs.length > 1) {
       const runsDone = runs.filter((x) => x.status === "done").length;
-      if (runsRunning) badge.textContent = `美化中 (${runsDone}/${runs.length})`;
-      else if (runsDone) badge.textContent = `已美化 (${runsDone}/${runs.length})`;
+      if (runsRunning) badge.textContent = tr("美化中 ({runsDone}/{length})", { runsDone, length: runs.length });
+      else if (runsDone) badge.textContent = tr("已美化 ({runsDone}/{length})", { runsDone, length: runs.length });
     }
 
     // A square .history-cube with the badge over its bottom-left corner,
@@ -7430,7 +7430,7 @@
     // shows. No filename -- the photo itself tells them apart.
     item.appendChild(media);
     item.appendChild(badge);
-    if (record.status === "error") item.title = record.error || "處理失敗";
+    if (record.status === "error") item.title = record.error || tr("處理失敗");
     item.addEventListener("click", async () => {
       if (record !== currentBatchRecord && !(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
       selectBatchRecord(record);
@@ -7555,10 +7555,10 @@
     if (els.batchDownloadAllBtn) {
       const doneCount = photos.filter((p) => p.active_version?.job_id).length;
       const hint = doneCount === 0
-        ? `下載所有原圖（${photos.length} 張）`
+        ? tr("下載所有原圖（{length} 張）", { length: photos.length })
         : doneCount === photos.length
-          ? `下載所有已完成的結果（${doneCount} 張）`
-          : `下載全部（已完成 ${doneCount} 張，其餘為原圖，共 ${photos.length} 張）`;
+          ? tr("下載所有已完成的結果（{doneCount} 張）", { doneCount })
+          : tr("下載全部（已完成 {doneCount} 張，其餘為原圖，共 {length} 張）", { doneCount, length: photos.length });
       els.batchDownloadAllBtn.hidden = false;
       els.batchDownloadAllBtn.title = hint;
       els.batchDownloadAllBtn.setAttribute("aria-label", hint);
@@ -7576,11 +7576,11 @@
   // A chat-page photo's state in this sidebar's own vocabulary -- the same
   // classes and badges buildBatchSidebarItem gives a record here.
   function caseGroupPhotoState(photo) {
-    if (photo.status === "failed") return { key: "error", text: "失敗" };
-    if (photo.status === "rendering" || photo.queued_render || photo.pending_render) return { key: "processing", text: "美化中" };
-    if (photo.status === "analyzing" || photo.status === "reframing" || photo.pending_reframe) return { key: "analyzing", text: "分析中" };
-    if (photo.active_version?.job_id) return { key: "done", text: "已美化" };
-    return { key: "analyzed", text: "已分析" };
+    if (photo.status === "failed") return { key: "error", text: tr("失敗") };
+    if (photo.status === "rendering" || photo.queued_render || photo.pending_render) return { key: "processing", text: tr("美化中") };
+    if (photo.status === "analyzing" || photo.status === "reframing" || photo.pending_reframe) return { key: "analyzing", text: tr("分析中") };
+    if (photo.active_version?.job_id) return { key: "done", text: tr("已美化") };
+    return { key: "analyzed", text: tr("已分析") };
   }
 
   function buildCaseGroupSidebarItem(photo, caseKey) {
@@ -7628,7 +7628,7 @@
   function openBatchError(record) {
     if (!els.errorModal) return;
     els.errorModalFile.textContent = record.file.name;
-    els.errorModalMsg.textContent = record.error || "處理失敗，請稍後再試。";
+    els.errorModalMsg.textContent = record.error || tr("處理失敗，請稍後再試。");
     els.errorModal.hidden = false;
   }
 
@@ -7713,14 +7713,14 @@
     if (!action || !btn || btn.disabled) return;
     const originalLabel = btn.textContent;
     btn.disabled = true;
-    btn.textContent = "準備中…";
+    btn.textContent = tr("準備中…");
     try {
       await action();
     } catch (error) {
       // Keep the modal open so the user can retry instead of dropping them
       // back onto the same read-only case with no explanation.
       if (!(error instanceof NoticeActionCancelled) && els.noticeModalMsg) {
-        els.noticeModalMsg.textContent = `無法重新載入原始照片，請稍後再試。\n${friendlyError(error)}`;
+        els.noticeModalMsg.textContent = tr("無法重新載入原始照片，請稍後再試。") + "\n" + friendlyError(error);
       }
       if (!els.noticeModal.hidden) {
         btn.disabled = false;
@@ -7737,7 +7737,7 @@
     return runNoticeModalAction(noticeModalAction2, els.noticeModalAction2Btn);
   }
 
-  const ARCHIVED_ANALYSIS_NOTICE = "這張照片還沒套用最新版本，重新處理一次就能得到更好的美化結果。";
+  const ARCHIVED_ANALYSIS_NOTICE = tr("這張照片還沒套用最新版本，重新處理一次就能得到更好的美化結果。");
 
   // Re-enters through the ordinary new-upload path instead of continuing or
   // rerunning the archived job. Fetch the source before resetApp clears the
@@ -7749,7 +7749,7 @@
   async function restartArchivedCase(sourceFile, sourceUrl, skipReview = false, { settings = null } = {}) {
     let file = sourceFile;
     if (!file) {
-      if (!sourceUrl) throw new Error("這筆紀錄沒有可重新上傳的原始照片。");
+      if (!sourceUrl) throw new Error(tr("這筆紀錄沒有可重新上傳的原始照片。"));
       const response = await fetchWithRetry(sourceUrl);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
@@ -7813,14 +7813,14 @@
     // runNoticeModalAction just quietly resets this button instead of
     // reporting it as a failure.
     showNoticeModal(ARCHIVED_ANALYSIS_NOTICE, canRestart ? {
-      dismissLabel: "維持現況",
-      actionLabel: "重新分析",
+      dismissLabel: tr("維持現況"),
+      actionLabel: tr("重新分析"),
       onAction: async () => {
         const confirmed = await showPreflightCostModal([analysisPreflightStep()]);
         if (!confirmed) throw new NoticeActionCancelled();
         await restartArchivedCase(sourceFile, sourceUrl, false);
       },
-      action2Label: "重新一鍵美化",
+      action2Label: tr("重新一鍵美化"),
       onAction2: async () => {
         const confirmed = await showPreflightCostModal([analysisPreflightStep(), editPreflightStep()]);
         if (!confirmed) throw new NoticeActionCancelled();
@@ -7845,8 +7845,8 @@
       ? [analysisPreflightStep(), editPreflightStep()]
       : [analysisPreflightStep()];
     const confirmed = await showConfirmModal(
-      skipReview ? "確定要用新版本重新一鍵美化一次嗎？" : "確定要用新版本重新分析一次嗎？",
-      { confirmLabel: skipReview ? "重新一鍵美化" : "重新分析", danger: false, costSteps: steps }
+      skipReview ? tr("確定要用新版本重新一鍵美化一次嗎？") : tr("確定要用新版本重新分析一次嗎？"),
+      { confirmLabel: skipReview ? tr("重新一鍵美化") : tr("重新分析"), danger: false, costSteps: steps }
     );
     if (!confirmed) return;
     // Restarting re-fetches the original photo from sourceUrl when there's no
@@ -7860,12 +7860,12 @@
     const label = btn.querySelector("span");
     const originalLabel = label ? label.textContent : "";
     btn.disabled = true;
-    if (label) label.textContent = "準備中…";
+    if (label) label.textContent = tr("準備中…");
     hideError();
     try {
       await restartArchivedCase(sourceFile, sourceUrl, skipReview);
     } catch (error) {
-      showError(`無法重新載入原始照片，請稍後再試。\n${friendlyError(error)}`);
+      showError(tr("無法重新載入原始照片，請稍後再試。") + "\n" + friendlyError(error));
       btn.disabled = false;
       if (label) label.textContent = originalLabel;
     }
@@ -7907,7 +7907,7 @@
   // label/value/model hierarchy every other cost display in the app uses.
   // Gated by isPreflightCostEstimateEnabled the same way showPreflightCostModal
   // is, so a caller doesn't have to check the setting itself.
-  function showConfirmModal(message, { confirmLabel = "刪除", cancelLabel = "取消", danger = true, costSteps = null } = {}) {
+  function showConfirmModal(message, { confirmLabel = tr("刪除"), cancelLabel = tr("取消"), danger = true, costSteps = null } = {}) {
     return new Promise((resolve) => {
       if (!els.confirmModal) {
         resolve(window.confirm(message));
@@ -7974,11 +7974,11 @@
       // beside #account-badge-label survives every call to this. The label
       // intentionally says 最近照片; the account name stays in aria-label
       // and in the history modal subtitle.
-      if (els.accountBadgeLabel) els.accountBadgeLabel.textContent = user ? "最近照片" : "";
+      if (els.accountBadgeLabel) els.accountBadgeLabel.textContent = user ? tr("最近照片") : "";
       const uploadVisible = !!els.sections.upload?.classList.contains("visible");
       els.accountBadge.hidden = !user || uploadVisible;
-      els.accountBadge.title = user ? "查看處理紀錄" : "";
-      els.accountBadge.setAttribute("aria-label", user ? `${user}｜查看處理紀錄` : "");
+      els.accountBadge.title = user ? tr("查看處理紀錄") : "";
+      els.accountBadge.setAttribute("aria-label", user ? tr("{user}｜查看處理紀錄", { user }) : "");
     }
     if (els.registerAccountBtn) els.registerAccountBtn.hidden = !!user;
     refreshUploadGallery(user);
@@ -7988,7 +7988,7 @@
   async function handleCreateAccount() {
     const name = normalizeUsername(els.accountModalInput ? els.accountModalInput.value : "");
     if (!name) {
-      showAccountModalError("請輸入使用者名稱。");
+      showAccountModalError(tr("請輸入使用者名稱。"));
       return;
     }
     if (els.accountModalCreateBtn) els.accountModalCreateBtn.disabled = true;
@@ -7999,7 +7999,7 @@
       checkAdminAccess();
       closeAccountModal();
     } catch (err) {
-      showAccountModalError(err.message || "建立帳號失敗，請再試一次。");
+      showAccountModalError(err.message || tr("建立帳號失敗，請再試一次。"));
     } finally {
       if (els.accountModalCreateBtn) els.accountModalCreateBtn.disabled = false;
     }
@@ -8019,9 +8019,9 @@
     const d = new Date(ts * 1000);
     const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
     const diffDays = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86400000);
-    if (diffDays === 0) return "今天";
-    if (diffDays === 1) return "昨天";
-    return `${d.getMonth() + 1}月${d.getDate()}日`;
+    if (diffDays === 0) return tr("今天");
+    if (diffDays === 1) return tr("昨天");
+    return tr("{v1}月{v2}日", { v1: d.getMonth() + 1, v2: d.getDate() });
   }
 
   // Removes one tile from the DOM after a successful delete -- also drops
@@ -8042,7 +8042,7 @@
   async function handleDeleteHistoryEntry(job, li) {
     const user = getCurrentUser();
     if (!user || !job.image_key) return;
-    const confirmed = await showConfirmModal("確定要刪除這筆處理紀錄嗎？");
+    const confirmed = await showConfirmModal(tr("確定要刪除這筆處理紀錄嗎？"));
     if (!confirmed) return;
     try {
       // Captured before removal -- li.closest/contains would already read
@@ -8066,7 +8066,7 @@
         resetApp();
       }
     } catch (err) {
-      showNoticeModal(err.message || "刪除紀錄失敗，請稍後再試。");
+      showNoticeModal(err.message || tr("刪除紀錄失敗，請稍後再試。"));
     }
   }
 
@@ -8077,7 +8077,7 @@
   async function handleClearAllHistory() {
     const user = getCurrentUser();
     if (!user) return;
-    const confirmed = await showConfirmModal("確定要刪除所有處理紀錄嗎？此操作無法復原。");
+    const confirmed = await showConfirmModal(tr("確定要刪除所有處理紀錄嗎？此操作無法復原。"));
     if (!confirmed) return;
     try {
       await clearHistory(user);
@@ -8090,7 +8090,7 @@
       closeHistoryDrawer();
       resetApp();
     } catch (err) {
-      showNoticeModal(err.message || "刪除所有紀錄失敗，請稍後再試。");
+      showNoticeModal(err.message || tr("刪除所有紀錄失敗，請稍後再試。"));
     }
   }
 
@@ -8102,10 +8102,10 @@
   // the page was linked in with ?user_id= -- that identity is re-resolved
   // from the URL on every load, same as before logout.
   async function handleLogout() {
-    const unsent = isReviewDirty() ? "這張照片還沒美化的調整也會清掉。" : "";
+    const unsent = isReviewDirty() ? tr("這張照片還沒美化的調整也會清掉。") : "";
     const confirmed = await showConfirmModal(
-      `登出後，這個瀏覽器將不再記得目前的使用者名稱，需要重新輸入才能再次查看處理紀錄。${unsent}確定要登出嗎？`,
-      { confirmLabel: "登出", danger: false }
+      tr("登出後，這個瀏覽器將不再記得目前的使用者名稱，需要重新輸入才能再次查看處理紀錄。{unsent}確定要登出嗎？", { unsent }),
+      { confirmLabel: tr("登出"), danger: false }
     );
     if (!confirmed) return;
     leaveConfirmed = true;
@@ -8170,7 +8170,7 @@
     li.classList.remove("analyzing", "processing", "analyzed", "done", "error");
     li.classList.add("archived");
     const badge = li.querySelector(".rc-badge");
-    if (badge) badge.textContent = "可更新";
+    if (badge) badge.textContent = tr("可更新");
     return true;
   }
 
@@ -8245,14 +8245,14 @@
     const count = selectedHistoryKeys.size;
     if (els.historyDownloadSelectedBtn) {
       els.historyDownloadSelectedBtn.disabled = count === 0;
-      const dlHint = count > 0 ? `下載所選（${count} 張）` : "下載所選";
+      const dlHint = count > 0 ? tr("下載所選（{count} 張）", { count }) : tr("下載所選");
       els.historyDownloadSelectedBtn.title = dlHint;
       els.historyDownloadSelectedBtn.setAttribute("aria-label", dlHint);
     }
     if (els.historyDownloadSelectedCount) els.historyDownloadSelectedCount.textContent = count > 0 ? String(count) : "";
     if (els.historyDeleteSelectedBtn) {
       els.historyDeleteSelectedBtn.disabled = count === 0;
-      const delHint = count > 0 ? `刪除所選（${count} 張）` : "刪除所選";
+      const delHint = count > 0 ? tr("刪除所選（{count} 張）", { count }) : tr("刪除所選");
       els.historyDeleteSelectedBtn.title = delHint;
       els.historyDeleteSelectedBtn.setAttribute("aria-label", delHint);
     }
@@ -8380,7 +8380,7 @@
     if (!keys.length) return;
     const user = getCurrentUser();
     if (!user) return;
-    const confirmed = await showConfirmModal(`確定要刪除這 ${keys.length} 筆處理紀錄嗎？`);
+    const confirmed = await showConfirmModal(tr("確定要刪除這 {length} 筆處理紀錄嗎？", { length: keys.length }));
     if (!confirmed) return;
     if (els.historyDeleteSelectedBtn) els.historyDeleteSelectedBtn.disabled = true;
     const results = await Promise.allSettled(keys.map((key) => deleteHistoryEntry(user, key)));
@@ -8405,7 +8405,7 @@
     // has no such offset to keep in sync).
     if (removedFromDrawer) historyDrawerOffset = Math.max(0, historyDrawerOffset - removedFromDrawer);
     exitHistorySelectMode();
-    if (anyFailed) showNoticeModal("部分紀錄刪除失敗，請稍後再試。");
+    if (anyFailed) showNoticeModal(tr("部分紀錄刪除失敗，請稍後再試。"));
     // Same "nothing left to browse" reset as handleDeleteHistoryEntry/
     // handleClearAllHistory once the last entry is gone.
     if (els.historyList && !els.historyList.children.length) {
@@ -8513,14 +8513,14 @@
   // classes and badges -- the ones renderTileStatus gives a single case.
   function historyGroupState(group) {
     switch (group.status) {
-      case "rendering": return { key: "processing", text: "美化中" };
-      case "analyzing": return { key: "analyzing", text: "分析中" };
-      case "failed": return { key: "error", text: "失敗" };
+      case "rendering": return { key: "processing", text: tr("美化中") };
+      case "analyzing": return { key: "analyzing", text: tr("分析中") };
+      case "failed": return { key: "error", text: tr("失敗") };
       case "done": return {
         key: "done",
-        text: group.rendered_count < group.photo_count ? `美化完成（${group.rendered_count}/${group.photo_count}）` : "美化完成"
+        text: group.rendered_count < group.photo_count ? tr("美化完成（{rendered_count}/{photo_count}）", { rendered_count: group.rendered_count, photo_count: group.photo_count }) : tr("美化完成")
       };
-      default: return { key: "analyzed", text: "待美化" };
+      default: return { key: "analyzed", text: tr("待美化") };
     }
   }
 
@@ -8542,9 +8542,9 @@
     li.dataset.sessionId = group.session_id;
     li.innerHTML = `
       <div class="rc-media">${historyMediaMarkup(backdrop)}${shots.length > 1 ? `<span class="history-cube-mosaic is-${shots.length}" aria-hidden="true">${cells}</span>` : ""}${busy ? '<div class="rc-spinner"></div>' : ""}</div>
-      <span class="history-cube-count">${group.photo_count} 張</span>
+      <span class="history-cube-count">${tr("{n} 張", { n: group.photo_count })}</span>
       <span class="rc-badge">${state.text}</span>
-      <button type="button" class="history-cube-remove" aria-label="刪除這組紀錄">×</button>
+      <button type="button" class="history-cube-remove" aria-label="${tr("刪除這組紀錄")}">×</button>
     `;
     return li;
   }
@@ -8577,7 +8577,7 @@
   async function handleDeleteHistoryGroup(entry, group) {
     const user = getCurrentUser();
     if (!user) return;
-    const confirmed = await showConfirmModal(`確定要刪除這組 ${group.photo_count} 張照片的處理紀錄嗎？`);
+    const confirmed = await showConfirmModal(tr("確定要刪除這組 {photo_count} 張照片的處理紀錄嗎？", { photo_count: group.photo_count }));
     if (!confirmed) return;
     try {
       const inDrawer = els.historyList?.contains(entry.li);
@@ -8594,7 +8594,7 @@
         resetApp();
       }
     } catch (err) {
-      showNoticeModal(err.message || "刪除紀錄失敗，請稍後再試。");
+      showNoticeModal(err.message || tr("刪除紀錄失敗，請稍後再試。"));
     }
   }
 
@@ -8695,7 +8695,7 @@
       li.innerHTML = `
         <div class="rc-media">${referenceThumb}${processingSpinner}</div>
         <span class="rc-badge" hidden></span>
-        <button type="button" class="history-cube-remove" aria-label="刪除紀錄">×</button>
+        <button type="button" class="history-cube-remove" aria-label="${tr("刪除紀錄")}">×</button>
         <span class="history-cube-check">
           <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
             <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
@@ -8754,7 +8754,7 @@
           const failed = statuses[0]?.status === "error";
           if (failed) {
             li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "error"}`;
-            if (badge) badge.textContent = archived ? "可更新" : "失敗";
+            if (badge) badge.textContent = archived ? tr("可更新") : tr("失敗");
             media?.querySelector(".rc-spinner")?.remove();
             markHistoryTileSelectable(li, job);
             li.addEventListener("click", () => {
@@ -8767,10 +8767,10 @@
           } else {
             if (analyzed) {
               li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "analyzed"}`;
-              if (badge) badge.textContent = archived ? "可更新" : "待美化";
+              if (badge) badge.textContent = archived ? tr("可更新") : tr("待美化");
               media?.querySelector(".rc-spinner")?.remove();
             } else if (badge) {
-              badge.textContent = archived ? "可更新" : "分析中";
+              badge.textContent = archived ? tr("可更新") : tr("分析中");
             }
             li.addEventListener("click", async () => {
               if (li.classList.contains("opening")) return;
@@ -8793,8 +8793,8 @@
           applyHistoryArchivedState(job, li);
           const doneCount = statuses.filter((s) => s.status === "success").length;
           if (badge) badge.textContent = archived
-            ? "可更新"
-            : (jobIds.length > 1 ? `美化完成（${doneCount}/${jobIds.length}）` : "美化完成");
+            ? tr("可更新")
+            : (jobIds.length > 1 ? tr("美化完成（{doneCount}/{length}）", { doneCount, length: jobIds.length }) : tr("美化完成"));
           // Thumbnail route only exists for the local path (see
           // photo-agent-api.js's resultThumbnailUrl) -- AIPoC-path jobs fall
           // back to the full-res image, same as before this change.
@@ -8838,7 +8838,7 @@
           });
         } else if (statuses.every((s) => s.status === "error")) {
           li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "error"}`;
-          if (badge) badge.textContent = archived ? "可更新" : "失敗";
+          if (badge) badge.textContent = archived ? tr("可更新") : tr("失敗");
           // Drop only the spinner -- keep the reference thumb (if any) so the
           // tile still shows a recognizable photo instead of going blank; the
           // badge/border already communicate the failure.
@@ -8860,7 +8860,7 @@
             showNoticeModal(failureReason(failed));
           });
         } else {
-          if (badge) badge.textContent = archived ? "可更新" : "美化中";
+          if (badge) badge.textContent = archived ? tr("可更新") : tr("美化中");
           // Still clickable -- otherwise there's no way to come back and
           // check on a record that was still processing last time this list
           // was fetched (see viewProcessingHistoryRecord). The opening guard
@@ -8882,14 +8882,14 @@
         const archived = applyHistoryArchivedState(job, li);
         if (badge) badge.hidden = false;
         li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "error"}`;
-        if (badge) badge.textContent = archived ? "可更新" : "無法取得狀態";
+        if (badge) badge.textContent = archived ? tr("可更新") : tr("無法取得狀態");
         markHistoryTileSelectable(li, job);
         li.addEventListener("click", () => {
           if (historySelectMode) {
             if (job.image_key) toggleHistorySelection(job.image_key, li);
             return;
           }
-          showNoticeModal(err ? friendlyError(err) : "無法取得處理狀態，請稍後再試。");
+          showNoticeModal(err ? friendlyError(err) : tr("無法取得處理狀態，請稍後再試。"));
         });
       }
     };
@@ -9150,7 +9150,7 @@
   function formatReportTimestamp(ts) {
     const d = new Date(ts * 1000);
     const pad = (n) => String(n).padStart(2, "0");
-    return `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return tr("{v1}月{v2}日 {v3}:{v4}", { v1: d.getMonth() + 1, v2: d.getDate(), v3: pad(d.getHours()), v4: pad(d.getMinutes()) });
   }
 
   function openReportScreenshotModal(url) {
@@ -9173,7 +9173,7 @@
   // read <-> solved. An item that's somehow still "unread" when its icon is
   // clicked directly (without opening the record first) also goes to
   // "solved" here, same as "read" would -- there's no third click target.
-  const REPORT_STATUS_LABELS = { unread: "未讀", read: "待解決", solved: "已解決" };
+  const REPORT_STATUS_LABELS = { unread: tr("未讀"), read: tr("待解決"), solved: tr("已解決") };
   const REPORT_STATUS_ORDER = ["unread", "read", "solved"];
   function nextReportStatus(status) {
     return status === "solved" ? "read" : "solved";
@@ -9187,7 +9187,7 @@
     statusBtn.classList.add("report-item-status");
     REPORT_STATUS_ORDER.forEach((s) => statusBtn.classList.toggle(`status-${s}`, s === status));
     statusBtn.textContent = REPORT_STATUS_LABELS[status] || status;
-    statusBtn.setAttribute("aria-label", `回報狀態：${REPORT_STATUS_LABELS[status] || status}（點擊切換）`);
+    statusBtn.setAttribute("aria-label", tr("回報狀態：{v1}（點擊切換）", { v1: REPORT_STATUS_LABELS[status] || status }));
   }
 
   // Best-effort, not awaited by callers -- a failed status write here just
@@ -9235,7 +9235,7 @@
   async function handleDeleteReport(r, li) {
     const user = resolveAdminUser();
     if (!user) return;
-    const confirmed = await showConfirmModal("確定要刪除這筆回報嗎？");
+    const confirmed = await showConfirmModal(tr("確定要刪除這筆回報嗎？"));
     if (!confirmed) return;
     try {
       await deleteReport(user, r.report_id);
@@ -9247,7 +9247,7 @@
         els.reportsEmpty.hidden = els.reportsList.children.length > 0;
       }
     } catch (err) {
-      showNoticeModal(err.message || "刪除回報失敗，請稍後再試。");
+      showNoticeModal(err.message || tr("刪除回報失敗，請稍後再試。"));
     }
   }
 
@@ -9373,10 +9373,10 @@
       metaLine.className = "report-item-meta";
       // r.source === "chat": filed from the chat UI (/chat/), which only runs
       // the local path, so its mode says more than "Local" would.
-      const where = r.source === "chat" ? "聊天模式" : r.path === "aipoc" ? "AIPoC" : "Local";
+      const where = r.source === "chat" ? tr("聊天模式") : r.path === "aipoc" ? "AIPoC" : "Local";
       metaLine.textContent = r.job_id
         ? `${formatReportTimestamp(r.ts)} · ${where}`
-        : `${formatReportTimestamp(r.ts)} · 一般回報${r.source === "chat" ? " · 聊天模式" : ""}`;
+        : tr("{v1} · 一般回報", { v1: formatReportTimestamp(r.ts) }) + (r.source === "chat" ? ` · ${tr("聊天模式")}` : "");
       info.appendChild(userLine);
       info.appendChild(metaLine);
       // r.owner is the account the chat session lives under (record_report,
@@ -9385,7 +9385,7 @@
       if (r.owner && r.owner !== r.user) {
         const ownerLine = document.createElement("span");
         ownerLine.className = "report-item-note";
-        ownerLine.textContent = `對話帳號：${r.owner}`;
+        ownerLine.textContent = tr("對話帳號：{owner}", { owner: r.owner });
         info.appendChild(ownerLine);
       }
       // r.user_prompt (what the original submission actually asked for) is
@@ -9399,13 +9399,13 @@
       if (userPrompt) {
         const promptLine = document.createElement("span");
         promptLine.className = "report-item-note";
-        promptLine.textContent = `個人化需求：${userPrompt}`;
+        promptLine.textContent = tr("個人化需求：{user_prompt}", { user_prompt: userPrompt });
         info.appendChild(promptLine);
       }
       if (r.note) {
         const noteLine = document.createElement("span");
         noteLine.className = "report-item-note";
-        noteLine.textContent = `回報說明：${r.note}`;
+        noteLine.textContent = tr("回報說明：{note}", { note: r.note });
         info.appendChild(noteLine);
       }
       // The reporter's own screen capture of the whole results panel at the
@@ -9420,7 +9420,7 @@
         const screenshotBtn = document.createElement("button");
         screenshotBtn.type = "button";
         screenshotBtn.className = "report-item-screenshot-link";
-        screenshotBtn.textContent = "查看回報截圖";
+        screenshotBtn.textContent = tr("查看回報截圖");
         screenshotBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           openReportScreenshotModal(reportScreenshotUrl(r.report_id));
@@ -9440,7 +9440,7 @@
         chatLink.href = `chat/${location.search}#report=${encodeURIComponent(r.report_id)}`;
         chatLink.target = "_blank";
         chatLink.rel = "noopener";
-        chatLink.textContent = "查看對話";
+        chatLink.textContent = tr("查看對話");
         chatLink.addEventListener("click", (e) => e.stopPropagation());
         info.appendChild(chatLink);
       }
@@ -9464,7 +9464,7 @@
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
       removeBtn.className = "report-item-remove";
-      removeBtn.setAttribute("aria-label", "刪除回報");
+      removeBtn.setAttribute("aria-label", tr("刪除回報"));
       removeBtn.textContent = "×";
       removeBtn.addEventListener("click", (e) => {
         // Stop this from also bubbling into the row's own click handler
@@ -9505,7 +9505,7 @@
     const user = resolveAdminUser();
     if (!user) return;
     if (!(await loadReportsPage({ reset: true }))) {
-      showNoticeModal("重新載入回報清單失敗，請稍後再試。");
+      showNoticeModal(tr("重新載入回報清單失敗，請稍後再試。"));
     }
   }
 
@@ -9848,7 +9848,7 @@
       // The history row outlived the job's result in Redis. Marking it errored
       // (rather than leaving it "unloaded") stops the arrows offering it again.
       run.status = "error";
-      run.error = "這一版的結果已經無法取得。";
+      run.error = tr("這一版的結果已經無法取得。");
       return false;
     }
     return true;
@@ -10189,7 +10189,7 @@
       } catch (error) {
         if (historyViewToken !== myToken) return; // navigated away meanwhile
         if (!myRuns.some((r) => r.status === "done")) {
-          showBatchMainError({ previewUrl, error: "全部處理失敗，請稍後再試。" });
+          showBatchMainError({ previewUrl, error: tr("全部處理失敗，請稍後再試。") });
         }
         // Otherwise at least one RUN already rendered -- leave it displayed
         // rather than clobbering it with an error for the whole record.
@@ -10217,7 +10217,7 @@
       await Promise.any(jobIds.map((id) => pollJobStatus(id, { path: job.path })));
     } catch {
       if (historyViewToken !== myToken) return; // navigated away meanwhile
-      showBatchMainError({ previewUrl, error: "全部處理失敗，請稍後再試。" });
+      showBatchMainError({ previewUrl, error: tr("全部處理失敗，請稍後再試。") });
       return;
     }
     if (historyViewToken !== myToken) return; // navigated away meanwhile
@@ -10389,7 +10389,7 @@
     // backend/services/report.py) leaves the current screen as it was,
     // rather than stamping this record's times over someone else's photo.
     if (!runs.length) {
-      showNoticeModal(report ? "這筆回報的結果已經過期，無法開啟。" : "無法取得這筆處理紀錄，請稍後再試。");
+      showNoticeModal(report ? tr("這筆回報的結果已經過期，無法開啟。") : tr("無法取得這筆處理紀錄，請稍後再試。"));
       return false;
     }
     setCurrentCaseTimes(job, revealDetailExtra);
@@ -10641,7 +10641,7 @@
       // already have alone and say nothing.
       if (!uploadHistoryOffset && !els.demoImagesGrid.children.length && els.demoImagesEmpty) {
         els.demoImagesEmpty.hidden = false;
-        els.demoImagesEmpty.textContent = "目前無法取得處理紀錄。";
+        els.demoImagesEmpty.textContent = tr("目前無法取得處理紀錄。");
       }
     }
   }
@@ -10668,7 +10668,7 @@
     ++uploadHistoryRequestToken;
     uploadHistoryHasMore = false;
     uploadHistoryLoading = false;
-    if (els.uploadGalleryTitle) els.uploadGalleryTitle.textContent = "範例照片";
+    if (els.uploadGalleryTitle) els.uploadGalleryTitle.textContent = tr("範例照片");
     if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.hidden = false;
     initDemoImagesGallery();
   }
@@ -10795,7 +10795,7 @@
     if (!els.demoImagesConfirmBtn) return;
     const count = demoSelectedNames.size;
     els.demoImagesConfirmBtn.disabled = count === 0;
-    els.demoImagesConfirmBtn.textContent = count > 0 ? `使用所選照片 (${count})` : "使用所選照片";
+    els.demoImagesConfirmBtn.textContent = count > 0 ? tr("使用所選照片 ({count})", { count }) : tr("使用所選照片");
   }
 
   function toggleDemoImageSelection(name, tile) {
@@ -10911,7 +10911,7 @@
         if (!els.changelogModal.hidden) renderChangelog(entries);
       })
       .catch(() => {
-        if (els.changelogModalBody) els.changelogModalBody.textContent = "無法載入版本紀錄。";
+        if (els.changelogModalBody) els.changelogModalBody.textContent = tr("無法載入版本紀錄。");
       });
   }
 
@@ -10938,7 +10938,7 @@
       }));
       routeSelectedFiles(files);
     } catch (error) {
-      showError(`載入範例照片失敗：${error.message || error}`);
+      showError(tr("載入範例照片失敗：{v1}", { v1: error.message || error }));
     } finally {
       if (els.demoImagesGrid) els.demoImagesGrid.classList.remove("is-loading");
       updateDemoImagesConfirmBtn();
@@ -11068,12 +11068,12 @@
   // All six are two glyphs -- see the width lock in styles.css, which is
   // measured off that fact.
   const THEME_LABELS = {
-    default: "極光",
-    "purple-light": "鳶尾",
-    "lilac-dark": "夜霞",
-    lilac: "藕荷",
-    "caramel-dark": "燼火",
-    caramel: "暖陽",
+    default: tr("極光"),
+    "purple-light": tr("鳶尾"),
+    "lilac-dark": tr("夜霞"),
+    lilac: tr("藕荷"),
+    "caramel-dark": tr("燼火"),
+    caramel: tr("暖陽"),
   };
   const THEME_SWATCH_CLASS = {
     default: "theme-swatch-purple",
@@ -11133,8 +11133,8 @@
       if (label) label.textContent = THEME_LABELS[selected];
       // title no longer repeats the name now that it is visible; it carries the
       // affordance the noun-label used to imply instead.
-      els.themeToggleBtn.setAttribute("aria-label", `主題：${THEME_LABELS[selected]}（點擊切換）`);
-      els.themeToggleBtn.title = "點擊切換主題";
+      els.themeToggleBtn.setAttribute("aria-label", tr("主題：{v1}（點擊切換）", { v1: THEME_LABELS[selected] }));
+      els.themeToggleBtn.title = tr("點擊切換主題");
     }
     const swatch = document.getElementById("theme-toggle-swatch");
     if (swatch) {
@@ -11183,10 +11183,10 @@
   // kept in sync by hand with each .ap-style-card-name (index.html) and with
   // STYLE_OPTION_GROUPS' own labels in results.js, since that map is private
   // to results.js's module closure and isn't exported for reuse here.
-  const STYLE_GROUP_TITLES = { pose: "姿勢", angle: "拍攝角度", lighting: "光線", size: "取景範圍" };
-  const STYLE_GROUP_NOTE = "（圖例僅示意風格，實際呈現依原圖調整）";
+  const STYLE_GROUP_TITLES = { pose: tr("姿勢"), angle: tr("拍攝角度"), lighting: tr("光線"), size: tr("取景範圍") };
+  const STYLE_GROUP_NOTE = tr("（圖例僅示意風格，實際呈現依原圖調整）");
   const STYLE_GROUP_NOTES = {
-    pose: "（圖例僅示意風格，實際姿勢依原圖調整）",
+    pose: tr("（圖例僅示意風格，實際姿勢依原圖調整）"),
   };
 
   function styleGroupListEl(group) {
@@ -11433,7 +11433,7 @@
     if (!els.compareFullscreenBtn) return;
     els.compareFullscreenBtn.innerHTML = isFullscreen ? COMPARE_FULLSCREEN_RESTORE_ICON : COMPARE_FULLSCREEN_EXPAND_ICON;
     els.compareFullscreenBtn.title = isFullscreen ? "back to original window" : "full screen";
-    els.compareFullscreenBtn.setAttribute("aria-label", isFullscreen ? "返回原視窗" : "全螢幕檢視比較");
+    els.compareFullscreenBtn.setAttribute("aria-label", isFullscreen ? tr("返回原視窗") : tr("全螢幕檢視比較"));
   }
 
   function isCompareFullscreen() {
@@ -11689,7 +11689,7 @@
     if (els.batchMainLoadingEyebrow) els.batchMainLoadingEyebrow.textContent = "Photo Master is working";
     const analyzing = record.status === "analyzing";
     if (els.batchMainLoadingTitle) {
-      els.batchMainLoadingTitle.textContent = analyzing ? "正在分析照片" : "AI 正在美化";
+      els.batchMainLoadingTitle.textContent = analyzing ? tr("正在分析照片") : tr("AI 正在美化");
     }
     // Same split the title above makes, off the record's own status -- this
     // view only ever shows for a record that is running, and "running" here
@@ -11775,9 +11775,9 @@
     els.batchMainLoading.classList.add("is-error");
     if (els.batchMainLoadingThumb) els.batchMainLoadingThumb.src = record.thumbUrl || record.previewUrl;
     if (els.batchMainLoadingEyebrow) els.batchMainLoadingEyebrow.textContent = "Photo Master hit a snag";
-    if (els.batchMainLoadingTitle) els.batchMainLoadingTitle.textContent = "處理失敗";
+    if (els.batchMainLoadingTitle) els.batchMainLoadingTitle.textContent = tr("處理失敗");
     if (els.batchMainLoadingText) {
-      els.batchMainLoadingText.textContent = record.error || "處理失敗，請稍後再試。";
+      els.batchMainLoadingText.textContent = record.error || tr("處理失敗，請稍後再試。");
     }
   }
 
@@ -11817,8 +11817,8 @@
     // currentBatchRecord-is-"analyzed" branch above.
     if (els.downloadLink) {
       els.downloadLink.hidden = !record.file;
-      els.downloadLink.title = "下載原圖";
-      els.downloadLink.setAttribute("aria-label", "下載原圖");
+      els.downloadLink.title = tr("下載原圖");
+      els.downloadLink.setAttribute("aria-label", tr("下載原圖"));
     }
     resetRunSwitcher(); // no RUNs exist yet for this record
 
@@ -11847,7 +11847,7 @@
     }
     const doneCount = runs.filter((r) => r.status === "done").length;
     els.runProgress.hidden = false;
-    if (els.runProgressLabel) els.runProgressLabel.textContent = `產生中… ${doneCount}/${runs.length} 張`;
+    if (els.runProgressLabel) els.runProgressLabel.textContent = tr("產生中… {doneCount}/{length} 張", { doneCount, length: runs.length });
     if (els.runProgressFill) els.runProgressFill.style.width = `${Math.round((doneCount / runs.length) * 100)}%`;
   }
 
@@ -11888,7 +11888,7 @@
     wrap.className = "version-pending";
     const tile = document.createElement("div");
     tile.className = "version-pending-tile";
-    tile.title = "已分析完成，按「美化」就會產生這一組";
+    tile.title = tr("已分析完成，按「美化」就會產生這一組");
     tile.setAttribute("aria-label", tile.title);
     const img = document.createElement("img");
     img.src = thumbUrl;
@@ -11897,7 +11897,7 @@
     tile.append(img);
     const label = document.createElement("span");
     label.className = "version-group-label";
-    label.textContent = "待美化";
+    label.textContent = tr("待美化");
     wrap.append(tile, label);
     return wrap;
   }
@@ -12016,8 +12016,8 @@
       originTile.type = "button";
       originTile.className = "version-origin-tile";
       originTile.setAttribute("role", "tab");
-      originTile.title = "原圖";
-      originTile.setAttribute("aria-label", "原圖");
+      originTile.title = tr("原圖");
+      originTile.setAttribute("aria-label", tr("原圖"));
       originTile.addEventListener("click", pickVersionStripOrigin);
       const originImg = document.createElement("img");
       // originalImgThumbUrl mirrors whatever #original-img is showing (a local blob
@@ -12032,7 +12032,7 @@
       originTile.addEventListener("mouseleave", hideVersionTilePreview);
       const originLabel = document.createElement("span");
       originLabel.className = "version-group-label";
-      originLabel.textContent = "原圖";
+      originLabel.textContent = tr("原圖");
       origin.append(originTile, originLabel);
       const divider = document.createElement("div");
       divider.className = "version-strip-divider";
@@ -12121,9 +12121,9 @@
     const current = runs[currentIdx];
     if (els.versionStripCount) {
       els.versionStripCount.textContent = versionStripOriginPicked
-        ? "原圖"
+        ? tr("原圖")
         : current && current.versionTotal
-          ? `第 ${current.versionNumber}／${current.versionTotal} 組`
+          ? tr("第 {versionNumber}／{versionTotal} 組", { versionNumber: current.versionNumber, versionTotal: current.versionTotal })
           : "";
     }
     const originTile = els.versionStripTrack.querySelector(".version-origin-tile");
@@ -12254,8 +12254,8 @@
     if (!els.canvasVersionLabel) return;
     const run = photoViewerCurrentRun();
     els.canvasVersionLabel.textContent = run && photoViewerShowingOriginal()
-      ? "原圖"
-      : run && run.versionTotal ? `第 ${run.versionNumber} 版` : "看大圖";
+      ? tr("原圖")
+      : run && run.versionTotal ? tr("第 {versionNumber} 版", { versionNumber: run.versionNumber }) : tr("看大圖");
   }
 
   function syncPhotoViewer() {
@@ -12309,23 +12309,23 @@
     const originalSrc = els.originalImg?.getAttribute("src") || "";
     const resultSrc = hasResult ? els.generatedImg.getAttribute("src") : "";
 
-    const title = showOriginal ? "原圖" : run && run.versionTotal ? `第 ${run.versionNumber} 版` : "美化結果";
-    els.photoViewerTitle.textContent = photoViewerHolding ? "原圖" : title;
+    const title = showOriginal ? tr("原圖") : run && run.versionTotal ? tr("第 {versionNumber} 版", { versionNumber: run.versionNumber }) : tr("美化結果");
+    els.photoViewerTitle.textContent = photoViewerHolding ? tr("原圖") : title;
     const notes = [];
-    if (!showOriginal && run && run.runsInVersion > 1) notes.push(`第 ${run.runInVersion}／${run.runsInVersion} 張`);
-    if (run && run.versionTotal) notes.push(`共 ${run.versionTotal} 版`);
+    if (!showOriginal && run && run.runsInVersion > 1) notes.push(tr("第 {runInVersion}／{runsInVersion} 張", { runInVersion: run.runInVersion, runsInVersion: run.runsInVersion }));
+    if (run && run.versionTotal) notes.push(tr("共 {versionTotal} 版", { versionTotal: run.versionTotal }));
     if (notes.length) {
       const small = document.createElement("small");
       small.textContent = notes.join(" · ");
       els.photoViewerTitle.append(small);
     }
-    els.photoViewer.setAttribute("aria-label", `${title}大圖`);
+    els.photoViewer.setAttribute("aria-label", tr("{title}大圖", { title }));
 
     els.photoViewerOriginal.src = originalSrc;
     els.photoViewerOriginal.hidden = !originalSrc || (!showOriginal && !photoViewerHolding);
     if (resultSrc) els.photoViewerResult.src = resultSrc;
     else els.photoViewerResult.removeAttribute("src");
-    els.photoViewerResult.alt = `${title}美化結果`;
+    els.photoViewerResult.alt = tr("{title}美化結果", { title });
     els.photoViewerResult.hidden = !resultSrc || showOriginal || photoViewerHolding;
 
     // 看結果時才有「按住看原圖」和下載；停在原圖時兩顆都收起來（同對話模式）。
@@ -12344,7 +12344,7 @@
     if (!runs) return;
     const originThumb = els.versionStripTrack?.querySelector(".version-origin-tile img")?.getAttribute("src")
       || originalImgThumbUrl || originalSrc;
-    track.append(buildPhotoViewerTile(originThumb, "原圖", showOriginal, () => {
+    track.append(buildPhotoViewerTile(originThumb, tr("原圖"), showOriginal, () => {
       if (!photoViewerShowingOriginal()) pickVersionStripOrigin();
       renderPhotoViewer();
     }));
@@ -12352,12 +12352,12 @@
       const isCurrent = !showOriginal && idx === versionStripCurrentIdx;
       const tile = buildPhotoViewerTile(
         resultThumbnailUrl(r.jobId, { run: r.sourceRun }),
-        r.versionTotal ? `第 ${r.versionNumber} 版` : `第 ${idx + 1} 張`,
+        r.versionTotal ? tr("第 {n} 版", { n: r.versionNumber }) : tr("第 {n} 張", { n: idx + 1 }),
         isCurrent,
         () => pickPhotoViewerRun(idx),
       );
       tile.disabled = !isSelectableRun(r);
-      tile.setAttribute("aria-label", r.versionTotal ? `第 ${r.versionNumber} 版，${runSwitcherLabel(runs, idx)}` : runSwitcherLabel(runs, idx));
+      tile.setAttribute("aria-label", r.versionTotal ? tr("第 {versionNumber} 版，{v2}", { versionNumber: r.versionNumber, v2: runSwitcherLabel(runs, idx) }) : runSwitcherLabel(runs, idx));
       if (r.runsInVersion > 1) {
         const chip = document.createElement("span");
         chip.className = "version-tile-run";
@@ -12426,7 +12426,7 @@
   // run_count>1 revise or a batch record, which have no versions at all.
   function runSwitcherLabel(runs, idx) {
     const run = runs[idx];
-    if (run && run.versionId) return `第 ${run.runInVersion} / ${run.runsInVersion} 張`;
+    if (run && run.versionId) return tr("第 {runInVersion} / {runsInVersion} 張", { runInVersion: run.runInVersion, runsInVersion: run.runsInVersion });
     return `${idx + 1} / ${runs.length}`;
   }
 
@@ -12472,7 +12472,7 @@
       // (refreshBatchVersionsAfterEdit) only fetched its newest version up
       // front, so an older one's image/result has to be fetched on arrival.
       if (run.status === "unloaded" && !(await loadHistoryRun(runs, run))) {
-        showNoticeModal(run.error || "無法取得這一版的結果。");
+        showNoticeModal(run.error || tr("無法取得這一版的結果。"));
         return;
       }
       // Superseded while loading -- a new revise replaced this record's list.
@@ -12563,7 +12563,7 @@
       if (run.status === "unloaded" && !(await loadHistoryRun(runs, run))) {
         // Leaves the current image alone: loadHistoryRun has marked the
         // target errored, so the arrows simply stop offering it.
-        showNoticeModal(run.error || "無法取得這一版的結果。");
+        showNoticeModal(run.error || tr("無法取得這一版的結果。"));
         return;
       }
       singleMirrorIndex = idx;
@@ -12658,13 +12658,13 @@
     const extraInfo = record.result["extra-info"] || {};
     const usedImageModelLabel = extraInfo.image_model
       ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
-      : "本機處理";
+      : tr("本機處理");
     const usedAnalysisModelLabel = extraInfo.analysis_model
       ? (window.PhotoAgentConfig.analysisModels[extraInfo.analysis_model] || extraInfo.analysis_model)
       : window.PhotoAgentConfig.analysisModel;
     const usedModelLabel = isDebugUiActive
     ? `${usedAnalysisModelLabel} + ${usedImageModelLabel}`
-    : "AI 智能美化";
+    : tr("AI 智能美化");
     const data = {
       image: record.imageUrl,
       model: usedModelLabel,
@@ -12888,7 +12888,7 @@
     refreshIfSelected(record);
 
     const failed = newRuns.filter((run) => run.status === "error");
-    if (failed.length) showError(failed[0].error || "重新處理失敗，請稍後再試。");
+    if (failed.length) showError(failed[0].error || tr("重新處理失敗，請稍後再試。"));
 
     // Last, same position as finishSingleFlow's refreshVersionsAfterEdit:
     // brings this photo's earlier edits back as the 美化紀錄 strip.
@@ -12994,7 +12994,7 @@
         if (record.status === "processing") record.status = "done";
         updateBatchSidebarItem(record);
         refreshIfSelected(record);
-        showError("重新處理時發生錯誤，請再試一次。");
+        showError(tr("重新處理時發生錯誤，請再試一次。"));
       });
     } else {
       backToProcessFromResults();
@@ -13034,7 +13034,7 @@
     if (!entries.length) return "";
     const lines = entries.map(([stage, seconds]) => `${stage.padEnd(24)}${Number(seconds).toFixed(2)}s`);
     const total = entries.reduce((sum, [, seconds]) => sum + Number(seconds), 0);
-    lines.push("", `${"總計（尚未完成，僅分析階段）".padEnd(24)}${total.toFixed(2)}s`);
+    lines.push("", tr("{v1}{v2}s", { v1: "總計（尚未完成，僅分析階段）".padEnd(24), v2: total.toFixed(2) }));
     return lines.join("\n");
   }
 
@@ -13048,12 +13048,12 @@
   // its own prompt element, hence `text` instead of `el` -- see
   // timingListAsText above.
   const PROMPT_MODAL_STAGES = [
-    { label: "照片分析", el: () => els.promptAnalysis },
-    { label: "使用者補充指令", el: () => els.promptReview },
-    { label: "裁切驗證", el: () => els.promptCrop },
-    { label: "修圖（送給 Editor）", el: () => els.promptEdit },
-    { label: "Feature Resolver 結果", el: () => els.promptEditResolution, omitWhenEmpty: true },
-    { label: "眼部修正（第二段）", el: () => els.promptGazeRepair },
+    { label: tr("照片分析"), el: () => els.promptAnalysis },
+    { label: tr("使用者補充指令"), el: () => els.promptReview },
+    { label: tr("裁切驗證"), el: () => els.promptCrop },
+    { label: tr("修圖（送給 Editor）"), el: () => els.promptEdit },
+    { label: tr("Feature Resolver 結果"), el: () => els.promptEditResolution, omitWhenEmpty: true },
+    { label: tr("眼部修正（第二段）"), el: () => els.promptGazeRepair },
     // Unlike every stage above, this one has no #prompt-* element to read --
     // it's a same-origin image lazy-fetched on click (see
     // loadPromptsModalImageTab below) from whichever job/run `lastResult`
@@ -13061,11 +13061,11 @@
     // when Step 5b actually ran (pipeline.py's finish_stage), so a missing
     // image is a normal 404, handled by loadPromptsModalImageTab itself
     // rather than the empty-tab styling the text stages use.
-    { label: "第一階段中間圖（眼部修正前）", image: true },
-    { label: "品質檢查", el: () => els.promptQa },
-    { label: "處理時間", text: timingListAsText, emptyText: "（尚無處理時間記錄）" },
-    { label: "API 用量與費用", text: tokenUsageAsText, emptyText: "（尚無用量記錄）" },
-    { label: "分析原始 JSON", text: analyzeRawJsonText, emptyText: "（尚無分析結果）" }
+    { label: tr("第一階段中間圖（眼部修正前）"), image: true },
+    { label: tr("品質檢查"), el: () => els.promptQa },
+    { label: tr("處理時間"), text: timingListAsText, emptyText: tr("（尚無處理時間記錄）") },
+    { label: tr("API 用量與費用"), text: tokenUsageAsText, emptyText: tr("（尚無用量記錄）") },
+    { label: tr("分析原始 JSON"), text: analyzeRawJsonText, emptyText: tr("（尚無分析結果）") }
   ];
 
   // Revoked whenever a new image loads or the modal closes, so switching
@@ -13095,7 +13095,7 @@
     }
     if (els.promptsModalImage) els.promptsModalImage.src = objectUrl;
     if (els.promptsModalImageOriginal) els.promptsModalImageOriginal.removeAttribute("src");
-    if (els.promptsModalImageCompareBtn) els.promptsModalImageCompareBtn.textContent = "與原圖比較";
+    if (els.promptsModalImageCompareBtn) els.promptsModalImageCompareBtn.textContent = tr("與原圖比較");
   }
 
   // #prompts-modal-image-compare-btn: same stacked-<img>-pair toggle as
@@ -13111,7 +13111,7 @@
       els.promptsModalImageOriginal.src = sourceImageUrl(lastResult.jobId);
     }
     if (els.promptsModalImageCompareBtn) {
-      els.promptsModalImageCompareBtn.textContent = showingOriginal ? "顯示第一階段圖" : "與原圖比較";
+      els.promptsModalImageCompareBtn.textContent = showingOriginal ? tr("顯示第一階段圖") : tr("與原圖比較");
     }
   }
 
@@ -13119,24 +13119,24 @@
   // pipeline doesn't expose this key) -- an aipoc lastResult short-circuits
   // to a fixed message instead of firing a fetch() that can only 404.
   async function loadPromptsModalImageTab() {
-    showPromptsModalText("載入中…");
+    showPromptsModalText(tr("載入中…"));
     if (!lastResult?.jobId) {
-      showPromptsModalText("（尚無結果可查看）");
+      showPromptsModalText(tr("（尚無結果可查看）"));
       return;
     }
     if (lastResult.path === "aipoc") {
-      showPromptsModalText("（AIPoC 尚不支援查看第一階段中間圖）");
+      showPromptsModalText(tr("（AIPoC 尚不支援查看第一階段中間圖）"));
       return;
     }
     try {
       const response = await fetch(preEditImageUrl(lastResult.jobId, { path: lastResult.path, run: lastResult.sourceRun != null ? lastResult.sourceRun : lastResult.runNumber }));
       if (!response.ok) {
-        showPromptsModalText("（此結果沒有第一階段中間圖，可能是單階段模式或未啟用 AI 修圖）");
+        showPromptsModalText(tr("（此結果沒有第一階段中間圖，可能是單階段模式或未啟用 AI 修圖）"));
         return;
       }
       showPromptsModalImage(URL.createObjectURL(await response.blob()));
     } catch (err) {
-      showPromptsModalText("（載入第一階段中間圖時發生錯誤）");
+      showPromptsModalText(tr("（載入第一階段中間圖時發生錯誤）"));
     }
   }
 
@@ -13370,13 +13370,13 @@
   function analysisPreflightStep() {
     const analysisModel = els.analysisModelSelect?.value || window.PhotoAgentConfig.defaultAnalysisModel || "gpt-5.6-luna";
     const est = preflightAnalysisEstimate(analysisModel);
-    return { label: "分析花費", modelLabel: est.label, cost: est.cost };
+    return { label: tr("分析花費"), modelLabel: est.label, cost: est.cost };
   }
 
   function editPreflightStep() {
     const modelQualityOpt = findModelQualityOption(els.imageModelQualitySelect?.value) || {};
     const est = preflightEditEstimate(modelQualityOpt.model, modelQualityOpt.quality);
-    return { label: "美化花費", modelLabel: est.label, cost: est.cost };
+    return { label: tr("美化花費"), modelLabel: est.label, cost: est.cost };
   }
 
   function formatPreflightCostValue(cost) {
@@ -13429,7 +13429,7 @@
         const knownCosts = steps.filter((s) => s.cost != null);
         const total = knownCosts.length ? knownCosts.reduce((sum, s) => sum + s.cost, 0) : null;
         els.preflightCostModalRows.appendChild(
-          buildPreflightCostRow({ label: "總金額", cost: total }, "cost-modal-row-total"));
+          buildPreflightCostRow({ label: tr("總金額"), cost: total }, "cost-modal-row-total"));
       }
       const finish = (result) => { clearPreflightCostModalWait(); els.preflightCostModal.hidden = true; resolve(result); };
       preflightCostModalHandlers = { ok: () => finish(true), cancel: () => finish(false) };
@@ -13496,7 +13496,7 @@
       el.hidden = true;
       return;
     }
-    el.textContent = labels.join("、");
+    el.textContent = labels.join(tr("、"));
     el.hidden = false;
   }
 
@@ -13561,10 +13561,10 @@
         : tokens.reasoningTokens > 0
           ? `, reasoning(${[tokens.reasoningTokens, effortPart].filter(Boolean).join(", ")})`
           : effortPart ? `, non-reasoning(${effortPart})` : ", non-reasoning";
-      const timePart = seconds != null ? `${Number(seconds).toFixed(2)}s｜` : "";
+      const timePart = seconds != null ? tr("{v1}s｜", { v1: Number(seconds).toFixed(2) }) : "";
       lines.push(
         `${stage} (${modelLabel}${reasoningLabel})`.padEnd(64) +
-        `${timePart}輸入 文字${tokens.input.text}/圖片${tokens.input.image}｜輸出 文字${tokens.output.text}/圖片${tokens.output.image}｜共 ${tokens.total} tokens ｜ $${cost.toFixed(4)}`
+        tr("{timePart}輸入 文字{text}/圖片{image}｜輸出 文字{v4}/圖片{v5}｜共 {total} tokens ｜ ${v7}", { timePart, text: tokens.input.text, image: tokens.input.image, v4: tokens.output.text, v5: tokens.output.image, total: tokens.total, v7: cost.toFixed(4) })
       );
     });
     if (!lines.length) return "";
@@ -13580,7 +13580,7 @@
     const stages = PROMPT_MODAL_STAGES.map((stage) => {
       if (stage.image) return { label: stage.label, image: true, empty: !lastResult?.jobId };
       const { label, el, text: getText, emptyText } = stage;
-      const fallback = emptyText || "（此步驟未呼叫 GPT）";
+      const fallback = emptyText || tr("（此步驟未呼叫 GPT）");
       const text = (getText ? getText() : el()?.textContent)?.trim();
       const empty = !text || text === "–" || text === fallback;
       return { label, text: empty ? fallback : text, empty };
@@ -14020,7 +14020,7 @@
 
     const childDirs = root.filter((e) => e.isDirectory).sort((a, b) => collateName(a.name, b.name));
     if (!childDirs.length) {
-      throw new Error("資料夾裡找不到原圖與 run_N 子資料夾。");
+      throw new Error(tr("資料夾裡找不到原圖與 run_N 子資料夾。"));
     }
 
     const images = [];
@@ -14035,11 +14035,11 @@
       }
     }
     if (!images.length) {
-      throw new Error("子資料夾裡都找不到可用的 result.json（需含 analysis）。");
+      throw new Error(tr("子資料夾裡都找不到可用的 result.json（需含 analysis）。"));
     }
     // Say what was left out rather than quietly importing a subset.
     if (skipped.length) {
-      showError(`已略過 ${skipped.length} 個無法讀取的子資料夾：${skipped.slice(0, 5).join("、")}${skipped.length > 5 ? " …" : ""}`);
+      showError(tr("已略過 {length} 個無法讀取的子資料夾：{v2}{v3}", { length: skipped.length, v2: skipped.slice(0, 5).join("、"), v3: skipped.length > 5 ? " …" : "" }));
     }
     return images;
   }
@@ -14100,7 +14100,7 @@
       if (images.length > 1) await importAsBatch(images);
       else await importAsSingle(images[0], dirEntry.name);
     } catch (error) {
-      showError(`無法讀取結果資料夾：${friendlyError(error)}`);
+      showError(tr("無法讀取結果資料夾：{v1}", { v1: friendlyError(error) }));
     }
   }
 
@@ -14301,8 +14301,8 @@
       }
       if (!writeModeHandoff(caseKey) && isReviewDirty()) {
         const leave = await showConfirmModal(
-          "這張照片還沒美化的調整沒辦法帶到對話模式，切過去就會清掉。確定要切換嗎？",
-          { confirmLabel: "切換", cancelLabel: "留在這裡", danger: false }
+          tr("這張照片還沒美化的調整沒辦法帶到對話模式，切過去就會清掉。確定要切換嗎？"),
+          { confirmLabel: tr("切換"), cancelLabel: tr("留在這裡"), danger: false }
         );
         if (!leave) return;
       }
@@ -14414,8 +14414,8 @@
   const goChatHome = async () => {
     if (isReviewDirty()) {
       const leave = await showConfirmModal(
-        "這張照片還沒美化的調整會清掉。確定要回到首頁嗎？",
-        { confirmLabel: "回到首頁", cancelLabel: "留在這裡", danger: false }
+        tr("這張照片還沒美化的調整會清掉。確定要回到首頁嗎？"),
+        { confirmLabel: tr("回到首頁"), cancelLabel: tr("留在這裡"), danger: false }
       );
       if (!leave) return;
     }
@@ -14429,8 +14429,8 @@
     els.newChatButton.addEventListener("click", async () => {
       if (isReviewDirty()) {
         const leave = await showConfirmModal(
-          "這張照片還沒美化的調整會清掉。確定要開新對話嗎？",
-          { confirmLabel: "開新對話", cancelLabel: "留在這裡", danger: false }
+          tr("這張照片還沒美化的調整會清掉。確定要開新對話嗎？"),
+          { confirmLabel: tr("開新對話"), cancelLabel: tr("留在這裡"), danger: false }
         );
         if (!leave) return;
       }

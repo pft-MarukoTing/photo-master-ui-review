@@ -3,6 +3,7 @@
 // the extra instruction (個人化需求) once there is one, and the render settings
 // (設定) while adjusting or once a typed request changed them.
 // Every click is saved to the photo's plan right away as a patch.
+import { lang, SOURCE, t } from "./i18n";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { urls } from "./api";
 import { fillNoteBox, noteBoxKeys, promptFaces, promptSections, PromptEditor, readPromptBox, type FaceRef } from "./chat";
@@ -14,34 +15,36 @@ import { aspectLabel, FIXED_RATIO_RE, recipeItems, REFRAME_RE, renderOptionLabel
 
 export type Category = "face" | "recipe" | "style" | "prompt" | "settings";
 
+// label、term 是中文原文：label 也是頁面告訴後端的面板名稱（Screen），顯示時
+// 用 nameOf、termOf 翻成頁面的語言。
 // term：放進句子或接在動詞後面時的叫法。「畫面」單獨當按鈕很清楚，但「看畫面」
 // 「這是更新後的畫面」會被讀成在講照片本身，所以句子裡說「畫面建議」。
 export const CATEGORIES: Record<Category, { label: string; icon: string; intro: string; term?: string }> = {
-  face: { label: "人像", icon: "person", intro: "有小圓點的是看過原圖後建議調整的項目，點一下可以開或關。" },
+  face: { label: "人像", icon: "person", intro: t("有小圓點的是看過原圖後建議調整的項目，點一下可以開或關。") },
   recipe: {
     label: "畫面",
     term: "畫面建議",
     icon: "recipe",
-    intro: "這些是看過原圖後，針對光線、色調、構圖這些整張畫面的建議，打勾的會套用，點一下可以開或關。",
+    intro: t("這些是看過原圖後，針對光線、色調、構圖這些整張畫面的建議，打勾的會套用，點一下可以開或關。"),
   },
-  style: { label: "風格", icon: "wand", intro: "想換一種氛圍的話，先挑想改的類別再選風格；不選就維持照片原本的樣子。" },
-  prompt: { label: "個人化需求", icon: "note", intro: "這段個人化需求會在美化時一起套用，可以直接修改或清除。" },
-  settings: { label: "設定", icon: "tune", intro: "這張照片美化時用的引擎與輸出設定，可以直接修改。" },
+  style: { label: "風格", icon: "wand", intro: t("想換一種氛圍的話，先挑想改的類別再選風格；不選就維持照片原本的樣子。") },
+  prompt: { label: "個人化需求", icon: "note", intro: t("這段個人化需求會在美化時一起套用，可以直接修改或清除。") },
+  settings: { label: "設定", icon: "tune", intro: t("這張照片美化時用的引擎與輸出設定，可以直接修改。") },
 };
 
 // 美化過一版之後再打開面板，看到的已經不是剛分析完的預設，而是上一版的設定。
 // 開場白要把這件事講出來：建議還是看原圖給的，開著關著的則是上次留下來的。
 const AGAIN_INTRO: Record<Category, string> = {
-  face: "開或關沿用上次美化的設定，有小圓點的是看過原圖後建議調整的項目，點一下可以改。",
-  recipe: "這些是看原圖分析出來、整張畫面的建議，打勾的狀態沿用上次美化，點一下可以開或關。",
-  style: "這是上次選的風格，想換可以直接改；不選就維持照片原本的樣子。",
-  prompt: "這是上次的個人化需求，可以直接修改或清除。",
-  settings: "這是上次美化用的引擎與輸出設定，可以直接修改。",
+  face: t("開或關沿用上次美化的設定，有小圓點的是看過原圖後建議調整的項目，點一下可以改。"),
+  recipe: t("這些是看原圖分析出來、整張畫面的建議，打勾的狀態沿用上次美化，點一下可以開或關。"),
+  style: t("這是上次選的風格，想換可以直接改；不選就維持照片原本的樣子。"),
+  prompt: t("這是上次的個人化需求，可以直接修改或清除。"),
+  settings: t("這是上次美化用的引擎與輸出設定，可以直接修改。"),
 };
 
 export const PROMPT_MAX = 2000; // chat_plan.USER_PROMPT_MAX_LEN
 
-const SUGGESTED_HINT = "看過原圖後建議調整";
+const SUGGESTED_HINT = t("看過原圖後建議調整");
 
 // 這個人有沒有東西要修。分析標出來的（flagged）和已經開著的（allowed）都算 --
 // 用於修正摘要；有分析項目但未建議修正的人仍可在面板自行設定。
@@ -55,10 +58,12 @@ export function introFor(cat: Category, a: Analysis, plan: Plan, again = false):
   const base = again ? AGAIN_INTRO[cat] : CATEGORIES[cat].intro;
   if (cat !== "face") return base;
   const people = faceEntries(a, plan.face_issue_overrides || {}).filter(canConfigurePerson).length;
-  return people > 1 ? `照片裡每個人都可以分開調整，${base}` : base;
+  return people > 1 ? t("照片裡每個人都可以分開調整，{base}", { base }) : base;
 }
 
-export const termOf = (cat: Category) => CATEGORIES[cat].term || CATEGORIES[cat].label;
+export const termOf = (cat: Category) => t(CATEGORIES[cat].term || CATEGORIES[cat].label);
+// A category's button name as shown; CATEGORIES[cat].label itself is what the page tells the backend.
+export const nameOf = (cat: Category) => t(CATEGORIES[cat].label);
 
 // The categories this photo has anything to show in, in the order offered.
 export function categoriesFor(a: Analysis, caps: Capabilities, plan: Plan): Category[] {
@@ -83,29 +88,29 @@ export function topicLead(cat: Category, a: Analysis, caps: Capabilities, plan: 
       // faceEntries 的順序編的。
       const who = faceEntries(a)
         .map((f, i) => ({
-          name: f.label || `人物 ${i + 1}`,
+          name: f.label || t("人物 {v1}", { v1: i + 1 }),
           fixes: f.subjectIndex >= 0 ? f.issues.filter((x) => x.flagged).map((x) => x.label) : [],
         }))
         .filter((p) => p.fixes.length);
-      if (!who.length) return "人像我幫你看過了，有幾項可以自己決定要不要調整。要先看一下嗎？";
+      if (!who.length) return t("人像我幫你看過了，有幾項可以自己決定要不要調整。要先看一下嗎？");
       // 三個人以上就只點名字，不然一句話要塞六七個項目，反而看不出重點。
       if (who.length > 2)
-        return `人像我幫你看過了，${who.slice(0, 2).map((p) => p.name).join("、")}等 ${who.length} 個人都有要調整的地方。要先看一下嗎？`;
-      const named = who.map((p) => `${p.name}的${p.fixes.join("、")}`).join("、");
-      return `人像我幫你看過了，${named}會幫你調整。要先看一下嗎？`;
+        return t("人像我幫你看過了，{v1}等 {length} 個人都有要調整的地方。要先看一下嗎？", { v1: who.slice(0, 2).map((p) => p.name).join(t("、")), length: who.length });
+      const named = who.map((p) => t("{name}的{v2}", { name: p.name, v2: p.fixes.join(t("、")) })).join(t("、"));
+      return t("人像我幫你看過了，{named}會幫你調整。要先看一下嗎？", { named });
     }
     case "recipe":
       // 不點名：這裡的每一項本身就是一整句話，念兩項就把這句開場撐成一段，反而
       // 看不出在問什麼。項目數先帶過，細節等他點開面板再看。
-      return `畫面的部分（光線、色調、構圖這些），我有 ${recipeItems(a).length} 項建議，預設都會套用。要看一下嗎？`;
+      return t("畫面的部分（光線、色調、構圖這些），我有 {v1} 項建議，預設都會套用。要看一下嗎？", { v1: recipeItems(a).length });
     case "style": {
-      const names = styleGroups(a, caps).slice(0, 3).map((g) => g.label).join("、");
-      return `最後是風格，${names}可以換一種氛圍，不選就維持照片原本的樣子。要看看嗎？`;
+      const names = styleGroups(a, caps).slice(0, 3).map((g) => g.label).join(t("、"));
+      return t("最後是風格，{names}可以換一種氛圍，不選就維持照片原本的樣子。要看看嗎？", { names });
     }
     case "prompt":
-      return `你先前寫的「${short(plan.user_prompt?.trim() || "", 18)}」美化時會一起套用。要看一下嗎？`;
+      return t("你先前寫的「{v1}」美化時會一起套用。要看一下嗎？", { v1: short(plan.user_prompt?.trim() || "", 18) });
     default:
-      return "最後是設定，可以改美化時用的引擎和輸出尺寸。要看一下嗎？";
+      return t("最後是設定，可以改美化時用的引擎和輸出尺寸。要看一下嗎？");
   }
 }
 
@@ -116,26 +121,26 @@ export function topicRecap(cat: Category, a: Analysis, caps: Capabilities, plan:
     case "face": {
       const on = faceEntries(a, plan.face_issue_overrides || {})
         .map((f, i) => ({
-          name: f.label || `人物 ${i + 1}`,
+          name: f.label || t("人物 {v1}", { v1: i + 1 }),
           items: f.issues.filter((x) => x.allowed).map((x) => x.label),
         }))
         .filter((e) => e.items.length);
-      if (!on.length) return "人像目前都不修。";
-      if (on.length > 2) return `人像會修 ${on.length} 個人。`;
-      return `人像會修${on.map((e) => `${e.name}的${e.items.join("、")}`).join("、")}。`;
+      if (!on.length) return t("人像目前都不修。");
+      if (on.length > 2) return t("人像會修 {length} 個人。", { length: on.length });
+      return t("人像會修{v1}。", { v1: on.map((e) => t("{name}的{v2}", { name: e.name, v2: e.items.join(t("、")) })).join(t("、")) });
     }
     case "recipe": {
       // 只給數字：項目名稱本身都是一整句，列出來會把這一行撐成一段；要看細節
       // 的路就在同一則訊息的「再看畫面建議」。
       const n = recipeItems(a).filter((_, i) => (plan.recipe_checked || [])[i] !== false).length;
-      return n ? `畫面建議會套用 ${n} 項。` : "畫面建議目前都不套用。";
+      return n ? t("畫面建議會套用 {n} 項。", { n }) : t("畫面建議目前都不套用。");
     }
     case "style": {
       const picked = pickedStyles(a, caps, plan);
-      return picked.length ? `風格選了${picked.join("、")}。` : "風格維持照片原本的樣子。";
+      return picked.length ? t("風格選了{v1}。", { v1: picked.join(t("、")) }) : t("風格維持照片原本的樣子。");
     }
     case "prompt":
-      return plan.user_prompt?.trim() ? `個人化需求：「${short(plan.user_prompt.trim(), 24)}」` : "";
+      return plan.user_prompt?.trim() ? t("個人化需求：「{v1}」", { v1: short(plan.user_prompt.trim(), 24) }) : "";
     default:
       return "";
   }
@@ -304,7 +309,7 @@ function LevelChip(props: {
         onClick={props.onToggle}
       >
         {props.on && <Icon name="check" size={12} />}
-        {props.on ? `${props.label}：${cur.label}` : props.label}
+        {props.on ? t("{label}：{v2}", { label: props.label, v2: cur.label }) : props.label}
         {props.suggested && <span class="chat-opt-dot" role="img" aria-label={SUGGESTED_HINT} />}
       </button>
       {props.on && (
@@ -314,8 +319,8 @@ function LevelChip(props: {
           disabled={props.disabled}
           aria-haspopup="menu"
           aria-expanded={open}
-          aria-label={`換${props.label}的程度`}
-          title={`換${props.label}的程度`}
+          aria-label={t("換{label}的程度", { label: props.label })}
+          title={t("換{label}的程度", { label: props.label })}
           onClick={props.onOpen}
         >
           <span class={`chat-opt-caret${open ? " is-open" : ""}`} />
@@ -368,7 +373,7 @@ function FaceOptions({ analysis, plan, faces, busy, hot, onPatch }: Body) {
   const entries = all.filter(canConfigurePerson);
   const set = (issue: FaceIssue, value: FaceOverride) =>
     onPatch({ face_issue_overrides: { [issue.key]: value } });
-  const faceOf = (f: FaceEntry): FaceRef => faces[f.subjectIndex] || { name: f.label || `人物 ${all.indexOf(f) + 1}`, thumb: "" };
+  const faceOf = (f: FaceEntry): FaceRef => faces[f.subjectIndex] || { name: f.label || t("人物 {v1}", { v1: all.indexOf(f) + 1 }), thumb: "" };
   // 這張照片分析出來的原樣，key -> 狀態。拿來比對現在的設定，才知道哪些是使用
   // 者自己動過的 -- 列上那句話只說「現在會修什麼」，說不出那是建議還是他改的。
   const base = new Map<string, string>();
@@ -380,7 +385,7 @@ function FaceOptions({ analysis, plan, faces, busy, hot, onPatch }: Body) {
     f.issues
       .filter((x) => x.allowed && locked[x.option] !== false)
       .map((x) => x.label)
-      .join("、") || "不修";
+      .join(t("、")) || t("不修");
   // 一個人的項目。收起來跟攤開來是同一份內容，差別只在外面那一層。
   const issuesOf = (f: FaceEntry) => (
     <div class="chat-choices">
@@ -416,7 +421,7 @@ function FaceOptions({ analysis, plan, faces, busy, hot, onPatch }: Body) {
             suggested={issue.flagged}
             hot={hot.has(`face_issue_overrides.${issue.key}`)}
             disabled={busy || off}
-            title={off ? "這一項已在「設定」的人像修正關閉" : undefined}
+            title={off ? t("這一項已在「設定」的人像修正關閉") : undefined}
             onClick={toggle}
           />
         );
@@ -442,7 +447,7 @@ function FaceOptions({ analysis, plan, faces, busy, hot, onPatch }: Body) {
                 {face.thumb ? <img src={face.thumb} alt="" /> : <span class="chat-face-blank" />}
                 <span class="chat-opt-person-name">{face.name}</span>
                 <span class="chat-opt-person-sum">{summaryOf(f)}</span>
-                {changedOf(f) && <span class="chat-opt-person-mark">已調整</span>}
+                {changedOf(f) && <span class="chat-opt-person-mark">{t("已調整")}</span>}
                 <span class={`chat-opt-caret${open ? " is-open" : ""}`} />
               </button>
               {open && <div class="chat-opt-person-body">{issuesOf(f)}</div>}
@@ -495,7 +500,7 @@ function RecipeOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
               <span>
                 {m ? (
                   <>
-                    {`${m[1]} `}
+                    {lang === SOURCE ? `${m[1]} ` : `${t("重新構圖：")} `}
                     <strong>{m[2]}</strong>
                   </>
                 ) : (
@@ -505,7 +510,7 @@ function RecipeOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
             </button>
             {fixed && (
               <p class="chat-note">
-                選了 {plan.aspect_ratio} 就一定要重新構圖，想取消的話把比例改成「{aspectLabel(caps, "original")}」。
+                {t("選了 {ratio} 就一定要重新構圖，想取消的話把比例改成「{original}」。", { ratio: plan.aspect_ratio || "", original: aspectLabel(caps, "original") })}
               </p>
             )}
           </li>
@@ -524,13 +529,13 @@ function poseNotice(caps: Capabilities, pose: string, r: PoseFaceResult): string
   const rules = (POSE_FACE_RULES[pose] || []).filter((x) => r.applied.includes(x.category));
   if (!rules.length && !r.restored.length) return [];
   const title = !rules.length && r.previousPose
-    ? pose === "default" ? `已取消「${name(r.previousPose)}」的自動調整` : `已切換為「${name(pose)}」`
-    : `已配合「${name(pose)}」自動調整人像設定`;
+    ? pose === "default" ? t("已取消「{v1}」的自動調整", { v1: name(r.previousPose) }) : t("已切換為「{v1}」", { v1: name(pose) })
+    : t("已配合「{v1}」自動調整人像設定", { v1: name(pose) });
   const lines = [title];
-  r.restored.forEach((c) => lines.push(`${label(c)}：已還原為原本設定`));
+  r.restored.forEach((c) => lines.push(t("{v1}：已還原為原本設定", { v1: label(c) })));
   rules.forEach((x) => {
     const level = x.values.level && LEVEL_OPTIONS[x.category]?.find((o) => o.value === x.values.level)?.label;
-    lines.push(`${label(x.category)}：${level || (x.values.allowed === false ? "關閉" : "開啟")}（${x.reason}）`);
+    lines.push(t("{v1}：{v2}（{reason}）", { v1: label(x.category), v2: level || (x.values.allowed === false ? t("關閉@@狀態") : t("開啟@@狀態")), reason: x.reason }));
   });
   return lines;
 }
@@ -572,7 +577,7 @@ function StyleOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
               onClick={() => setOpen(open === g.id ? null : g.id)}
             >
               {g.label}
-              {picked && <span class="chat-opt-value">：{picked}</span>}
+              {picked && <span class="chat-opt-value">{t("：")}{picked}</span>}
               <span class={`chat-opt-caret${open === g.id ? " is-open" : ""}`} />
             </button>
           );
@@ -581,7 +586,7 @@ function StyleOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
       {group && (
         <div class="chat-opt-style-row">
           <button type="button" class={`chat-opt-style-none${valueOf(group) === group.default ? " is-picked" : ""}`} disabled={busy} onClick={() => pick(group.default)}>
-            不指定
+            {t("不指定")}
           </button>
           {group.choices
             .filter((c) => c.value !== group.default)
@@ -622,13 +627,13 @@ function PromptOptions({ plan, faces, busy, hot, onPatch, onQuietPrompt }: Body)
         value={saved}
         faces={faces}
         busy={busy}
-        label="個人化需求"
-        placeholder="例如：讓背景更乾淨一點"
+        label={t("個人化需求")}
+        placeholder={t("例如：讓背景更乾淨一點")}
         onSave={onQuietPrompt}
         extra={
           !!saved && (
             <button type="button" class="chat-chip chat-opt-chip is-ghost" disabled={busy} onClick={() => onPatch({ user_prompt: "" })}>
-              清除
+              {t("清除")}
             </button>
           )
         }
@@ -646,7 +651,7 @@ function SettingsOptions({ plan, caps, busy, hot, onPatch }: Body) {
     <div class="chat-settings-editor">
       <div class="chat-settings-fields">
         <label class={field("render_option")}>
-          <span class="chat-meta">美化引擎</span>
+          <span class="chat-meta">{t("美化引擎")}</span>
           <select class="quality-select" value={plan.render_option} disabled={busy} onChange={(e) => onPatch({ render_option: val(e) })}>
             {caps.render.options.map((o) => (
               <option value={o.id}>{renderOptionLabel(caps, o.id)}</option>
@@ -661,11 +666,11 @@ function SettingsOptions({ plan, caps, busy, hot, onPatch }: Body) {
           onChange={(aspect_ratio) => onPatch({ aspect_ratio })}
         />
       </div>
-      <p class="chat-note">換長寬比會馬上依新的長寬比重新構圖，畫面建議裡的構圖也會跟著換。</p>
+      <p class="chat-note">{t("換長寬比會馬上依新的長寬比重新構圖，畫面建議裡的構圖也會跟著換。")}</p>
       {caps.advanced_options.length > 0 && (
         <div class="chat-settings-portrait">
-          <span class="chat-meta">人像修正</span>
-          <p class="chat-note">這幾項預設會偵測並修正，不想被改到的先關掉。</p>
+          <span class="chat-meta">{t("人像修正")}</span>
+          <p class="chat-note">{t("這幾項預設會偵測並修正，不想被改到的先關掉。")}</p>
           {caps.advanced_options.map((o) => {
             const on = plan.advanced_options?.[o.key] ?? o.default;
             return (

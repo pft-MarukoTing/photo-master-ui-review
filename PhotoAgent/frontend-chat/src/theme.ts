@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 // The theme palette is global: both UIs write body[data-theme] /
 // body[data-theme-mode] and persist to the same localStorage key, so a theme
 // picked here is the one the old page opens with, and vice versa. The maps
@@ -25,12 +26,12 @@ export type ThemeKey = (typeof THEME_CYCLE)[number];
 // The button's label is the theme's own name -- no two share a glyph, and all
 // six are two glyphs wide (styles.css width-locks .btn-label off that fact).
 export const THEME_LABELS: Record<ThemeKey, string> = {
-  default: "極光",
-  "purple-light": "鳶尾",
-  "lilac-dark": "夜霞",
-  lilac: "藕荷",
-  "caramel-dark": "燼火",
-  caramel: "暖陽",
+  default: t("極光"),
+  "purple-light": t("鳶尾"),
+  "lilac-dark": t("夜霞"),
+  lilac: t("藕荷"),
+  "caramel-dark": t("燼火"),
+  caramel: t("暖陽"),
 };
 
 export const THEME_SWATCH_CLASS: Record<ThemeKey, string> = {

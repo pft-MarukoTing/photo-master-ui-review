@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 /** Route only unoptioned person clarifications to the enabled preview bridge.
  * Legacy/off mode returns the original result unchanged. Do not classify
  * questions by matching prose: use the review's validated semantic evidence.
@@ -33,5 +34,5 @@ export function routeReviewQuestion<T extends Review>(review: T, previewEnabled:
   // Accepted for clarification, not approved for editing. The Note stays
   // pending until the bridge resolves both action and stable person ID.
   return { ...review, accepted: true, ask: false, options: [], semantic_pending: true,
-    reply: "收到，我先確認這項需求的對象與調整內容。" };
+    reply: t("收到，我先確認這項需求的對象與調整內容。") };
 }

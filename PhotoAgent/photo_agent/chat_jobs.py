@@ -14,7 +14,7 @@ minutes.
 import os
 
 from engine_result_code import RESULT_INVALID_PARAMETER
-from photo_agent import chat_assistant, preview_conversation
+from photo_agent import chat_assistant, i18n, preview_conversation
 
 # Read by both sides, so the backend and the worker agree on it from the
 # shared .env.default alone: the job queue's name with ":chat" on the end,
@@ -58,7 +58,8 @@ def run(params, spent=None):
     list, gets the {model, usage} of every model call the job made."""
     token = chat_assistant.SPENT.set(spent)
     try:
-        return _run(params)
+        with i18n.use(params.get("lang")):
+            return _run(params)
     finally:
         chat_assistant.SPENT.reset(token)
 

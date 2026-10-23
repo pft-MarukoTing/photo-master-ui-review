@@ -1,3 +1,4 @@
+import { shownRecipe, t } from "./i18n";
 import type { Analysis, Capabilities, Dict, Message, Plan, Version } from "./types";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -14,8 +15,8 @@ export function timeLabel(epochSeconds: number | null | undefined): string {
   const d = new Date(epochSeconds * 1000);
   const diff = daysAgo(d);
   const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  if (diff === 0) return `今天 ${hm}`;
-  if (diff === 1) return `昨天 ${hm}`;
+  if (diff === 0) return t("今天 {hm}", { hm });
+  if (diff === 1) return t("昨天 {hm}", { hm });
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
@@ -25,9 +26,9 @@ export function dayLabel(epochSeconds: number | null | undefined): string {
   if (!epochSeconds) return "";
   const d = new Date(epochSeconds * 1000);
   const diff = daysAgo(d);
-  if (diff === 0) return "今天";
-  if (diff === 1) return "昨天";
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
+  if (diff === 0) return t("今天");
+  if (diff === 1) return t("昨天");
+  return t("{v1}月{v2}日", { v1: d.getMonth() + 1, v2: d.getDate() });
 }
 
 export function clockLabel(epochSeconds: number): string {
@@ -51,21 +52,22 @@ export function stripFieldLabel(value: unknown, labels: string[]): string {
 const joinParts = (parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(" ");
 
 export function photoSummaryText(a: Analysis): string {
-  const summary = stripFieldLabel(a.photo_summary, ["照片內容", "照片摘要", "內容"]);
-  const subject = stripFieldLabel(a.main_subject, ["主體", "主要主體"]);
-  const scene = stripFieldLabel(a.scene_type, ["場景", "場景類型"]);
+  const summary = stripFieldLabel(a.photo_summary, [t("照片內容"), t("照片摘要"), t("內容")]);
+  const subject = stripFieldLabel(a.main_subject, [t("主體"), t("主要主體")]);
+  const scene = stripFieldLabel(a.scene_type, [t("場景"), t("場景類型")]);
   if (summary) {
     return joinParts([
-      `${summary}。`,
-      subject && !summary.includes(subject) && `主體：${subject}。`,
-      scene && !summary.includes(scene) && `場景：${scene}。`,
+      t("{summary}。", { summary }),
+      subject && !summary.includes(subject) && t("主體：{subject}。", { subject }),
+      scene && !summary.includes(scene) && t("場景：{scene}。", { scene }),
     ]);
   }
-  return joinParts([subject ? `主體：${subject}。` : "已完成照片總覽辨識。", scene && `場景：${scene}。`]);
+  return joinParts([subject ? t("主體：{subject}。", { subject }) : t("已完成照片總覽辨識。"), scene && t("場景：{scene}。", { scene })]);
 }
 
 export function photoTags(a: Analysis): string[] {
-  return [a.subject_category, a.scene_category].filter((t) => typeof t === "string" && t.trim()) as string[];
+  // Fixed Chinese values (人物、室內…), shown translated.
+  return ([a.subject_category, a.scene_category].filter((t) => typeof t === "string" && t.trim()) as string[]).map((tag) => t(tag));
 }
 
 export function photoIssues(a: Analysis): string[] {
@@ -84,9 +86,9 @@ export const FIXED_RATIO_RE = /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/;
 
 // 重新構圖中的那一句，和舊版 app.js 的 reframeLoadingMessage 同一份文案。
 export function reframeLoadingMessage(ratio?: string): string {
-  if (!ratio || ratio === "auto") return "由 AI 選擇比例並重新構圖中…";
-  if (ratio === "original") return "依原圖比例重新構圖中…";
-  return `依 ${ratio} 重新構圖中…`;
+  if (!ratio || ratio === "auto") return t("由 AI 選擇比例並重新構圖中…");
+  if (ratio === "original") return t("依原圖比例重新構圖中…");
+  return t("依 {ratio} 重新構圖中…", { ratio });
 }
 
 // ── Job errors ──────────────────────────────────────────────────────────────
@@ -94,12 +96,12 @@ export function reframeLoadingMessage(ratio?: string): string {
 // app.js 的 friendlyError 同一套說法。OpenAI 安全審查擋下的不是暫時性錯誤，
 // 同一張照片再試多半一樣，所以另外標出來，卡片好接「換一張照片」。
 const SAFETY_VIOLATION_LABELS: Record<string, string> = {
-  sexual: "照片可能包含裸露或性暗示內容",
-  violence: "照片可能包含暴力或血腥內容",
-  "self-harm": "照片可能包含自我傷害相關內容",
-  self_harm: "照片可能包含自我傷害相關內容",
-  hate: "照片可能包含仇恨或歧視相關內容",
-  harassment: "照片可能包含騷擾相關內容",
+  sexual: t("照片可能包含裸露或性暗示內容"),
+  violence: t("照片可能包含暴力或血腥內容"),
+  "self-harm": t("照片可能包含自我傷害相關內容"),
+  self_harm: t("照片可能包含自我傷害相關內容"),
+  hate: t("照片可能包含仇恨或歧視相關內容"),
+  harassment: t("照片可能包含騷擾相關內容"),
 };
 
 export function jobErrorText(error?: string, code?: string): { text: string; safety: boolean } {
@@ -112,14 +114,14 @@ export function jobErrorText(error?: string, code?: string): { text: string; saf
       .filter(Boolean);
     return {
       text: reasons.length
-        ? `${[...new Set(reasons)].join("、")}，平台政策不允許編輯這類內容`
-        : "照片裡可能有平台政策不允許編輯的內容（例如受著作權保護的角色、商標，或其他敏感內容）",
+        ? t("{v1}，平台政策不允許編輯這類內容", { v1: [...new Set(reasons)].join(t("、")) })
+        : t("照片裡可能有平台政策不允許編輯的內容（例如受著作權保護的角色、商標，或其他敏感內容）"),
       safety: true,
     };
   }
-  if (code === "ai_service_timeout") return { text: "系統回應逾時", safety: false };
+  if (code === "ai_service_timeout") return { text: t("系統回應逾時"), safety: false };
   // 卡片自己接句號；後端寫好的中文句子本身就帶了。
-  return { text: msg.replace(/[。.\s]+$/, "") || "發生未知錯誤", safety: false };
+  return { text: msg.replace(/[。.\s]+$/, "") || t("發生未知錯誤"), safety: false };
 }
 
 // ── Settings labels ─────────────────────────────────────────────────────────
@@ -134,9 +136,9 @@ export function aspectLabel(caps: Capabilities, value?: string): string {
 
 // 「＿重新構圖」前面那一段：依 4:5、依原圖比例、由 AI 選比例。
 export function reframeBy(ratio?: string): string {
-  if (!ratio || ratio === "auto") return "由 AI 選比例";
-  if (ratio === "original") return "依原圖比例";
-  return `依 ${ratio} `;
+  if (!ratio || ratio === "auto") return t("由 AI 選比例");
+  if (ratio === "original") return t("依原圖比例");
+  return t("依 {ratio} ", { ratio });
 }
 
 export function analysisModelLabel(caps: Capabilities, id?: string): string {
@@ -151,14 +153,14 @@ export function analysisModelLabel(caps: Capabilities, id?: string): string {
 // RUN 的進度，寫了也是假的。
 export function renderSubMessages(): string[] {
   return [
-    "AI 正在美化照片…",
-    "正在調整光影與細節…",
-    "正在細修色調…",
-    "正在校正白平衡與色彩…",
-    "正在優化背景與構圖…",
-    "正在強化畫面細節…",
-    "正在做最後的品質檢查…",
-    "快完成了，再等一下…",
+    t("AI 正在美化照片…"),
+    t("正在調整光影與細節…"),
+    t("正在細修色調…"),
+    t("正在校正白平衡與色彩…"),
+    t("正在優化背景與構圖…"),
+    t("正在強化畫面細節…"),
+    t("正在做最後的品質檢查…"),
+    t("快完成了，再等一下…"),
   ];
 }
 
@@ -167,13 +169,13 @@ export function renderSubMessages(): string[] {
 // 會以為整張都被動了。需求內容不知道是什麼，每句都只講「你寫的」、不猜項目。
 export function promptSubMessages(): string[] {
   return [
-    "正在讀你寫的需求…",
-    "正在照你的需求調整照片…",
-    "正在處理你指定的地方…",
-    "其他地方會保持原樣…",
-    "正在讓改過的地方跟周圍自然接上…",
-    "正在做最後的品質檢查…",
-    "快完成了，再等一下…",
+    t("正在讀你寫的需求…"),
+    t("正在照你的需求調整照片…"),
+    t("正在處理你指定的地方…"),
+    t("其他地方會保持原樣…"),
+    t("正在讓改過的地方跟周圍自然接上…"),
+    t("正在做最後的品質檢查…"),
+    t("快完成了，再等一下…"),
   ];
 }
 
@@ -185,20 +187,20 @@ export function promptSubMessages(): string[] {
 // 照片裡不一定有人（風景、商品、食物），所以每一句都不提人、臉、膚色 -- 拍一盤
 // 菜卻看到「正在找出照片裡的每個人」很怪。
 export function analyzeSubMessages(renderQueued: boolean, waiting: boolean): string[] {
-  const then = renderQueued ? "，分析完會自動開始美化" : waiting ? "，分析完就回答你的問題" : "";
+  const then = renderQueued ? t("，分析完會自動開始美化") : waiting ? t("，分析完就回答你的問題") : "";
   return [
-    `正在辨識畫面主體、光線與構圖${then}…`,
-    "正在判斷照片類型與拍攝場景…",
-    "正在診斷畫面中可以加強的地方…",
-    "正在規劃成品的光影與色調方向…",
-    "正在評估構圖與取景…",
-    "正在檢查水平線傾斜與透視變形…",
-    "正在辨識背景中的干擾元素…",
-    "正在評估裁切範圍與長寬比…",
-    "正在檢查曝光、白平衡與色彩表現…",
-    "正在評估清晰度與雜訊…",
-    "正在彙整建議的美化項目…",
-    "即將完成分析…",
+    t("正在辨識畫面主體、光線與構圖{then}…", { then }),
+    t("正在判斷照片類型與拍攝場景…"),
+    t("正在診斷畫面中可以加強的地方…"),
+    t("正在規劃成品的光影與色調方向…"),
+    t("正在評估構圖與取景…"),
+    t("正在檢查水平線傾斜與透視變形…"),
+    t("正在辨識背景中的干擾元素…"),
+    t("正在評估裁切範圍與長寬比…"),
+    t("正在檢查曝光、白平衡與色彩表現…"),
+    t("正在評估清晰度與雜訊…"),
+    t("正在彙整建議的美化項目…"),
+    t("即將完成分析…"),
   ];
 }
 
@@ -271,7 +273,7 @@ export function executedRecipeItems(a: Analysis | null | undefined): string[] {
   const out = plan.flatMap((command, i) => {
     if (typeof command !== "string" || !command.trim() || !prompt.includes(command.trim())) return [];
     const label = recipes[i];
-    return [typeof label === "string" && label.trim() ? label.trim() : command.trim()];
+    return [typeof label === "string" && label.trim() ? shownRecipe(label.trim()) : command.trim()];
   });
   return [...new Set(out)];
 }
@@ -349,7 +351,7 @@ export function renderLabelFor(keys: string[]): RenderLabel | null {
 
 export function qaText(qc: { pass?: boolean; overall_status?: string } | undefined | null): string {
   if (!qc) return "";
-  return qc.pass === false ? qc.overall_status || "需人工複查" : qc.overall_status || "可展示";
+  return qc.pass === false ? qc.overall_status || t("需人工複查") : qc.overall_status || t("可展示");
 }
 
 // 下載成品：跟面板模式（app.js downloadCurrentResultImage）一樣看檔頭決定副檔名。

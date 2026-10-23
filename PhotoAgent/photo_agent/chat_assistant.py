@@ -26,7 +26,7 @@ import time
 
 import config
 from openai_client import OPENAI_RESPONSES_URL, _extract_output_text, _parse_json_from_text, _post_json, _responses_payload
-from photo_agent import capabilities, request_semantics, text_transform
+from photo_agent import capabilities, i18n, request_semantics, text_transform
 from photo_agent.clarification_choices import (LITERAL_CHOICE_INSTRUCTION, validate_selected_literal,
     answer_context, answer_instruction, completion_retry, choice_repair_instruction)
 from photo_agent.chat_brief import face_people, person_names
@@ -81,6 +81,12 @@ OPEN_PANELS = {"人像": "face", "畫面": "recipe", "風格": "style", "個人�
 
 UNMAPPED_REPLY = "這個調整我沒辦法對應到可設定的項目，可以直接在面板上修改。"
 ALREADY_SET_REPLY = "目前的設定已經是這樣了，不需要再調整。"
+
+
+# The prompts here are written for Chinese replies; i18n turns them to the
+# user's language. Sentences the code puts together join the same way.
+_localized = i18n.localized_prompt
+_cat = i18n.sentences
 
 # 這個工具本身怎麼用，兩邊的對話都會被問到。模型只能照這段講，超出的就說不確
 # 定——它不知道的功能，寧可說不知道也不能編一個出來。
@@ -238,8 +244,8 @@ def _faces_view(analysis):
     for person in face_people(analysis):
         index = person["subject_index"]
         mine = {k: v.split("・", 1)[1] for k, v in keys.items() if k.split(":", 1)[0] == str(index)}
-        mine[f"{index}:face_symmetry"] = FACE_SYMMETRY_LABEL
-        view.append({"panel": f"人物 {person['number']}", "name": person["name"], "keys": mine})
+        mine[f"{index}:face_symmetry"] = i18n.label(FACE_SYMMETRY_LABEL)
+        view.append({"panel": i18n.tr("人物 {n}", n=person["number"]), "name": person["name"], "keys": mine})
     return view
 
 
@@ -351,12 +357,12 @@ def build_context(analysis, plan, status, history, debug=False, screen=None):
     # What stays the same comes first, what changes turn to turn last, with a
     # CACHE_BREAK after each part that stays: the instructions (the same for
     # every photo), then the photo's analysis (the same for every turn).
-    return "\n\n".join([
+    return _localized("\n\n".join([
         INSTRUCTION,
         *([VOICE] if plan.get("detailed_explanation") else []),
         TOOL_GUIDE,
         f"PLAN FIELDS: {_dump(_fields(debug))}",
-    ]) + CACHE_BREAK + "\n\n".join([
+    ])) + CACHE_BREAK + "\n\n".join([
         f"ANALYSIS: {_dump(trimmed) if trimmed else '(not available yet)'}",
         f"FACES: {_dump(_faces_view(analysis))}",
         f"RECIPE: {_dump(recipe)}",
@@ -592,7 +598,7 @@ def write_render_note(analysis, plan, *, before=None, after=None, previous_plan=
     notes = [n.strip() for n in earlier_notes if isinstance(n, str) and n.strip()]
     only_wishes = bool(plan.get("overwrite_prompt")) and bool((plan.get("user_prompt") or "").strip())
     context = "\n\n".join([
-        RENDER_REVIEW_INSTRUCTION if images else RENDER_NOTE_INSTRUCTION,
+        _localized(RENDER_REVIEW_INSTRUCTION if images else RENDER_NOTE_INSTRUCTION),
         *([ONLY_WISHES_POLISHED_RULE if config.ENABLE_OVERWRITE_BASELINE_RETOUCH else ONLY_WISHES_RULE]
           if only_wishes else []),
         f"ANALYSIS: {_dump(trimmed)}",
@@ -625,7 +631,7 @@ def write_opening(analysis, wishes="", *, model=None):
 
     issues = [t.strip() for t in analysis.get("detected_issues") or [] if isinstance(t, str) and t.strip()]
     context = "\n\n".join([
-        OPENING_INSTRUCTION,
+        _localized(OPENING_INSTRUCTION),
         "PHOTO:\n" + _dump({"summary": field("photo_summary"), "main_subject": field("main_subject"),
                              "scene": field("scene_type")}),
         "GOAL:\n" + _dump({"edit_intent": field("edit_intent"), "mood": field("composition_mood")}),
@@ -762,10 +768,18 @@ def _parse_patch(raw):
 # 一個人一條：模型照指示解掉互相矛盾的需求，但常常還是一句一條交出來，同一個人
 # 出現兩次。條目的寫法是固定的（人名開頭、以；分隔），所以這一步在這裡做死，不
 # 必再多一輪模型。認不出是在講誰的條目（背景、場景）就原樣留著。
+def _wish_marks():
+    """(between people, between one person's wishes, what to strip after a
+    name) for 個人化需求 in the user's language: 「；」「、」 in Chinese."""
+    return i18n.fmt("wish_marks")
+
+
 def _merge_prompt_wishes(text, analysis):
     if not isinstance(text, str) or not text.strip():
         return text
-    heads = sorted(set(person_names(analysis).values()) | {"背景", "場景"}, key=len, reverse=True)
+    between, within, after_name = _wish_marks()
+    heads = {"背景", "場景", *(i18n.pattern("wish_heads") or ())}
+    heads = sorted(set(person_names(analysis).values()) | heads, key=len, reverse=True)
     parts = [p.strip() for p in re.split(r"[；;]", text) if p.strip()]
     order, wishes = [], {}
     for part in parts:
@@ -774,11 +788,11 @@ def _merge_prompt_wishes(text, analysis):
         key = head or f"#{len(order)}"
         if key in wishes:
             # 第二條之後只留述語，連同「的」一起拿掉：左側男性的外套改成藍色、眼鏡去掉。
-            wishes[key].append(part[len(head):].lstrip("，、, ").lstrip("的"))
+            wishes[key].append(part[len(head):].lstrip(after_name).lstrip("的"))
         else:
             order.append(key)
             wishes[key] = [part]
-    return "；".join("、".join(w for w in wishes[key] if w) for key in order)
+    return between.join(within.join(w for w in wishes[key] if w) for key in order)
 
 
 def _normalize_patch(patch, plan, analysis):
@@ -828,17 +842,17 @@ def _check_patch(patch, plan, debug):
 
 
 def _choice_label(choices, value, unset="不指定"):
-    return choices.get(value, value) if value not in (None, *capabilities.STYLE_UNSET_VALUES) else unset
+    return choices.get(value, value) if value not in (None, *capabilities.STYLE_UNSET_VALUES) else i18n.tr(unset)
 
 
 def _override_label(value, category, levels):
     if value is None:
-        return "交給 AI 判斷"
+        return i18n.tr("交給 AI 判斷")
     if value is False or not value.get("allowed", True):
-        return "不修正"
+        return i18n.tr("不修正")
     level = value.get("level")
     level_label = levels.get(category, {}).get(level)
-    return f"修正（{level_label}）" if level_label else "修正"
+    return i18n.tr("修正（{level}）", level=level_label) if level_label else i18n.tr("修正")
 
 
 def describe_changes(before, after, analysis, debug=False):
@@ -852,7 +866,8 @@ def describe_changes(before, after, analysis, debug=False):
             changes.append({"field": field, "label": label, "before": old, "after": new})
 
     ratios = fields["aspect_ratio"]
-    add("aspect_ratio", "比例", ratios.get(before["aspect_ratio"], before["aspect_ratio"]),
+    on, off = i18n.tr("開"), i18n.tr("關")
+    add("aspect_ratio", i18n.tr("比例"), ratios.get(before["aspect_ratio"], before["aspect_ratio"]),
         ratios.get(after["aspect_ratio"], after["aspect_ratio"]))
     for group, spec in fields["style_options"].items():
         add(f"style_options.{group}", spec["label"],
@@ -861,7 +876,7 @@ def describe_changes(before, after, analysis, debug=False):
     for key, label in fields["advanced_options"].items():
         old, new = before["advanced_options"].get(key), after["advanced_options"].get(key)
         if old != new:
-            add(f"advanced_options.{key}", label, "開" if old else "關", "開" if new else "關")
+            add(f"advanced_options.{key}", label, on if old else off, on if new else off)
     faces = _face_keys(analysis)
     old_faces, new_faces = before["face_issue_overrides"], after["face_issue_overrides"]
     for key in sorted(set(old_faces) | set(new_faces)):
@@ -877,10 +892,12 @@ def describe_changes(before, after, analysis, debug=False):
     for index, text in enumerate(_recipe(analysis)):
         old = not (index < len(old_checked) and old_checked[index] is False)
         new = not (index < len(new_checked) and new_checked[index] is False)
-        add(f"recipe_checked.{index}", text, "套用" if old else "不套用", "套用" if new else "不套用")
-    add("user_prompt", "個人化需求", before["user_prompt"] or "（無）", after["user_prompt"] or "（無）")
+        applied, skipped = i18n.tr("套用"), i18n.tr("不套用")
+        add(f"recipe_checked.{index}", text, applied if old else skipped, applied if new else skipped)
+    none = i18n.tr("（無）")
+    add("user_prompt", i18n.label("個人化需求"), before["user_prompt"] or none, after["user_prompt"] or none)
     if before["user_prompt"] == after["user_prompt"]:
-        add("literal_texts", "指定字樣", _dump(before.get("literal_texts") or []),
+        add("literal_texts", i18n.label("指定字樣"), _dump(before.get("literal_texts") or []),
             _dump(after.get("literal_texts") or []))
     return changes
 
@@ -901,19 +918,20 @@ def _picked(history, analysis=None):
         return True
     asked = last.get("card") or {}
     pointed = _pointed(person_names(analysis or {}), asked) if asked.get("type") == "ask" else []
-    return text == "這位" and len(pointed) == 1 and pointed[0] in options
+    return text in i18n.translations("這位") and len(pointed) == 1 and pointed[0] in options
 
 
-def _split_wishes(text):
-    """`text` cut at every 「、」 or 「，」 that is not inside 「」: the model
-    joins wishes with either, and a quoted text to print keeps its own."""
+def _split_wishes(text, extra=""):
+    """`text` cut at every 「、」 or 「，」 (or one of `extra`, another
+    language's mark) that is not inside 「」: the model joins wishes with
+    either, and a quoted text to print keeps its own."""
     parts, depth, start = [], 0, 0
     for i, ch in enumerate(text):
         if ch == "「":
             depth += 1
         elif ch == "」":
             depth = max(0, depth - 1)
-        elif ch in "、，" and depth == 0:
+        elif ch in "、，" + extra and depth == 0:
             parts.append(text[start:i])
             start = i + 1
     return [p.strip() for p in parts + [text[start:]] if p.strip()]
@@ -923,11 +941,12 @@ def _wish_items(text, analysis):
     """[(name, wish)] for every wish in 個人化需求, one per 「、」 or 「，」;
     name is None for a wish that names no one."""
     heads = sorted(set(person_names(analysis).values()), key=len, reverse=True)
+    _, within, after_name = _wish_marks()
     out = []
     for part in re.split(r"[；;]", text or ""):
         head = next((h for h in heads if part.strip().startswith(h)), None)
-        rest = part.strip()[len(head):].lstrip("，、, ").lstrip("的") if head else part.strip()
-        out += [(head, w) for w in _split_wishes(rest)]
+        rest = part.strip()[len(head):].lstrip(after_name).lstrip("的") if head else part.strip()
+        out += [(head, w) for w in _split_wishes(rest, within.strip())]
     return out
 
 
@@ -974,7 +993,8 @@ def _grouped_wishes(items):
     groups = {}
     for head, wish in items:
         groups.setdefault(head, []).append(wish)
-    return [f"{head}{'、'.join(wishes)}" if head else "、".join(wishes) for head, wishes in groups.items()]
+    within, after_name = _wish_marks()[1], i18n.fmt("name_mark")
+    return [f"{head}{after_name}{within.join(wishes)}" if head else within.join(wishes) for head, wishes in groups.items()]
 
 
 # 回答「哪一位？」的那一句，模型常常只交出新的那一條，把原本的需求整串丟
@@ -1034,20 +1054,25 @@ def _applied_reply(changes, screen, wishes=()):
     `wishes` are the wishes it added to 個人化需求 or reworded there, as the
     user would read them now."""
     only = changes[0] if len(changes) == 1 else None
-    echo = "、".join(wishes)
-    if only and only["field"] == "user_prompt" and echo and len(echo) <= APPLIED_WISH_MAX_LEN:
-        said = f"好，記下了：{echo}。"
+    echo = i18n.join(wishes)
+    if only and only["field"] == "user_prompt" and echo and len(echo) <= _echo_max():
+        said = i18n.tr("好，記下了：{echo}。", echo=echo)
     elif only and only["field"] == "user_prompt" and echo:
-        said = "好，已加進個人化需求。"
+        said = i18n.tr("好，已加進個人化需求。")
     elif only and only["field"] == "user_prompt":
         # 沒有多出來的需求，是原本的被改寫了。
-        said = "好，個人化需求更新好了。"
+        said = i18n.tr("好，個人化需求更新好了。")
     elif only:
-        said = f"好，{only['label']}改成「{only['after']}」了。"
+        said = i18n.tr("好，{label}改成「{after}」了。", label=only["label"], after=only["after"])
     else:
-        said = "好，已經幫你改好了。"
+        said = i18n.tr("好，已經幫你改好了。")
     # 開關、選項不畫卡，要改就是回到美化項目，這句一併說。
-    return said + _next_step(screen, edit=not (only and only["field"] == "user_prompt"))
+    return _cat(said, _next_step(screen, edit=not (only and only["field"] == "user_prompt")))
+
+
+def _echo_max():
+    # 英文一個字母比一個中文字短，念回來的長度上限跟著放寬。
+    return APPLIED_WISH_MAX_LEN * i18n.fmt("echo_scale")
 
 
 def _judged_reply(reply, screen, prompt_only):
@@ -1055,20 +1080,25 @@ def _judged_reply(reply, screen, prompt_only):
     without asking: the model's reason stays, its 「確認後套用」 becomes that it
     is already done."""
     reason = re.sub(r"[，,]?\s*確認後(再)?套用[。！!]?", "", reply).strip()
-    reason = reason + ("" if not reason or reason[-1] in "。！!？?" else "。")
+    tail = i18n.pattern("confirm_tail")
+    if tail:
+        # 其他語言的「確認後套用」。
+        reason = tail.sub("", reason).strip()
+    end = i18n.fmt("sentence_end")
+    reason = reason + ("" if not reason or reason[-1] in end else end[0])
     # 只動個人化需求的卡可以直接在卡上改；其他的不畫卡，要改就到美化項目裡改。
-    done = "先幫你記進個人化需求了，下面可以直接修改。" if prompt_only else "先幫你套用了。"
-    return reason + done + _next_step(screen, edit=not prompt_only)
+    done = i18n.tr("先幫你記進個人化需求了，下面可以直接修改。") if prompt_only else i18n.tr("先幫你套用了。")
+    return _cat(reason, done, _next_step(screen, edit=not prompt_only))
 
 
 def _dropped_reply(dropped, screen):
     """What to say for wishes the user took back, and what to press next."""
-    echo = "、".join(_grouped_wishes(dropped))
-    if echo and len(echo) <= APPLIED_WISH_MAX_LEN:
-        said = f"好，{echo}就不做了。"
+    echo = i18n.join(_grouped_wishes(dropped))
+    if echo and len(echo) <= _echo_max():
+        said = i18n.tr("好，{echo}就不做了。", echo=echo)
     else:
-        said = WITHDRAWN_REPLY if len(dropped) == 1 else "好，那些需求就不做了。"
-    return said + _next_step(screen)
+        said = i18n.tr(WITHDRAWN_REPLY) if len(dropped) == 1 else i18n.tr("好，那些需求就不做了。")
+    return _cat(said, _next_step(screen))
 
 
 # 只照需求改（沒照分析修）時，回覆底下多出來的那顆。
@@ -1090,13 +1120,13 @@ def _next_step(screen, edit=False):
     label = "美化" if bar[0] in ("再美化", "照建議直接美化") else bar[0]
     # 只照需求改的時候底下多一顆「幫我分析」：除了改需求、美化，也讓他知道
     # 還可以請 AI 看整張照片。
-    analyze = ANALYZE_NUDGE if ANALYZE_BUTTON in (screen or {}).get("bar") or [] else ""
+    analyze = i18n.tr(ANALYZE_NUDGE) if ANALYZE_BUTTON in (screen or {}).get("bar") or [] else ""
     # 調整中，回覆底下接著項目按鈕（人像、畫面…），一併指給他看。
     if (screen or {}).get("topics") and edit:
-        return f"要修改或調整其他項目，可以點下面的美化項目，或按「{label}」我就開始。" + analyze
+        return _cat(i18n.tr("要修改或調整其他項目，可以點下面的美化項目，或按「{label}」我就開始。", label=i18n.label(label)), analyze)
     if (screen or {}).get("topics"):
-        return f"還想調整其他項目可以點下面的項目，或按「{label}」我就開始。" + analyze
-    return f"按下面的「{label}」我就開始。" + analyze
+        return _cat(i18n.tr("還想調整其他項目可以點下面的項目，或按「{label}」我就開始。", label=i18n.label(label)), analyze)
+    return _cat(i18n.tr("按下面的「{label}」我就開始。", label=i18n.label(label)), analyze)
 
 
 def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None, deadline=None):
@@ -1157,7 +1187,7 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     reply = reply.strip()
     if wanted and proposal is None:
         # The reply offers a change the user would get no card for.
-        reply = ALREADY_SET_REPLY if patch else UNMAPPED_REPLY
+        reply = i18n.tr(ALREADY_SET_REPLY if patch else UNMAPPED_REPLY)
     # Every change goes in as it stands: whatever it touched can be changed
     # back from 「修改」 or the topic buttons, so the card never waits for 套用.
     # What the AI chose for the user (「什麼顏色好？」) keeps the model's reason in
@@ -1190,9 +1220,9 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     lines = bool(options) and result.get("lines") is True
     # 只照需求改的時候，每一則都要讓他知道還可以分析；模型漏講就補上。
     # 在問問題、開始美化或收尾的那則不插嘴。
-    if ANALYZE_BUTTON in ((screen or {}).get("bar") or []) and ANALYZE_BUTTON not in reply \
+    if ANALYZE_BUTTON in ((screen or {}).get("bar") or []) and i18n.label(ANALYZE_BUTTON) not in reply \
             and not (render or close or options or offers_button or opened):
-        reply = (reply + ANALYZE_NUDGE) if reply else ANALYZE_NUDGE
+        reply = _cat(reply, i18n.tr(ANALYZE_NUDGE))
     return {"reply": reply, "render": render, "proposal": proposal, "options": options, "close": close, "lines": lines,
             "open": opened, **({"request_validated": True} if result.get("request_validated") else {})}
 
@@ -1361,20 +1391,21 @@ REPLY
 
 def _settings_said(ratio, switches=None):
     """What a line changed in 「設定」, in the words the panel uses: 「長寬比換成「9:16（限動）」、關掉「閉眼修正」」."""
-    parts = [f"長寬比換成「{REVIEW_RATIOS[ratio]}」"] if ratio else []
-    parts += [f"{'打開' if on else '關掉'}「{REVIEW_SWITCHES[k]}」" for k, on in (switches or {}).items()]
-    return "、".join(parts)
+    parts = [i18n.tr("長寬比換成「{ratio}」", ratio=i18n.tr(REVIEW_RATIOS[ratio]))] if ratio else []
+    parts += [i18n.tr("打開「{name}」" if on else "關掉「{name}」", name=i18n.tr(REVIEW_SWITCHES[k]))
+              for k, on in (switches or {}).items()]
+    return i18n.join(parts)
 
 
 def _settings_reply(ratio, switches=None):
     """The reply to a line that only changed 「設定」: nothing went into the list."""
-    return f"好，{_settings_said(ratio, switches)}了，在「設定」裡隨時可以改。"
+    return i18n.tr("好，{said}了，在「設定」裡隨時可以改。", said=_settings_said(ratio, switches))
 
 
 def _settings_note(ratio, switches=None):
     """Said after a kept line that also changed 「設定」."""
     said = _settings_said(ratio, switches)
-    return f"另外{said}了，在「設定」裡隨時可以改。" if said else ""
+    return i18n.tr("另外{said}了，在「設定」裡隨時可以改。", said=said) if said else ""
 
 
 # 使用者說的比例不在選項裡（21:9），不偷換成相近的：問要換成最接近的，還是交給
@@ -1445,7 +1476,11 @@ def _swap_ratio(wish, asked, to=""):
     if not pair:
         return wish, False
     pair = (float(pair.group(1)), float(pair.group(2)))
-    pattern = _RATIO_PATTERN if to else _RATIO_VERB + r"\s*" + _RATIO_PATTERN + r"\s*" + _RATIO_TAIL
+    # Other languages: their catalog's words, and their case does not matter.
+    flags = 0 if i18n.is_source() else re.I
+    verb, tail = i18n.pattern("ratio_verb", _RATIO_VERB) or "", i18n.pattern("ratio_tail", _RATIO_TAIL) or ""
+    links = i18n.pattern("ratio_links", _LINKS)
+    pattern = _RATIO_PATTERN if to else verb + r"\s*" + _RATIO_PATTERN + r"\s*" + tail
     found = False
 
     def swap(m):
@@ -1455,22 +1490,30 @@ def _swap_ratio(wish, asked, to=""):
         found = True
         return to
 
-    out = re.sub(pattern, swap, wish)
+    out = re.sub(pattern, swap, wish, flags=flags)
     if not to:
-        clauses = (re.sub(rf"^{_LINKS}|{_LINKS}$", "", c.strip()).strip() for c in re.split(r"[，,。；;！!\n]", out))
-        out = "，".join(c for c in clauses if c)
+        clauses = (re.sub(rf"^{links}|{links}$", "", c.strip(), flags=flags).strip() if links else c.strip()
+                   for c in re.split(i18n.pattern("clause_split", r"[，,。；;！!\n]") or r"[，,。；;！!.\n]", out))
+        out = (i18n.pattern("clause_join", "，") or ", ").join(c for c in clauses if c)
     return out, found
 
 
 def _ratio_question(asked, nearest):
-    return f"目前沒有 {asked} 這個比例，最接近的是「{REVIEW_RATIOS[nearest]}」，要換成這個嗎？"
+    return i18n.tr("目前沒有 {asked} 這個比例，最接近的是「{nearest}」，要換成這個嗎？",
+                   asked=asked, nearest=i18n.tr(REVIEW_RATIOS[nearest]))
+
+
+# _ratio_question's start, to find which ratio it asked about.
+_RATIO_ASKED = r"目前沒有 (\S+) 這個比例"
 
 
 def _ratio_answer(line, history):
     """review_line's result when `line` taps an answer to _ratio_question, else None."""
     if len(history) < 2 or history[-1]["role"] != "assistant" or line not in (history[-1].get("options") or []):
         return None
-    asked = re.match(r"目前沒有 (\S+) 這個比例", history[-1]["text"])
+    # The question may be in any language: the page may have changed since it was asked.
+    asked = next(filter(None, (re.match(p, history[-1]["text"])
+                               for p in (_RATIO_ASKED, *i18n.patterns_everywhere("ratio_asked")))), None)
     if not asked:
         return None
     done = {"kept": False, "start": "", "ask": False, "offer": False, "later": False,
@@ -1478,21 +1521,24 @@ def _ratio_answer(line, history):
     # The wish the question held back, with the ratio swapped or taken out, so
     # anything else said in the same line is not lost.
     wish = history[-2]["text"] if history[-2]["role"] == "user" else ""
-    if line == RATIO_ASK_AI:
+    if line in i18n.translations(RATIO_ASK_AI):
         rest, found = _swap_ratio(wish, asked.group(1))
         rest = rest if found else wish
         if not rest:
-            return {**done, "reply": RATIO_ASK_AI_REPLY + KEPT_NEXT}
-        return {**done, "kept": True, "line": rest, "reply": RATIO_ASK_AI_REPLY_REST + KEPT_NEXT}
-    ratio = line[len("換成 "):] if line.startswith("換成 ") else line
+            return {**done, "reply": _cat(i18n.tr(RATIO_ASK_AI_REPLY), i18n.tr(KEPT_NEXT))}
+        return {**done, "kept": True, "line": rest, "reply": _cat(i18n.tr(RATIO_ASK_AI_REPLY_REST), i18n.tr(KEPT_NEXT))}
+    # The other option, 「換成 4:5」, in whichever language it was offered.
+    prefixes = [t.split("{ratio}")[0] for t in i18n.translations("換成 {ratio}")]
+    prefix = next((p for p in prefixes if p and line.startswith(p)), "")
+    ratio = line[len(prefix):]
     if ratio not in REVIEW_RATIOS:
         return None
     # 比例交給「設定」，清單裡只留其他的需求。
     rest, found = _swap_ratio(wish, asked.group(1))
     if not found or not rest:
-        return {**done, "aspect_ratio": ratio, "reply": _settings_reply(ratio) + KEPT_NEXT}
+        return {**done, "aspect_ratio": ratio, "reply": _cat(_settings_reply(ratio), i18n.tr(KEPT_NEXT))}
     return {**done, "kept": True, "line": rest, "aspect_ratio": ratio,
-            "reply": KEPT_REPLY + _settings_note(ratio) + KEPT_NEXT}
+            "reply": _cat(i18n.tr(KEPT_REPLY), _settings_note(ratio), i18n.tr(KEPT_NEXT))}
 
 
 def call_review(context, *, timeout=None):
@@ -1551,18 +1597,22 @@ def _kept_next(batch):
     """KEPT_NEXT for the overview: which photos the line goes to, then the
     batch's own buttons, which sit right under the reply."""
     if not batch:
-        return KEPT_NEXT
+        return i18n.tr(KEPT_NEXT)
     photos, unrendered = batch.get("photos") or 0, batch.get("unrendered") or 0
     if batch.get("redo"):
-        scope = f"這 {unrendered} 張再美化時都會照這樣修。" if unrendered else ""
+        scope = i18n.tr("這 {n} 張再美化時都會照這樣修。", n=unrendered) if unrendered else ""
     elif unrendered and unrendered < photos:
-        scope = f"還沒美化的 {unrendered} 張會照這樣修，已經在美化或美化好的 {photos - unrendered} 張不動。"
+        scope = i18n.tr("還沒美化的 {n} 張會照這樣修，已經在美化或美化好的 {done} 張不動。",
+                        n=unrendered, done=photos - unrendered)
     elif unrendered:
-        scope = f"這 {unrendered} 張美化時都會照這樣修。"
+        scope = i18n.tr("這 {n} 張美化時都會照這樣修。", n=unrendered)
     else:
         scope = ""
-    buttons = "或".join(f"「{b}」" for b in (batch.get("analyze"), batch.get("render")) if b)
-    return scope + ("還有其他想改的地方嗎？沒有的話，可以按下面的" + buttons + "。" if buttons else "還有其他想改的地方嗎？")
+    # The labels come from the page, already in the user's language.
+    left, right = i18n.fmt("quote")
+    buttons = i18n.tr("或").join(f"{left}{b}{right}" for b in (batch.get("analyze"), batch.get("render")) if b)
+    return _cat(scope, i18n.tr("還有其他想改的地方嗎？沒有的話，可以按下面的{buttons}。", buttons=buttons)
+                if buttons else i18n.tr("還有其他想改的地方嗎？"))
 
 
 OPTIONS_MAX = 4
@@ -1570,7 +1620,9 @@ OPTION_MAX_LEN = 20
 
 
 def _says_kept(reply):
-    return any(w in reply for w in _KEPT_WORDS)
+    if i18n.is_source():
+        return any(w in reply for w in _KEPT_WORDS)
+    return any(w in reply.lower() for w in i18n.pattern("kept_words") or ())
 
 
 def _turn_line(turn):
@@ -1622,6 +1674,8 @@ def _points_at_screen(reply, options, screen):
     labels = set((screen or {}).get("bar") or []) | set((screen or {}).get("topics") or [])
     if not labels:
         return False
+    if not i18n.is_source():
+        return _points_at_screen_translated(reply, options, {i18n.label(x).lower() for x in labels})
     plain = [o.replace("「", "").replace("」", "").strip() for o in options]
     # 按鈕名稱本身也可能以這些字開頭（「幫我分析」「看美化項目」），所以原字也比一次。
     if any(p in labels or _BUTTON_VERBS.sub("", p).strip() in labels for p in plain):
@@ -1631,6 +1685,25 @@ def _points_at_screen(reply, options, screen):
     if not question.endswith(("？", "?")):
         return False
     return any(re.search(rf"(?:{'|'.join(_OFFER_BEFORE)})(?:下面的|底下的)?「{re.escape(label)}」|「{re.escape(label)}」(?:{'|'.join(_OFFER_AFTER)})", question)
+               for label in labels)
+
+
+def _points_at_screen_translated(reply, options, labels):
+    """_points_at_screen in another language, with its catalog's words:
+    `labels` are the names as the user reads them, lowercase."""
+    left, right = (re.escape(q) for q in i18n.fmt("quote"))
+    plain = [re.sub(rf"[\"'‘’{left}{right}]", "", o).strip().rstrip(".!?").lower() for o in options]
+    verbs = i18n.pattern("button_verbs")
+    if any(p in labels or (verbs and verbs.sub("", p).strip() in labels) for p in plain):
+        return True
+    before, after = i18n.pattern("offer_before"), i18n.pattern("offer_after")
+    question = re.split(r"(?<=[.!;。！；])\s*", reply.strip())[-1].strip()
+    if not (before or after) or not question.endswith(("?", "？")):
+        return False
+    question = question.lower()
+    quoted = lambda label: rf"[\"{left}]{re.escape(label)}[\"{right}]"
+    return any(re.search(rf"\b(?:{'|'.join(before or ['(?!)'])})\s+(?:the\s+)?(?:below\s+)?{quoted(label)}"
+                         rf"|{quoted(label)}\s+(?:{'|'.join(after or ['(?!)'])})\b", question)
                for label in labels)
 
 
@@ -1654,6 +1727,8 @@ def _offer_question(reply, options, batch=False, redo=False):
     還是直接一鍵美化？分析或美化好之後就回答你。」); a last question that does
     not ask about every option is swapped for the offer, and a reply that asks
     nothing gets it added."""
+    if not i18n.is_source():
+        return _offer_question_translated(reply, options, batch, redo)
     both = BATCH_OFFER_BOTH if batch else OFFER_BOTH
     offer = (both if len(options) > 1 else OFFER_QUESTIONS).get(options[0]) if options else None
     words = OFFER_WORDS
@@ -1672,6 +1747,31 @@ def _offer_question(reply, options, batch=False, redo=False):
     return body[:cut + 1] + offer + body[end + 1:]
 
 
+def _offer_question_translated(reply, options, batch=False, redo=False):
+    """_offer_question in another language: `options` are the offer's
+    options as the user reads them; the question is the Chinese one
+    translated, and the catalog's offer_words (keyed by the Chinese options)
+    tell whether the reply already asks it."""
+    source = {i18n.label(o): o for o in OFFER_OPTIONS}
+    source.update({o: o for o in OFFER_OPTIONS})
+    words = i18n.pattern("offer_words") or {}
+    both = BATCH_OFFER_BOTH if batch else OFFER_BOTH
+    offer = (both if len(options) > 1 else OFFER_QUESTIONS).get(source.get(options[0])) if options else None
+    if redo and offer:
+        offer, words = BATCH_REDO_QUESTION, {"一鍵美化": "retouch"}
+    offer = i18n.tr(offer) if offer else None
+    body = reply.rstrip()
+    if not offer:
+        return body
+    end = max(body.rfind("?"), body.rfind("？"))
+    if end < 0:
+        return _cat(body, offer)
+    cut = max(body.rfind(c, 0, end) for c in i18n.fmt("sentence_end"))
+    if any(words[source[o]] in body[cut + 1:end].lower() for o in options if source.get(o) in words):
+        return body
+    return _cat(body[:cut + 1].rstrip(), offer, body[end + 1:].strip())
+
+
 MERGED_NOTE = "前面跟這句衝突的需求，已經照這句改掉了。"
 WITHDRAWN_REPLY = "好，前面那項需求就不做了。"
 
@@ -1681,7 +1781,16 @@ UNASSIGNED = "未指定對象"
 
 def _sections_text(sections):
     """LINES SO FAR as the model reads it: one numbered section per person."""
-    return "\n".join(f"[{i}] {s['who'] or UNASSIGNED}：{s['text']}" for i, s in enumerate(sections, 1))
+    return "\n".join(f"[{i}] {s['who'] or i18n.tr(UNASSIGNED)}：{s['text']}" for i, s in enumerate(sections, 1))
+
+
+def _chip_start(line):
+    """REVIEW_CHIP_STARTS' value for a line that is a start button's name, or None."""
+    if i18n.is_source():
+        return REVIEW_CHIP_STARTS.get(re.sub(r"[\s，。！？!?、.]+", "", line))
+    # The button's name as the user reads it, give or take case, spaces and punctuation.
+    bare = lambda text: re.sub(r"[\W_]+", "", text.lower())
+    return {bare(i18n.label(name)): start for name, start in REVIEW_CHIP_STARTS.items()}.get(bare(line))
 
 
 # How the review reads a line's meaning (photo_agent.request_semantics). The same
@@ -1776,7 +1885,7 @@ def _completion_question(result=None):
     reply = result.get('reply')
     reply = reply.strip() if isinstance(reply, str) else ''
     return dict(kept=False, start='', ask=True, offer=False, later=False,
-        reply=reply if '？' in reply or '?' in reply else INTERPRETATION_CLARIFY_REPLY,
+        reply=reply if '？' in reply or '?' in reply else i18n.tr(INTERPRETATION_CLARIFY_REPLY),
         question_kind=_review_question_kind(result), answer_mode=result.get('answer_mode', 'choices'), line='', persons=[], options=_options(result.get('options')), aspect_ratio='', merged=[], withdrawn=False)
 
 
@@ -1829,7 +1938,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
             persons=[],options=[c['label'] for c in q['choices']],aspect_ratio='',merged=[],withdrawn=False,
             question_kind='content',answer_mode='choices',clarification_subtype='body_side_reference',
             side_question=q,side_reference=side)
-    chip = REVIEW_CHIP_STARTS.get(re.sub(r"[\s，。！？!?、.]+", "", line))
+    chip = _chip_start(line)
     if chip:
         return {"kept": False, "start": chip, "ask": False, "offer": False, "later": False,
                 "reply": "", "line": "", "persons": [], "options": [], "aspect_ratio": "", "advanced_options": {}}
@@ -1855,26 +1964,26 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
             # Only the people were left once the ratio came out: nothing to keep.
             ratio = tapped["aspect_ratio"]
             return {**tapped, "kept": False, "line": "", "advanced_options": {},
-                    "reply": (_settings_reply(ratio) if ratio else RATIO_ASK_AI_REPLY) + _kept_next(batch)}
+                    "reply": _cat(_settings_reply(ratio) if ratio else i18n.tr(RATIO_ASK_AI_REPLY), _kept_next(batch))}
         return {**tapped, "line": wish, "persons": persons if wish else [], "advanced_options": {}}
     # Answering a question about a wish -- an offer to start 分析 is not one.
     answering = (bool(history) and history[-1]["role"] == "assistant" and bool(history[-1].get("question"))
                  and not history[-1].get("offer"))
     after_offer = bool(history) and history[-1]["role"] == "assistant" and bool(history[-1].get("offer"))
     selected_context=answer_context(history,line)
-    context = "\n\n".join([
+    context = _localized("\n\n".join([
         REVIEW_INSTRUCTION,
         TOOL_GUIDE,
         "RATIOS:\n" + "\n".join(f"{v}: {label}" for v, label in REVIEW_RATIOS.items()),
         "SWITCHES:\n" + "\n".join(f"{k}: {label}" for k, label in REVIEW_SWITCHES.items()),
         REVIEW_SEMANTIC_CONTRACT,
         LITERAL_CHOICE_INSTRUCTION,
-    ]) + CACHE_BREAK + "\n\n".join([
+    ]) + ("\n\n" + i18n.pattern("review_note") if i18n.pattern("review_note") else "")) + CACHE_BREAK + "\n\n".join([
         *(["BATCH OVERVIEW:\n" + _batch_text(batch)] if batch else []),
-        "PEOPLE IN PHOTO:\n" + ("\n".join(people) if people else "（總覽：好幾張照片，這裡不指定人物）" if batch else "（沒有偵測到人臉）"),
-        f"LINES SO FAR:\n{_sections_text(sections) or '（還沒有）'}",
+        "PEOPLE IN PHOTO:\n" + ("\n".join(people) if people else i18n.tr("（總覽：好幾張照片，這裡不指定人物）") if batch else i18n.tr("（沒有偵測到人臉）")),
+        f"LINES SO FAR:\n{_sections_text(sections) or i18n.tr('（還沒有）')}",
         answer_instruction(selected_context),
-        "CONVERSATION SO FAR:\n" + ("\n".join(_turn_line(t) for t in history) or "（還沒有）"),
+        "CONVERSATION SO FAR:\n" + ("\n".join(_turn_line(t) for t in history) or i18n.tr("（還沒有）")),
         f"NEW LINE:\n{line}",
     ])
     end = min(deadline, time.time() + TIMEOUT_SECONDS) if deadline is not None else time.time() + TIMEOUT_SECONDS
@@ -1979,7 +2088,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
                 if not answering:
                     return dict(kept=False, start='', ask=False, offer=False, later=False,
                         line='', persons=[], options=[], aspect_ratio='', merged=[], withdrawn=False,
-                        request_error=True, reply='這項需求暫時未能整理完成，尚未套用；請稍後再試。')
+                        request_error=True, reply=i18n.tr('這項需求暫時未能整理完成，尚未套用；請稍後再試。'))
                 return dict(kept=False,start='',ask=True,offer=False,later=False,line='',persons=[],
                     aspect_ratio='',merged=[],withdrawn=False,**completion_retry(selected_context))
         completed_context = answering
@@ -2003,11 +2112,11 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
             reply = result.get('reply') if not revised else ''
             reply = reply.strip() if isinstance(reply, str) else ''
             return finish_question(dict(kept=False, start='', ask=True, offer=False, later=False,
-                reply=reply if '？' in reply or '?' in reply else INTERPRETATION_CLARIFY_REPLY,
+                reply=reply if '？' in reply or '?' in reply else i18n.tr(INTERPRETATION_CLARIFY_REPLY),
                 question_kind=_review_question_kind(result), answer_mode=result.get('answer_mode', 'choices'), line='', persons=[], options=_options(result.get('options')), aspect_ratio='', merged=[], withdrawn=False))
         interpreted = True
         result = {**result, 'verdict': 'keep', 'line': revised,
-            'reply': f'我理解你是想「{revised}」，已整理到個人化需求。', 'merged': [], 'withdraw': False}
+            'reply': i18n.tr('我理解你是想「{revised}」，已整理到個人化需求。', revised=revised), 'merged': [], 'withdraw': False}
     semantic_values = None
     semantic_pending = False
     if 'semantics' in result:
@@ -2040,6 +2149,8 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     labels = {"幫我分析": batch.get("analyze"), "一鍵美化": batch.get("render")} if batch else {}
     redo = bool(batch and batch.get("redo"))
     named = {v: k for k, v in labels.items() if v}
+    # The start buttons as the user reads them count as their Chinese names too.
+    named.update({i18n.label(o): o for o in OFFER_OPTIONS if i18n.label(o) not in named})
     options = [named.get(o, o) for o in _options(result.get("options"))]
     asked = result.get("asked_ratio") if isinstance(result.get("asked_ratio"), str) else ""
     nearest = (_nearest_ratio(asked.strip()) if verdict == "keep" and asked.strip() not in REVIEW_RATIOS
@@ -2047,7 +2158,8 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     if nearest:
         question_kind = "content"
         # A ratio we do not offer: ask rather than keep a wish the result will not follow.
-        ask, reply, options = True, _ratio_question(asked.strip(), nearest), [f"換成 {nearest}", RATIO_ASK_AI]
+        ask, reply, options = True, _ratio_question(asked.strip(), nearest), [
+            i18n.tr("換成 {ratio}", ratio=nearest), i18n.tr(RATIO_ASK_AI)]
     # Only an outright 「幫我分析」 starts it; a guessed intent is asked about first.
     offer = verdict == "offer" or (verdict == "answer" and bool(options))
     # 總覽每張都分析過了，就只剩一鍵美化可以提。
@@ -2057,7 +2169,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         first = [o for o in options if o in starts]
         options = first + [o for o in starts if o not in first]
     if verdict == "offer":
-        reply = _offer_question(reply, options, bool(batch), redo) if reply else (
+        reply = _offer_question(reply, options, bool(batch), redo) if reply else i18n.tr(
             OFFER_REPLY if not batch else BATCH_OFFER_REPLY if batch.get("analyze")
             else BATCH_REDO_OFFER_REPLY if redo else BATCH_RENDER_OFFER_REPLY)
     elif offer:
@@ -2072,7 +2184,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         offer, options = True, list(starts)
         # 叫人去「我的照片」選某一張的回答，鍵照給，但不改成問要不要全部分析——
         # 那句講的是某一張，接一句「要不要幫你分析？」會像在問那一張。
-        if not (batch and (batch.get("where") or "我的照片") in reply):
+        if not (batch and (batch.get("where") or i18n.tr("我的照片")) in reply):
             reply = _offer_question(reply, options, bool(batch), redo)
     # Only a question an offer of 分析 promises to answer afterwards.
     later = offer and result.get("later") is True and options[0] == OFFER_OPTIONS[0]
@@ -2096,7 +2208,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
             who, rest = _split_people(rest, people)
             rest = _ratio_rest(_split_people(wish or line.strip(), people)[1], rest, run_rest)
             setting = not rest
-            wish = "" if setting else ("、".join(who) + "：" if who else "") + rest
+            wish = "" if setting else (i18n.join(who) + ("：" if i18n.is_source() else i18n.fmt("name_mark")) if who else "") + rest
     kept = not start and not ask and not setting and verdict not in ("answer", "offer")
     # 後講的蓋掉先講的：同一個人、同一件事不能兩個都做，模型把整段需求重寫一
     # 次（手改過的那段字也一樣），頁面整段換掉，回話裡講一聲。跟原本一樣就不算。
@@ -2109,18 +2221,18 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     # 只是把前面某項撤回（「帽子拿掉」→「帽子留著」）：前面那項拿掉就是照原樣，
     # 這句也不用進清單，項目直接消失。前面沒東西可撤的話，這句就是一般的需求。
     withdrawn = bool(merged) and result.get("withdraw") is True
-    replaced = MERGED_NOTE if merged and not withdrawn else ""
+    replaced = i18n.tr(MERGED_NOTE) if merged and not withdrawn else ""
     if withdrawn and not reply:
-        reply = WITHDRAWN_REPLY
+        reply = i18n.tr(WITHDRAWN_REPLY)
     if setting:
-        reply = _settings_reply(ratio, switches) + _kept_next(batch)
+        reply = _cat(_settings_reply(ratio, switches), _kept_next(batch))
     elif kept and "？" not in reply and "?" not in reply:
-        reply = (reply or KEPT_REPLY) + replaced + _settings_note(ratio, switches) + _kept_next(batch)
+        reply = _cat(reply or i18n.tr(KEPT_REPLY), replaced, _settings_note(ratio, switches), _kept_next(batch))
     elif ratio or switches or replaced:
-        reply = replaced + _settings_note(ratio, switches) + reply
+        reply = _cat(replaced, _settings_note(ratio, switches), reply)
     if redo:
         # 每張都美化過了，鍵叫「全部再美化」：AI 自己寫的「一鍵美化」也照鍵名改。
-        reply = reply.replace("一鍵美化", "再美化")
+        reply = reply.replace(i18n.label("一鍵美化"), i18n.label("再美化"))
     wish = wish if kept else ""
     persons, wish = _split_people(wish, people)
     if not completed_context and not persons and wish == _split_people(line.strip(), people)[1]:
@@ -2136,10 +2248,10 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         **({"question_kind": question_kind, "answer_mode": result.get("answer_mode", "choices")} if ask else {}),
         "offer": offer,
         "later": later,
-        "reply": (reply or CLARIFY_REPLY) if ask else reply,
+        "reply": (reply or i18n.tr(CLARIFY_REPLY)) if ask else reply,
         "line": wish,
         "persons": persons if wish else [],
-        "options": [labels.get(o) or o for o in options] if ask or offer else [],
+        "options": [labels.get(o) or i18n.label(o) for o in options] if ask or offer else [],
         "aspect_ratio": ratio,
         "advanced_options": switches,
         "merged": merged,

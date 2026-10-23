@@ -83,44 +83,44 @@ window.PhotoAgentConfig = {
   // The W:H values run tallest → widest, so the picker's shape row reads as
   // one continuous scale with 1:1 in the middle.
   aspectRatioOptions: [
-    { value: "auto", label: "AI 建議", description: "依照片內容自動決定" },
-    { value: "original", label: "原圖比例", description: "不改變照片長寬" },
-    { value: "9:16", label: "9:16", hint: "限動" },
-    { value: "2:3", label: "2:3", hint: "人像" },
-    { value: "3:4", label: "3:4", hint: "手機" },
-    { value: "4:5", label: "4:5", hint: "IG 貼文" },
-    { value: "1:1", label: "1:1", hint: "方形" },
-    { value: "5:4", label: "5:4", hint: "橫幅" },
-    { value: "4:3", label: "4:3", hint: "平板" },
-    { value: "3:2", label: "3:2", hint: "相機" },
-    { value: "16:9", label: "16:9", hint: "桌布" }
+    { value: "auto", label: tr("AI 建議"), description: tr("依照片內容自動決定") },
+    { value: "original", label: tr("原圖比例"), description: tr("不改變照片長寬") },
+    { value: "9:16", label: "9:16", hint: tr("限動") },
+    { value: "2:3", label: "2:3", hint: tr("人像") },
+    { value: "3:4", label: "3:4", hint: tr("手機") },
+    { value: "4:5", label: "4:5", hint: tr("IG 貼文") },
+    { value: "1:1", label: "1:1", hint: tr("方形") },
+    { value: "5:4", label: "5:4", hint: tr("橫幅") },
+    { value: "4:3", label: "4:3", hint: tr("平板") },
+    { value: "3:2", label: "3:2", hint: tr("相機") },
+    { value: "16:9", label: "16:9", hint: tr("桌布") }
   ],
   defaultAspectRatio: "auto",
   presets: {
     natural: {
-      label: "自然高級美化",
-      intent: "保留原照內容，提升光線、色彩、構圖與整體質感。",
-      tags: ["自然", "乾淨", "高質感", "保留真實"]
+      label: tr("自然高級美化"),
+      intent: tr("保留原照內容，提升光線、色彩、構圖與整體質感。"),
+      tags: [tr("自然"), tr("乾淨"), tr("高質感"), tr("保留真實")]
     },
     editorial: {
-      label: "雜誌 editorial",
-      intent: "讓照片更有視覺張力與雜誌感，但不改變主體與場景。",
-      tags: ["雜誌感", "層次", "氛圍", "克制"]
+      label: tr("雜誌 editorial"),
+      intent: tr("讓照片更有視覺張力與雜誌感，但不改變主體與場景。"),
+      tags: [tr("雜誌感"), tr("層次"), tr("氛圍"), tr("克制")]
     },
     product: {
-      label: "商業產品照",
-      intent: "強化產品形狀、材質、色準與背景秩序。",
-      tags: ["商品", "材質", "清楚", "商業"]
+      label: tr("商業產品照"),
+      intent: tr("強化產品形狀、材質、色準與背景秩序。"),
+      tags: [tr("商品"), tr("材質"), tr("清楚"), tr("商業")]
     },
     portrait: {
-      label: "人像精修",
-      intent: "保留身分、表情、膚色與姿態，改善光線與皮膚質感。",
-      tags: ["人像", "膚色", "自然", "身分保留"]
+      label: tr("人像精修"),
+      intent: tr("保留身分、表情、膚色與姿態，改善光線與皮膚質感。"),
+      tags: [tr("人像"), tr("膚色"), tr("自然"), tr("身分保留")]
     },
     custom: {
-      label: "自訂方向",
-      intent: "依照補充指令調整，同時保留原始照片的真實內容。",
-      tags: ["自訂", "保留原照", "精修", "可控"]
+      label: tr("自訂方向"),
+      intent: tr("依照補充指令調整，同時保留原始照片的真實內容。"),
+      tags: [tr("自訂"), tr("保留原照"), tr("精修"), tr("可控")]
     }
   }
 };

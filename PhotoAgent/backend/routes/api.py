@@ -12,7 +12,7 @@ from werkzeug.utils import safe_join
 from aiserver_utils.queue import get_job_info
 from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, detect_face_boxes, ensure_jpeg_bytes, sniff_image_mime, HISTORY_THUMBNAIL_MAX_SIDE, RESULT_PREVIEW_MAX_SIDE
-from photo_agent import capabilities
+from photo_agent import capabilities, i18n
 from photo_agent.param_validation import normalize_advanced_options, validate_photo_agent_request
 from photo_agent.selections import apply_selections, validate_selections
 from pipeline import analyze_stage, reframe_stage
@@ -1291,7 +1291,7 @@ def continue_job(job_id):
     if error:
         return jsonify({"error": error}), 400
     if _skipped_without_prompt(analysis, params):
-        return jsonify({"error": SKIPPED_NEEDS_PROMPT}), 400
+        return jsonify({"error": i18n.tr(SKIPPED_NEEDS_PROMPT)}), 400
     params["stage"] = "finish"
     params["analysis"] = analysis
 
@@ -1361,7 +1361,7 @@ def rerun():
     if error:
         return jsonify({"error": error}), 400
     if _skipped_without_prompt(analysis, params):
-        return jsonify({"error": SKIPPED_NEEDS_PROMPT}), 400
+        return jsonify({"error": i18n.tr(SKIPPED_NEEDS_PROMPT)}), 400
     params["stage"] = "finish"
     params["analysis"] = analysis
 
@@ -1456,7 +1456,7 @@ def aipoc_reframe():
             analysis_model=params["analysis_model"],
         )
     except Exception as exc:
-        return jsonify({"error": f"重新構圖失敗：{exc}"}), 502
+        return jsonify({"error": i18n.tr("重新構圖失敗：{exc}", exc=exc)}), 502
     return jsonify({"status": "success", "analysis": reframed})
 
 
@@ -1485,7 +1485,7 @@ def aipoc_analyze():
             advanced_options=params.get("advanced_options", {}),
         )
     except Exception as exc:
-        return jsonify({"error": f"分析失敗：{exc}"}), 502
+        return jsonify({"error": i18n.tr("分析失敗：{exc}", exc=exc)}), 502
 
     return jsonify({"status": "success", "analysis": analysis})
 

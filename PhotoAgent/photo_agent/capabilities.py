@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
 import config
+from photo_agent.i18n import tr
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -286,7 +287,7 @@ def normalize_level(category: str, level: str) -> Optional[str]:
 # ── GET /api/capabilities ─────────────────────────────────────────────────────
 
 def _choices(choices, debug):
-    return [{"value": c.value, "label": c.label} for c in choices if not c.hidden and (debug or not c.debug_only)]
+    return [{"value": c.value, "label": tr(c.label)} for c in choices if not c.hidden and (debug or not c.debug_only)]
 
 
 def describe(*, debug: bool = False) -> dict:
@@ -325,18 +326,18 @@ def describe(*, debug: bool = False) -> dict:
             },
         },
         "presets": [
-            {"id": preset_id, "label": config.PRESETS[preset_id]["label"]} for preset_id in PRESET_IDS
+            {"id": preset_id, "label": tr(config.PRESETS[preset_id]["label"])} for preset_id in PRESET_IDS
         ],
         "style_options": [
             {
-                "id": g.id, "label": g.label, "scope": "global", "selections_key": f"options.{g.id}",
+                "id": g.id, "label": tr(g.label), "scope": "global", "selections_key": f"options.{g.id}",
                 "default": "default", "choices": _choices(g.choices, debug),
             }
             for g in STYLE_GROUPS
         ],
         "portrait_fixes": [
             {
-                "id": f.id, "label": f.label, "scope": "per-person",
+                "id": f.id, "label": tr(f.label), "scope": "per-person",
                 "selections_key": f"face_issue_overrides.<subject_index>:{f.id}",
                 "toggle_key": (
                     f"advanced_options.{f.toggle_key}" if f.toggle_key else "body_reshape_enabled"
@@ -348,7 +349,7 @@ def describe(*, debug: bool = False) -> dict:
         ],
         "advanced_options": [
             {
-                "key": o.key, "label": o.label, "scope": "global",
+                "key": o.key, "label": tr(o.label), "scope": "global",
                 "selections_key": f"advanced_options.{o.key}",
                 "default": o.default, **({"choices": list(o.choices)} if o.choices else {}),
             }

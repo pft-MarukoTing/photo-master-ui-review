@@ -1,6 +1,7 @@
 // Port of the old review card's portrait-check model (results.js
 // faceIssueEntries / subjectForDetection / getFaceIssueOverrides), minus body
 // reshape, which stays off in Stage 1.
+import { t } from "./i18n";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
 import type { Analysis, Dict, FaceOverride, Plan, PoseFaceChanges } from "./types";
@@ -11,23 +12,23 @@ import { executedPrompt } from "./util";
 // in 人像修正 are asked before there is a photo and carry the longer
 // "we will fix this" names instead -- a different question, a different label.
 export const FACE_CATEGORIES = [
-  { field: "blink_issue", label: "閉眼", flagField: "should_fix", option: "eye_closed_detection" },
-  { field: "gaze_issue", label: "視線", flagField: "should_fix", option: "gaze_contact_detection" },
-  { field: "hair_issue", label: "髮絲", flagField: "should_fix", option: "hair_mess_detection" },
-  { field: "smile_issue", label: "笑容", flagField: "adjust_safe", option: "smile_adjustment" },
+  { field: "blink_issue", label: t("閉眼"), flagField: "should_fix", option: "eye_closed_detection" },
+  { field: "gaze_issue", label: t("視線"), flagField: "should_fix", option: "gaze_contact_detection" },
+  { field: "hair_issue", label: t("髮絲"), flagField: "should_fix", option: "hair_mess_detection" },
+  { field: "smile_issue", label: t("笑容"), flagField: "adjust_safe", option: "smile_adjustment" },
 ] as const;
 
 export const LEVEL_OPTIONS: Record<string, { value: string; label: string }[]> = {
   hair_issue: [
-    { value: "dynamic", label: "保留髮絲動態" },
-    { value: "tidy", label: "梳整俐落" },
+    { value: "dynamic", label: t("保留髮絲動態") },
+    { value: "tidy", label: t("梳整俐落") },
   ],
   smile_issue: [
-    { value: "auto", label: "自動" },
-    { value: "neutral", label: "不笑" },
-    { value: "gentle", label: "微笑" },
-    { value: "broad", label: "開朗笑" },
-    { value: "laughing", label: "大笑" },
+    { value: "auto", label: t("自動") },
+    { value: "neutral", label: t("不笑") },
+    { value: "gentle", label: t("微笑") },
+    { value: "broad", label: t("開朗笑") },
+    { value: "laughing", label: t("大笑") },
   ],
 };
 
@@ -196,7 +197,7 @@ const EXECUTED_FACE_TAGS = [
   {
     field: "blink_issue",
     option: "eye_closed_detection",
-    label: "閉眼",
+    label: t("閉眼"),
     markers: [
       /Accidental blink repair priority:/i,
       /PRIMARY EYE-PAIR REPAIR/i,
@@ -207,7 +208,7 @@ const EXECUTED_FACE_TAGS = [
   {
     field: "gaze_issue",
     option: "gaze_contact_detection",
-    label: "視線",
+    label: t("視線"),
     markers: [
       /Approved gaze repair execution instructions:/i,
       /ONLY task for this edit:[\s\S]{0,180}redirect[^\n]*gaze/i,
@@ -219,7 +220,7 @@ const EXECUTED_FACE_TAGS = [
   {
     field: "hair_issue",
     option: "hair_mess_detection",
-    label: "髮絲",
+    label: t("髮絲"),
     markers: [
       /Hair tidying priority:/i,
       /Still-air hair \(user-selected, mandatory\):/i,
@@ -230,7 +231,7 @@ const EXECUTED_FACE_TAGS = [
   {
     field: "smile_issue",
     option: "smile_adjustment",
-    label: "笑容",
+    label: t("笑容"),
     markers: [
       /Smile adjustment \(user-selected, mandatory\)/i,
       /target_smile:/i,
@@ -334,9 +335,9 @@ export function executedPortraits(a: Analysis | null | undefined): PortraitDone[
         EXECUTED_BODY_MARKER.test(prompt) &&
         targeted
       ) {
-        tags.push("身形調整");
+        tags.push(t("身形調整"));
       }
-      return { label: name || `人物 ${index + 1}`, box, tags: [...new Set(tags)] };
+      return { label: name || t("人物 {v1}", { v1: index + 1 }), box, tags: [...new Set(tags)] };
     })
     .filter((p): p is PortraitDone => !!p.box && p.tags.length > 0);
 }
@@ -367,16 +368,16 @@ interface PoseRule {
 const BROAD_SMILE = { category: "smile_issue", values: { allowed: true, level: "broad" } };
 
 export const POSE_FACE_RULES: Record<string, PoseRule[]> = {
-  playful: [{ ...BROAD_SMILE, reason: "讓表情與活潑、輕鬆的姿勢一致" }],
-  candid: [{ category: "gaze_issue", values: { allowed: false }, reason: "保留自然、非擺拍的鏡頭外視線" }],
-  elegant: [{ category: "smile_issue", values: { allowed: true, level: "gentle" }, reason: "讓表情維持優雅、自然且不過度張揚" }],
+  playful: [{ ...BROAD_SMILE, reason: t("讓表情與活潑、輕鬆的姿勢一致") }],
+  candid: [{ category: "gaze_issue", values: { allowed: false }, reason: t("保留自然、非擺拍的鏡頭外視線") }],
+  elegant: [{ category: "smile_issue", values: { allowed: true, level: "gentle" }, reason: t("讓表情維持優雅、自然且不過度張揚") }],
   dynamic: [
-    { category: "gaze_issue", values: { allowed: false }, reason: "讓視線配合自然的動態瞬間" },
-    { category: "hair_issue", values: { level: "dynamic" }, onlyWhenAllowed: true, reason: "保留人物移動時自然的髮絲方向" },
+    { category: "gaze_issue", values: { allowed: false }, reason: t("讓視線配合自然的動態瞬間") },
+    { category: "hair_issue", values: { level: "dynamic" }, onlyWhenAllowed: true, reason: t("保留人物移動時自然的髮絲方向") },
   ],
-  cool: [{ category: "smile_issue", values: { allowed: true, level: "neutral" }, reason: "維持冷靜、俐落的姿態氛圍" }],
-  vsign: [{ ...BROAD_SMILE, reason: "讓表情與 V-Sign 的輕鬆、開朗氛圍一致" }],
-  cheer: [{ ...BROAD_SMILE, reason: "讓表情與開放、歡呼的姿勢一致" }],
+  cool: [{ category: "smile_issue", values: { allowed: true, level: "neutral" }, reason: t("維持冷靜、俐落的姿態氛圍") }],
+  vsign: [{ ...BROAD_SMILE, reason: t("讓表情與 V-Sign 的輕鬆、開朗氛圍一致") }],
+  cheer: [{ ...BROAD_SMILE, reason: t("讓表情與開放、歡呼的姿勢一致") }],
 };
 
 function sameOverride(a?: FaceOverride | null, b?: FaceOverride | null) {
@@ -484,7 +485,7 @@ export interface Person {
 
 export function facePeople(a: Analysis | null): Person[] {
   if (!a) return [];
-  return faceEntries(a).map((f, i) => ({ detectionIndex: f.detectionIndex, subjectIndex: f.subjectIndex, name: f.label || `人物 ${i + 1}`, box: f.box, thumbnailBox: f.thumbnailBox }));
+  return faceEntries(a).map((f, i) => ({ detectionIndex: f.detectionIndex, subjectIndex: f.subjectIndex, name: f.label || t("人物 {v1}", { v1: i + 1 }), box: f.box, thumbnailBox: f.thumbnailBox }));
 }
 
 // Face crops of the source image, one per facePeople entry (same order).

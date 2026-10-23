@@ -13,37 +13,37 @@ window.PhotoAgentResults = (() => {
       || els.apOptionsCardInline?.classList.contains("ap-readonly-locked"));
   }
 
-  const DEFAULT_OPTION = { value: "default", label: "不指定" };
+  const DEFAULT_OPTION = { value: "default", label: tr("不指定") };
   const POSE_OPTIONS = [
     DEFAULT_OPTION,
-    { value: "playful", label: "俏皮" },
-    { value: "candid", label: "自然抓拍" },
-    { value: "strong", label: "強勢" },
-    { value: "elegant", label: "優雅" },
-    { value: "dynamic", label: "動感" },
-    { value: "cool", label: "酷帥" },
-    { value: "vsign", label: "勝利手勢" },
-    { value: "cheer", label: "歡呼" }
+    { value: "playful", label: tr("俏皮") },
+    { value: "candid", label: tr("自然抓拍") },
+    { value: "strong", label: tr("強勢") },
+    { value: "elegant", label: tr("優雅") },
+    { value: "dynamic", label: tr("動感") },
+    { value: "cool", label: tr("酷帥") },
+    { value: "vsign", label: tr("勝利手勢") },
+    { value: "cheer", label: tr("歡呼") }
   ];
   const ANGLE_OPTIONS = [
     DEFAULT_OPTION,
-    { value: "high", label: "俯拍" },
-    { value: "low", label: "仰拍" },
-    { value: "eye", label: "平視" }
+    { value: "high", label: tr("俯拍") },
+    { value: "low", label: tr("仰拍") },
+    { value: "eye", label: tr("平視") }
   ];
   const LIGHTING_OPTIONS = [
     DEFAULT_OPTION,
-    { value: "gold", label: "金色光調" },
-    { value: "soft", label: "柔光" },
-    { value: "cool", label: "藍調光線" },
-    { value: "night", label: "夜色" }
+    { value: "gold", label: tr("金色光調") },
+    { value: "soft", label: tr("柔光") },
+    { value: "cool", label: tr("藍調光線") },
+    { value: "night", label: tr("夜色") }
   ];
   const SIZE_OPTIONS = [
     DEFAULT_OPTION,
-    { value: "wide", label: "遠景" },
-    { value: "wider", label: "廣角" },
-    { value: "close", label: "近景" },
-    { value: "closer", label: "特寫" }
+    { value: "wide", label: tr("遠景") },
+    { value: "wider", label: tr("廣角") },
+    { value: "close", label: tr("近景") },
+    { value: "closer", label: tr("特寫") }
   ];
 
   // Maps each non-default option value to its example image in
@@ -66,10 +66,10 @@ window.PhotoAgentResults = (() => {
   // (the raw {pose, angle, lighting, size} values the user picked on the review
   // screen) back into human-readable text on the results page.
   const STYLE_OPTION_GROUPS = {
-    pose: { options: POSE_OPTIONS, label: "姿勢" },
-    angle: { options: ANGLE_OPTIONS, label: "拍攝角度" },
-    lighting: { options: LIGHTING_OPTIONS, label: "光線" },
-    size: { options: SIZE_OPTIONS, label: "取景範圍" }
+    pose: { options: POSE_OPTIONS, label: tr("姿勢") },
+    angle: { options: ANGLE_OPTIONS, label: tr("拍攝角度") },
+    lighting: { options: LIGHTING_OPTIONS, label: tr("光線") },
+    size: { options: SIZE_OPTIONS, label: tr("取景範圍") }
   };
 
   function buildStyleOptionsText(styleOptions) {
@@ -82,7 +82,7 @@ window.PhotoAgentResults = (() => {
         return opt ? `${group.label}: ${opt.label}` : "";
       })
       .filter(Boolean)
-      .join("、");
+      .join(tr("、"));
   }
 
   // Same non-default-only filtering as buildStyleOptionsText, but as plain
@@ -130,7 +130,7 @@ window.PhotoAgentResults = (() => {
     {
       field: "blink_issue",
       option: "eye_closed_detection",
-      label: "閉眼偵測",
+      label: tr("閉眼偵測"),
       markers: [
         /Accidental blink repair priority:/i,
         /PRIMARY EYE-PAIR REPAIR/i,
@@ -141,7 +141,7 @@ window.PhotoAgentResults = (() => {
     {
       field: "gaze_issue",
       option: "gaze_contact_detection",
-      label: "眼神對焦",
+      label: tr("眼神對焦"),
       markers: [
         /Approved gaze repair execution instructions:/i,
         /ONLY task for this edit:[\s\S]{0,180}redirect[^\n]*gaze/i,
@@ -153,7 +153,7 @@ window.PhotoAgentResults = (() => {
     {
       field: "hair_issue",
       option: "hair_mess_detection",
-      label: "亂髮偵測",
+      label: tr("亂髮偵測"),
       markers: [
         /Hair tidying priority:/i,
         /Still-air hair \(user-selected, mandatory\):/i,
@@ -164,7 +164,7 @@ window.PhotoAgentResults = (() => {
     {
       field: "smile_issue",
       option: "smile_adjustment",
-      label: "笑容調整",
+      label: tr("笑容調整"),
       markers: [
         /Smile adjustment \(user-selected, mandatory\)/i,
         /target_smile:/i,
@@ -205,7 +205,7 @@ window.PhotoAgentResults = (() => {
     return [...new Set(plan.flatMap((command, index) => {
       if (typeof command !== "string" || !command.trim() || !prompt.includes(command.trim())) return [];
       const label = recipes[index];
-      return [typeof label === "string" && label.trim() ? label.trim() : command.trim()];
+      return [typeof label === "string" && label.trim() ? shownRecipe(label.trim()) : command.trim()];
     }))];
   }
 
@@ -305,7 +305,7 @@ window.PhotoAgentResults = (() => {
     row.className = "ap-body-reshape-row";
     const toggle = document.createElement("label");
     toggle.className = "ios-switch ap-body-reshape-toggle";
-    toggle.title = "決定是否將身形調整指令送給 Editor";
+    toggle.title = tr("決定是否將身形調整指令送給 Editor");
     const input = document.createElement("input");
     input.type = "checkbox";
     const track = document.createElement("span");
@@ -319,7 +319,7 @@ window.PhotoAgentResults = (() => {
 
     const name = document.createElement("span");
     name.className = "ap-body-reshape-name";
-    name.textContent = "身形調整";
+    name.textContent = tr("身形調整");
     row.appendChild(name);
     const icon = document.createElement("span");
     row.appendChild(icon);
@@ -332,8 +332,8 @@ window.PhotoAgentResults = (() => {
       input.checked = active;
       icon.className = `adherence-icon ${active ? "is-pending" : "is-done"}`;
       icon.textContent = active ? "!" : "✓";
-      verdict.textContent = active ? "可以調整" : "已關閉";
-      toggle.setAttribute("aria-label", active ? "關閉身形調整" : "開啟身形調整");
+      verdict.textContent = active ? tr("可以調整") : tr("已關閉");
+      toggle.setAttribute("aria-label", active ? tr("關閉身形調整") : tr("開啟身形調整"));
     };
     input.addEventListener("change", () => {
       setBodyReshapeReviewEnabled(input.checked);
@@ -382,8 +382,13 @@ window.PhotoAgentResults = (() => {
     return axes.some((axis) => REFRAME_AXIS_NAMES.has(String(axis || "").trim().toLowerCase()));
   }
 
+  // The starts syncPreviewReframingText writes, in another language: taken
+  // off too, so a row rebuilt for a new ratio does not say it twice.
+  const REFRAME_LEADS = [...trLeads("維持原圖比例，{detail}"), ...trLeads("調整為{ratioLabel}，{detail}")];
+
   function reframingDetail(text) {
     let value = String(text || "").trim().replace(/^\s*重新構圖\s*[:：]\s*/, "");
+    REFRAME_LEADS.forEach((lead) => { value = value.replace(lead, ""); });
     value = value.replace(
       new RegExp(`^\\s*(?:以\\s*${RATIO_TOKEN_PATTERN}\\s*輸出比例|維持原圖輸出比例並)\\s*重新構圖\\s*[；;，,]*\\s*`),
       ""
@@ -411,13 +416,13 @@ window.PhotoAgentResults = (() => {
       const detail = reframingDetail(recipe[index])
         || reframingDetail(plan[index])
         || reframingDetail(analysis.crop_box?.reason)
-        || "依解析後的裁切框改善主體集中度與邊緣落點。";
+        || tr("依解析後的裁切框改善主體集中度與邊緣落點。");
       if (!cropPlan && !expanding) {
-        recipe[index] = "重新構圖：此比例下維持完整原圖（沒有有效裁切）";
+        recipe[index] = "重新構圖：" + tr("此比例下維持完整原圖（沒有有效裁切）");
       } else if (ratioLabel === "original") {
-        recipe[index] = `重新構圖：維持原圖比例，${detail}`;
+        recipe[index] = "重新構圖：" + tr("維持原圖比例，{detail}", { detail });
       } else {
-        recipe[index] = `重新構圖：調整為${ratioLabel}，${detail}`;
+        recipe[index] = "重新構圖：" + tr("調整為{ratioLabel}，{detail}", { ratioLabel, detail });
       }
     });
     return { ...analysis, retouch_recipe: recipe };
@@ -455,7 +460,7 @@ window.PhotoAgentResults = (() => {
     );
     const recipeChecked = recipeInputs.map((input) => input.checked);
     const reframeChecked = FIXED_RATIO_RE.test(pref) || Array.from(els.apRecipeList?.querySelectorAll("li") || []).some(
-      (item) => /^重新構圖\s*[:：]/.test(item.querySelector(".step-cb-label")?.textContent || "")
+      (item) => REFRAME_LABEL_RE.test(item.querySelector(".step-cb-label")?.textContent || "")
         && item.querySelector('input[type="checkbox"]')?.checked
     );
     // A rejected run keeps the pre-rejection crop proposal privately. When
@@ -506,7 +511,7 @@ window.PhotoAgentResults = (() => {
 
   function aspectRatioDisplayValue(value) {
     const text = String(value || "").trim();
-    return text.toLowerCase() === "original" ? "原圖" : text;
+    return text.toLowerCase() === "original" ? tr("原圖") : text;
   }
 
   // One more recipe-tag pill (debug UI only): the resolved output ratio. Not
@@ -518,13 +523,13 @@ window.PhotoAgentResults = (() => {
   function buildAspectRatioTagLabel(analysis) {
     const value = String(analysis?.recommended_aspect_ratio || "").trim();
     if (!value) return "";
-    if (value.toLowerCase() === "original") return "比例 原圖";
+    if (value.toLowerCase() === "original") return tr("比例 原圖");
     const match = value.match(/(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)/);
-    if (!match) return `比例 ${value}`;
+    if (!match) return tr("比例 {value}", { value });
     const w = Number(match[1]);
     const h = Number(match[2]);
-    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return `比例 ${value}`;
-    return `比例 ${value}（${w > h ? "橫" : w < h ? "直" : "方"}）`;
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return tr("比例 {value}", { value });
+    return `${tr("比例")} ${value}${tr("（")}${w > h ? tr("橫") : w < h ? tr("直") : tr("方")}${tr("）")}`;
   }
 
   // fillRecipeAdherenceList's fallback for styleEntries when QA didn't run
@@ -551,7 +556,7 @@ window.PhotoAgentResults = (() => {
     const source = Array.isArray(items) && items.length ? items : fallbackItems;
     source.forEach((item) => {
       const li = document.createElement("li");
-      li.textContent = item;
+      li.textContent = shownRecipe(item);
       element.appendChild(li);
     });
   }
@@ -567,13 +572,13 @@ window.PhotoAgentResults = (() => {
     const ratio = FIXED_RATIO_RE.test(pref) ? pref : "";
     els.apRecipeList?.querySelectorAll("li").forEach((li) => {
       const input = li.querySelector('input[type="checkbox"]');
-      if (!input || !REFRAME_RECIPE_RE.test(li.querySelector(".step-cb-label")?.textContent || "")) return;
+      if (!input || !REFRAME_LABEL_RE.test(li.querySelector(".step-cb-label")?.textContent || "")) return;
       li.classList.toggle("is-ratio-locked", Boolean(ratio));
       if (ratio) {
         input.checked = true;
         input.disabled = true;
         input.dataset.ratioLocked = "1";
-        li.dataset.lockTip = `指定比例${ratio}需重新構圖，若需取消請把長寬比改成「原圖比例」`;
+        li.dataset.lockTip = tr("指定比例{ratio}需重新構圖，若需取消請把長寬比改成「原圖比例」", { ratio });
       } else if (input.dataset.ratioLocked) {
         delete input.dataset.ratioLocked;
         delete li.dataset.lockTip;
@@ -675,7 +680,7 @@ window.PhotoAgentResults = (() => {
       if (reframe) {
         // Keep the framing decision visually recognizable as one recipe row:
         // the label stays plain and the combined ratio/crop result is bold.
-        text.appendChild(document.createTextNode(`${reframe[1]} `));
+        text.appendChild(document.createTextNode(`${tr("重新構圖：")} `));
         const detail = document.createElement("strong");
         detail.textContent = reframe[2];
         text.appendChild(detail);
@@ -710,7 +715,7 @@ window.PhotoAgentResults = (() => {
       : buildFallbackStyleEntries(fallbackStyleOptions);
     const rejectedEntries = Array.isArray(rejectedItems)
       ? rejectedItems.map((it) => ({
-          label: `不應出現：${it.item}`,
+          label: tr("不應出現：{item}", { item: it.item }),
           checked: it.violated !== true,
           note: it.note
         }))
@@ -718,7 +723,7 @@ window.PhotoAgentResults = (() => {
 
     if (!followedEntries.length && !styleEntries.length && !rejectedEntries.length) {
       const li = document.createElement("li");
-      li.textContent = "尚未取得修圖項目。";
+      li.textContent = tr("尚未取得修圖項目。");
       element.appendChild(li);
       return;
     }
@@ -733,7 +738,7 @@ window.PhotoAgentResults = (() => {
 
       const text = document.createElement("span");
       text.className = "step-cb-label";
-      text.textContent = entry.note ? `${entry.label}（${entry.note}）` : entry.label;
+      text.textContent = entry.note ? tr("{label}（{note}）", { label: entry.label, note: entry.note }) : entry.label;
 
       label.appendChild(icon);
       label.appendChild(text);
@@ -830,7 +835,7 @@ window.PhotoAgentResults = (() => {
       const cancelBtn = document.createElement("button");
       cancelBtn.type = "button";
       cancelBtn.className = "ap-style-option-cancel";
-      cancelBtn.setAttribute("aria-label", `清除${opt.label}`);
+      cancelBtn.setAttribute("aria-label", tr("清除{label}", { label: opt.label }));
       cancelBtn.textContent = "×";
       cancelBtn.addEventListener("click", (e) => {
         e.preventDefault();
@@ -1109,7 +1114,7 @@ window.PhotoAgentResults = (() => {
       const card = document.querySelector(`.ap-style-card[data-style-group="${group}"]`);
       if (card) card.classList.toggle("is-picked", !!opt);
       const valueEl = document.querySelector(`.ap-style-card-value[data-style-group="${group}"]`);
-      if (valueEl) valueEl.textContent = opt ? opt.label : `選擇${label}`;
+      if (valueEl) valueEl.textContent = opt ? opt.label : tr("選擇{label}", { label });
       const clearBtn = document.querySelector(`.ap-style-card-clear[data-style-group="${group}"]`);
       if (clearBtn) clearBtn.hidden = !opt;
 
@@ -1162,7 +1167,7 @@ window.PhotoAgentResults = (() => {
 
   function sentence(label, value) {
     const text = stripFieldLabel(value, [label]);
-    return text ? `${label}：${text}。` : "";
+    return text ? tr("{label}：{text}。", { label, text }) : "";
   }
 
   function numberOrDash(value) {
@@ -1176,9 +1181,9 @@ window.PhotoAgentResults = (() => {
   }
 
   function formatStatus(qa) {
-    if (!qa) return "未檢查";
-    if (qa.pass === false) return qa.overall_status || "需人工複查";
-    return qa.overall_status || "可展示";
+    if (!qa) return tr("未檢查");
+    if (qa.pass === false) return qa.overall_status || tr("需人工複查");
+    return qa.overall_status || tr("可展示");
   }
 
   // A tag is normally just its label. The object form -- { label, onClick,
@@ -1198,7 +1203,8 @@ window.PhotoAgentResults = (() => {
       const label = typeof spec.label === "string" ? spec.label.trim() : "";
       if (!label) return;
       const chip = document.createElement("span");
-      chip.textContent = label;
+      // subject_category / scene_category are fixed Chinese values: shown translated.
+      chip.textContent = tr(label);
       if (spec.className) chip.className = spec.className;
       if (spec.title) chip.title = spec.title;
       if (spec.onClick) {
@@ -1267,7 +1273,7 @@ window.PhotoAgentResults = (() => {
     panel.style.setProperty("--personalize-tail-x", `${Math.min(Math.max(anchorCenter, min), max)}px`);
   }
 
-  function openPersonalizePopover(text, anchor, title = "個人化需求") {
+  function openPersonalizePopover(text, anchor, title = tr("個人化需求")) {
     if (!els.personalizePopover) return;
     closePersonalizePopover();
     els.personalizePopover.setAttribute("aria-label", title);
@@ -1342,19 +1348,19 @@ window.PhotoAgentResults = (() => {
   }
 
   function buildPhotoContentSummary(analysis) {
-    const summary = stripFieldLabel(analysis.photo_summary, ["照片內容", "照片摘要", "內容"]);
-    const subject = stripFieldLabel(analysis.main_subject, ["主體", "主要主體"]);
-    const scene = stripFieldLabel(analysis.scene_type, ["場景", "場景類型"]);
+    const summary = stripFieldLabel(analysis.photo_summary, [tr("照片內容"), tr("照片摘要"), tr("內容")]);
+    const subject = stripFieldLabel(analysis.main_subject, [tr("主體"), tr("主要主體")]);
+    const scene = stripFieldLabel(analysis.scene_type, [tr("場景"), tr("場景類型")]);
     if (summary) {
       return joinParts([
-        `${summary}。`,
-        subject && !summary.includes(subject) ? `主體：${subject}。` : "",
-        scene && !summary.includes(scene) ? `場景：${scene}。` : ""
+        tr("{summary}。", { summary }),
+        subject && !summary.includes(subject) ? tr("主體：{subject}。", { subject }) : "",
+        scene && !summary.includes(scene) ? tr("場景：{scene}。", { scene }) : ""
       ]);
     }
     return joinParts([
-      subject ? `主體：${subject}。` : "已完成照片總覽辨識。",
-      scene ? `場景：${scene}。` : ""
+      subject ? tr("主體：{subject}。", { subject }) : tr("已完成照片總覽辨識。"),
+      scene ? tr("場景：{scene}。", { scene }) : ""
     ]);
   }
 
@@ -1383,7 +1389,7 @@ window.PhotoAgentResults = (() => {
     if (els.apPhotoSummaryBadge) {
       els.apPhotoSummaryBadge.hidden = visible.length === 0;
       els.apPhotoSummaryBadge.textContent = visible.length
-        ? `${visible.length} 項值得調整`
+        ? tr("{length} 項值得調整", { length: visible.length })
         : "";
     }
     if (els.apPhotoIssues) els.apPhotoIssues.hidden = total === 0;
@@ -1487,7 +1493,7 @@ window.PhotoAgentResults = (() => {
     // symmetrically with 收合 instead of leaving one half of the toggle
     // phrased as a destination and the other as a verb. The pill's mark moved
     // off the chevron for the same split (see .ap-photo-summary-toggle).
-    toggle.textContent = photoSummaryExpanded ? "收合" : "展開";
+    toggle.textContent = photoSummaryExpanded ? tr("收合") : tr("展開");
     toggle.setAttribute("aria-expanded", String(photoSummaryExpanded));
     if (photoSummaryExpanded) {
       summary.classList.add("ap-photo-summary--expanded");
@@ -1517,32 +1523,32 @@ window.PhotoAgentResults = (() => {
     const selected = validation?.selected_candidate_id === candidate.id;
     const score = (validation?.candidate_scores || []).find((item) => item.id === candidate.id);
     const label = candidate.label || candidate.label_en || candidate.id;
-    const verdict = selected ? "最終選擇" : score ? `候選評分 ${score.score}/10` : "候選方案";
+    const verdict = selected ? tr("最終選擇") : score ? tr("候選評分 {score}/10", { score: score.score }) : tr("候選方案");
     const comment = score?.comment || candidate.compositionIntent || candidate.tradeoffs || "";
-    return `${verdict} - ${label}${comment ? `：${comment}` : ""}`;
+    return `${verdict} - ${label}${comment ? `${tr("：")}${comment}` : ""}`;
   }
 
   function checksToList(qa) {
     if (!qa?.checks) return [];
     const labels = {
-      subject_preserved: "主體與身分保留",
-      user_intent_followed: "使用者目標達成",
-      crop_safe: "裁切安全",
-      protected_regions_safe: "保護區域安全",
-      framing_intent_respected: "取景意圖一致",
-      aspect_ratio_feels_intentional: "比例有構圖意義",
-      composition_method_matches: "構圖方法吻合",
-      empty_space_has_function: "留白有功能",
-      alignment_stable_or_intentional: "水平/透視穩定",
-      distractions_reassessed_after_crop: "裁切後重新評估干擾",
-      scene_preserved: "場景真實保留",
-      frame_breathing_room_ok: "邊緣呼吸感合理",
-      not_overedited: "未過度美化",
-      light_color_improved: "光色改善"
+      subject_preserved: tr("主體與身分保留"),
+      user_intent_followed: tr("使用者目標達成"),
+      crop_safe: tr("裁切安全"),
+      protected_regions_safe: tr("保護區域安全"),
+      framing_intent_respected: tr("取景意圖一致"),
+      aspect_ratio_feels_intentional: tr("比例有構圖意義"),
+      composition_method_matches: tr("構圖方法吻合"),
+      empty_space_has_function: tr("留白有功能"),
+      alignment_stable_or_intentional: tr("水平/透視穩定"),
+      distractions_reassessed_after_crop: tr("裁切後重新評估干擾"),
+      scene_preserved: tr("場景真實保留"),
+      frame_breathing_room_ok: tr("邊緣呼吸感合理"),
+      not_overedited: tr("未過度美化"),
+      light_color_improved: tr("光色改善")
     };
     return Object.entries(qa.checks)
       .slice(0, 8)
-      .map(([key, value]) => `${value === true ? "通過" : value === false ? "注意" : "未定"}：${labels[key] || key}`);
+      .map(([key, value]) => tr("{v1}：{v2}", { v1: value === true ? tr("通過") : value === false ? tr("注意") : tr("未定"), v2: labels[key] || key }));
   }
 
   // ── Per-person face review tabs (#ap-face-tabs / #ap-face-detail) ──
@@ -1579,11 +1585,11 @@ window.PhotoAgentResults = (() => {
   // warning with the switch initially off, but smile alone remains manually
   // controllable so the user can explicitly override that recommendation.
   const FACE_ISSUE_CATEGORIES = [
-    { field: "blink_issue", label: "閉眼偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
-    { field: "gaze_issue", label: "眼神對焦", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
-    { field: "hair_issue", label: "亂髮偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
-    { field: "smile_issue", label: "笑容調整", flagField: "adjust_safe", flagWhen: true, flagText: "可以調整", okText: "不建議調整" },
-    { field: "body_reshape", label: "身形調整", flagField: "should_edit", flagWhen: true, flagText: "可以調整", okText: "無須修正" }
+    { field: "blink_issue", label: tr("閉眼偵測"), flagField: "should_fix", flagWhen: true, flagText: tr("需要修正"), okText: tr("無需修正") },
+    { field: "gaze_issue", label: tr("眼神對焦"), flagField: "should_fix", flagWhen: true, flagText: tr("需要修正"), okText: tr("無需修正") },
+    { field: "hair_issue", label: tr("亂髮偵測"), flagField: "should_fix", flagWhen: true, flagText: tr("需要修正"), okText: tr("無需修正") },
+    { field: "smile_issue", label: tr("笑容調整"), flagField: "adjust_safe", flagWhen: true, flagText: tr("可以調整"), okText: tr("不建議調整") },
+    { field: "body_reshape", label: tr("身形調整"), flagField: "should_edit", flagWhen: true, flagText: tr("可以調整"), okText: tr("無須修正") }
   ];
 
   // Every category the user can manually switch on even when the analyzer
@@ -1597,8 +1603,8 @@ window.PhotoAgentResults = (() => {
   const MANUAL_OVERRIDE_CATEGORIES = ["blink_issue", "gaze_issue", "hair_issue", "smile_issue"];
   const LEVEL_SELECT_CATEGORIES = ["hair_issue", "smile_issue"];
   const FACE_ISSUE_LEVEL_CHOICES = {
-    hair_issue: [["dynamic", "保留髮絲動態"], ["tidy", "梳整俐落"]],
-    smile_issue: [["auto", "自動"], ["neutral", "不笑"], ["gentle", "微笑"], ["broad", "開朗笑"], ["laughing", "大笑"]]
+    hair_issue: [["dynamic", tr("保留髮絲動態")], ["tidy", tr("梳整俐落")]],
+    smile_issue: [["auto", tr("自動")], ["neutral", tr("不笑")], ["gentle", tr("微笑")], ["broad", tr("開朗笑")], ["laughing", tr("大笑")]]
   };
 
   // Intersection over the SMALLER of the two boxes' own area (the
@@ -1872,14 +1878,14 @@ window.PhotoAgentResults = (() => {
         && EXECUTED_BODY_RESHAPE_PROMPT_MARKER.test(prompt)
         && bodyTargetInPrompt
       ) {
-        tags.push("身形調整");
+        tags.push(tr("身形調整"));
       }
       return {
         subject,
         subjectIndex,
         box,
         thumbnailBox,
-        label: subject.label || `人物 ${subjectIndex + 1}`,
+        label: subject.label || tr("人物 {v1}", { v1: subjectIndex + 1 }),
         tags: [...new Set(tags)]
       };
     }).filter((entry) => entry.tags.length);
@@ -1890,11 +1896,11 @@ window.PhotoAgentResults = (() => {
   function buildPlannedEditMessages({ analysis, selections = {}, userPrompt = "", overwritePrompt = false, aiPhotoEditing = true } = {}) {
     const sentence = (text) => {
       const value = typeof text === "string" ? text.trim() : "";
-      return value ? (/[。！？.!?…]$/.test(value) ? value : value + "。") : "";
+      return value ? (/[。！？.!?…]$/.test(value) ? value : value + tr("。")) : "";
     };
     const direction = typeof userPrompt === "string" ? userPrompt.trim() : "";
     if (!aiPhotoEditing) return []; // These controls describe AI editing, not local processing.
-    if (overwritePrompt && direction) return [sentence("依照您的個人化需求修圖：" + direction)];
+    if (overwritePrompt && direction) return [sentence(tr("依照您的個人化需求修圖：") + direction)];
     const advanced = selections.advanced_options || analysis?._advanced_options || {};
     const overrides = selections.face_issue_overrides || {};
     const optionFor = { blink_issue: "eye_closed_detection", gaze_issue: "gaze_contact_detection",
@@ -1912,7 +1918,7 @@ window.PhotoAgentResults = (() => {
           || selections.body_reshape_enabled === false || (selections.body_reshape_enabled == null && analysis?._body_reshape_enabled === false)
           || !issue.controllable)) return [];
         const levelLabel = FACE_ISSUE_LEVEL_CHOICES[issue.category]?.find(([value]) => value === level)?.[1];
-        return [sentence(`為${subject.label || `人物 ${index + 1}`}進行${issue.label}${levelLabel ? `（${levelLabel}）` : ""}`)];
+        return [sentence(tr("為{who}進行{fix}", { who: subject.label || tr("人物 {n}", { n: index + 1 }), fix: issue.label }) + (levelLabel ? tr("（{level}）", { level: levelLabel }) : ""))];
       });
     });
     const messages = [];
@@ -1924,14 +1930,14 @@ window.PhotoAgentResults = (() => {
       .filter((_, index) => !Array.isArray(checked) || checked[index] === true)
       .filter((item) => typeof item === "string" && item.trim());
     recipes.sort((a, b) => Number(/^重新構圖\s*[:：]/.test(b)) - Number(/^重新構圖\s*[:：]/.test(a)));
-    messages.push(...recipes.map(sentence));
+    messages.push(...recipes.map((item) => sentence(shownRecipe(item))));
     const options = selections.options || {};
     Object.entries(options).forEach(([key, value]) => {
       const group = STYLE_OPTION_GROUPS[key];
       const option = group?.options.find((item) => item.value === value && value !== "default");
-      if (option) messages.push(sentence(`設定${group.label}為「${option.label}」`));
+      if (option) messages.push(sentence(tr("設定{label}為「{v2}」", { label: group.label, v2: option.label })));
     });
-    if (direction) messages.push(sentence("也依照您的個人化需求修圖：" + direction));
+    if (direction) messages.push(sentence(tr("也依照您的個人化需求修圖：") + direction));
     return messages;
   }
 
@@ -2055,7 +2061,7 @@ window.PhotoAgentResults = (() => {
       entry.tags.forEach((tag) => {
         const item = document.createElement("span");
         item.className = "portrait-adjustment-item";
-        item.setAttribute("aria-label", `${tag}，已完成`);
+        item.setAttribute("aria-label", tr("{tag}，已完成", { tag }));
         const check = document.createElement("span");
         check.className = "portrait-check-complete";
         check.setAttribute("aria-hidden", "true");
@@ -2428,7 +2434,7 @@ window.PhotoAgentResults = (() => {
       // sentToModel caveats below -- release users see every face tab
       // rendered the same way regardless of how it was found.
       if (entry.sentToModel !== true && debugUiActive) tab.classList.add("ap-face-tab--local-only");
-      const label = entry.label || `人物 ${index + 1}`;
+      const label = entry.label || tr("人物 {v1}", { v1: index + 1 });
       tab.title = label;
       tab.setAttribute("aria-label", label);
       if (dataUrl) {
@@ -2616,7 +2622,7 @@ window.PhotoAgentResults = (() => {
     }
     const name = document.createElement("p");
     name.className = "ap-face-detail-name";
-    name.textContent = entry.label || `人物 ${selectedFaceIndex + 1}`;
+    name.textContent = entry.label || tr("人物 {v1}", { v1: selectedFaceIndex + 1 });
     detail.appendChild(name);
     const list = document.createElement("ul");
     list.className = "step-inline-list step-inline-list--readonly";
@@ -2654,7 +2660,7 @@ window.PhotoAgentResults = (() => {
       // detail and no way to act on it.
       const note = document.createElement("li");
       note.className = "ap-face-issue-note";
-      note.textContent = "此人物的分析結果來自整張照片的判讀，未使用特寫照片進行細節分析，準確度可能略低。";
+      note.textContent = tr("此人物的分析結果來自整張照片的判讀，未使用特寫照片進行細節分析，準確度可能略低。");
       items.push(note);
     }
     const issues = (entry?.issues || []).filter((issue) => {
@@ -2669,7 +2675,7 @@ window.PhotoAgentResults = (() => {
     });
     if (!issues.length) {
       const li = document.createElement("li");
-      li.textContent = "此人像沒有可顯示的分析結果。";
+      li.textContent = tr("此人像沒有可顯示的分析結果。");
       items.push(li);
       return items;
     }
@@ -2714,14 +2720,14 @@ window.PhotoAgentResults = (() => {
       // alone -- see that rule's own comment for why.
       toggle.classList.toggle("is-locked", !globallyEnabled);
       toggle.title = !globallyEnabled
-        ? "此項目已在人像修正設定中關閉，需先在設定中開啟才能個別調整"
+        ? tr("此項目已在人像修正設定中關閉，需先在設定中開啟才能個別調整")
         : issue.analysisStatus === "error"
-          ? "身形調整分析失敗，已停用；請重新分析"
+          ? tr("身形調整分析失敗，已停用；請重新分析")
         : issue.flagged
-          ? "允許 AI 修正此項目"
+          ? tr("允許 AI 修正此項目")
           : isManualOverride
-            ? "分析判定無需或不建議調整；仍可手動開啟"
-            : "模型未判定此項目需要修正，無需操作";
+            ? tr("分析判定無需或不建議調整；仍可手動開啟")
+            : tr("模型未判定此項目需要修正，無需操作");
       // Capture-phase click guard on the LABEL itself (not just input.disabled
       // below) -- a click anywhere in this label (including the track/thumb
       // spans appended below, which aren't the input) normally activates its
@@ -2775,14 +2781,14 @@ window.PhotoAgentResults = (() => {
         icon.className = `adherence-icon ${locked ? "is-locked" : failed ? "is-pending" : active ? "is-pending" : "is-done"}`;
         icon.textContent = locked ? "–" : failed ? "!" : active ? "!" : "✓";
         resultLabel.textContent = locked
-          ? "已於人像修正設定關閉"
+          ? tr("已於人像修正設定關閉")
           : failed
-            ? "分析失敗"
+            ? tr("分析失敗")
           : !issue.flagged
             ? (isManualOverride && issue.allowed
-                ? `已手動開啟`
+                ? tr("已手動開啟")
                 : issue.okText)
-            : (issue.allowed ? issue.flagText : "已設定不修正");
+            : (issue.allowed ? issue.flagText : tr("已設定不修正"));
       };
       refreshVerdict();
       row.appendChild(icon);
@@ -2859,14 +2865,14 @@ window.PhotoAgentResults = (() => {
         report.open = !!issue.reportExpanded;
         const toggle = document.createElement("summary");
         toggle.className = "ap-body-reshape-report-toggle";
-        toggle.textContent = report.open ? "收合" : "展開";
+        toggle.textContent = report.open ? tr("收合") : tr("展開");
         const content = document.createElement("div");
         content.className = "ap-body-reshape-report-text";
         content.textContent = issue.report;
         report.append(toggle, content);
         report.addEventListener("toggle", () => {
           issue.reportExpanded = report.open;
-          toggle.textContent = report.open ? "收合" : "展開";
+          toggle.textContent = report.open ? tr("收合") : tr("展開");
         });
         li.appendChild(report);
       }
@@ -2905,19 +2911,19 @@ window.PhotoAgentResults = (() => {
   // visible.
   const ANALYSIS_BOX_SPECS = [
     { field: "roi_box", color: "#22c55e", label: "ROI", corner: "tl" },
-    { field: "subject_extent_box", color: "#38bdf8", label: "主體範圍", corner: "tr" },
+    { field: "subject_extent_box", color: "#38bdf8", label: tr("主體範圍"), corner: "tr" },
     // subjects contains both people and non-person subjects. Only surface the
     // former here: the per-person diagnostics below use the same person box,
     // while product/animal/object subjects are outside this debug view's
     // purpose. `personOnly` is applied by analysisBoxList before reading box.
-    { field: "subjects", color: "#6366f1", label: "人物主體（subjects）", corner: "br", list: true, itemBox: true, personOnly: true },
-    { field: "crop_box", color: "#f59e0b", label: "crop_box（分析建議）", corner: "bl", dashed: true },
-    { field: "applied_crop_plan", color: "#f43f5e", label: "實際送出裁切", corner: "br" },
+    { field: "subjects", color: "#6366f1", label: tr("人物主體（subjects）"), corner: "br", list: true, itemBox: true, personOnly: true },
+    { field: "crop_box", color: "#f59e0b", label: tr("crop_box（分析建議）"), corner: "bl", dashed: true },
+    { field: "applied_crop_plan", color: "#f43f5e", label: tr("實際送出裁切"), corner: "br" },
     // detect_face_crops (openai_client.analyze_photo) -- zero, one, or several
     // boxes, unlike every other spec above which is a single box. Same
     // normalized-against-original-image convention as roi_box, so it slots
     // into the same overlay with no separate coordinate handling.
-    { field: "_face_crop_boxes", color: "#a855f7", label: "臉部裁切", corner: "tl", list: true },
+    { field: "_face_crop_boxes", color: "#a855f7", label: tr("臉部裁切"), corner: "tl", list: true },
     // These four live nested inside each subjects[] entry (subject.blink_issue/
     // gaze_issue/hair_issue/smile_issue), not as separate top-level arrays --
     // perSubject tells analysisBoxList to walk analysis.subjects and read
@@ -2933,10 +2939,10 @@ window.PhotoAgentResults = (() => {
     // should_fix at all -- its equivalent field is adjust_safe, and there the
     // notable value is false (unsafe to adjust), the opposite polarity, hence
     // a per-spec flagWhen instead of a hardcoded should_fix check.
-    { field: "blink_issue", color: "#eab308", label: "閉眼偵測", corner: "tl", perSubject: true, flagField: "should_fix", flagWhen: true, flagText: "（需修正）" },
-    { field: "gaze_issue", color: "#ec4899", label: "眼神對焦", corner: "tr", perSubject: true, flagField: "should_fix", flagWhen: true, flagText: "（需修正）" },
-    { field: "hair_issue", color: "#14b8a6", label: "亂髮偵測", corner: "bl", perSubject: true, flagField: "should_fix", flagWhen: true, flagText: "（需修正）" },
-    { field: "smile_issue", color: "#84cc16", label: "笑容調整", corner: "br", perSubject: true, flagField: "adjust_safe", flagWhen: false, flagText: "（不建議調整）" }
+    { field: "blink_issue", color: "#eab308", label: tr("閉眼偵測"), corner: "tl", perSubject: true, flagField: "should_fix", flagWhen: true, flagText: tr("（需修正）") },
+    { field: "gaze_issue", color: "#ec4899", label: tr("眼神對焦"), corner: "tr", perSubject: true, flagField: "should_fix", flagWhen: true, flagText: tr("（需修正）") },
+    { field: "hair_issue", color: "#14b8a6", label: tr("亂髮偵測"), corner: "bl", perSubject: true, flagField: "should_fix", flagWhen: true, flagText: tr("（需修正）") },
+    { field: "smile_issue", color: "#84cc16", label: tr("笑容調整"), corner: "br", perSubject: true, flagField: "adjust_safe", flagWhen: false, flagText: tr("（不建議調整）") }
   ];
 
   let boxesAnalysis = null;
@@ -3002,7 +3008,7 @@ window.PhotoAgentResults = (() => {
       // Same box, different promise: after a preview it is what WILL be sent.
       const label = (spec.field === "applied_crop_plan" && analysis._aspect_ratio_preview
         && analysis._aspect_ratio_preview !== analysis._aspect_ratio_pref_at_edit)
-        ? "將送出裁切（預覽）" : spec.label;
+        ? tr("將送出裁切（預覽）") : spec.label;
       // crop_box carries its own on/off switch; an analysis that recommends no
       // reframe still ships the field with enabled:false.
       if (spec.field === "crop_box" && box.enabled !== true) return [];
@@ -3085,7 +3091,7 @@ window.PhotoAgentResults = (() => {
       const label = box.itemBox ? box.specLabel : box.label;
       const coords = box.itemBox
         ? ""
-        : `　x ${box.x.toFixed(3)} · y ${box.y.toFixed(3)} · w ${box.w.toFixed(3)} · h ${box.h.toFixed(3)}`;
+        : tr("　x {v1} · y {v2} · w {v3} · h {v4}", { v1: box.x.toFixed(3), v2: box.y.toFixed(3), v3: box.w.toFixed(3), v4: box.h.toFixed(3) });
       text.textContent = `${label}${coords}${box.ratio ? `　(${box.ratio})` : ""}`;
       row.append(swatch, text);
       legend.appendChild(row);
@@ -3134,7 +3140,7 @@ window.PhotoAgentResults = (() => {
     // floats over the photo with nothing that opened it in sight.
     if (!showGenerated) closePersonalizePopover();
     if (els.compareCard) els.compareCard.classList.toggle("showing-generated", showGenerated);
-    const label = showGenerated ? "查看原始照片" : "查看輸出結果";
+    const label = showGenerated ? tr("查看原始照片") : tr("查看輸出結果");
     if (els.compareToggleBtn) els.compareToggleBtn.setAttribute("aria-label", label);
     if (els.compareHint) els.compareHint.textContent = showGenerated ? "After" : "Before";
     drawAnalysisBoxes();
@@ -3204,7 +3210,7 @@ window.PhotoAgentResults = (() => {
       const recipeItems = buildExecutedRecipeItems(analysis, pending);
       const styleItems = buildExecutedStyleOptionTagLabels(analysis.style_options, analysis, pending);
       renderTags(els.recipeTags, [
-        debugUiActive ? `${buildAspectRatioTagLabel(analysis)}${ratioIsPreview ? "（預覽）" : ""}` : ""
+        debugUiActive ? tr("{v1}{v2}", { v1: buildAspectRatioTagLabel(analysis), v2: ratioIsPreview ? "（預覽）" : "" }) : ""
       ]);
       const addControl = (label, tabId, content) => {
         const button = document.createElement("button");
@@ -3229,17 +3235,17 @@ window.PhotoAgentResults = (() => {
           if (personalizeAnchor === button && !els.personalizePopover.hidden) closePersonalizePopover();
           else openPersonalizePopover(
             tabId === "ap-review-tab-face" ? buildPortraitAdjustmentList(content) : content,
-            button, tabId === "ap-review-tab-prompt" ? "個人化需求" : label);
+            button, tabId === "ap-review-tab-prompt" ? tr("個人化需求") : label);
         });
         els.recipeTags.appendChild(button);
       };
-      if (!pending && portraitEntries.length) addControl("人像調整", "ap-review-tab-face", portraitEntries);
-      if (recipeItems.length) addControl("畫面調整", "ap-review-tab-recipe", recipeItems);
-      if (styleItems.length) addControl("美化風格", "ap-review-tab-style", styleItems);
-      if (!pending && personalization) addControl("個人化", "ap-review-tab-prompt", personalization);
+      if (!pending && portraitEntries.length) addControl(tr("人像調整"), "ap-review-tab-face", portraitEntries);
+      if (recipeItems.length) addControl(tr("畫面調整"), "ap-review-tab-recipe", recipeItems);
+      if (styleItems.length) addControl(tr("美化風格"), "ap-review-tab-style", styleItems);
+      if (!pending && personalization) addControl(tr("個人化"), "ap-review-tab-prompt", personalization);
       fitRecipeTagsRow(els.recipeTags);
     }
-    els.resultSummary.textContent = analysis.photo_summary || "已完成影像分析與輸出。";
+    els.resultSummary.textContent = analysis.photo_summary || tr("已完成影像分析與輸出。");
     els.qaScore.textContent = Number.isFinite(Number(qa?.score)) ? `${qa.score}/10` : "-";
     if (els.recipeVerdictScore) {
       const recipeScore = qa?.recipe_adherence?.score;
@@ -3256,12 +3262,12 @@ window.PhotoAgentResults = (() => {
     const userInstruction = analysis.user_instruction || {};
     const intentItems = userInstruction.has_user_direction
       ? [
-          userInstruction.user_intent_summary ? `使用者目標：${userInstruction.user_intent_summary}。` : "",
-          userInstruction.normalized_user_direction ? `執行方向：${userInstruction.normalized_user_direction}。` : "",
-          userInstruction.warning ? `提醒：${userInstruction.warning}` : ""
+          userInstruction.user_intent_summary ? tr("使用者目標：{user_intent_summary}。", { user_intent_summary: userInstruction.user_intent_summary }) : "",
+          userInstruction.normalized_user_direction ? tr("執行方向：{normalized_user_direction}。", { normalized_user_direction: userInstruction.normalized_user_direction }) : "",
+          userInstruction.warning ? tr("提醒：{warning}", { warning: userInstruction.warning }) : ""
         ].filter(Boolean)
-      : [analysis.edit_intent || preset.intent || "保留原照並提升質感。"];
-    fillList(document.querySelector("#r-intent"), intentItems, ["保留原照並提升質感。"]);
+      : [analysis.edit_intent || preset.intent || tr("保留原照並提升質感。")];
+    fillList(document.querySelector("#r-intent"), intentItems, [tr("保留原照並提升質感。")]);
 
     document.querySelector("#r-status").textContent = formatStatus(qa);
 
@@ -3269,58 +3275,58 @@ window.PhotoAgentResults = (() => {
     // just above (els.subjectText, "照片總覽") -- repeating them here as well
     // read as the same "主體：.../場景：..." sentence printed twice in a row.
     els.diagnosisText.textContent = analysis.aesthetic_diagnosis
-      || "照片已有基本資訊，接下來以提升光線、色彩、構圖與視覺焦點為主。";
+      || tr("照片已有基本資訊，接下來以提升光線、色彩、構圖與視覺焦點為主。");
 
     els.philosophyText.textContent = joinParts([
       userInstruction.has_user_direction
-        ? `優先遵守使用者目標：${userInstruction.normalized_user_direction || userInstruction.user_intent_summary}。`
+        ? tr("優先遵守使用者目標：{v1}。", { v1: userInstruction.normalized_user_direction || userInstruction.user_intent_summary })
         : "",
-      analysis.edit_philosophy || "以保留原照內容為前提，讓照片看起來更乾淨、更有完成度。",
-      analysis.scene_preservation_strategy ? `場景保留：${analysis.scene_preservation_strategy}` : ""
+      analysis.edit_philosophy || tr("以保留原照內容為前提，讓照片看起來更乾淨、更有完成度。"),
+      analysis.scene_preservation_strategy ? tr("場景保留：{scene_preservation_strategy}", { scene_preservation_strategy: analysis.scene_preservation_strategy }) : ""
     ]);
 
     els.moodText.textContent = joinParts([
-      qa?.score_reason || qa?.summary || "尚未執行輸出品質檢查。",
+      qa?.score_reason || qa?.summary || tr("尚未執行輸出品質檢查。"),
       qa?.recommendation || ""
     ]);
 
     const bodyPrompt = bodyReshapePromptForDisplay(analysis);
     els.compositionText.textContent = joinParts([
-      analysis.composition_strategy ? sentence("原圖觀察", analysis.composition_strategy) : "",
-      analysis.composition_intent ? sentence("建議構圖", analysis.composition_intent) : "",
-      analysis.framing_intent ? sentence("建議取景", analysis.framing_intent) : "",
+      analysis.composition_strategy ? sentence(tr("原圖觀察"), analysis.composition_strategy) : "",
+      analysis.composition_intent ? sentence(tr("建議構圖"), analysis.composition_intent) : "",
+      analysis.framing_intent ? sentence(tr("建議取景"), analysis.framing_intent) : "",
       analysis.recommended_aspect_ratio
-        ? `${ratioIsPreview ? "下次輸出比例（預覽）" : "輸出比例"}：${aspectRatioDisplayValue(analysis.recommended_aspect_ratio)}${!ratioIsPreview && analysis.aspect_ratio_reason ? `，${stripFieldLabel(analysis.aspect_ratio_reason, ["比例", "建議比例", "比例理由"])}` : ""}。`
+        ? tr("{what}：{ratio}", { what: ratioIsPreview ? tr("下次輸出比例（預覽）") : tr("輸出比例"), ratio: aspectRatioDisplayValue(analysis.recommended_aspect_ratio) }) + (!ratioIsPreview && analysis.aspect_ratio_reason ? tr("，") + stripFieldLabel(analysis.aspect_ratio_reason, [tr("比例"), tr("建議比例"), tr("比例理由")]) : "") + tr("。")
         : "",
-      analysis.layout_method ? sentence("布局方法", analysis.layout_method) : "",
-      bodyPrompt ? `身形調整：${bodyPrompt}` : ""
+      analysis.layout_method ? sentence(tr("布局方法"), analysis.layout_method) : "",
+      bodyPrompt ? tr("身形調整：{bodyPrompt}", { bodyPrompt }) : ""
     ]);
 
     els.roiText.textContent = joinParts([
-      analysis.visual_balance_strategy ? sentence("平衡", analysis.visual_balance_strategy) : "",
-      analysis.empty_space_strategy ? sentence("留白", analysis.empty_space_strategy) : "",
-      analysis.alignment_strategy ? sentence("水平/透視", analysis.alignment_strategy) : ""
+      analysis.visual_balance_strategy ? sentence(tr("平衡"), analysis.visual_balance_strategy) : "",
+      analysis.empty_space_strategy ? sentence(tr("留白"), analysis.empty_space_strategy) : "",
+      analysis.alignment_strategy ? sentence(tr("水平/透視"), analysis.alignment_strategy) : ""
     ]);
 
     els.toolText.textContent = joinParts([
-      analysis.roi_anchor || "ROI 是主體最重要、不可被裁掉的視覺區域。",
-      analysis.roi_box ? `${formatBox("ROI box", analysis.roi_box)}。` : "",
-      analysis.subject_extent_box ? `${formatBox("主體範圍", analysis.subject_extent_box)}。` : "",
+      analysis.roi_anchor || tr("ROI 是主體最重要、不可被裁掉的視覺區域。"),
+      analysis.roi_box ? tr("{v1}。", { v1: formatBox("ROI box", analysis.roi_box) }) : "",
+      analysis.subject_extent_box ? tr("{v1}。", { v1: formatBox("主體範圍", analysis.subject_extent_box) }) : "",
       Array.isArray(analysis.protected_regions) && analysis.protected_regions.length
-        ? `保護區域：${analysis.protected_regions.slice(0, 5).map((r) => r.label || r.reason || "重要區域").join("、")}。`
+        ? tr("保護區域：{v1}。", { v1: analysis.protected_regions.slice(0, 5).map((r) => r.label || r.reason || "重要區域").join("、") })
         : "",
-      pending ? "尚未執行美化，確認後將開始 AI 影像美化。" : (data.localOnly ? "目前使用本機處理，未執行 AI 影像生成。" : "目前已執行 AI 影像美化。")
+      pending ? tr("尚未執行美化，確認後將開始 AI 影像美化。") : (data.localOnly ? tr("目前使用本機處理，未執行 AI 影像生成。") : tr("目前已執行 AI 影像美化。"))
     ]);
 
     els.lightColorText.textContent = joinParts([
-      analysis.lighting_strategy || "改善亮度層次與主體分離，避免過曝、死黑或平面化。",
-      analysis.memory_color_strategy || "維持膚色、天空、綠色、食物與材質的可信記憶色。"
+      analysis.lighting_strategy || tr("改善亮度層次與主體分離，避免過曝、死黑或平面化。"),
+      analysis.memory_color_strategy || tr("維持膚色、天空、綠色、食物與材質的可信記憶色。")
     ]);
 
     if (els.styleOptionsText) {
       const styleOptionsText = buildStyleOptionsText(analysis.style_options);
       els.styleOptionsText.hidden = !styleOptionsText;
-      els.styleOptionsText.textContent = styleOptionsText ? `使用者風格設定：${styleOptionsText}` : "";
+      els.styleOptionsText.textContent = styleOptionsText ? tr("使用者風格設定：{styleOptionsText}", { styleOptionsText }) : "";
     }
 
     const cropBox = resolveCropBoxForDisplay(
@@ -3330,33 +3336,33 @@ window.PhotoAgentResults = (() => {
       els.originalImg.naturalHeight
     );
     const cropApplied = cropBox
-      ? `${ratioIsPreview ? "下次裁切（預覽）" : "已套用裁切"}${cropBox.aspectRatio ? `，比例 ${cropBox.aspectRatio}` : ""}：x:${cropBox.x.toFixed(2)} y:${cropBox.y.toFixed(2)} w:${cropBox.w.toFixed(2)} h:${cropBox.h.toFixed(2)}。`
-      : "保留原始構圖。";
+      ? `${ratioIsPreview ? tr("下次裁切（預覽）") : tr("已套用裁切")}${cropBox.aspectRatio ? tr("，比例 {ratio}", { ratio: cropBox.aspectRatio }) : ""}${tr("：")}x:${cropBox.x.toFixed(2)} y:${cropBox.y.toFixed(2)} w:${cropBox.w.toFixed(2)} h:${cropBox.h.toFixed(2)}${tr("。")}`
+      : tr("保留原始構圖。");
     const validationText = validation
-      ? `AI 最終選擇：${validation.selected_candidate_label || validation.selected_candidate_id || "最佳候選"}。${validation.reason || ""}`
+      ? tr("AI 最終選擇：{v1}。{v2}", { v1: validation.selected_candidate_label || validation.selected_candidate_id || tr("最佳候選"), v2: validation.reason || "" })
       : "";
     els.cropText.textContent = joinParts([
       analysis.recommended_aspect_ratio
-        ? `${ratioIsPreview ? "下次輸出比例（預覽）" : "輸出比例"}：${aspectRatioDisplayValue(analysis.recommended_aspect_ratio)}${!ratioIsPreview && analysis.aspect_ratio_reason ? `（${analysis.aspect_ratio_reason}）` : ""}。`
+        ? tr("{what}：{ratio}", { what: ratioIsPreview ? tr("下次輸出比例（預覽）") : tr("輸出比例"), ratio: aspectRatioDisplayValue(analysis.recommended_aspect_ratio) }) + (!ratioIsPreview && analysis.aspect_ratio_reason ? tr("（{reason}）", { reason: analysis.aspect_ratio_reason }) : "") + tr("。")
         : "",
-      analysis.crop_recommendation || "未提供裁切建議。",
+      analysis.crop_recommendation || tr("未提供裁切建議。"),
       cropApplied,
       validationText
     ]);
 
     els.qualityText.textContent = qa
       ? joinParts([
-          `${qa.overall_status || (qa.pass ? "可展示" : "需複查")}${Number.isFinite(Number(qa.score)) ? `，分數 ${qa.score}/10` : ""}。`,
+          (qa.overall_status || (qa.pass ? tr("可展示") : tr("需複查"))) + (Number.isFinite(Number(qa.score)) ? tr("，分數 {score}/10", { score: qa.score }) : "") + tr("。"),
           qa.summary || "",
-          Array.isArray(qa.warnings) && qa.warnings.length ? `提醒：${qa.warnings.join("、")}` : "",
+          Array.isArray(qa.warnings) && qa.warnings.length ? tr("提醒：{v1}", { v1: qa.warnings.join(tr("、")) }) : "",
           qa.recommendation || ""
         ])
-      : "尚未執行輸出品質檢查。";
+      : tr("尚未執行輸出品質檢查。");
 
     fillList(els.issuesList, (analysis.detected_issues || []).filter(Boolean), [
-      "光線或對比仍可更有層次。",
-      "色彩關係可以更穩定。",
-      "背景或邊緣干擾可再降低。"
+      tr("光線或對比仍可更有層次。"),
+      tr("色彩關係可以更穩定。"),
+      tr("背景或邊緣干擾可再降低。")
     ]);
 
     const candidates = Array.isArray(analysis.crop_candidates) ? analysis.crop_candidates.slice(0, 5) : [];
@@ -3367,32 +3373,32 @@ window.PhotoAgentResults = (() => {
     );
 
     fillList(els.recipeList, analysis.retouch_recipe || [], [
-      "先校正曝光與白平衡。",
-      "調整局部對比與主體清晰度。",
-      "控制背景干擾並保留自然質感。"
+      tr("先校正曝光與白平衡。"),
+      tr("調整局部對比與主體清晰度。"),
+      tr("控制背景干擾並保留自然質感。")
     ]);
 
     const recipeAdherence = qa?.recipe_adherence || null;
     if (els.recipeScoreText) {
       els.recipeScoreText.textContent = recipeAdherence && Number.isFinite(Number(recipeAdherence.score))
-        ? joinParts([`畫面建議達成度：${recipeAdherence.score}/10。`, recipeAdherence.reason || ""])
-        : "尚未取得畫面建議達成度。";
+        ? joinParts([tr("畫面建議達成度：{score}/10。", { score: recipeAdherence.score }), recipeAdherence.reason || ""])
+        : tr("尚未取得畫面建議達成度。");
     }
     fillRecipeAdherenceList(els.recipeScoreList, recipeAdherence?.items, recipeAdherence?.style_items, recipeAdherence?.rejected_items, analysis.retouch_recipe, analysis.style_options);
 
     fillList(els.qaList, [
       ...checksToList(qa),
-      ...(Array.isArray(qa?.warnings) ? qa.warnings.map((w) => `提醒：${w}`) : [])
-    ], ["尚未取得 QA 檢查結果。"]);
+      ...(Array.isArray(qa?.warnings) ? qa.warnings.map((w) => tr("提醒：{w}", { w })) : [])
+    ], [tr("尚未取得 QA 檢查結果。")]);
     fillList(els.correctionList, analysis.correction_plan, [
-      "套用必要裁切或保留原構圖。",
-      "提升整體光線與色彩完成度。",
-      "讓主體更清楚但不過度銳化。"
+      tr("套用必要裁切或保留原構圖。"),
+      tr("提升整體光線與色彩完成度。"),
+      tr("讓主體更清楚但不過度銳化。")
     ]);
     fillList(els.preserveList, analysis.preserve_rules, [
-      "保留主體、場景與原始拍攝角度。",
-      "不新增文字、標誌、人物或不相關物件。",
-      "避免塑膠感、重濾鏡與不自然改造。"
+      tr("保留主體、場景與原始拍攝角度。"),
+      tr("不新增文字、標誌、人物或不相關物件。"),
+      tr("避免塑膠感、重濾鏡與不自然改造。")
     ]);
 
     renderPrompts(analysis.prompts || {});
@@ -3400,7 +3406,7 @@ window.PhotoAgentResults = (() => {
 
   function renderPrompts(prompts) {
     const setPrompt = (el, text) => {
-      if (el) el.textContent = text || "（此步驟未呼叫 GPT）";
+      if (el) el.textContent = text || tr("（此步驟未呼叫 GPT）");
     };
     setPrompt(els.promptAnalysis, prompts.photo_analysis);
     setPrompt(els.promptReview, prompts.user_instruction_review);
@@ -3453,12 +3459,12 @@ window.PhotoAgentResults = (() => {
     if (els.apReviewTabStyle) els.apReviewTabStyle.hidden = false;
     // The shell's heading speaks of AI suggestions this case doesn't have.
     if (els.apAnalysisShellTitleText) {
-      els.apAnalysisShellTitleText.textContent = skipped ? "需求與調整" : "分析與調整";
+      els.apAnalysisShellTitleText.textContent = skipped ? tr("需求與調整") : tr("分析與調整");
     }
     if (els.apAnalysisShellDesc) {
       els.apAnalysisShellDesc.textContent = skipped
-        ? "這個版本依照你的個人化需求修圖，可以在這裡修改需求、調整風格或設定"
-        : "這是 AI 分析後提供的建議，你可依此在這裡進一步調整設定";
+        ? tr("這個版本依照你的個人化需求修圖，可以在這裡修改需求、調整風格或設定")
+        : tr("這是 AI 分析後提供的建議，你可依此在這裡進一步調整設定");
     }
     if (skipped) activeReviewTab = "prompt";
     // #ap-analysis-shell (the outer title+collapse frame) mirrors
@@ -3495,7 +3501,7 @@ window.PhotoAgentResults = (() => {
     // read as the same "主體：.../場景：..." sentence printed twice in a row.
     if (els.apDiagnosis) {
       els.apDiagnosis.textContent = analysis.aesthetic_diagnosis
-        || "照片已有基本資訊，接下來以提升光線、色彩、構圖與視覺焦點為主。";
+        || tr("照片已有基本資訊，接下來以提升光線、色彩、構圖與視覺焦點為主。");
     }
 
     if (els.apComposition) {
@@ -3503,14 +3509,14 @@ window.PhotoAgentResults = (() => {
       const bodyPrompt = bodyReshapePromptForDisplay(analysis);
       els.apComposition.textContent = joinParts([
         userInstruction.has_user_direction
-          ? `使用者目標：${userInstruction.user_intent_summary || userInstruction.normalized_user_direction || ""}。`
+          ? tr("使用者目標：{v1}。", { v1: userInstruction.user_intent_summary || userInstruction.normalized_user_direction || "" })
           : (analysis.edit_intent || preset?.intent || ""),
-        analysis.composition_intent ? sentence("建議構圖", analysis.composition_intent) : "",
-        bodyPrompt ? `身形調整：${bodyPrompt}` : ""
+        analysis.composition_intent ? sentence(tr("建議構圖"), analysis.composition_intent) : "",
+        bodyPrompt ? tr("身形調整：{bodyPrompt}", { bodyPrompt }) : ""
       ]);
     }
 
-    fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得畫面建議。"]);
+    fillCheckList(els.apRecipeList, analysis.retouch_recipe, [tr("尚未取得畫面建議。")]);
     renderFaceThumbnails(analysis);
 
     // Rebuild the style-option groups each run (defaults to "Default
@@ -3543,7 +3549,7 @@ window.PhotoAgentResults = (() => {
   // renderAnalysisPreview and disturbing whatever Pose/Angle/Lighting/Size
   // pick the user already made.
   function refreshRecipeList(analysis) {
-    fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得畫面建議。"]);
+    fillCheckList(els.apRecipeList, analysis.retouch_recipe, [tr("尚未取得畫面建議。")]);
   }
 
   return {

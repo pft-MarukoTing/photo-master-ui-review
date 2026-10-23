@@ -1,3 +1,4 @@
+import { lang, LANGS, setLang, t } from "./i18n";
 import { createPortal } from "preact/compat";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { Capabilities, Plan } from "./types";
@@ -62,14 +63,14 @@ export function settingsChanges(caps: Capabilities, from: Settings, to: Settings
   const label = (list: { label: string }[], pick: (x: any) => boolean, v?: string) => list.find(pick)?.label || v || "";
   const out: string[] = [];
   if (model && from.analysis_model !== to.analysis_model)
-    out.push(`分析引擎換成 ${label(caps.render.analysis_models, (m) => m.id === to.analysis_model, to.analysis_model)}`);
-  if (from.render_option !== to.render_option) out.push(`美化引擎換成 ${renderOptionLabel(caps, to.render_option)}`);
+    out.push(t("分析引擎換成 {v1}", { v1: label(caps.render.analysis_models, (m) => m.id === to.analysis_model, to.analysis_model) }));
+  if (from.render_option !== to.render_option) out.push(t("美化引擎換成 {v1}", { v1: renderOptionLabel(caps, to.render_option) }));
   if (from.aspect_ratio !== to.aspect_ratio)
-    out.push(`長寬比改成 ${label(caps.render.aspect_ratios, (a) => a.value === to.aspect_ratio, to.aspect_ratio)}`);
+    out.push(t("長寬比改成 {v1}", { v1: label(caps.render.aspect_ratios, (a) => a.value === to.aspect_ratio, to.aspect_ratio) }));
   for (const o of caps.advanced_options) {
     const was = from.advanced_options?.[o.key] ?? o.default;
     const now = to.advanced_options?.[o.key] ?? o.default;
-    if (was !== now) out.push(`${now ? "打開" : "關掉"}${o.label}`);
+    if (was !== now) out.push(t(now ? "打開{v1}" : "關掉{v1}", { v1: o.label }));
   }
   return out;
 }
@@ -80,7 +81,8 @@ export function settingsChanges(caps: Capabilities, from: Settings, to: Settings
 const AR_NOTES: Record<string, string> = { auto: "依照片內容自動決定", original: "不改變照片長寬" };
 
 function ratioParts(label: string): { name: string; hint?: string } {
-  const m = /^(.+?)（(.+)）$/.exec(label);
+  // 「9:16（限動）」, or 「9:16 (Stories)」 in another language.
+  const m = /^(.+?)\s*[（(](.+)[）)]$/.exec(label);
   return m ? { name: m[1], hint: m[2] } : { name: label };
 }
 
@@ -143,7 +145,7 @@ export function AspectRatioField({
   const option = (a: (typeof choices)[number]) => {
     const fixed = FIXED_RATIO_RE.test(a.value);
     const { name, hint } = ratioParts(a.label);
-    const note = fixed ? hint : AR_NOTES[a.value];
+    const note = fixed ? hint : AR_NOTES[a.value] && t(AR_NOTES[a.value]);
     return (
       <label class={fixed ? "chat-ar-shape" : "chat-ar-smart"}>
         <input
@@ -169,7 +171,7 @@ export function AspectRatioField({
   return (
     <>
       <div class={cls || "chat-field"}>
-        <span class="chat-meta">長寬比</span>
+        <span class="chat-meta">{t("長寬比")}</span>
         <button
           type="button"
           class="quality-select chat-ar-trigger"
@@ -187,8 +189,8 @@ export function AspectRatioField({
             <div class="error-modal-backdrop" onClick={() => setOpen(false)} />
             <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="chat-aspect-title">
               <div class="error-modal-hdr">
-                <span id="chat-aspect-title" class="settings-modal-title">長寬比</span>
-                <button class="error-modal-close" type="button" aria-label="關閉" onClick={() => setOpen(false)}>
+                <span id="chat-aspect-title" class="settings-modal-title">{t("長寬比")}</span>
+                <button class="error-modal-close" type="button" aria-label={t("關閉")} onClick={() => setOpen(false)}>
                   ×
                 </button>
               </div>
@@ -197,9 +199,9 @@ export function AspectRatioField({
                 {shapes.length > 0 && (
                   <>
                     <div class="chat-ar-scale" aria-hidden="true">
-                      <span>← 直式</span>
-                      <span>方形</span>
-                      <span>橫式 →</span>
+                      <span>{t("← 直式")}</span>
+                      <span>{t("方形")}</span>
+                      <span>{t("橫式 →")}</span>
                     </div>
                     <div class="chat-ar-shape-row">{shapes.map(option)}</div>
                   </>
@@ -231,7 +233,7 @@ export function SettingsEditor({
     <div class="chat-card chat-settings-editor">
       <div class="chat-settings-fields">
         {!hideModel && <label class="chat-field">
-          <span class="chat-meta">分析引擎</span>
+          <span class="chat-meta">{t("分析引擎")}</span>
           <select class="quality-select" value={settings.analysis_model} onChange={(e) => set({ analysis_model: val(e) })}>
             {caps.render.analysis_models.map((m) => (
               <option value={m.id}>{m.label}</option>
@@ -239,7 +241,7 @@ export function SettingsEditor({
           </select>
         </label>}
         <label class="chat-field">
-          <span class="chat-meta">美化引擎</span>
+          <span class="chat-meta">{t("美化引擎")}</span>
           <select class="quality-select" value={settings.render_option} onChange={(e) => set({ render_option: val(e) })}>
             {caps.render.options.map((o) => (
               <option value={o.id}>{renderOptionLabel(caps, o.id)}</option>
@@ -249,11 +251,11 @@ export function SettingsEditor({
         <AspectRatioField caps={caps} value={settings.aspect_ratio} onChange={(aspect_ratio) => set({ aspect_ratio })} />
       </div>
       <div class="chat-settings-portrait">
-        <span class="chat-meta">人像修正</span>
+        <span class="chat-meta">{t("人像修正")}</span>
         {/* What the switches are for is otherwise only in our heads: they are a
             standing policy set before any photo is analysed, not a reaction to
             one. */}
-        <p class="chat-note">這幾項預設會偵測並修正，不想被改到的先關掉。</p>
+        <p class="chat-note">{t("這幾項預設會偵測並修正，不想被改到的先關掉。")}</p>
         {caps.advanced_options.map((o) => {
           const on = settings.advanced_options?.[o.key] ?? o.default;
           return (
@@ -303,8 +305,8 @@ export function PrefsModal(props: {
       <div class="error-modal-backdrop" onClick={onClose} />
       <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="chat-prefs-title">
         <div class="error-modal-hdr">
-          <span id="chat-prefs-title" class="settings-modal-title">設定</span>
-          <button class="error-modal-close" type="button" aria-label="關閉" onClick={onClose}>
+          <span id="chat-prefs-title" class="settings-modal-title">{t("設定")}</span>
+          <button class="error-modal-close" type="button" aria-label={t("關閉")} onClick={onClose}>
             ×
           </button>
         </div>
@@ -313,8 +315,8 @@ export function PrefsModal(props: {
         <div class="settings-modal-body chat-prefs-body">
           <label class="option-row">
             <div class="option-text">
-              <span class="option-label">詳細解說</span>
-              <span class="option-desc">開啟後，助理會更詳細地說明分析、建議與每一版的成果。</span>
+              <span class="option-label">{t("詳細解說")}</span>
+              <span class="option-desc">{t("開啟後，助理會更詳細地說明分析、建議與每一版的成果。")}</span>
             </div>
             <span class="ios-switch">
               <input
@@ -326,6 +328,18 @@ export function PrefsModal(props: {
                 <span class="ios-thumb" />
               </span>
             </span>
+          </label>
+          {/* 介面語言：每個語言用它自己的寫法列出來；換了就重新載入頁面。 */}
+          <label class="option-row">
+            <div class="option-text">
+              <span class="option-label">{t("介面語言")}</span>
+              <span class="option-desc">{t("切換後頁面會重新載入；之前的對話和分析維持原本的語言。")}</span>
+            </div>
+            <select class="quality-select" value={lang} onChange={(e) => setLang((e.currentTarget as HTMLSelectElement).value)}>
+              {LANGS.map((l) => (
+                <option value={l.code}>{l.name}</option>
+              ))}
+            </select>
           </label>
         </div>
       </div>

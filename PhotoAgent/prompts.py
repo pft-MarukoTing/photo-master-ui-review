@@ -6,6 +6,7 @@ import re
 import config as _photoagent_config
 from aspect_ratio_rules import allowed_auto_ratio_labels
 from config import STYLE_OPTION_INSTRUCTIONS, STYLE_OPTION_LABELS, STYLE_OPTION_VALUE_LABELS
+from photo_agent import i18n
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +195,10 @@ def normalize_body_reshape_prompt_display(value, fallback=""):
         if not isinstance(raw, str):
             return ""
         text = " ".join(raw.split()).strip()
+        if not i18n.is_source():
+            # The cleanup below is for Chinese copy: it removes every Latin
+            # word, which would leave nothing of an English sentence.
+            return text[:240]
         for pattern, replacement in _BODY_RESHAPE_PROMPT_DISPLAY_REPLACEMENTS:
             text = pattern.sub(replacement, text)
         text = _replace_body_reshape_stock_phrases(text)
@@ -239,6 +244,9 @@ def normalize_body_reshape_report(value, *, subject_label="", should_edit=True):
     if not isinstance(value, str):
         return ""
     text = " ".join(value.split()).strip()
+    if not i18n.is_source():
+        # The rewrites below put Chinese wording into the report.
+        return text
     for pattern, replacement in _BODY_RESHAPE_REPORT_REPLACEMENTS:
         text = pattern.sub(replacement, text)
     text = re.sub(
@@ -886,7 +894,7 @@ def build_overall_analysis_instruction(aspect_ratio_pref="auto", source_size=Non
         + _COMPOSITION_DECISION_FRAMEWORK
         + "\n"
     )
-    instruction += _aspect_ratio_policy_suffix(aspect_ratio_pref, source_size)
+    instruction = i18n.localize_analysis(instruction + _aspect_ratio_policy_suffix(aspect_ratio_pref, source_size))
     return instruction + photo_facts_section(photo_facts) if photo_facts else instruction
 
 
@@ -1238,6 +1246,7 @@ def build_reframe_instruction(analysis, aspect_ratio_pref="auto", source_size=No
         + "\n"
         + _reframe_settled_facts(analysis, source_size)
     )
+    before_photo = i18n.localize_analysis(before_photo)
     after_photo = (
         f"## Output aspect-ratio preference for this pass: {pref}\n"
         + _aspect_ratio_policy_suffix(pref, source_size)

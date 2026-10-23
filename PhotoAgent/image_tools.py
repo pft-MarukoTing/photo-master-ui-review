@@ -25,7 +25,7 @@ except Exception:
     aiutils_logger = _DroppedTelemetry()
 from aspect_ratio_rules import allowed_auto_ratio_labels
 from sdl_face_detector import SDLFaceDetector
-from photo_agent import capabilities
+from photo_agent import capabilities, i18n
 
 logger = logging.getLogger(__name__)
 
@@ -499,6 +499,10 @@ def _reframing_detail(text):
     """Remove an analyzer/local ratio prefix while retaining crop intent."""
     value = str(text or "").strip()
     value = re.sub(r"^\s*重新構圖\s*[:：]\s*", "", value)
+    # The same start as another language writes it (_reframing_text's
+    # 「維持原圖比例，」「調整為…，」 through i18n), so it is not written twice.
+    for lead in (*i18n.translated_leads("維持原圖比例，{detail}"), *i18n.translated_leads("調整為{ratio}，{detail}")):
+        value = lead.sub("", value)
     value = re.sub(
         r"^\s*(?:以\s*" + _RATIO_TOKEN_RE.pattern + r"\s*輸出比例|維持原圖輸出比例並)"
         r"\s*重新構圖\s*[；;，,]*\s*",
@@ -552,10 +556,10 @@ def _sync_reframing_review_contract(context: dict, ratio_label: str, crop_box: d
         recipe_detail = recipe_detail or plan_detail
         if ratio_label == "original":
             plan[index] = f"維持原圖輸出比例並重新構圖；{plan_detail}"
-            recipe[index] = f"重新構圖：維持原圖比例，{recipe_detail}"
+            recipe[index] = "重新構圖：" + i18n.tr("維持原圖比例，{detail}", detail=recipe_detail)
         else:
             plan[index] = f"以{ratio_label}輸出比例重新構圖；{plan_detail}"
-            recipe[index] = f"重新構圖：調整為{ratio_label}，{recipe_detail}"
+            recipe[index] = "重新構圖：" + i18n.tr("調整為{ratio}，{detail}", ratio=ratio_label, detail=recipe_detail)
     ctx["correction_plan"] = plan
     ctx["retouch_recipe"] = recipe
     ctx["crop_recommendation"] = plan[indices[0]]

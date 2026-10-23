@@ -1,5 +1,6 @@
 // Building blocks of the chat panel: the panel shell, message rows, chips and
 // the few cards that are new to the chat (working / result / collapsed).
+import { shownLabel, shownRecipe, t } from "./i18n";
 import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { api, urls } from "./api";
@@ -151,20 +152,20 @@ export type PanelMode = { href: string; busy: boolean; onLeave: () => void };
 
 export function ModeSwitch({ mode, class: cls }: { mode: PanelMode; class?: string }) {
   return (
-    <nav class={`mode-switch${cls ? ` ${cls}` : ""}`} aria-label="檢視方式">
+    <nav class={`mode-switch${cls ? ` ${cls}` : ""}`} aria-label={t("檢視方式")}>
       <span class="mode-switch-opt is-active" aria-current="page">
         <Icon name="chat" size={14} />
-        對話
+        {t("對話")}
       </span>
       {mode.busy ? (
-        <span class="mode-switch-opt" aria-disabled="true" title="分析或美化完成後才能切換">
+        <span class="mode-switch-opt" aria-disabled="true" title={t("分析或美化完成後才能切換")}>
           <Icon name="layout" size={14} />
-          面板
+          {t("面板")}
         </span>
       ) : (
-        <a class="mode-switch-opt" href={mode.href} title="切換到面板模式" onClick={mode.onLeave}>
+        <a class="mode-switch-opt" href={mode.href} title={t("切換到面板模式")} onClick={mode.onLeave}>
           <Icon name="layout" size={14} />
-          面板
+          {t("面板")}
         </a>
       )}
     </nav>
@@ -346,7 +347,7 @@ export function ChatPanel(props: {
         ) : (
           <>
             <Icon name="chat" size={14} />
-            <span class="chat-panel-title">對話</span>
+            <span class="chat-panel-title">{t("對話")}</span>
           </>
         )}
         <span class="chat-panel-sub">{props.sub}</span>
@@ -355,8 +356,8 @@ export function ChatPanel(props: {
         <button type="button" class="chat-panel-photo" onClick={props.photo.onOpen} tabIndex={photoUp ? 0 : -1}>
           <img src={props.photo.src} alt="" />
           <span class="chat-panel-photo-text">
-            <b>{props.photo.title || "這次要修的照片"}</b>
-            <small>{props.photo.note || "點一下看大圖"}</small>
+            <b>{props.photo.title || t("這次要修的照片")}</b>
+            <small>{props.photo.note || t("點一下看大圖")}</small>
           </span>
           <Icon name="expand" size={16} />
         </button>
@@ -413,7 +414,7 @@ export function ClickBubble({ icon, label }: { icon: string; label: string }) {
   return (
     <div class="chat-bubble is-click">
       <Icon name={icon} />
-      {label}
+      {shownLabel(label)}
     </div>
   );
 }
@@ -424,7 +425,7 @@ export function UploadBubble({ src, text, onOpen }: { src: string; text: string;
   return (
     <div class={`chat-upload${onOpen ? " is-zoom" : ""}`}>
       {onOpen ? (
-        <button type="button" class="chat-upload-shot" aria-label="看大圖" onClick={onOpen}>
+        <button type="button" class="chat-upload-shot" aria-label={t("看大圖")} onClick={onOpen}>
           <img src={src} alt="" />
           <span class="chat-upload-zoom" aria-hidden="true">
             <Icon name="expand" size={14} />
@@ -469,9 +470,9 @@ export function PhotoViewer({ src, onClose }: { src: string | null; onClose: () 
 
   if (!src) return null;
   return (
-    <div class="photo-viewer" role="dialog" aria-modal="true" aria-label="照片大圖" onClick={onClose}>
-      <img src={src} alt="待美化的照片" onClick={(e) => e.stopPropagation()} />
-      <button type="button" class="photo-viewer-close" aria-label="關閉" onClick={onClose}>
+    <div class="photo-viewer" role="dialog" aria-modal="true" aria-label={t("照片大圖")} onClick={onClose}>
+      <img src={src} alt={t("待美化的照片")} onClick={(e) => e.stopPropagation()} />
+      <button type="button" class="photo-viewer-close" aria-label={t("關閉")} onClick={onClose}>
         <Icon name="x" size={18} />
       </button>
     </div>
@@ -501,7 +502,7 @@ export function Chip(props: {
     return (
       <span class={cls} title={title}>
         {props.icon && <Icon name={props.icon} />}
-        {props.label}
+        {shownLabel(props.label)}
         {badge}
       </span>
     );
@@ -509,7 +510,7 @@ export function Chip(props: {
   return (
     <button type="button" class={cls} disabled={props.disabled} title={title} onClick={props.onClick}>
       {props.icon && <Icon name={props.icon} />}
-      {props.label}
+      {shownLabel(props.label)}
       {badge}
     </button>
   );
@@ -592,7 +593,7 @@ export function FacePicker(props: {
         face={p}
         avatarOnly
         picked={picked}
-        title={picked ? `取消指定${faceLabel(p)}` : `指定${faceLabel(p)}`}
+        title={picked ? t("取消指定{v1}", { v1: faceLabel(p) }) : t("指定{v1}", { v1: faceLabel(p) })}
         onClick={() =>
           props.onPoint?.(
             picked ? props.pointed.filter((i) => i !== p.subjectIndex) : [...props.pointed, p.subjectIndex],
@@ -606,7 +607,7 @@ export function FacePicker(props: {
   return (
     <div class="chat-face-picker" ref={box}>
       <span class="chat-face-picker-label" ref={label}>
-        指定對象
+        {t("指定對象")}
       </span>
       {folded ? (
         <>
@@ -615,7 +616,7 @@ export function FacePicker(props: {
             class={`chat-face-fold${open ? " is-open" : ""}`}
             aria-haspopup="dialog"
             aria-expanded={open}
-            aria-label={`指定對象，共 ${people.length} 位`}
+            aria-label={t("指定對象，共 {length} 位", { length: people.length })}
             onClick={() => {
               if (open) return close(true);
               opened.current = key;
@@ -631,10 +632,10 @@ export function FacePicker(props: {
             <Icon name="chevron-up" size={14} />
           </button>
           {open && (
-            <div class="chat-face-panel" role="dialog" aria-label="指定對象">
+            <div class="chat-face-panel" role="dialog" aria-label={t("指定對象")}>
               <div class="chat-face-panel-head">
-                <span>指定對象</span>
-                <button type="button" class="chat-face-panel-x" aria-label="關閉" onClick={() => close(true)}>
+                <span>{t("指定對象")}</span>
+                <button type="button" class="chat-face-panel-x" aria-label={t("關閉")} onClick={() => close(true)}>
                   <Icon name="x" size={16} />
                 </button>
               </div>
@@ -731,7 +732,7 @@ function Elapsed({ since }: { since: number }) {
     return () => clearInterval(t);
   }, []);
   const sec = Math.max(0, Math.floor((now - since) / 1000));
-  const text = sec < 60 ? `${sec} 秒` : `${Math.floor(sec / 60)} 分 ${String(sec % 60).padStart(2, "0")} 秒`;
+  const text = sec < 60 ? t("{sec} 秒", { sec }) : t("{v1} 分 {v2} 秒", { v1: Math.floor(sec / 60), v2: String(sec % 60).padStart(2, "0") });
   return <span class="chat-working-time">{text}</span>;
 }
 
@@ -850,30 +851,30 @@ export function ResultCard({ job, ordinal, failed, next, note, noting, onOpen, s
   return (
     <figure class="chat-result" ref={card}>
       {onOpen ? (
-        <button type="button" class="chat-result-shot" aria-label={`看第 ${ordinal} 版大圖`} onClick={onOpen}>
-          <img src={src} alt={`第 ${ordinal} 版美化結果`} />
+        <button type="button" class="chat-result-shot" aria-label={t("看第 {ordinal} 版大圖", { ordinal })} onClick={onOpen}>
+          <img src={src} alt={t("第 {ordinal} 版美化結果", { ordinal })} />
           <span class="chat-upload-zoom" aria-hidden="true">
             <Icon name="expand" size={14} />
           </span>
         </button>
       ) : (
-        <img src={src} alt={`第 ${ordinal} 版美化結果`} />
+        <img src={src} alt={t("第 {ordinal} 版美化結果", { ordinal })} />
       )}
       <figcaption class="chat-result-cap">
-        <h4>第 {ordinal} 版完成</h4>
-        {note ? <p class="chat-text">{note}</p> : noting && <p class="chat-text chat-muted">正在對照原圖，整理這版的變化…</p>}
+        <h4>{t("第 {ordinal} 版完成", { ordinal })}</h4>
+        {note ? <p class="chat-text">{note}</p> : noting && <p class="chat-text chat-muted">{t("正在對照原圖，整理這版的變化…")}</p>}
         {qa && (
           <div class="chat-verdict">
-            輸出評語 <b class={qa.pass ? "" : "is-warn"}>{qa.verdict}</b>
-            {qa.score && ` 品質分數 ${qa.score}`}
+            {t("輸出評語")} <b class={qa.pass ? "" : "is-warn"}>{qa.verdict}</b>
+            {qa.score && t(" 品質分數 {score}", { score: qa.score })}
           </div>
         )}
         {!noting && <p class="chat-text chat-muted">
-          {failed > 0 && `有 ${failed} 張沒有成功，已略過。`}
-          <span class="chat-result-hint-wide">左側可比較 Before / After，也可從「美化紀錄」切換版本。</span>
-          <span class="chat-result-hint-narrow">上方照片可以跟原圖比，點右上的版本也能切換。</span>
+          {failed > 0 && t("有 {failed} 張沒有成功，已略過。", { failed })}
+          <span class="chat-result-hint-wide">{t("左側可比較 Before / After，也可從「美化紀錄」切換版本。")}</span>
+          <span class="chat-result-hint-narrow">{t("上方照片可以跟原圖比，點右上的版本也能切換。")}</span>
         </p>}
-        {next && !noting && <p class="chat-text">想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。</p>}
+        {next && !noting && <p class="chat-text">{t("想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。")}</p>}
       </figcaption>
     </figure>
   );
@@ -890,7 +891,7 @@ export interface FaceRef {
   where?: string;
 }
 
-const faceLabel = (f: FaceRef) => f.name || f.where || "這個人";
+const faceLabel = (f: FaceRef) => f.name || f.where || t("這個人");
 
 // Wherever a person is written out -- the name the panel gives them, or where
 // they stand -- their crop stands in for the words: the chat talks about people
@@ -1011,7 +1012,7 @@ export function readNoteBox(box: HTMLElement, keys: string[]) {
   };
   walk(box);
   end();
-  return Object.entries(parts).map(([k, ts]) => ({ key: k, text: ts.join(k ? "、" : "；") }));
+  return Object.entries(parts).map(([k, ts]) => ({ key: k, text: ts.join(k ? t("、") : t("；")) }));
 }
 
 // 框裡打 Enter 就是換對象，直接打成「；」；貼上的換行也一樣。
@@ -1019,13 +1020,13 @@ export const noteBoxKeys = {
   onKeyDown(e: KeyboardEvent) {
     if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault();
-      document.execCommand("insertText", false, "；");
+      document.execCommand("insertText", false, t("；"));
     }
   },
   onPaste(e: ClipboardEvent) {
     e.preventDefault();
-    const t = e.clipboardData?.getData("text/plain") || "";
-    document.execCommand("insertText", false, t.replace(/\r?\n/g, "；"));
+    const text = e.clipboardData?.getData("text/plain") || "";
+    document.execCommand("insertText", false, text.replace(/\r?\n/g, t("；")));
   },
 };
 
@@ -1033,7 +1034,7 @@ export const noteBoxKeys = {
 export function fillNoteBox(el: HTMLElement, sections: { key: string; faces: FaceRef[]; text: string }[], focus = true) {
   el.replaceChildren();
   sections.forEach((sec, i) => {
-    if (i) el.appendChild(document.createTextNode("；"));
+    if (i) el.appendChild(document.createTextNode(t("；")));
     if (sec.key) el.appendChild(noteAtom(sec.key, sec.faces));
     el.appendChild(document.createTextNode(sec.text));
   });
@@ -1067,7 +1068,7 @@ export function promptSections(text: string, faces: Record<number, FaceRef>): Pr
 
 // 看的時候：一段字，名字換成頭像。
 export function promptFaces(sections: PromptSection[]) {
-  return sections.map((sec, i) => [i ? "；" : "", sec.faces.map((f) => <FaceChip face={f} small />), sec.text]);
+  return sections.map((sec, i) => [i ? t("；") : "", sec.faces.map((f) => <FaceChip face={f} small />), sec.text]);
 }
 
 // 框裡的內容組回「名字＋需求；…」。
@@ -1075,7 +1076,7 @@ export function readPromptBox(box: HTMLElement, sections: PromptSection[]) {
   return readNoteBox(box, sections.map((x) => x.key))
     .filter((x) => x.text)
     .map((x) => x.key + x.text)
-    .join("；");
+    .join(t("；"));
 }
 
 // 個人化需求不用按「儲存」：打字停一下、或離開輸入框，就存下來。還沒存的字在
@@ -1193,13 +1194,13 @@ export function PromptEditor(props: {
               saveQuietly();
             }}
           >
-            復原
+            {t("復原")}
           </button>
         )}
         {props.extra}
         {status && (
           <span class={`chat-meta${status === "failed" ? " chat-error" : ""}`}>
-            {status === "saving" ? "儲存中…" : status === "saved" ? "已儲存" : "儲存失敗，將自動重試"}
+            {status === "saving" ? t("儲存中…") : status === "saved" ? t("已儲存") : t("儲存失敗，將自動重試")}
           </span>
         )}
       </div>
@@ -1351,7 +1352,7 @@ export function Composer(props: {
             <button
               type="button"
               class="chat-attach"
-              title={props.attachTitle || (onSample ? "換一張照片" : "上傳照片")}
+              title={props.attachTitle || (onSample ? t("換一張照片") : t("上傳照片"))}
               aria-haspopup={onSample ? "menu" : undefined}
               aria-expanded={onSample ? menu : undefined}
               disabled={disabled}
@@ -1370,7 +1371,7 @@ export function Composer(props: {
                   }}
                 >
                   <Icon name="up" size={16} />
-                  自行上傳照片
+                  {t("自行上傳照片")}
                 </button>
                 <button
                   type="button"
@@ -1381,7 +1382,7 @@ export function Composer(props: {
                   }}
                 >
                   <Icon name="image" size={16} />
-                  從範例照片挑選
+                  {t("從範例照片挑選")}
                 </button>
               </div>
             )}
@@ -1415,12 +1416,12 @@ export function Composer(props: {
                     <FaceChip key={p.subjectIndex} face={p} small />
                   ))}
                 </span>
-                {who.length > 1 && `${who.length} 位`}
+                {who.length > 1 && t("{length} 位", { length: who.length })}
                 <button
                   type="button"
                   class="chat-composer-who-x"
-                  title={one ? `取消指定${faceLabel(one)}` : "全部取消指定"}
-                  aria-label={one ? `取消指定${faceLabel(one)}` : "全部取消指定"}
+                  title={one ? t("取消指定{v1}", { v1: faceLabel(one) }) : t("全部取消指定")}
+                  aria-label={one ? t("取消指定{v1}", { v1: faceLabel(one) }) : t("全部取消指定")}
                   onClick={(e) => {
                     // The token sits inside the field's <label>, so the click
                     // would also land on the label and refocus the input.
@@ -1442,16 +1443,16 @@ export function Composer(props: {
               placeholder={fits(
                 props.placeholder ||
                 (who.length > 1
-                  ? "想怎麼調整這幾位？"
+                  ? t("想怎麼調整這幾位？")
                   : one
                     ? // The token in the field is a face, not a name, so the
                       // line beside it points at the face instead of naming it.
-                      "想怎麼調整這位？"
+                      t("想怎麼調整這位？")
                     : // With more than one face, the field is the one line everyone
                       // reads before typing, so it carries the picker's affordance.
                       people.length > 1
-                      ? ["想調整什麼？點頭像可以指定要改誰", "想調整什麼？點頭像指定人", "想調整什麼？"]
-                      : "想調整什麼？")
+                      ? [t("想調整什麼？點頭像可以指定要改誰"), t("想調整什麼？點頭像指定人"), t("想調整什麼？")]
+                      : t("想調整什麼？"))
               )}
               onInput={(e) => write(e.currentTarget.value)}
               onKeyDown={(e) => {
@@ -1465,10 +1466,10 @@ export function Composer(props: {
           </label>
         ) : (
           <div class="chat-composer-field" ref={still}>
-            {fits(props.placeholder || ["選好照片後就可以用文字告訴我想怎麼調整", "選好照片就可以打字告訴我"])}
+            {fits(props.placeholder || [t("選好照片後就可以用文字告訴我想怎麼調整"), t("選好照片就可以打字告訴我")])}
           </div>
         )}
-        <button type="button" class="chat-send" title="送出" disabled={disabled || !onSend || !sendable} onClick={send}>
+        <button type="button" class="chat-send" title={t("送出")} disabled={disabled || !onSend || !sendable} onClick={send}>
           <Icon name="up" />
         </button>
       </div>
@@ -1500,10 +1501,10 @@ export type ProposalChoice = "apply_render" | "apply" | "revise" | "undo";
 // apply_render is kept only to show older proposals; rendering is left to the
 // 美化 button below the chat.
 export const PROPOSAL_CHOICES: Record<ProposalChoice, { label: string; icon: string }> = {
-  apply_render: { label: "套用並美化", icon: "spark" },
-  apply: { label: "套用", icon: "check" },
-  revise: { label: "取消", icon: "x" },
-  undo: { label: "復原", icon: "undo" },
+  apply_render: { label: t("套用並美化"), icon: "spark" },
+  apply: { label: t("套用"), icon: "check" },
+  revise: { label: t("取消"), icon: "x" },
+  undo: { label: t("復原"), icon: "undo" },
 };
 const OFFERED: ProposalChoice[] = ["apply", "revise"];
 
@@ -1513,7 +1514,7 @@ const isLong = (c: Change) => String(c.before ?? "").length > LONG_VALUE || Stri
 
 // 從沒有到有的時候沒有舊值可以劃掉，直接寫出要的是什麼就好。chat_assistant 把
 // 空值送成「（無）」，舊 session 存下來的卡也是這樣，所以兩種都當成沒有。
-const NO_VALUE = "（無）";
+const NO_VALUE = t("（無）");
 const hadBefore = (c: Change) => {
   const b = String(c.before ?? "").trim();
   return !!b && b !== NO_VALUE;
@@ -1529,7 +1530,8 @@ const textChangeOf = (p: Proposal) =>
 
 // A face change's label is "<name>・<fix>"; the face crop stands in for the name.
 function changeLabel(c: Change, face?: FaceRef) {
-  if (!face) return c.label;
+  // A 畫面 item's label is its recipe text.
+  if (!face) return shownRecipe(c.label);
   const prefix = `${face.name}・`;
   return c.label.startsWith(prefix) ? c.label.slice(prefix.length) : c.label;
 }
@@ -1582,8 +1584,8 @@ export function ProposalCard(props: {
   return (
     <div class="chat-card chat-proposal">
       <p class="chat-proposal-title">
-        {only ? only.label : "建議的調整"}
-        {reedited != null && "（已修改）"}
+        {only ? only.label : t("建議的調整")}
+        {reedited != null && t("（已修改）")}
       </p>
       <ul class="chat-proposal-list">
         {proposal.changes.map((c) => {
@@ -1600,7 +1602,7 @@ export function ProposalCard(props: {
               <Row
                 type={clickable ? "button" : undefined}
                 class="chat-proposal-row"
-                title={clickable ? "在面板上顯示" : undefined}
+                title={clickable ? t("在面板上顯示") : undefined}
                 disabled={clickable && !live ? props.busy : undefined}
                 onClick={clickable ? () => props.onShow(c) : undefined}
               >
@@ -1674,17 +1676,17 @@ export function ProposalCard(props: {
               disabled={props.busy}
               onClick={() => props.onShow(only ?? proposal.changes[0])}
             >
-              修改
+              {t("修改")}
             </button>
           </div>
         )
       ) : (
         <p class="chat-meta">
           {resolved === "stale"
-            ? "已有新的建議，這個沒有套用。"
+            ? t("已有新的建議，這個沒有套用。")
             : resolved === "undo"
-              ? "已復原，沒有套用。"
-              : `已選擇「${PROPOSAL_CHOICES[resolved].label}」`}
+              ? t("已復原，沒有套用。")
+              : t("已選擇「{v1}」", { v1: PROPOSAL_CHOICES[resolved].label })}
         </p>
       )}
     </div>
@@ -1754,10 +1756,10 @@ export function SamplePicker(props: {
   return (
     <>
       <div class="sample-modal-backdrop" onClick={onClose} />
-      <div class="sample-modal" role="dialog" aria-modal="true" aria-label="範例照片">
+      <div class="sample-modal" role="dialog" aria-modal="true" aria-label={t("範例照片")}>
         <div class="sample-modal-head">
-          <h2>範例照片</h2>
-          <button type="button" class="sample-modal-close" aria-label="關閉" onClick={onClose}>
+          <h2>{t("範例照片")}</h2>
+          <button type="button" class="sample-modal-close" aria-label={t("關閉")} onClick={onClose}>
             <Icon name="x" size={16} />
           </button>
         </div>
@@ -1772,7 +1774,7 @@ export function SamplePicker(props: {
                     type="button"
                     key={name}
                     class={`sample-tile${at >= 0 ? " is-picked" : ""}${off ? " is-full" : ""}`}
-                    title={taken.includes(name) ? `${name}（已經加入了）` : name}
+                    title={taken.includes(name) ? t("{name}（已經加入了）", { name }) : name}
                     aria-pressed={multi ? at >= 0 : undefined}
                     aria-disabled={off || undefined}
                     onClick={() => toggle(name)}
@@ -1784,18 +1786,18 @@ export function SamplePicker(props: {
               })}
             </div>
           ) : (
-            <p class="chat-text chat-muted">{props.demos ? "目前沒有可用的範例照片。" : "載入中…"}</p>
+            <p class="chat-text chat-muted">{props.demos ? t("目前沒有可用的範例照片。") : t("載入中…")}</p>
           )}
         </div>
         {multi && !!demos.length && (
           <div class="sample-modal-foot">
             <span class="sample-modal-count" aria-live="polite">
-              {chosen.length ? (full ? `已選 ${chosen.length} 張（最多 ${max} 張）` : `已選 ${chosen.length} 張`) : `可以選多張，最多 ${max} 張`}
+              {chosen.length ? (full ? t("已選 {length} 張（最多 {max} 張）", { length: chosen.length, max }) : t("已選 {length} 張", { length: chosen.length })) : t("可以選多張，最多 {max} 張", { max })}
             </span>
             <div class="chat-choices">
-              <button type="button" class="chat-chip is-ghost" onClick={onClose}>取消</button>
+              <button type="button" class="chat-chip is-ghost" onClick={onClose}>{t("取消")}</button>
               <button type="button" class="chat-chip is-primary" disabled={!chosen.length} onClick={() => props.onPick(chosen)}>
-                選好了
+                {t("選好了")}
               </button>
             </div>
           </div>

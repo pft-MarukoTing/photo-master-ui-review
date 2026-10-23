@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 // Most desktop browsers (Chrome/Firefox/Edge) can't render HEIC/HEIF in an
 // <img> at all, even though the backend (Pillow + pillow-heif) decodes it
 // fine. Decode it here to a JPEG purely for on-page preview; the original file
@@ -35,7 +36,7 @@ function libheif(): Promise<Libheif> {
       const script = document.createElement("script");
       script.src = "../libheif-bundle.js";
       script.onload = () => (window.libheif ? resolve(window.libheif) : reject(new Error("libheif missing")));
-      script.onerror = () => reject(new Error("HEIC 預覽元件載入失敗"));
+      script.onerror = () => reject(new Error(t("HEIC 預覽元件載入失敗")));
       document.head.appendChild(script);
     }).then((factory) => factory());
     instance.catch(() => (instance = null)); // let a later pick retry
@@ -98,7 +99,7 @@ async function decodeHeic(file: File, withThumb: boolean): Promise<{ full: Blob;
     if (!ctx) return { full: file, thumb: null };
     const data = ctx.createImageData(canvas.width, canvas.height);
     await new Promise<void>((resolve, reject) =>
-      image.display(data, (d) => (d ? resolve() : reject(new Error("HEIC 解碼失敗")))),
+      image.display(data, (d) => (d ? resolve() : reject(new Error(t("HEIC 解碼失敗"))))),
     );
     ctx.putImageData(data, 0, 0);
     const full = (await jpeg(canvas, 0.85)) || file;

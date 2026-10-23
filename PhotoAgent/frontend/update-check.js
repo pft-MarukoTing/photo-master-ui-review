@@ -14,13 +14,13 @@ window.PhotoAgentUpdateCheck = (() => {
   const MISMATCH_THRESHOLD = 1;
 
   const MESSAGES = {
-    frontend: "網站有新版本，請重新整理頁面以取得最新內容。",
+    frontend: tr("網站有新版本，請重新整理頁面以取得最新內容。"),
     // A destroyed worker container orphans any job it had already pulled off
     // Redis (see job_processor.py/queue.py -- there's no requeue-on-crash),
     // so a job the user is still waiting on will never finish. Worded more
     // urgently than the frontend-only case, and shown immediately instead of
     // waiting for that job to "complete" -- it can't.
-    worker: "後端處理伺服器已更新，執行中的工作可能已中斷，請立即重新整理頁面。"
+    worker: tr("後端處理伺服器已更新，執行中的工作可能已中斷，請立即重新整理頁面。")
   };
 
   let baselineVersion = null;

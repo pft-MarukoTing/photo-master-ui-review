@@ -2,6 +2,7 @@
 
 import json
 
+from photo_agent import i18n
 from photo_agent.editor_skills import EDITOR_SKILLS
 from prompts import style_option_entries
 from photo_agent.text_overlay import qa_instruction
@@ -201,4 +202,4 @@ Return only valid JSON. User-visible values must be Traditional Chinese.
     ]
   }
 }"""
-    return head + schema + qa_instruction(analysis)
+    return i18n.localize_analysis(head + schema) + qa_instruction(analysis)

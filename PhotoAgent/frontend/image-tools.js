@@ -25,7 +25,7 @@ window.PhotoAgentImageTools = (() => {
       };
       image.onerror = () => {
         URL.revokeObjectURL(url);
-        reject(new Error("無法讀取圖片，請確認檔案格式是否正確。"));
+        reject(new Error(tr("無法讀取圖片，請確認檔案格式是否正確。")));
       };
       image.src = url;
     });
@@ -295,7 +295,7 @@ window.PhotoAgentImageTools = (() => {
         : clampRawCropBox(sourceCrop, analysis);
       addCropCandidate(candidates, seen, {
         id: candidate?.id || `ai-candidate-${index + 1}`,
-        label: candidate?.label || `AI 候選 ${index + 1}`,
+        label: candidate?.label || tr("AI 候選 {v1}", { v1: index + 1 }),
         cropBox,
         compositionIntent: candidate?.composition_intent || candidate?.compositionIntent || "",
         tradeoffs: candidate?.tradeoffs || ""
@@ -305,7 +305,7 @@ window.PhotoAgentImageTools = (() => {
     if (base) {
       addCropCandidate(candidates, seen, {
         id: "ai-plan",
-        label: "AI 初始裁切建議",
+        label: tr("AI 初始裁切建議"),
         cropBox: base,
         compositionIntent: analysis?.composition_intent || "",
         tradeoffs: analysis?.crop_recommendation || ""
@@ -314,10 +314,10 @@ window.PhotoAgentImageTools = (() => {
 
     addCropCandidate(candidates, seen, {
       id: "original-frame",
-      label: "保留原始構圖",
+      label: tr("保留原始構圖"),
       cropBox: { enabled: false, x: 0, y: 0, w: 1, h: 1, aspect_ratio: "" },
-      compositionIntent: "保留完整原圖與原始場景脈絡",
-      tradeoffs: "不做構圖裁切，只進行美化與色彩整理"
+      compositionIntent: tr("保留完整原圖與原始場景脈絡"),
+      tradeoffs: tr("不做構圖裁切，只進行美化與色彩整理")
     });
 
     const limit = options.highRisk === true ? 6 : 4;

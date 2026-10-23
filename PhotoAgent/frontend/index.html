@@ -7313,6 +7313,9 @@
   <button type="button" id="update-banner-refresh" class="update-banner-refresh">重新整理</button>
 </div>
 
+<!-- Before every other script: they call tr() while they load (i18n.js). -->
+<script src="i18n-en.js"></script>
+<script src="i18n.js"></script>
 <script src="config.js"></script>
 <script src="account.js"></script>
 <script src="update-check.js"></script>

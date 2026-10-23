@@ -1528,6 +1528,19 @@ div.chat-proposal-row{cursor:default}
 .chat-header-more,.chat-header-icon,.upload-gallery-all,.session-tile-when{display:none}
 /* 最近照片的尾巴：捲到這附近再畫下一段，自己不佔位置。 */
 .gallery-more{display:block;flex:0 0 1px;width:1px;height:1px;margin:0 0 0 -1px}
+/* 首頁右上的語言切換：靠右，緊貼在其他按鈕（手機上是 ⋯）左邊。 */
+.lang-switch{position:relative;margin-left:auto;margin-right:8px;display:flex}
+.lang-switch ~ .chat-header-more{margin-left:0}
+.lang-switch-btn{display:flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border:0;border-radius:50%;
+  background:transparent;color:var(--text-2);cursor:pointer}
+.lang-switch-btn:hover,.lang-switch-btn[aria-expanded="true"]{background:rgba(var(--accent-rgb),.1);color:var(--accent)}
+.lang-switch-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:1500;min-width:160px;padding:6px;display:flex;flex-direction:column;gap:2px;
+  border-radius:14px;background:var(--card);border:1px solid var(--border);box-shadow:0 12px 32px rgba(0,0,0,.16)}
+.lang-switch-item{display:flex;align-items:center;justify-content:space-between;gap:12px;height:40px;padding:0 12px;border:0;border-radius:10px;
+  background:transparent;color:var(--text);font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.lang-switch-item:hover{background:rgba(var(--accent-rgb),.08)}
+.lang-switch-item.is-on{color:var(--accent-text);font-weight:700}
+@media (max-width:600px){.lang-switch{margin-right:0}}
 /* 對話頁的 header 有七顆按鈕，攤開要約 980px；平板直拿時按鈕放大到 44px，要約 1100px
    （Surface Pro 直拿 960 會把 logo 擠扁）。放不下的寬度也收進 ⋯，選單長相跟下面手機的一樣。
    首頁只有兩顆，維持攤開。 */

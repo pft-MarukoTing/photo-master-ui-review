@@ -42,6 +42,7 @@ from prompts import (
     with_reframing_proposal,
 )
 from photo_agent.analysis_skills import ANALYSIS_SKILLS
+from photo_agent import i18n
 from photo_agent.branch_skills import BRANCH_SKILLS, branch_named
 from photo_agent.photo_router import ROUTER_INSTRUCTION, run_call0, select_branch
 from photo_agent.edit_prompt import overwrites_prompt
@@ -144,17 +145,17 @@ def _run_eye_repair_pass(image_b64: str, analysis: dict, quality: str):
 def _quality_check_fallback(error: Exception) -> dict:
     return {
         "pass": False,
-        "overall_status": "QA 未完成",
+        "overall_status": i18n.tr("QA 未完成"),
         "score": None,
-        "summary": "輸出已完成，但品質檢查階段未成功回傳可解析結果。",
+        "summary": i18n.tr("輸出已完成，但品質檢查階段未成功回傳可解析結果。"),
         "checks": {
             "subject_preserved": None,
             "crop_safe": None,
             "not_overedited": None,
             "light_color_improved": None,
         },
-        "warnings": [str(error) or "品質檢查失敗"],
-        "recommendation": "請人工快速比對原圖與輸出圖。",
+        "warnings": [str(error) or i18n.tr("品質檢查失敗")],
+        "recommendation": i18n.tr("請人工快速比對原圖與輸出圖。"),
     }
 
 
@@ -689,9 +690,9 @@ def finish_stage(
             logger.info("Step 6: skipping quality check (run_qa=False)")
             qa = {
                 "pass": True,
-                "overall_status": "已略過 QA",
+                "overall_status": i18n.tr("已略過 QA"),
                 "score": None,
-                "summary": "已依設定略過 AI 輸出 QA 檢查。",
+                "summary": i18n.tr("已依設定略過 AI 輸出 QA 檢查。"),
                 "checks": {},
                 "warnings": [],
                 "recommendation": "",
@@ -731,9 +732,9 @@ def finish_stage(
         # Step 6 — skip QA
         qa = {
             "pass": True,
-            "overall_status": "本機預覽",
+            "overall_status": i18n.tr("本機預覽"),
             "score": None,
-            "summary": "本機模式只做簡易裁切與色彩增強，未執行 AI 輸出 QA。",
+            "summary": i18n.tr("本機模式只做簡易裁切與色彩增強，未執行 AI 輸出 QA。"),
             "checks": {
                 "subject_preserved": True,
                 "crop_safe": True,
@@ -741,7 +742,7 @@ def finish_stage(
                 "light_color_improved": True,
             },
             "warnings": [],
-            "recommendation": "若要檢查生成式修圖品質，請開啟 AI 修圖。",
+            "recommendation": i18n.tr("若要檢查生成式修圖品質，請開啟 AI 修圖。"),
         }
         qa = _normalize_quality_check_result(qa)
         prompts["quality_check"] = None

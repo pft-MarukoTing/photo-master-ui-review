@@ -1,0 +1,318 @@
+"""English: a catalog for photo_agent.i18n.
+
+LABELS are the names of the page's buttons and panels; the chat page's
+frontend-chat/src/i18n.ts uses the same English for them, so a reply that
+names a button names the one on screen. TEXT is every other fixed sentence,
+keyed by its Chinese. FORMAT and PATTERNS are described in i18n.
+"""
+
+import re
+
+CODE = "en"
+NAME = "English"
+
+FORMAT = {
+    "list": ", ",
+    "sentence": " ",
+    "quote": ("“", "”"),
+    "sentence_end": ".!?",
+    "wish_marks": ("; ", ", ", "，、,:： "),
+    "name_mark": ": ",
+    # An English word is several letters to a Chinese character's one.
+    "echo_scale": 3,
+}
+
+LABELS = {
+    "分析": "Analyze",
+    "一鍵美化": "One-Tap Retouch",
+    "美化": "Retouch",
+    "再美化": "Retouch Again",
+    "照建議直接美化": "Retouch as Suggested",
+    "看美化項目": "Review Edits",
+    "幫我分析": "Analyze for Me",
+    "再試一次": "Try Again",
+    "設定": "Settings",
+    "人像": "Portrait",
+    "畫面": "Scene",
+    "畫面建議": "scene suggestions",
+    "風格": "Style",
+    "個人化需求": "My Requests",
+    "美化引擎": "Retouch Engine",
+    "分析引擎": "Analysis Engine",
+    "長寬比": "Aspect Ratio",
+    "人像修正": "Portrait Fixes",
+    "清除所有需求": "Clear All Requests",
+    "自行上傳照片": "Upload a Photo",
+    "從範例照片挑選": "Choose a Sample Photo",
+    "修改": "Edit",
+    "套用": "Apply",
+    "頭像": "face thumbnail",
+    "整體美化": "Full Retouch",
+    "僅依需求修改": "Only My Requests",
+    # Added with exact-text requests, face symmetry and request validation
+    "臉部左右平衡": "Facial Symmetry",
+    "指定字樣": "Requested Text",
+}
+
+TEXT = {
+    # --- capabilities: settings, styles, portrait fixes ---
+    "AI 建議": "AI Suggested",
+    "原圖比例": "Original",
+    "9:16（限動）": "9:16 (Stories)",
+    "2:3（人像）": "2:3 (Portrait)",
+    "3:4（手機）": "3:4 (Phone)",
+    "4:5（IG 貼文）": "4:5 (Instagram Post)",
+    "1:1（方形）": "1:1 (Square)",
+    "5:4（橫幅）": "5:4 (Landscape)",
+    "4:3（平板）": "4:3 (Tablet)",
+    "3:2（相機）": "3:2 (Camera)",
+    "16:9（桌布）": "16:9 (Wallpaper)",
+    "姿勢": "Pose",
+    "俏皮": "Playful",
+    "自然抓拍": "Candid",
+    "強勢": "Powerful",
+    "優雅": "Elegant",
+    "動感": "Dynamic",
+    "酷帥": "Cool",
+    "勝利手勢": "Peace Sign",
+    "歡呼": "Cheer",
+    "拍攝角度": "Camera Angle",
+    "俯拍": "High Angle",
+    "仰拍": "Low Angle",
+    "平視": "Eye Level",
+    "側拍": "Side",
+    "光線": "Lighting",
+    "金色光調": "Golden Hour",
+    "柔光": "Soft Light",
+    "藍調光線": "Blue Hour",
+    "夜色": "Night",
+    "取景範圍": "Framing",
+    "遠景": "Wide Shot",
+    "廣角": "Wide Angle",
+    "近景": "Medium Close-Up",
+    "特寫": "Close-Up",
+    "閉眼": "Closed Eyes",
+    "視線": "Gaze",
+    "髮絲": "Stray Hairs",
+    "笑容": "Smile",
+    "身形調整": "Body Shape",
+    "保留髮絲動態": "Keep Hair Movement",
+    "梳整俐落": "Smooth and Tidy",
+    "自動": "Auto",
+    "不笑": "No Smile",
+    "微笑": "Gentle Smile",
+    "開朗笑": "Big Smile",
+    "大笑": "Laughing",
+    "閉眼修正": "Fix Closed Eyes",
+    "視線修正": "Fix Gaze",
+    "髮絲整理": "Tidy Stray Hairs",
+    "笑容調整": "Smile Adjustment",
+    "自然高級修圖": "Natural Premium",
+    "雜誌 editorial": "Magazine Editorial",
+    "商業產品照": "Commercial Product",
+    "人像精修": "Portrait Retouch",
+    "自訂方向": "Custom Direction",
+
+    # --- chat_assistant: plan changes, fixed replies ---
+    "人物 {n}": "Person {n}",
+    "不指定": "Not set",
+    "交給 AI 判斷": "Let the AI decide",
+    "不修正": "Don't fix",
+    "修正（{level}）": "Fix ({level})",
+    "修正": "Fix",
+    "開": "On",
+    "關": "Off",
+    "比例": "Aspect ratio",
+    "套用": "Apply",
+    "不套用": "Don't apply",
+    "（無）": "(none)",
+    "這位": "This person",
+    "好，記下了：{echo}。": "OK, noted: {echo}.",
+    "好，已加進個人化需求。": "OK, added to My Requests.",
+    "好，個人化需求更新好了。": "OK, My Requests has been updated.",
+    "好，{label}改成「{after}」了。": "OK, {label} is now “{after}”.",
+    "好，已經幫你改好了。": "OK, done.",
+    "先幫你記進個人化需求了，下面可以直接修改。": "I've added it to My Requests. You can edit it right below.",
+    "先幫你套用了，想改的話按「修改」。": "I've applied it. Tap “Edit” if you'd like to change it.",
+    "好，{echo}就不做了。": "OK, I'll skip {echo}.",
+    "好，前面那項需求就不做了。": "OK, I'll drop that earlier request.",
+    "好，那些需求就不做了。": "OK, I'll drop those requests.",
+    "想看整張照片還有哪些地方可以修，也可以按「幫我分析」。":
+        "To see what else in the photo could be improved, tap “Analyze for Me”.",
+    "還想調整其他項目可以點下面的項目，或按「{label}」我就開始。":
+        "To adjust anything else, tap an item below, or tap “{label}” to start.",
+    "按下面的「{label}」我就開始。": "Tap “{label}” below to start.",
+    "這個調整我沒辦法對應到可設定的項目，可以直接在面板上修改。":
+        "I couldn't match that to any available setting, but you can change it directly in the panels.",
+    "目前的設定已經是這樣了，不需要再調整。": "That's already the current setting, so no change is needed.",
+    "長寬比也幫你換成「{ratio}」了，在「設定」裡隨時可以改。":
+        "I've also set the aspect ratio to “{ratio}”. You can change it anytime in “Settings”.",
+    "目前沒有 {asked} 這個比例，最接近的是「{nearest}」，要換成這個嗎？":
+        "There's no {asked} ratio. The closest option is “{nearest}”. Use that instead?",
+    "換成 {ratio}": "Use {ratio}",
+    "交給 AI 決定": "Let the AI decide",
+    "好，比例就交給 AI 決定。": "OK, I'll let the AI pick the ratio.",
+    "好，比例就交給 AI 決定，其他的我記下來了。": "OK, I'll let the AI pick the ratio, and I've noted the rest.",
+    "比例改成 {ratio}": "Change the aspect ratio to {ratio}",
+    "好，長寬比幫你換成「{ratio}」了，在「設定」裡隨時可以改。":
+        "OK, the aspect ratio is now “{ratio}”. You can change it anytime in “Settings”.",
+    "好，這個我記下來了。": "OK, noted.",
+    "還有其他想改的地方嗎？沒有的話，可以從下面選「分析」或「一鍵美化」喔！":
+        "Anything else you'd like to change? If not, pick “Analyze” or “One-Tap Retouch” below!",
+    "要不要我先幫你分析這張照片？": "Want me to analyze this photo first?",
+    "可以再說清楚一點嗎？": "Could you tell me a bit more?",
+    "前面跟這句衝突的需求，已經照這句改掉了。": "I've updated the earlier request that conflicted with this one.",
+    "未指定對象": "No specific person",
+    "（沒有偵測到人臉）": "(no faces detected)",
+    "（還沒有）": "(none yet)",
+
+    # --- backend/routes/chat.py ---
+    "不在已辨識的人物清單中": "Not Among the People Detected",
+    "人物初步辨識完成。": "Finished detecting the people in the photo.",
+    "人物清單暫時無法交接，請重新上傳照片。": "Couldn't hand off the list of people. Please upload the photo again.",
+    "人物清單暫時無法交接，請重試預覽。": "Couldn't hand off the list of people. Please try the preview again.",
+    "人物確認已過時，請重新選擇。": "That selection is out of date. Please choose again.",
+    "人物預覽不屬於目前使用者。": "This people preview belongs to another user.",
+    "人物預覽暫時不可用，仍可進行分析。": "The people preview isn't available right now, but you can still run the analysis.",
+    "人物預覽暫時無法讀取，仍可進行分析。": "The people preview can't be loaded right now, but you can still run the analysis.",
+    "人物預覽未完成，仍可進行分析。": "The people preview didn't finish, but you can still run the analysis.",
+    "人物預覽版本不符，請重新預覽。": "The people preview is out of date. Please run it again.",
+    "原圖暫時無法讀取，請稍後再試。": "The original photo can't be loaded right now. Please try again later.",
+    "可以幫你這樣調整，確認後套用。": "I can make this change; it applies once you confirm.",
+    "已取消這筆需求，其他需求保留。": "That request has been canceled; your other requests are kept.",
+    "已取消這項髮絲整理需求。": "The hair-tidying request has been canceled.",
+    "我不太確定要怎麼調整，可以直接在面板上修改。": "I'm not sure how to make that change, but you can adjust it directly in the panels.",
+    "我會先照你的原句處理，完成後再和你確認需要調整的對象。":
+        "I'll work from your original wording for now and confirm who it applies to once that's done.",
+    "指定了這筆需求的對象": "Chose who this request is for",
+    "指定人物尚未完成正式身份確認。": "The selected person hasn't been confirmed yet.",
+    "指定人物尚未確認，請重新指定或清除該需求。": "The selected person isn't confirmed. Please choose again or clear the request.",
+    "收到，我會重新確認修改目標。": "Got it. Let me double-check what to change.",
+    "有保持原樣的人物，請先選擇僅依需求修改，確認保護範圍。":
+        "Some people should be left untouched. Please choose “Only My Requests” first to confirm what stays as is.",
+    "正在初步辨識照片中的人物。": "Detecting the people in the photo…",
+    "無法讀取人物預覽圖片。": "Couldn't load the people preview image.",
+    "無法讀取照片，請使用有效的圖片檔案。": "Couldn't read the photo. Please use a valid image file.",
+    "無法開始人物預覽，仍可稍後進行分析。": "Couldn't start the people preview. You can still run the analysis later.",
+    "照片大小需介於 1 byte 與 30 MB。": "The photo must be between 1 byte and 30 MB.",
+    "請先確認個人化需求指定的人物，再開始美化。": "Please confirm who your requests are for before retouching.",
+    "請先選擇已完成分析的人物。": "Please choose a person from the completed analysis first.",
+    "請補充想調整的動作。": "Please describe the change you'd like.",
+    "請說明這筆需求要如何調整，或取消這筆需求。": "Please describe how to adjust this request, or cancel it.",
+    "這句我先保留，稍後會一起確認對象與修改內容。": "I'll hold on to this for now and confirm who it's for and what to change later.",
+    "這張照片正在處理中，完成後再試一次。": "This photo is still processing. Please try again once it's done.",
+    "這項修改還沒確認完成，請稍後再試一次。": "This change hasn't been confirmed yet. Please try again in a moment.",
+    "還需要確認這項修改的內容，請再補充想調整的對象或動作。":
+        "I need a bit more detail about this change. Please tell me who or what to adjust.",
+    "需求影像確認目前未啟用；可以先取消這筆需求。": "Checking requests against the photo is currently off. You can cancel this request for now.",
+    "需求確認已過時，請重新整理。": "This request check is out of date. Please refresh the page.",
+    "需求確認結果已過時，請重新分析。": "This request check is out of date. Please reanalyze the photo.",
+    "正在照新比例重新構圖，好了就可以接著調整或美化。":
+        "Reframing for the new ratio. Once it's done, you can keep adjusting or start retouching.",
+    "好，馬上幫你一鍵美化。": "OK, starting One-Tap Retouch now.",
+    "好，我先幫你分析這張照片。": "OK, I'll analyze this photo first.",
+    "不好意思，這個我幫不上忙。想怎麼修這張照片，再跟我說說看喔！":
+        "Sorry, I can't help with that. Tell me how you'd like this photo retouched!",
+    "處理到一半中斷了": "Processing was interrupted",
+    "重新構圖失敗：{exc}": "Reframing failed: {exc}",
+    "分析失敗：{exc}": "Analysis failed: {exc}",
+
+    # --- pipeline: the output check when it did not run ---
+    "QA 未完成": "QA incomplete",
+    "輸出已完成，但品質檢查階段未成功回傳可解析結果。": "The result is ready, but the quality check didn't return a readable result.",
+    "品質檢查失敗": "Quality check failed",
+    "請人工快速比對原圖與輸出圖。": "Please compare the original and the result manually.",
+    "已略過 QA": "QA skipped",
+    "已依設定略過 AI 輸出 QA 檢查。": "The AI quality check was skipped based on your settings.",
+    "本機預覽": "Local preview",
+    "本機模式只做簡易裁切與色彩增強，未執行 AI 輸出 QA。": "Local mode only applies a basic crop and color enhancement; the AI quality check wasn't run.",
+    "若要檢查生成式修圖品質，請開啟 AI 修圖。": "Turn on AI Retouch to check the quality of generated edits.",
+
+    # --- image_tools: the reframing item in 畫面 (after its 「重新構圖：」 prefix) ---
+    "維持原圖比例，{detail}": "keep the original ratio. {detail}",
+    "調整為{ratio}，{detail}": "change to {ratio}. {detail}",
+    # Added with exact-text requests, face symmetry and request validation
+    "、": ", ",
+    "設定已在這段時間更新，這次需求尚未套用，請依最新設定再送出。": "The settings changed in the meantime, so this request wasn't applied. Please send it again with the current settings.",
+    "{label}會幫{who}調整。": "{label} will be applied to {who}. ",
+    "{label}要幫哪一位調整？": "Who should {label} be applied to?",
+    "{a}{b}": "{a}{b}",
+    "我理解你是想「{revised}」，已整理到個人化需求。": "Got it, you'd like “{revised}”. I've added that to My Requests.",
+    "這項需求暫時未能整理完成，尚未套用；請稍後再試。": "I couldn't process this request, so it hasn't been applied. Please try again later.",
+    "指定文字未通過逐字核對，或有額外新增文案，請人工複查。": "The requested text failed the character-by-character check, or extra text was added. Please review it manually.",
+    "請核對指定字樣後再使用此成品。": "Please check the requested text before using this result.",
+    "QA 未回傳完整且有效的逐字核對結果": "QA didn't return a complete, valid character-by-character check",
+    "文字核對資料不完整": "Text check data is incomplete",
+    "這句話你希望怎麼用在照片上？可以再說明想調整的效果嗎？": "How would you like this text used in the photo? Could you describe the effect you have in mind?",
+    # Added with the overview, the settings switches and the new offers
+    "先幫你套用了。": "I've applied it.",
+    "要先幫你分析這張照片，還是直接一鍵美化？": "Would you like me to analyze this photo first, or retouch it right away?",
+    "要先幫你分析看看，還是直接一鍵美化？": "Want me to analyze it first, or retouch it right away?",
+    "要直接幫你一鍵美化，還是先分析看看？": "Want me to retouch it right away, or analyze it first?",
+    "要不要我先幫你分析看看？": "Want me to analyze it first?",
+    "要不要直接幫你一鍵美化？": "Want me to retouch it right away?",
+    "這幾張要先分析看看，還是直接一鍵美化？": "Want me to analyze these first, or retouch them right away?",
+    "這幾張要直接一鍵美化，還是先分析看看？": "Want me to retouch these right away, or analyze them first?",
+    "這幾張要先分析看看，還是直接一鍵美化？分析完會整理出每張可以修的地方給你參考。": "Want me to analyze these first, or retouch them right away? The analysis lists what could be improved in each photo.",
+    "這幾張都分析好了，要直接美化嗎？": "These are all analyzed. Want me to retouch them now?",
+    "要照這樣把這幾張再美化一次嗎？": "Want me to retouch these again with this?",
+    "要不要照這樣再美化一次？": "Want me to retouch them again with this?",
+    "長寬比換成「{ratio}」": "set the aspect ratio to “{ratio}”",
+    "打開「{name}」": "turned on “{name}”",
+    "關掉「{name}」": "turned off “{name}”",
+    "好，{said}了，在「設定」裡隨時可以改。": "OK, I've {said}. You can change this anytime in “Settings”.",
+    "另外{said}了，在「設定」裡隨時可以改。": "I've also {said}. You can change this anytime in “Settings”.",
+    "這 {n} 張再美化時都會照這樣修。": "These {n} photos will follow this when they're retouched again.",
+    "還沒美化的 {n} 張會照這樣修，已經在美化或美化好的 {done} 張不動。": "The {n} photos not yet retouched will follow this; the {done} already being retouched or done stay as they are.",
+    "這 {n} 張美化時都會照這樣修。": "These {n} photos will follow this when they're retouched.",
+    "或": " or ",
+    "還有其他想改的地方嗎？沒有的話，可以按下面的{buttons}。": "Anything else you'd like to change? If not, tap {buttons} below.",
+    "還有其他想改的地方嗎？": "Anything else you'd like to change?",
+    "（總覽：好幾張照片，這裡不指定人物）": "(Overview: several photos, no specific person)",
+    "我的照片": "My Photos",
+    "要修改或調整其他項目，可以點下面的美化項目，或按「{label}」我就開始。": "To change this or adjust other items, tap an item below, or tap “{label}” to start.",
+    "已收到你的回答，但需求整理暫時失敗，尚未套用；可以重試這項回答。": "Got your answer, but I couldn't process the request, so it hasn't been applied. You can try this answer again.",
+    "這張照片還沒分析，只能依照個人化需求修圖；要整張美化請先按「幫我分析」。": "This photo hasn't been analyzed, so it can only be retouched based on My Requests. To retouch the whole photo, tap “Analyze for Me” first.",
+}
+
+
+# How chat_assistant reads replies and lines in English (see the Chinese
+# constants each one stands in for there).
+PATTERNS = {
+    # The 「確認後套用」 tail of a suggestion, taken off once it is applied.
+    "confirm_tail": re.compile(
+        r"[,;]?\s*(?:and\s+)?(?:(?:once|after|when)\s+you\s+confirm\b[^.!?]*"
+        r"|(?:I'll|I will)\s+apply\s+it\s+(?:once|after|when)\s+you\s+confirm[^.!?]*"
+        r"|(?:it\s+)?applies\s+once\s+you\s+confirm[^.!?]*"
+        r"|confirm\s+to\s+apply(?:\s+it)?)[.!]?", re.I),
+    # Words that say a line was taken down (_KEPT_WORDS), matched in lowercase.
+    "kept_words": ("noted", "got it", "added", "taken down", "written down", "saved", "no problem"),
+    # The words around a ratio in a wish (_RATIO_VERB, _RATIO_TAIL, _LINKS),
+    # and how its clauses are split and joined again.
+    "ratio_verb": r"(?:(?:please\s+)?(?:make|crop|change|turn|set|cut)\s+(?:it|this|the\s+photo)?\s*(?:to|into|in)?\s*|(?:use|in|at)\s+)?(?:an?\s+)?",
+    "ratio_tail": r"(?:\s*(?:aspect\s+)?(?:ratio|format|size|frame))?",
+    "ratio_links": r"(?:and\s+then|then|and|also|plus)\b",
+    "clause_split": r"[，,。；;！!.\n]",
+    "clause_join": ", ",
+    # _ratio_question's start, to find the ratio it asked about.
+    "ratio_asked": r"There's no (\S+) ratio",
+    # Heads in 個人化需求 that are not people (「背景」「場景」).
+    "wish_heads": ("Background", "Scene"),
+    # An option that names a button: these words around the button's name
+    # (_BUTTON_VERBS), and in a question (_OFFER_BEFORE, _OFFER_AFTER).
+    "button_verbs": re.compile(
+        r"^(?:(?:please|let me|I want to|I'd like to)\s+)?(?:open|tap|press|check|see|view|show(?:\s+me)?|look\s+at|go\s+to)?\s*(?:the\s+)?"
+        r"|\s+(?:panel|button|tab)$", re.I),
+    "offer_before": ("open", "tap", "press", "check", "see", "view", "look at", "go to", "in", "into", "under"),
+    "offer_after": ("panel", "button", "tab"),
+    # OFFER_QUESTIONS and OFFER_WORDS, keyed by the Chinese option.
+    "offer_questions": {"幫我分析": "Want me to analyze it first?", "一鍵美化": "Want me to retouch it in one tap?"},
+    "offer_words": {"幫我分析": "analy", "一鍵美化": "retouch"},
+    # What chat.py's NEXT_STEP_RE finds: _next_step's sentence at the end of a reply.
+    "next_step": re.compile(
+        r"\s*(?:To adjust anything else, tap an item below, or tap|To change this or adjust other items, tap an item below, or tap|Tap) “[^”]+”(?: below)? to start\."
+        r"(?: To see what else in the photo could be improved, tap “Analyze for Me”\.)?$"),
+    # Added to REVIEW_INSTRUCTION: the page writes its tags in English.
+    "review_note": """ENGLISH PAGE
+On this page the people tags read 「Person N from the left」 where the rules above say 「照片中從左邊數來第 N 位」, and the section of wishes for no one in particular is headed 「No specific person」 where they say 「未指定對象」. Follow the same rules with these English tags: a line about tagged people starts with the tags, joined with ", " and followed by ": ".""",
+}

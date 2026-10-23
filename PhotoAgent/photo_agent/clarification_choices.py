@@ -1,6 +1,8 @@
 """Presentation choices for an unclear intent; accepting them still needs the LLM."""
 import json
 
+from photo_agent import i18n
+
 
 def choice_repair_instruction(question):
     return ('\nCOMPLETE CLARIFICATION CHOICES ONLY:\n'
@@ -71,7 +73,7 @@ def answer_instruction(context):
 def completion_retry(context):
     answer=context.get('answer') or ''
     options=[answer] if context.get('selected_option') and answer else []
-    return dict(reply='已收到你的回答，但需求整理暫時失敗，尚未套用；可以重試這項回答。',
+    return dict(reply=i18n.tr('已收到你的回答，但需求整理暫時失敗，尚未套用；可以重試這項回答。'),
         question_kind='content',answer_mode='choices' if options else 'free_text',options=options,request_error=True)
 
 LITERAL_CHOICE_INSTRUCTION = """

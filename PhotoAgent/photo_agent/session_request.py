@@ -3,7 +3,7 @@ import copy
 import json
 import logging
 import config
-from photo_agent import request_semantics, text_transform
+from photo_agent import i18n, request_semantics, text_transform
 from photo_agent.chat_plan import apply_plan_patch
 from photo_agent.clarification_choices import validate_selected_literal, answer_context, answer_instruction, completion_retry, choice_repair_instruction, question_presentation
 
@@ -233,5 +233,5 @@ def resolve(context,plan,history,run_model,validate_completion,options,debug=Fal
         if selected:
             return _retry_result(selected)
         # Keep the conversation, never turn invalid output into a plan change.
-        return dict(reply='這項需求暫時未能整理完成，尚未套用；請稍後再試。',action='none',
+        return dict(reply=i18n.tr('這項需求暫時未能整理完成，尚未套用；請稍後再試。'),action='none',
             patch_json='',options=[],lines=False,your_pick=False,open='',request_error=True)

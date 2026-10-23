@@ -10,6 +10,8 @@ line before the issue list that says the same thing more concretely.
 
 import math
 
+from photo_agent import i18n
+
 MAX_ISSUES = 6
 
 def _text(value):
@@ -55,7 +57,7 @@ def face_people(analysis):
     if isinstance(analysis.get('_fixed_preview_person_ids'), list):
         ids = set(analysis['_fixed_preview_person_ids'])
         return [{'number': number, 'subject_index': index,
-                 'name': _text(subject.get('label')) or f'人物 {number}', 'box': subject['box'],
+                 'name': _text(subject.get('label')) or i18n.tr('人物 {n}', n=number), 'box': subject['box'],
                  'thumbnail_box': (analysis.get('_subject_thumbnail_boxes') or {}).get(str(index), subject['box'])}
                 for number, (index, subject) in enumerate(
                     ((i, s) for i, s in enumerate(analysis.get('subjects') or [])
@@ -80,7 +82,7 @@ def face_people(analysis):
             represented.add(index)
         number = len(people) + 1
         label = _text(subjects[index].get("label")) if index >= 0 else ""
-        people.append({"number": number, "detection_index": i + 1, "subject_index": index, "name": label or f"人物 {number}", "box": box})
+        people.append({"number": number, "detection_index": i + 1, "subject_index": index, "name": label or i18n.tr("人物 {n}", n=number), "box": box})
     for index, subject in enumerate(subjects):
         if not isinstance(subject, dict) or subject.get("is_person") is not True or index in represented:
             continue
@@ -96,7 +98,7 @@ def face_people(analysis):
             continue
         number = len(people) + 1
         people.append({"number": number, "subject_index": index,
-                       "name": _text(subject.get("label")) or f"人物 {number}", "box": box})
+                       "name": _text(subject.get("label")) or i18n.tr("人物 {n}", n=number), "box": box})
     return people
 
 

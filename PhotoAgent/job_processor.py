@@ -9,7 +9,7 @@ import time
 from aiserver_utils.queue import set_job_info, get_job_info
 from engine_result_code import RESULT_INVALID_PARAMETER, RESULT_UNKNOWN_INTERNAL_ERROR
 from image_tools import ensure_jpeg_bytes, RESULT_JPEG_QUALITY
-from photo_agent import EFFECT_NAME, validate_photo_agent_request
+from photo_agent import EFFECT_NAME, i18n, validate_photo_agent_request
 from pipeline import (
     analyze_preview_stage, analyze_stage, skipped_analysis_stage,
     reframe_stage, review_stage, finish_stage,
@@ -140,6 +140,14 @@ class PhotoAgentJobProcessor:
             self.artifact_store.upload_file(local_path, dst_keys[i])
 
     def process_for_api(self, task_id, task_info):
+        # The language the job's user-visible text is written in (i18n); the
+        # job's params carry it only when it is not Chinese.
+        acts = task_info.get("acts") if isinstance(task_info, dict) else None
+        params = acts[0].get("params") if isinstance(acts, list) and acts and isinstance(acts[0], dict) else None
+        with i18n.use(params.get("lang") if isinstance(params, dict) else None):
+            return self._process_for_api(task_id, task_info)
+
+    def _process_for_api(self, task_id, task_info):
         start_ts = time.time()
         request = validate_photo_agent_request(task_info, task_id=task_id)
 

@@ -181,6 +181,15 @@ const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
   },
   more: { sw: 3.2, body: <path d="M5 12h.01M12 12h.01M19 12h.01" /> },
   next: { sw: 2, body: <path d="M9 6l6 6-6 6" /> },
+  globe: {
+    sw: 1.8,
+    body: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9M12 3c-2.5 2.6-3.8 5.6-3.8 9s1.3 6.4 3.8 9" />
+      </>
+    ),
+  },
   caret: { sw: 2, body: <path d="M6 9l6 6 6-6" /> },
   expand: { sw: 2, body: <path d="M14 4h6v6M10 20H4v-6M20 4l-6 6M4 20l6-6" /> },
 };

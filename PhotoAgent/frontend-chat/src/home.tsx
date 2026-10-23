@@ -1,5 +1,6 @@
 // Header, the home page's intro, the 最近照片 / 範例照片 gallery and the
 // 最近照片 drawer -- old markup and classes throughout.
+import { t, lang, LANGS, setLang } from "./i18n";
 import type { ComponentChildren } from "preact";
 import { createPortal } from "preact/compat";
 import { useEffect, useRef, useState } from "preact/hooks";
@@ -34,8 +35,8 @@ function ThemeToggle() {
       id="chat-theme-btn"
       class="btn btn-secondary btn-sm"
       type="button"
-      title="點擊切換主題"
-      aria-label={`主題：${THEME_LABELS[theme]}（點擊切換）`}
+      title={t("點擊切換主題")}
+      aria-label={t("主題：{v1}（點擊切換）", { v1: THEME_LABELS[theme] })}
       onClick={() => {
         const next = nextTheme(theme);
         applyTheme(next);
@@ -69,7 +70,7 @@ function ReportModal(props: { jobId: string | null; chat: ReportChat; onClose: (
 
   const submit = async () => {
     if (!name.trim()) {
-      setError("請輸入你的名稱。");
+      setError(t("請輸入你的名稱。"));
       return;
     }
     setBusy(true);
@@ -80,7 +81,7 @@ function ReportModal(props: { jobId: string | null; chat: ReportChat; onClose: (
       await api.report(name.trim(), props.jobId, note.trim(), props.chat, page || undefined);
       setDone(true);
     } catch (err) {
-      setError((err as Error).message || "回報失敗，請稍後再試。");
+      setError((err as Error).message || t("回報失敗，請稍後再試。"));
     } finally {
       setBusy(false);
     }
@@ -93,41 +94,41 @@ function ReportModal(props: { jobId: string | null; chat: ReportChat; onClose: (
       <div class="error-modal-backdrop" onClick={onClose} />
       <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="chat-report-title">
         <div class="error-modal-hdr">
-          <span id="chat-report-title" class="notice-modal-title">{props.jobId ? "回報此結果" : "回報問題"}</span>
-          <button class="error-modal-close" type="button" aria-label="關閉" onClick={onClose}>
+          <span id="chat-report-title" class="notice-modal-title">{props.jobId ? t("回報此結果") : t("回報問題")}</span>
+          <button class="error-modal-close" type="button" aria-label={t("關閉")} onClick={onClose}>
             ×
           </button>
         </div>
         {done ? (
           <>
-            <p class="chat-text">已回報，我們會盡快確認{props.jobId ? "這筆結果" : ""}。</p>
+            <p class="chat-text">{props.jobId ? t("已回報，我們會盡快確認這筆結果。") : t("已回報，我們會盡快確認。")}</p>
             <div class="account-modal-actions">
               <button class="chat-chip" type="button" onClick={onClose}>
-                關閉
+                {t("關閉")}
               </button>
             </div>
           </>
         ) : (
           <>
             <label class="report-modal-label" for="chat-report-name">
-              你的名稱
+              {t("你的名稱")}
             </label>
             <input
               id="chat-report-name"
               class="account-modal-input"
               type="text"
-              placeholder="輸入你的名稱"
+              placeholder={t("輸入你的名稱")}
               maxLength={64}
               value={name}
               onInput={(e) => setName(e.currentTarget.value)}
             />
             <label class="report-modal-label" for="chat-report-note">
-              問題描述（選填）
+              {t("問題描述（選填）")}
             </label>
             <textarea
               id="chat-report-note"
               class="report-modal-textarea"
-              placeholder={props.jobId ? "請描述這筆結果的問題…" : "請描述遇到的問題…"}
+              placeholder={props.jobId ? t("請描述這筆結果的問題…") : t("請描述遇到的問題…")}
               maxLength={500}
               value={note}
               onInput={(e) => setNote(e.currentTarget.value)}
@@ -135,10 +136,10 @@ function ReportModal(props: { jobId: string | null; chat: ReportChat; onClose: (
             {error && <p class="account-modal-error">{error}</p>}
             <div class="account-modal-actions">
               <button class="chat-chip is-ghost" type="button" onClick={onClose}>
-                取消
+                {t("取消")}
               </button>
               <button class="chat-chip is-primary" type="button" disabled={busy} onClick={submit}>
-                {busy ? "送出中…" : "送出回報"}
+                {busy ? t("送出中…") : t("送出回報")}
               </button>
             </div>
           </>
@@ -185,14 +186,14 @@ function ChangelogModal(props: { onClose: () => void }) {
       <div class="error-modal-backdrop" onClick={onClose} />
       <div class="error-modal-box changelog-modal-box" role="dialog" aria-modal="true" aria-labelledby="chat-changelog-title">
         <div class="error-modal-hdr">
-          <span id="chat-changelog-title" class="notice-modal-title">版本紀錄</span>
-          <button class="error-modal-close" type="button" aria-label="關閉" onClick={onClose}>
+          <span id="chat-changelog-title" class="notice-modal-title">{t("版本紀錄")}</span>
+          <button class="error-modal-close" type="button" aria-label={t("關閉")} onClick={onClose}>
             ×
           </button>
         </div>
         <div class="changelog-modal-body">
           {failed
-            ? "無法載入版本紀錄。"
+            ? t("無法載入版本紀錄。")
             : entries?.map((entry, i) => (
                 <details class="changelog-entry" open={i === 0} key={entry.date || i}>
                   <summary class="changelog-entry-date">{entry.date || ""}</summary>
@@ -263,6 +264,61 @@ export function ConfirmModal(props: {
 // step indicator.
 // showChangelog: 版本紀錄 only on 首頁, as 面板模式 shows it only on its upload screen.
 // showHistory is off on 首頁, whose gallery has its own 最近照片 tab.
+// 右上角的語言切換：一顆地球，點開列出每個語言（用它自己的寫法），選了就換並重新載入。
+// 偏好設定裡的「介面語言」照樣在，這顆是給還沒進對話、找不到設定的人。
+function LangSwitch() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => {
+      if (!(e.target as Element).closest?.(".lang-switch")) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  const current = LANGS.find((l) => l.code === lang)?.name || lang;
+  return (
+    <div class="lang-switch">
+      <button
+        type="button"
+        class="lang-switch-btn"
+        aria-label={`${t("介面語言")}${t("：")}${current}`}
+        title={`${t("介面語言")}${t("：")}${current}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <Icon name="globe" size={20} />
+      </button>
+      {open && (
+        <div class="lang-switch-menu" role="menu">
+          {LANGS.map((l) => (
+            <button
+              key={l.code}
+              type="button"
+              role="menuitemradio"
+              aria-checked={l.code === lang}
+              class={`lang-switch-item${l.code === lang ? " is-on" : ""}`}
+              onClick={() => {
+                setOpen(false);
+                if (l.code !== lang) setLang(l.code);
+              }}
+            >
+              <span>{l.name}</span>
+              {l.code === lang && <Icon name="check" size={14} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Header(props: {
   onHome: () => void;
   onHistory: () => void;
@@ -278,6 +334,8 @@ export function Header(props: {
   reportChat?: ReportChat;
   // 管理者從「回報清單」換到某筆回報前先問一聲（還沒開始美化的照片會清掉）。
   beforeLeave?: () => Promise<boolean>;
+  // 首頁右上那顆地球：選介面語言。
+  showLang?: boolean;
 }) {
   const [reporting, setReporting] = useState(false);
   const [changelog, setChangelog] = useState(false);
@@ -305,19 +363,20 @@ export function Header(props: {
         </button>
         {/* 收成 ⋯ 的寬度，新對話跟最近照片不進選單，留在 header 上一鍵就到（寬螢幕不顯示，用攤開的那顆）。 */}
         {props.onNewChat && (
-          <button type="button" class="chat-header-icon" aria-label="新對話" title="新對話" onClick={props.onNewChat}>
+          <button type="button" class="chat-header-icon" aria-label={t("新對話")} title={t("新對話")} onClick={props.onNewChat}>
             <Icon name="plus" size={22} />
           </button>
         )}
         {props.showHistory && (
-          <button type="button" class="chat-header-icon" aria-label="最近照片" title="最近照片" onClick={props.onHistory}>
+          <button type="button" class="chat-header-icon" aria-label={t("最近照片")} title={t("最近照片")} onClick={props.onHistory}>
             <Icon name="clock" size={22} />
           </button>
         )}
+        {props.showLang && <LangSwitch />}
         <button
           type="button"
           class="chat-header-more"
-          aria-label="更多選項"
+          aria-label={t("更多選項")}
           aria-expanded={menu}
           aria-controls="chat-header-actions"
           onClick={() => setMenu(!menu)}
@@ -329,31 +388,31 @@ export function Header(props: {
           {props.showHome && (
             <button id="chat-home-btn" class="btn btn-secondary btn-sm" type="button" onClick={props.onHome}>
               <Icon name="house" size={14} />
-              <span class="btn-label">回到首頁</span>
+              <span class="btn-label">{t("回到首頁")}</span>
             </button>
           )}
           {props.onNewChat && (
             <button id="chat-new-btn" class="btn btn-secondary btn-sm" type="button" onClick={props.onNewChat}>
               <Icon name="plus" size={14} />
-              <span class="btn-label">新對話</span>
+              <span class="btn-label">{t("新對話")}</span>
             </button>
           )}
           {props.showHistory && (
             <button id="chat-history-btn" class="btn btn-secondary btn-sm" type="button" onClick={props.onHistory}>
               <Icon name="clock" size={14} />
-              <span class="btn-label">最近照片</span>
+              <span class="btn-label">{t("最近照片")}</span>
             </button>
           )}
           {props.showChangelog && (
             <button id="chat-changelog-btn" class="btn btn-secondary btn-sm" type="button" onClick={() => setChangelog(true)}>
               <Icon name="changelog" size={14} />
-              <span class="btn-label">版本紀錄</span>
+              <span class="btn-label">{t("版本紀錄")}</span>
             </button>
           )}
           {props.onSettings && (
             <button id="chat-settings-btn" class="btn btn-secondary btn-sm" type="button" onClick={props.onSettings}>
               <Icon name="gear" size={14} />
-              <span class="btn-label">設定</span>
+              <span class="btn-label">{t("設定")}</span>
             </button>
           )}
           <ReportsButton beforeLeave={props.beforeLeave} />
@@ -362,11 +421,11 @@ export function Header(props: {
             id="chat-report-btn"
             class="btn btn-sm"
             type="button"
-            title={props.jobId ? "回報此結果" : "回報問題"}
+            title={props.jobId ? t("回報此結果") : t("回報問題")}
             onClick={() => setReporting(true)}
           >
             <Icon name="report" size={14} />
-            <span class="btn-label">回報</span>
+            <span class="btn-label">{t("回報")}</span>
           </button>
         </div>
       </div>
@@ -382,8 +441,8 @@ function HeroCompare() {
   const [pos, setPos] = useState(25);
   return (
     <div class="home-compare" style={{ "--pos": `${pos}%` }}>
-      <img class="home-compare-img" src={heroBefore} alt="修圖前" />
-      <img class="home-compare-img is-after" src={heroAfter} alt="修圖後" />
+      <img class="home-compare-img" src={heroBefore} alt={t("修圖前")} />
+      <img class="home-compare-img is-after" src={heroAfter} alt={t("修圖後")} />
       <span class="home-compare-line" aria-hidden="true">
         <span class="home-compare-knob">
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
@@ -399,34 +458,37 @@ function HeroCompare() {
         min={0}
         max={100}
         value={pos}
-        aria-label="拖曳比較修圖前後"
+        aria-label={t("拖曳比較修圖前後")}
         onInput={(e) => setPos(Number(e.currentTarget.value))}
       />
     </div>
   );
 }
 
+// The headline's middle words are emphasised: the translation marks them with <em>.
+const heroLine = t("開啟<em>專屬</em>美化體驗").split(/<\/?em>/);
+
 export function HomeIntro({ onStart }: { onStart: () => void }) {
   return (
     <div class="home-intro">
       <div class="home-hero">
         <div class="home-hero-copy">
-          <p class="home-eyebrow">AI 個人化美化分析</p>
+          <p class="home-eyebrow">{t("AI 個人化美化分析")}</p>
           <h1 class="home-headline">
-            <span>一張照片，</span>
+            <span>{t("一張照片，")}</span>
             <span>
-              開啟<em>專屬</em>美化體驗
+              {heroLine[0]}<em>{heroLine[1]}</em>{heroLine[2]}
             </span>
           </h1>
           <p class="home-lead">
-            AI 先判讀人物、光線、構圖與畫面細節，給你幾個美化方向，表情、姿勢、視角也能幫你調；你也可以直接說想怎麼修，它就照你的意思來。
+            {t("AI 先判讀人物、光線、構圖與畫面細節，給你幾個美化方向，表情、姿勢、視角也能幫你調；你也可以直接說想怎麼修，它就照你的意思來。")}
           </p>
           <div class="home-start">
             <button type="button" class="btn btn-primary home-start-btn" onClick={onStart}>
               <Icon name="chat" />
-              開始對話
+              {t("開始對話")}
             </button>
-            <span class="chat-meta">選一張照片，剩下的用聊的</span>
+            <span class="chat-meta">{t("選一張照片，剩下的用聊的")}</span>
           </div>
         </div>
         <HeroCompare />
@@ -473,11 +535,11 @@ function Tile(props: {
 // state is the whole conversation's: anything still running wins over a
 // result, and 失敗 only when nothing in it survived.
 const SESSION_BADGES: Record<SessionState, string> = {
-  analyzing: "分析中",
-  rendering: "美化中",
-  ready: "待美化",
-  done: "美化完成",
-  failed: "失敗",
+  analyzing: t("分析中"),
+  rendering: t("美化中"),
+  ready: t("待美化"),
+  done: t("美化完成"),
+  failed: t("失敗"),
 };
 
 // 每格右上角的 ×，跟面板模式最近照片那顆同一個樣子（.history-cube-remove）。磚本身是
@@ -493,8 +555,8 @@ function RemoveMark({ onRemove }: { onRemove: () => void }) {
       class="history-cube-remove chat-tile-remove"
       role="button"
       tabIndex={0}
-      aria-label="刪除紀錄"
-      title="刪除紀錄"
+      aria-label={t("刪除紀錄")}
+      title={t("刪除紀錄")}
       onClick={go}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && go(e)}
     >
@@ -554,7 +616,7 @@ function SessionMosaic({ s }: { s: SessionSummary }) {
           ))}
         </span>
       )}
-      <span class="session-tile-count">{s.photo_count} 張</span>
+      <span class="session-tile-count">{t("{n} 張", { n: s.photo_count })}</span>
     </>
   );
 }
@@ -682,7 +744,7 @@ export function Gallery(props: {
               <span class="upload-gallery-tab-icon" aria-hidden="true">
                 <Icon name="clock" size={14} />
               </span>
-              最近照片
+              {t("最近照片")}
             </button>
           </div>
           <button
@@ -705,12 +767,12 @@ export function Gallery(props: {
                 />
               </svg>
             </span>
-            範例照片
+            {t("範例照片")}
           </button>
         </div>
         {props.onAll && (
           <button type="button" class="upload-gallery-all" onClick={() => props.onAll!(tab)}>
-            全部
+            {t("全部")}
             <Icon name="next" size={16} />
           </button>
         )}
@@ -742,7 +804,7 @@ export function Gallery(props: {
         </div>
       </div>
       <p id="demo-images-empty" class="history-empty" hidden={!list || list.length > 0}>
-        {recent ? "還沒有照片，按「開始對話」挑一張吧。" : "目前沒有可顯示的照片。"}
+        {recent ? t("還沒有照片，按「開始對話」挑一張吧。") : t("目前沒有可顯示的照片。")}
       </p>
       {!recent && (
         <button
@@ -752,7 +814,7 @@ export function Gallery(props: {
           disabled={!names.length}
           onClick={props.onConfirm}
         >
-          {names.length > 1 ? `使用所選照片（${names.length} 張）` : "使用所選照片"}
+          {names.length > 1 ? t("使用所選照片（{length} 張）", { length: names.length }) : t("使用所選照片")}
         </button>
       )}
     </div>
@@ -798,12 +860,12 @@ export function HistoryDrawer(props: {
   const count = picked.size;
   const allIds = (props.sessions || []).map(rowId);
   const allPicked = hasRows && allIds.every((id) => picked.has(id));
-  const delHint = allPicked ? "全部刪除" : count ? `刪除所選（${count} 張）` : "刪除所選";
+  const delHint = allPicked ? t("全部刪除") : count ? t("刪除所選（{count} 張）", { count }) : t("刪除所選");
   return (
     <>
       <div class={`history-drawer-backdrop${props.open ? " drawer-open" : ""}`} onClick={props.onClose} />
-      <aside class={`history-drawer${props.open ? " drawer-open" : ""}`} role="dialog" aria-label="最近照片">
-        <button class="history-drawer-close-btn" type="button" aria-label="關閉" onClick={props.onClose}>
+      <aside class={`history-drawer${props.open ? " drawer-open" : ""}`} role="dialog" aria-label={t("最近照片")}>
+        <button class="history-drawer-close-btn" type="button" aria-label={t("關閉")} onClick={props.onClose}>
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
             <path
               d="M18 6l-4 4m0 0h4m-4 0V6M6 18l4-4m0 0H6m4 0v4"
@@ -816,7 +878,7 @@ export function HistoryDrawer(props: {
         </button>
         <div class="history-header">
           <div class="history-header-top">
-            <h2>最近照片</h2>
+            <h2>{t("最近照片")}</h2>
             {hasRows && (
               <div class="history-header-actions">
                 {picking ? (
@@ -828,10 +890,10 @@ export function HistoryDrawer(props: {
                       aria-pressed={allPicked}
                       onClick={() => setPicked(allPicked ? new Set() : new Set(allIds))}
                     >
-                      {allPicked ? "取消全選" : "全選"}
+                      {allPicked ? t("取消全選") : t("全選")}
                     </button>
                     <button id="history-select-cancel-btn" class="btn btn-outline btn-sm" type="button" onClick={stopPicking}>
-                      取消
+                      {t("取消")}
                     </button>
                     <button
                       id="history-delete-selected-btn"
@@ -846,7 +908,7 @@ export function HistoryDrawer(props: {
                         } else if (await props.onRemove([...picked])) stopPicking();
                       }}
                     >
-                      刪除
+                      {t("刪除")}
                     </button>
                   </>
                 ) : (
@@ -861,7 +923,7 @@ export function HistoryDrawer(props: {
                         <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="2" />
                         <path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                       </svg>
-                      選取
+                      {t("選取")}
                     </button>
                   </>
                 )}
@@ -885,7 +947,7 @@ export function HistoryDrawer(props: {
           )}
         </div>
         <p class="history-empty" hidden={!props.sessions || props.sessions.length > 0}>
-          目前還沒有照片。
+          {t("目前還沒有照片。")}
         </p>
       </aside>
     </>

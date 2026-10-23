@@ -2,6 +2,8 @@
 import copy
 import json
 
+from photo_agent import i18n
+
 
 def validate_texts(value, prompt=None):
     if not isinstance(value, list) or len(value) > 40:
@@ -78,14 +80,14 @@ def enforce_text_qa(qa, analysis):
     qa['checks']['literal_text_followed'] = passed
     if passed:
         return qa
-    warning = '指定文字未通過逐字核對，或有額外新增文案，請人工複查。'
+    warning = i18n.tr('指定文字未通過逐字核對，或有額外新增文案，請人工複查。')
     qa.update({'pass': False, 'overall_status': '需人工複查', 'failure_level': 'major',
-        'summary': warning, 'recommendation': '請核對指定字樣後再使用此成品。'})
+        'summary': warning, 'recommendation': i18n.tr('請核對指定字樣後再使用此成品。')})
     score = qa.get('score')
     qa['score'] = min(score, 5) if type(score) in (int, float) else None
     qa['warnings'] = list(dict.fromkeys([*(qa.get('warnings') or []), warning]))
     if not valid:
         qa['text_adherence'] = dict(items=[dict(expected_text=s, observed_text='', status='uncertain',
-            reason='QA 未回傳完整且有效的逐字核對結果') for s in texts],
-            unexpected_added_text=None, reason='文字核對資料不完整')
+            reason=i18n.tr('QA 未回傳完整且有效的逐字核對結果')) for s in texts],
+            unexpected_added_text=None, reason=i18n.tr('文字核對資料不完整'))
     return qa

@@ -21,6 +21,7 @@ from aiserver_utils.pf_redis import pf_redis_client
 from aiserver_utils.s3 import S3Access, S3AccessV2
 
 from image_tools import create_preview_bytes, HISTORY_THUMBNAIL_MAX_SIDE
+from photo_agent import i18n
 
 MSG_ID_QUEUE = os.getenv("REDIS_MSG_QUEUE", "yce_ai:photoAgent:queue")
 MSG_DETAIL_QUEUE = os.getenv("REDIS_MSG_INFO_FORMAT", "yce_ai:photoAgent:{msg_id}:info")
@@ -168,6 +169,12 @@ def enqueue(engine_param_dict, src_content=None, job_id=None, queue=MSG_ID_QUEUE
             get_s3_accessor().upload_to_s3(src_content, engine_param_dict["srcKeys"])
         _upload_source_thumbnail(src_content[0], engine_param_dict["srcKeys"][0], job_id)
 
+    if not i18n.is_source():
+        # Only when it is not Chinese, so a Chinese job is the same as before.
+        for act in engine_param_dict.get("acts") or []:
+            if isinstance(act, dict) and isinstance(act.get("params"), dict):
+                act["params"].setdefault("lang", i18n.current())
+
     upload_dict = engine_param_dict.copy()
     # After upload and immediately before Redis insertion: queue wait excludes
     # the original photo's S3-upload latency. Other job stages are untouched.
@@ -211,7 +218,7 @@ def lost_job_error(job_id, info, queue=MSG_ID_QUEUE):
         return None
     if get_redis_conn().zscore(queue, job_id) is not None:
         return None
-    return {"status": "error", "error": JOB_LOST, "error_message": JOB_LOST_MESSAGE}
+    return {"status": "error", "error": JOB_LOST, "error_message": i18n.tr(JOB_LOST_MESSAGE)}
 
 
 def create_presigned_url(object_name, action, content_type=None):

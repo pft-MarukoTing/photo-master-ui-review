@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { nextDisplayOrder } from "./display-order";
 import type { FaceRef } from "./chat";
 import type { Settings } from "./settings";
@@ -179,8 +180,8 @@ export function usePreviewConversation(input: Input) {
       const replyText = (current.current.introductionEnabled && !budget.current.published && !current.current.emptyRoster && updated.presentation ? `${updated.presentation.opening}\n\n${updated.presentation.closing}` : "") || updated.question?.text?.trim() || updated.reply?.trim() || "";
       const showPeople = current.current.introductionEnabled && !budget.current.published && !current.current.emptyRoster && !!replyText;
       if (showPeople) budget.current.published = true;
-      setState(old => ({ ...old, result: updated, events: [...old.events.map(event => event.questionSnapshot?.token === result.token ? { ...event, questionSnapshot: { ...event.questionSnapshot, answered: true, answer: text || ids.map(id => people.current.find(p => p.preview_person_id === id)?.name || id).join("、") } } : event), { id: `${updated.token}-answer-${old.events.length}`, order: userOrder, after: input.turns,
-        text: text || `指定：${ids.map(id => input.preview?.people?.find(p => p.preview_person_id === id)?.label || id).join("、")}`,
+      setState(old => ({ ...old, result: updated, events: [...old.events.map(event => event.questionSnapshot?.token === result.token ? { ...event, questionSnapshot: { ...event.questionSnapshot, answered: true, answer: text || ids.map(id => people.current.find(p => p.preview_person_id === id)?.name || id).join(t("、")) } } : event), { id: `${updated.token}-answer-${old.events.length}`, order: userOrder, after: input.turns,
+        text: text || t("指定：{v1}", { v1: ids.map(id => input.preview?.people?.find(p => p.preview_person_id === id)?.label || id).join(t("、")) }),
         showPeople: false, role: "user" }, ...(replyText ? [{
         id: `${updated.token}-${old.events.length}`, generation: key, order: nextDisplayOrder(), after: input.turns, text: replyText, showPeople,
         ...(updated.question ? { questionSnapshot: { ...updated.question, token: updated.token, revision: updated.revision }, people: people.current.map(p => ({ ...p })) } : {}),

@@ -1,6 +1,7 @@
 // Left side of a session: the flow breadcrumb, Before/After compare card
 // and 美化紀錄 version strip, with the old markup and classes so styles.css
 // applies unchanged.
+import { t } from "./i18n";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { api, urls } from "./api";
 import type { Capabilities, Dict, Photo, Version } from "./types";
@@ -11,7 +12,7 @@ import { ConfirmModal } from "./home";
 import { PromptsModal } from "./prompts-modal";
 import type { VNode } from "preact";
 
-const STEP_NAMES = ["上傳", "分析", "美化", "完成"];
+const STEP_NAMES = [t("上傳"), t("分析"), t("美化"), t("完成")];
 
 // done 這一步做完了、busy 正在跑、pending 停在這裡等使用者。
 export type StepState = "done" | "busy" | "pending";
@@ -36,7 +37,7 @@ export function stepState(photo: Photo, versions: Version[], adjusting = false):
 export function StepIndicator({ step, state, pre }: { step: number; state: StepState; pre?: boolean }) {
   return (
     <div class={`container chat-flow-slot${pre ? " is-pre" : ""}`} id="step-indicator-slot">
-      <nav class="chat-flow" aria-label="美化流程">
+      <nav class="chat-flow" aria-label={t("美化流程")}>
         <ol>
           {STEP_NAMES.map((name, i) => {
             const n = i + 1;
@@ -91,9 +92,9 @@ interface MadeWith {
 
 const NO_DETAILS: MadeWith = { portraits: [], recipes: [], styles: [], hint: "" };
 
-const DETAIL_LABEL: Record<Detail, string> = { face: "人像調整", recipe: "畫面調整", style: "美化風格", prompt: "個人化" };
+const DETAIL_LABEL: Record<Detail, string> = { face: t("人像調整"), recipe: t("畫面調整"), style: t("美化風格"), prompt: t("個人化") };
 // The bubble's heading: 個人化 is the pill's short form of 個人化需求.
-const DETAIL_TITLE: Record<Detail, string> = { ...DETAIL_LABEL, prompt: "個人化需求" };
+const DETAIL_TITLE: Record<Detail, string> = { ...DETAIL_LABEL, prompt: t("個人化需求") };
 
 function DetailIcon({ detail }: { detail: Detail }) {
   const line = { stroke: "currentColor", "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round" } as const;
@@ -147,9 +148,9 @@ function useDownload(): [(job: string, base: string) => void, VNode | null] {
   const [notice, setNotice] = useState<string | null>(null);
   const start = (job: string, base: string) =>
     void downloadImage(urls.resultImage(job), base).then((ok) =>
-      setNotice(ok ? "已下載完成。" : "下載失敗，請稍後再試。"),
+      setNotice(ok ? t("已下載完成。") : t("下載失敗，請稍後再試。")),
     );
-  const el = notice ? <ConfirmModal message={notice} confirmLabel="確定" onAnswer={() => setNotice(null)} /> : null;
+  const el = notice ? <ConfirmModal message={notice} confirmLabel={t("確定")} onAnswer={() => setNotice(null)} /> : null;
   return [start, el];
 }
 
@@ -388,8 +389,8 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                   canvas-actions 照舊是標頭那排的一格。 */}
               <div class="canvas-tools">
                 {onViewer && (
-                  <button type="button" class="canvas-version-btn" onClick={onViewer} aria-label="看大圖、切換版本">
-                    {generated && current ? `第 ${current.ordinal} 版` : "原圖"}
+                  <button type="button" class="canvas-version-btn" onClick={onViewer} aria-label={t("看大圖、切換版本")}>
+                    {generated && current ? t("第 {ordinal} 版", { ordinal: current.ordinal }) : t("原圖")}
                     <Icon name="caret" size={14} />
                   </button>
                 )}
@@ -403,7 +404,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                       type="button"
                       disabled={originPicked}
                       title="compare"
-                      aria-label={generated ? "查看原始照片" : "查看美化結果"}
+                      aria-label={generated ? t("查看原始照片") : t("查看美化結果")}
                       onClick={() => setShowGenerated(!showGenerated)}
                     >
                       <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
@@ -418,7 +419,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                     class="canvas-btn"
                     type="button"
                     title={fullscreen ? "back to original window" : "full screen"}
-                    aria-label={fullscreen ? "返回原視窗" : "全螢幕檢視比較"}
+                    aria-label={fullscreen ? t("返回原視窗") : t("全螢幕檢視比較")}
                     onClick={() => setFullscreen(!fullscreen)}
                   >
                     <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
@@ -457,8 +458,8 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                           e.preventDefault();
                           download(job, `photomaster_${photo.photo_id}_v${current!.ordinal}`);
                         }}
-                        title="下載結果"
-                        aria-label="下載結果"
+                        title={t("下載結果")}
+                        aria-label={t("下載結果")}
                       >
                         <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
                           <path
@@ -480,11 +481,11 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                 id="original-img"
                 class="compare-img compare-img-original"
                 src={source}
-                alt="原始照片"
+                alt={t("原始照片")}
                 style={arriving ? { visibility: "hidden" } : undefined}
               />
               {shownJob && (
-                <img id="generated-img" class="compare-img compare-img-generated" src={urls.resultImage(shownJob)} alt="美化結果" />
+                <img id="generated-img" class="compare-img compare-img-generated" src={urls.resultImage(shownJob)} alt={t("美化結果")} />
               )}
               {busy && (
                 <div class="canvas-busy" role="status" aria-live="polite">
@@ -542,7 +543,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                   <button
                     class="personalize-popover-close"
                     type="button"
-                    aria-label="關閉"
+                    aria-label={t("關閉")}
                     onClick={() => setOpen(null)}
                   >
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
@@ -557,12 +558,12 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                         <div class="portrait-adjustment-row" role="listitem">
                           <img class="portrait-adjustment-thumbnail" src={faceThumbs[i] || undefined} alt={p.label} title={p.label} />
                           <div class="portrait-adjustment-items">
-                            {p.tags.map((t) => (
-                              <span class="portrait-adjustment-item" aria-label={`${t}，已完成`}>
+                            {p.tags.map((tag) => (
+                              <span class="portrait-adjustment-item" aria-label={t("{tag}，已完成", { tag })}>
                                 <span class="portrait-check-complete" aria-hidden="true">
                                   ✓
                                 </span>
-                                {t}
+                                {tag}
                               </span>
                             ))}
                           </div>
@@ -586,9 +587,9 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
           {versions.length > 0 && (
             <div id="version-strip" class="version-strip">
               <div class="version-strip-head">
-                <span class="version-strip-title">美化紀錄</span>
+                <span class="version-strip-title">{t("美化紀錄")}</span>
                 <span id="version-strip-count" class="version-strip-count">
-                  {originPicked ? "原圖" : `第 ${idx + 1}／${versions.length} 組`}
+                  {originPicked ? t("原圖") : t("第 {v1}／{length} 組", { v1: idx + 1, length: versions.length })}
                 </span>
                 <span class="version-strip-note">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -596,10 +597,10 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                     <path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
                     <circle cx="12" cy="7.8" r="1.1" fill="currentColor" />
                   </svg>
-                  每張美化結果皆由原圖重新產生
+                  {t("每張美化結果皆由原圖重新產生")}
                 </span>
               </div>
-              <div id="version-strip-track" class="version-strip-track" role="tablist" aria-label="這張照片的美化紀錄">
+              <div id="version-strip-track" class="version-strip-track" role="tablist" aria-label={t("這張照片的美化紀錄")}>
                 <div class="version-strip-origin">
                   <div class="version-origin">
                     <button
@@ -607,14 +608,14 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                       class={`version-origin-tile${originPicked ? " is-current" : ""}`}
                       role="tab"
                       aria-selected={originPicked}
-                      title="原圖"
+                      title={t("原圖")}
                       onClick={() => setOriginPicked(true)}
                       onMouseEnter={(e) => showPreview(e.currentTarget, urls.sourceThumb(photo.analyze_job_id))}
                       onMouseLeave={hidePreview}
                     >
                       <img src={urls.sourceThumb(photo.analyze_job_id)} alt="" />
                     </button>
-                    <span class="version-group-label">原圖</span>
+                    <span class="version-group-label">{t("原圖")}</span>
                   </div>
                   <div class="version-strip-divider" />
                 </div>
@@ -629,7 +630,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                             class={`version-tile${on ? " is-current" : ""}`}
                             role="tab"
                             aria-selected={on}
-                            title={`第 ${v.ordinal} 版`}
+                            title={t("第 {ordinal} 版", { ordinal: v.ordinal })}
                             onClick={() => {
                               // 點的若是同一版，version_id 沒變、上面的 effect 不會跑，這裡自己切回 After。
                               setOriginPicked(false);
@@ -642,7 +643,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                             <img src={urls.resultThumb(versionJob(v))} alt="" />
                           </button>
                         </div>
-                        <span class="version-group-label">第 {v.ordinal} 版</span>
+                        <span class="version-group-label">{t("第 {n} 版", { n: v.ordinal })}</span>
                       </div>
                     );
                   })}
@@ -657,7 +658,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                           </svg>
                         </div>
                       </div>
-                      <span class="version-group-label">調整中</span>
+                      <span class="version-group-label">{t("調整中")}</span>
                     </div>
                   )}
                 </div>
@@ -723,23 +724,23 @@ export function VersionViewer({ photo, versions, current, open, onClose, onSelec
   if (!open) return null;
   const source = urls.sourceImage(photo.analyze_job_id);
   const job = current && !originPicked ? versionJob(current) : null;
-  const title = job ? `第 ${current!.ordinal} 版` : "原圖";
+  const title = job ? t("第 {ordinal} 版", { ordinal: current!.ordinal }) : t("原圖");
   const release = () => setHolding(false);
 
   return (
-    <div class="version-viewer" role="dialog" aria-modal="true" aria-label={`${title}大圖`}>
+    <div class="version-viewer" role="dialog" aria-modal="true" aria-label={t("{title}大圖", { title })}>
       <div class="version-viewer-head">
         <span class="version-viewer-title">
-          {holding ? "原圖" : title}
-          {versions.length > 0 && <small>共 {versions.length} 版</small>}
+          {holding ? t("原圖") : title}
+          {versions.length > 0 && <small>{t("共 {n} 版", { n: versions.length })}</small>}
         </span>
-        <button type="button" class="version-viewer-btn" aria-label="關閉" onClick={onClose}>
+        <button type="button" class="version-viewer-btn" aria-label={t("關閉")} onClick={onClose}>
           <Icon name="x" size={18} />
         </button>
       </div>
       <div class="version-viewer-stage" onClick={(e) => e.target === e.currentTarget && onClose()}>
-        <img src={source} alt="原始照片" hidden={!!job && !holding} />
-        {job && <img src={urls.resultImage(job)} alt={`${title}美化結果`} hidden={holding} />}
+        <img src={source} alt={t("原始照片")} hidden={!!job && !holding} />
+        {job && <img src={urls.resultImage(job)} alt={t("{title}美化結果", { title })} hidden={holding} />}
       </div>
       <div class="version-viewer-foot">
         {job && (
@@ -760,7 +761,7 @@ export function VersionViewer({ photo, versions, current, open, onClose, onSelec
               onBlur={release}
               onContextMenu={(e) => e.preventDefault()}
             >
-              按住看原圖
+              {t("按住看原圖")}
             </button>
             <a
               class="version-viewer-btn"
@@ -770,15 +771,15 @@ export function VersionViewer({ photo, versions, current, open, onClose, onSelec
                 e.preventDefault();
                 download(job, `photomaster_${photo.photo_id}_v${current!.ordinal}`);
               }}
-              aria-label={`下載${title}`}
-              title="下載"
+              aria-label={t("下載{title}", { title })}
+              title={t("下載")}
             >
               <Icon name="down" size={18} />
             </a>
           </div>
         )}
         {versions.length > 0 && (
-          <div class="version-viewer-track" ref={trackRef} role="tablist" aria-label="這張照片的美化紀錄">
+          <div class="version-viewer-track" ref={trackRef} role="tablist" aria-label={t("這張照片的美化紀錄")}>
             <button
               type="button"
               class={`version-viewer-tile${!job ? " is-current" : ""}`}
@@ -787,7 +788,7 @@ export function VersionViewer({ photo, versions, current, open, onClose, onSelec
               onClick={() => setOriginPicked(true)}
             >
               <img src={urls.sourceThumb(photo.analyze_job_id)} alt="" />
-              <span>原圖</span>
+              <span>{t("原圖")}</span>
             </button>
             {versions.map((v) => {
               const on = !!job && v.version_id === current?.version_id;
@@ -803,7 +804,7 @@ export function VersionViewer({ photo, versions, current, open, onClose, onSelec
                   }}
                 >
                   <img src={urls.resultThumb(versionJob(v))} alt="" />
-                  <span>第 {v.ordinal} 版</span>
+                  <span>{t("第 {n} 版", { n: v.ordinal })}</span>
                 </button>
               );
             })}
@@ -873,7 +874,7 @@ export function SplitGrip() {
       class="split-grip"
       role="separator"
       aria-orientation="horizontal"
-      aria-label="拖動調整照片和對話的大小"
+      aria-label={t("拖動調整照片和對話的大小")}
       aria-valuemin={SPLIT_MIN * 100}
       aria-valuemax={SPLIT_MAX * 100}
       aria-valuenow={Math.round(split * 100)}

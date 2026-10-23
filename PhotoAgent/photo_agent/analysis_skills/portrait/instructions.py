@@ -2,6 +2,8 @@
 
 import json
 
+from photo_agent import i18n
+
 from prompts import (
     _BOX_SCHEMA,
     _schema_boolean,
@@ -275,7 +277,7 @@ def build_portrait_qc_instruction(persons):
     subject_index from Call A. Results are merged by subject_index, never by
     response-array position.
     """
-    return (
+    return i18n.localize_analysis(
         _PORTRAIT_QC_PERSONA_HEADER
         + "\nPeople to review, in order:\n"
         + _person_list_text(persons)
