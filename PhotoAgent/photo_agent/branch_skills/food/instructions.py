@@ -1,5 +1,6 @@
 """The food branch's analysis and reframing instructions and their response schemas."""
 
+from photo_agent import i18n
 from prompts import (
     _BOX_SCHEMA, _canvas_shape_difference, _cross_direction_retained, _schema_array_of, _schema_boolean,
     _schema_enum, _schema_object, _schema_string, expand_permitted,
@@ -23,6 +24,16 @@ SHADOW_SOURCES = (
 ITEM_PREFIX = {"reframe": "重新構圖：", "alignment": "水平／透視校正：", "distraction": "移除干擾物：", "shadow": "改善陰影："}
 ITEM_LIMITS = {"reframe": 1, "alignment": 1, "distraction": 2, "shadow": 1}
 LOOK_PREFIX = "整體風格："
+
+
+def localized(text):
+    """A food-branch instruction for the user's language: as it is in Chinese;
+    otherwise the user-facing prefixes are the translated ones (重新構圖： stays,
+    the program reads it) and the language rule names that language."""
+    if not i18n.is_source():
+        for prefix in (LOOK_PREFIX, *(p for kind, p in ITEM_PREFIX.items() if kind != "reframe")):
+            text = text.replace(prefix, i18n.tr(prefix))
+    return i18n.localize_analysis(text)
 
 _PERSONA = """You are a food photographer finishing your own photo: turn it into a food photo that makes people want to eat -- the food is the most inviting and clearest thing in the frame, the light and colour have atmosphere, and the frame is clean with a clear hierarchy. It stays the same meal on the same table at the same moment, and the user recognises it at once as their own photo."""
 

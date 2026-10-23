@@ -11,7 +11,7 @@ from ..base import BranchSkill
 from .adapter import BRANCH, merge_reframe, to_analysis
 from .edit_prompt import build_food_edit_prompt
 from .instructions import (
-    ANALYSIS_INSTRUCTION, analysis_schema, ratio_labels, ratio_policy, reframe_instruction, reframe_schema,
+    ANALYSIS_INSTRUCTION, analysis_schema, localized, ratio_labels, ratio_policy, reframe_instruction, reframe_schema,
 )
 
 
@@ -39,7 +39,7 @@ class FoodBranchSkill(BranchSkill):
 
         width, height = get_image_dimensions(image_bytes)
         pref = str(aspect_ratio or "auto").strip().lower()
-        instruction = (ANALYSIS_INSTRUCTION + ratio_policy(pref, width, height) + photo_facts_section(photo_facts)
+        instruction = (localized(ANALYSIS_INSTRUCTION + ratio_policy(pref, width, height)) + photo_facts_section(photo_facts)
                        + chat_analysis.context(user_requests))
         result, usage = _request(image_bytes, analysis_model, instruction, analysis_schema(_labels(pref, width, height)),
                                  "Photo analysis failed (food branch)")
@@ -58,8 +58,8 @@ class FoodBranchSkill(BranchSkill):
             "other_review_items": [item["recipe"] for item in food["review_items"] if item["kind"] != "reframe"],
             "previous_framing": food["framing"],
         }
-        instruction = reframe_instruction(ratio_policy(pref, width, height),
-                                          json.dumps(settled, ensure_ascii=False))
+        instruction = localized(reframe_instruction(ratio_policy(pref, width, height),
+                                                    json.dumps(settled, ensure_ascii=False)))
         reframe, usage = _request(image_bytes, analysis_model, instruction, reframe_schema(_labels(pref, width, height)),
                                   "Photo reframing failed (food branch)")
         return merge_reframe(analysis, reframe, pref, (width, height)), usage, instruction

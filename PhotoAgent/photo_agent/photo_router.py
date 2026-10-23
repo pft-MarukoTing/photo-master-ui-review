@@ -7,6 +7,7 @@ import logging
 import time
 
 from image_tools import create_preview_bytes, image_to_data_url
+from photo_agent import i18n
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ def route_photo(image_bytes, model=ROUTER_MODEL, *, max_side=ROUTER_IMAGE_MAX_SI
     data_url = image_to_data_url(create_preview_bytes(image_bytes, max_side=max_side), "image/jpeg")
     payload = openai_client._responses_payload(
         model,
-        [{"type": "input_text", "text": ROUTER_INSTRUCTION}, {"type": "input_image", "image_url": data_url}],
+        [{"type": "input_text", "text": i18n.localize_analysis(ROUTER_INSTRUCTION)}, {"type": "input_image", "image_url": data_url}],
         text_format=ROUTER_SCHEMA, reasoning_effort=ROUTER_REASONING_EFFORT,
     )
     payload["max_output_tokens"] = ROUTER_MAX_OUTPUT_TOKENS

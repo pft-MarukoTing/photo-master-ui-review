@@ -273,6 +273,11 @@ TEXT = {
     "要修改或調整其他項目，可以點下面的美化項目，或按「{label}」我就開始。": "To change this or adjust other items, tap an item below, or tap “{label}” to start.",
     "已收到你的回答，但需求整理暫時失敗，尚未套用；可以重試這項回答。": "Got your answer, but I couldn't process the request, so it hasn't been applied. You can try this answer again.",
     "這張照片還沒分析，只能依照個人化需求修圖；要整張美化請先按「幫我分析」。": "This photo hasn't been analyzed, so it can only be retouched based on My Requests. To retouch the whole photo, tap “Analyze for Me” first.",
+    # The food branch's recipe prefixes (重新構圖： stays: the program reads it)
+    "整體風格：": "Overall Look: ",
+    "水平／透視校正：": "Straighten: ",
+    "移除干擾物：": "Remove Distractions: ",
+    "改善陰影：": "Improve Shadows: ",
 }
 
 

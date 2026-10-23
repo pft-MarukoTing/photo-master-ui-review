@@ -4,6 +4,8 @@ import unittest
 
 from photo_agent import capabilities, chat_assistant, i18n, i18n_en
 from prompts import build_overall_analysis_instruction
+from photo_agent import photo_router
+from photo_agent.branch_skills.food import adapter as food_adapter, instructions as food_instructions
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -115,6 +117,33 @@ class EnglishTest(unittest.TestCase):
         merged = chat_assistant._merge_prompt_wishes(
             "Woman on the left: blue jacket; Woman on the left: no glasses; Background: beach", analysis)
         self.assertEqual(merged, "Woman on the left: blue jacket, no glasses; Background: beach")
+
+
+class AnalysisStepsLanguageTest(unittest.TestCase):
+    """Call 0 and the food branch write user-visible text in the page's language too."""
+
+    def test_chinese_prompts_are_untouched(self):
+        self.assertEqual(i18n.localize_analysis(photo_router.ROUTER_INSTRUCTION), photo_router.ROUTER_INSTRUCTION)
+        self.assertEqual(food_instructions.localized(food_instructions.ANALYSIS_INSTRUCTION),
+                         food_instructions.ANALYSIS_INSTRUCTION)
+        self.assertEqual(food_adapter.normalize(self._result())["review_items"][0]["recipe"], "水平／透視校正：tilted")
+
+    def test_english_prompts_ask_for_english(self):
+        with i18n.use("en"):
+            router = i18n.localize_analysis(photo_router.ROUTER_INSTRUCTION)
+            food = food_instructions.localized(food_instructions.ANALYSIS_INSTRUCTION)
+            recipe = food_adapter.normalize(self._result())["review_items"][0]["recipe"]
+        self.assertIn("photo_summary and scene_type are English", router)
+        self.assertNotIn("Traditional Chinese", router + food)
+        # The reframe prefix is read by the program, so it stays; the others are the user's.
+        self.assertIn("重新構圖：", food)
+        self.assertIn("Overall Look:", food)
+        self.assertNotIn("移除干擾物", food.split("LANGUAGE\n")[0])
+        self.assertEqual(recipe, "Straighten: tilted")
+
+    @staticmethod
+    def _result():
+        return {"review_items": [], "alignment_strategy": {"state": "rotated", "deliberate": False, "decision": "tilted"}}
 
 
 class ReframeTextTest(unittest.TestCase):

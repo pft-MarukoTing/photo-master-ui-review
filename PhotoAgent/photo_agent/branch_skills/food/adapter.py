@@ -3,6 +3,7 @@
 import copy
 
 from image_tools import resolve_crop_box_with_report
+from photo_agent import i18n
 from prompts import ANALYSIS_RESPONSE_SCHEMA_OVERALL, _replace_reframe_item
 
 from .instructions import ITEM_LIMITS, ITEM_PREFIX, LOOK_PREFIX
@@ -31,7 +32,7 @@ def normalize(result):
         kept = [item for item in kept if item["kind"] != "alignment"]
     elif not any(item["kind"] == "alignment" for item in kept):
         kept.append({"kind": "alignment", "plan": strategy["decision"],
-                     "recipe": ITEM_PREFIX["alignment"] + strategy["decision"], "inverse": ALIGNMENT_DECLINED})
+                     "recipe": i18n.tr(ITEM_PREFIX["alignment"]) + strategy["decision"], "inverse": ALIGNMENT_DECLINED})
     result["review_items"] = kept
     return result
 
@@ -110,8 +111,9 @@ def to_analysis(result, photo_facts, image_size):
     hero = _hero(result)
     keep = result["framing"]["keep_in_frame"] or ([{"label": hero["label"], "box": hero["box"]}] if hero else [])
     look_recipe = result["look_recipe"]
-    if not look_recipe.startswith(LOOK_PREFIX):
-        look_recipe = LOOK_PREFIX + look_recipe
+    prefix = i18n.tr(LOOK_PREFIX)
+    if not (look_recipe.startswith(LOOK_PREFIX) or look_recipe.lower().startswith(prefix.strip().lower())):
+        look_recipe = prefix + look_recipe
     entries = [{"correction_plan": result["edit_brief"], "correction_axes": list(LOOK_AXES),
                 "retouch_recipe": look_recipe, "correction_inverse": LOOK_DECLINED}]
     entries += [_review_entry(item) for item in result["review_items"]]

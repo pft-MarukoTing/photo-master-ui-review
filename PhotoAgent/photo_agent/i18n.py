@@ -218,5 +218,6 @@ def localize_analysis(prompt):
     if is_source():
         return prompt
     name = language_name()
-    prompt = prompt.replace("must be Traditional Chinese", f"must be {name}").replace("in Traditional Chinese", f"in {name}")
+    for rule in ("must be", "in", "is", "are"):
+        prompt = prompt.replace(f"{rule} Traditional Chinese", f"{rule} {name}")
     return prompt + "\n\n" + ANALYSIS_NOTE.format(name=name)
