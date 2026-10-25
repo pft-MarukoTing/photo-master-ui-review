@@ -6,6 +6,7 @@
 export const EN: Record<string, string> = {
   // Punctuation the page joins things with
   "、": ", ",
+  "{v1}和{v2}": "{v1} and {v2}",
   "；": "; ",
   "：": ": ",
   "。": ". ",
@@ -355,12 +356,12 @@ export const EN: Record<string, string> = {
   "選好了": "Done",
 
   // face.ts (the same names as capabilities in the backend)
-  "閉眼": "Closed Eyes",
+  "閉眼": "Eyes",
   "視線": "Gaze",
-  "髮絲": "Stray Hairs",
+  "髮絲": "Hair",
   "笑容": "Smile",
-  "保留髮絲動態": "Keep Hair Movement",
-  "梳整俐落": "Smooth and Tidy",
+  "保留髮絲動態": "Natural",
+  "梳整俐落": "Tidy",
   "自動": "Auto",
   "不笑": "No Smile",
   "微笑": "Gentle Smile",

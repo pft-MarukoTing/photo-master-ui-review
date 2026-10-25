@@ -3,7 +3,7 @@
 // the extra instruction (個人化需求) once there is one, and the render settings
 // (設定) while adjusting or once a typed request changed them.
 // Every click is saved to the photo's plan right away as a patch.
-import { lang, SOURCE, t } from "./i18n";
+import { lang, listOf, SOURCE, t } from "./i18n";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { urls } from "./api";
 import { fillNoteBox, noteBoxKeys, promptFaces, promptSections, PromptEditor, readPromptBox, type FaceRef } from "./chat";
@@ -80,6 +80,8 @@ export function categoriesFor(a: Analysis, caps: Capabilities, plan: Plan): Cate
 // 幾項要修」任何一張照片都講得出來，就等於沒看過這一張。只有名稱本身長到會蓋掉
 // 這句話的（畫面建議），才退回用項目數帶過。
 const short = (s: string, n = 14) => (s.length > n ? `${s.slice(0, n)}…` : s);
+// 一個人要修的項目。英文在句中要小寫（"eyes and hair"），中文不變。
+const fixList = (labels: string[]) => listOf(lang === SOURCE ? labels : labels.map((l) => l.toLowerCase()));
 
 export function topicLead(cat: Category, a: Analysis, caps: Capabilities, plan: Plan): string {
   switch (cat) {
@@ -96,7 +98,7 @@ export function topicLead(cat: Category, a: Analysis, caps: Capabilities, plan: 
       // 三個人以上就只點名字，不然一句話要塞六七個項目，反而看不出重點。
       if (who.length > 2)
         return t("人像我幫你看過了，{v1}等 {length} 個人都有要調整的地方。要先看一下嗎？", { v1: who.slice(0, 2).map((p) => p.name).join(t("、")), length: who.length });
-      const named = who.map((p) => t("{name}的{v2}", { name: p.name, v2: p.fixes.join(t("、")) })).join(t("、"));
+      const named = listOf(who.map((p) => t("{name}的{v2}", { name: p.name, v2: fixList(p.fixes) })));
       return t("人像我幫你看過了，{named}會幫你調整。要先看一下嗎？", { named });
     }
     case "recipe":
@@ -127,7 +129,7 @@ export function topicRecap(cat: Category, a: Analysis, caps: Capabilities, plan:
         .filter((e) => e.items.length);
       if (!on.length) return t("人像目前都不修。");
       if (on.length > 2) return t("人像會修 {length} 個人。", { length: on.length });
-      return t("人像會修{v1}。", { v1: on.map((e) => t("{name}的{v2}", { name: e.name, v2: e.items.join(t("、")) })).join(t("、")) });
+      return t("人像會修{v1}。", { v1: listOf(on.map((e) => t("{name}的{v2}", { name: e.name, v2: fixList(e.items) }))) });
     }
     case "recipe": {
       // 只給數字：項目名稱本身都是一整句，列出來會把這一行撐成一段；要看細節

@@ -83,6 +83,12 @@ export function shownRecipe(text: string): string {
   return catalog ? text.replace(/^\s*重新構圖\s*[:：]\s*/, `${t("重新構圖：")} `) : text;
 }
 
+/** Items read as one list: 「甲、乙、丙」 in Chinese, "a, b and c" in English. */
+export function listOf(items: string[]): string {
+  if (!catalog || items.length < 2) return items.join(t("、"));
+  return t("{v1}和{v2}", { v1: items.slice(0, -1).join(t("、")), v2: items[items.length - 1] });
+}
+
 /** Switches the page's language: remembered, then the page reloads in it. */
 export function setLang(code: string) {
   try {
