@@ -660,7 +660,10 @@
     if (state.widthKey !== key) {
       // At most 17 full-width characters: longer sentences wrap onto a full
       // first line, so the block stays centered with room on both sides.
-      state.width = Math.min(measureProgressFeedWidth(texts), measureProgressFeedWidth(["國".repeat(17)]));
+      // English sentences run two to three times longer, so outside Chinese
+      // the cap is about 48 letters instead, or nearly every one would wrap.
+      const cap = window.PHOTOAGENT_LANG === "zh-TW" ? "國".repeat(17) : "n".repeat(48);
+      state.width = Math.min(measureProgressFeedWidth(texts), measureProgressFeedWidth([cap]));
       state.widthKey = key;
     }
     return state.width;
