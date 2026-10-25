@@ -586,6 +586,26 @@
       }
       .step-indicator-slot > .mode-switch { order: -1; align-self: flex-end; margin: 0; }
     }
+    /* 英文步驟名比中文長，四個步驟加開關要約 703px 才放得下一行；更窄時
+       步驟會被開關蓋住，所以英文到 720px 就換成上面同一套直排。中文不變。 */
+    @media (min-width: 561px) and (max-width: 720px) {
+      :root:lang(en) { --step-indicator-h: 117px; }
+      :lang(en) .ap-step-indicator { align-items: flex-start; }
+      :lang(en) .ap-step {
+        flex-direction: column;
+        gap: 4px;
+        text-align: center;
+      }
+      :lang(en) .ap-step-name { font-size: 15px; }
+      :lang(en) .ap-step-line { margin: 14px 14px 0; }
+      :lang(en) .step-indicator-slot:not([hidden]) {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding-top: 12px;
+      }
+      :lang(en) .step-indicator-slot > .mode-switch { order: -1; align-self: flex-end; margin: 0; }
+    }
 
     /* ── Shared collapsible-card shell for #ap-review-panel, the merged
        修圖建議 + 人像檢查 box -- replaces the old #ap-recipe-picker button +
