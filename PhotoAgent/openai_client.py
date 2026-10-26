@@ -28,7 +28,7 @@ from image_tools import (
     nearest_openai_edit_size,
     supports_arbitrary_openai_size,
     openai_edit_size_for_ratio,
-    ensure_png_bytes,
+    prepare_openai_edit_jpeg,
 )
 from prompts import (
     SUBJECT_PREVIEW_INSTRUCTION, SUBJECT_PREVIEW_RESPONSE_SCHEMA, SUBJECT_ROSTER_HANDOFF_INSTRUCTION,
@@ -810,8 +810,8 @@ def edit_photo(
             request={"size": size_param},
         )
 
-    def send(png_bytes, prompt_text, geometry):
-        data = _post_image_edit(model, prompt_text, quality, geometry.request["size"], png_bytes)
+    def send(jpeg_bytes, prompt_text, geometry):
+        data = _post_image_edit(model, prompt_text, quality, geometry.request["size"], jpeg_bytes)
         b64 = (data.get("data") or [{}])[0].get("b64_json")
         if not b64:
             raise RuntimeError("OpenAI 回應沒有包含圖片資料。")
@@ -821,15 +821,16 @@ def edit_photo(
         image_bytes, analysis, preset_key=preset_key, revision_feedback=revision_feedback,
         aspect_ratio=aspect_ratio, single_pass_edit=single_pass_edit,
         resolve_geometry=resolve_geometry, send=send,
+        prepare_image=prepare_openai_edit_jpeg,
     )
 
 
 @retry_transient
-def _post_image_edit(model: str, prompt_text: str, quality: str, size_param: str, png_bytes: bytes) -> dict:
+def _post_image_edit(model: str, prompt_text: str, quality: str, size_param: str, jpeg_bytes: bytes) -> dict:
     resp = requests.post(
         OPENAI_IMAGES_EDITS_URL,
         headers=_auth_headers(),
-        files={"image": ("photo.png", png_bytes, "image/png")},
+        files={"image": ("photo.jpg", jpeg_bytes, "image/jpeg")},
         data={"model": model, "prompt": prompt_text, "quality": quality, "size": size_param},
         timeout=300,
     )
@@ -854,8 +855,8 @@ def edit_eye_repair_pass(image_bytes: bytes, prompt: str, quality: str = "low", 
     prompt_text = prompt
     img_w, img_h = get_image_dimensions(image_bytes)
     size_param = openai_edit_size_for_ratio(img_w, img_h) if supports_arbitrary_openai_size(model) else nearest_openai_edit_size(img_w, img_h)
-    png_bytes = ensure_png_bytes(image_bytes)
-    data = _post_image_edit(model, prompt_text, quality, size_param, png_bytes)
+    jpeg_bytes = prepare_openai_edit_jpeg(image_bytes)
+    data = _post_image_edit(model, prompt_text, quality, size_param, jpeg_bytes)
     b64 = (data.get("data") or [{}])[0].get("b64_json")
     if not b64:
         raise RuntimeError("OpenAI 回應沒有包含圖片資料。")

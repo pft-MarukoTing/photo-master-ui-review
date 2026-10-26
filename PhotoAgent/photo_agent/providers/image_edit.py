@@ -46,11 +46,12 @@ def run_image_edit(
     single_pass_edit: bool,
     resolve_geometry: Callable[[dict, int, int], EditGeometry],
     send: Callable[[bytes, str, EditGeometry], Tuple[str, dict]],
+    prepare_image: Optional[Callable[[bytes], bytes]] = None,
 ):
     """Returns (result, prompt) -- the contract of every provider's edit_photo.
 
     resolve_geometry(framed_analysis, width, height) -> EditGeometry
-    send(png_bytes, prompt_text, geometry) -> (image_b64, usage)
+    send(prepared_bytes, prompt_text, geometry) -> (image_b64, usage)
     """
     img_w, img_h = get_image_dimensions(image_bytes)
 
@@ -86,7 +87,7 @@ def run_image_edit(
 
     # Converted once, outside the retry-wrapped call, so a retry doesn't
     # needlessly re-encode the same bytes.
-    image_b64, usage = send(ensure_png_bytes(image_bytes), prompt_text, geometry)
+    image_b64, usage = send((prepare_image or ensure_png_bytes)(image_bytes), prompt_text, geometry)
 
     return {
         "image_b64": image_b64,

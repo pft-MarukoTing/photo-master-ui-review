@@ -312,10 +312,27 @@ def detect_face_boxes(image_bytes: bytes) -> list:
     return [_normalized_face_entry(img, *b) for b in _detect_faces_px(img, "detect_face_boxes")]
 
 
+def prepare_openai_edit_jpeg(image_bytes: bytes) -> bytes:
+    """Use upright RGB JPEGs as-is; normalize every other source to JPEG.
+
+    Bake EXIF rotation/mirroring into pixels before dropping metadata, so
+    the provider sees the same orientation as analysis. Use high quality
+    and no chroma subsampling to preserve fine color detail in new encodes.
+    """
+    with Image.open(io.BytesIO(image_bytes)) as img:
+        if (img.format == "JPEG" and img.mode == "RGB"
+                and img.getexif().get(274, 1) == 1):
+            return image_bytes
+    img = _open_rgb(image_bytes)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=100, subsampling=0)
+    return buf.getvalue()
+
+
 def ensure_png_bytes(image_bytes: bytes) -> bytes:
     """Re-encode arbitrary input bytes (HEIC/JPEG/WebP/PNG/...) as a real PNG.
 
-    The edit-model APIs (OpenAI images/edits, Gemini inlineData) are told the
+    PNG-based edit-model paths (such as Gemini inlineData) are told the
     upload is "image/png" regardless of what the user actually uploaded -- if
     the source bytes aren't genuinely PNG-encoded (most importantly a
     HEIC/HEIF photo straight off an iPhone, which neither API can decode
