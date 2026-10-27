@@ -9,7 +9,7 @@ import { urls } from "./api";
 import { fillNoteBox, noteBoxKeys, promptFaces, promptSections, PromptEditor, readPromptBox, type FaceRef } from "./chat";
 import { FACE_CATEGORIES, faceEntries, LEVEL_OPTIONS, POSE_FACE_RULES, poseFacePatch, type FaceEntry, type FaceIssue, type PoseFaceResult } from "./face";
 import { Icon } from "./icons";
-import { AspectRatioField } from "./settings";
+import { AspectRatioField, OutputScaleField } from "./settings";
 import type { Analysis, Capabilities, FaceOverride, Plan } from "./types";
 import { aspectLabel, FIXED_RATIO_RE, recipeItems, REFRAME_RE, renderOptionLabel } from "./util";
 
@@ -165,7 +165,7 @@ export function categoryOf(field: string): Category | null {
   if (field.startsWith("recipe_checked.")) return "recipe";
   if (field.startsWith("style_options.")) return "style";
   if (field === "user_prompt") return "prompt";
-  if (["preset", "render_option", "aspect_ratio", "run_count"].includes(field) || field.startsWith("advanced_options.")) return "settings";
+  if (["preset", "render_option", "aspect_ratio", "output_scale", "run_count"].includes(field) || field.startsWith("advanced_options.")) return "settings";
   return null;
 }
 
@@ -666,6 +666,15 @@ function SettingsOptions({ plan, caps, busy, hot, onPatch }: Body) {
           value={plan.aspect_ratio}
           disabled={busy}
           onChange={(aspect_ratio) => onPatch({ aspect_ratio })}
+        />
+        <OutputScaleField
+          caps={caps}
+          class={field("output_scale")}
+          renderOption={plan.render_option}
+          aspectRatio={plan.aspect_ratio}
+          value={plan.output_scale}
+          disabled={busy}
+          onChange={(output_scale) => onPatch({ output_scale })}
         />
       </div>
       <p class="chat-note">{t("換長寬比會馬上依新的長寬比重新構圖，畫面建議裡的構圖也會跟著換。")}</p>

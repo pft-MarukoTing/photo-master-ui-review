@@ -27,6 +27,7 @@ export interface Plan {
   render_option?: string;
   analysis_model?: string;
   aspect_ratio?: string;
+  output_scale?: string;
   run_count?: number;
   user_prompt?: string;
   literal_texts?: string[];
@@ -144,9 +145,12 @@ export interface Capabilities {
   render: {
     analysis_models: { id: string; label: string }[];
     aspect_ratios: Choice[];
+    // sizes: "WxH" per fixed ratio; megapixels for auto/original, whose ratio is not known yet.
+    output_scales?: (Choice & { sizes?: Record<string, string>; megapixels?: number })[];
     defaults: Dict;
     max_run_count: number;
-    options: { id: string; label: string; image_model: string; quality: string }[];
+    // scalable: the engine honours output_scale; the others render at their own size.
+    options: { id: string; label: string; image_model: string; quality: string; scalable?: boolean }[];
     image_models: { id: string; label: string }[];
   };
   style_options: { id: string; label: string; default: string; choices: Choice[] }[];

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import type { Capabilities, Plan } from "./types";
 import { FIXED_RATIO_RE, renderOptionLabel } from "./util";
 
-export type Settings = Pick<Plan, "analysis_model" | "render_option" | "aspect_ratio" | "advanced_options" | "detailed_explanation">;
+export type Settings = Pick<Plan, "analysis_model" | "render_option" | "aspect_ratio" | "output_scale" | "advanced_options" | "detailed_explanation">;
 
 // header 設定裡的那一項：跟著使用者走，不跟著照片走。換照片、開新對話都不會
 // 清掉，重新整理也還在；引擎、長寬比跟人像修正才是每張照片各自的。
@@ -40,6 +40,7 @@ export function defaultSettings(caps: Capabilities, prefs?: Prefs): Settings {
     analysis_model: d.analysis_model,
     render_option: d.render_option,
     aspect_ratio: d.aspect_ratio,
+    output_scale: d.output_scale,
     advanced_options: Object.fromEntries(caps.advanced_options.map((o) => [o.key, o.default])),
     detailed_explanation: true,
     ...prefs,
@@ -47,9 +48,9 @@ export function defaultSettings(caps: Capabilities, prefs?: Prefs): Settings {
 }
 
 export function settingsOf(plan: Plan): Settings {
-  const { analysis_model, render_option, aspect_ratio, advanced_options } = plan;
+  const { analysis_model, render_option, aspect_ratio, output_scale, advanced_options } = plan;
   return {
-    analysis_model, render_option, aspect_ratio, advanced_options: { ...(advanced_options || {}) },
+    analysis_model, render_option, aspect_ratio, output_scale, advanced_options: { ...(advanced_options || {}) },
     detailed_explanation: !!plan.detailed_explanation,
   };
 }
@@ -67,6 +68,8 @@ export function settingsChanges(caps: Capabilities, from: Settings, to: Settings
   if (from.render_option !== to.render_option) out.push(t("美化引擎換成 {v1}", { v1: renderOptionLabel(caps, to.render_option) }));
   if (from.aspect_ratio !== to.aspect_ratio)
     out.push(t("長寬比改成 {v1}", { v1: label(caps.render.aspect_ratios, (a) => a.value === to.aspect_ratio, to.aspect_ratio) }));
+  if ((from.output_scale ?? to.output_scale) !== to.output_scale)
+    out.push(t("輸出尺寸改成 {v1}", { v1: label(caps.render.output_scales || [], (s) => s.value === to.output_scale, to.output_scale) }));
   for (const o of caps.advanced_options) {
     const was = from.advanced_options?.[o.key] ?? o.default;
     const now = to.advanced_options?.[o.key] ?? o.default;
@@ -114,6 +117,52 @@ function RatioIcon({ value, size }: { value?: string; size: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
       {body}
     </svg>
+  );
+}
+
+// 輸出尺寸：以長寬比算出來的尺寸再放大。只有能自訂尺寸的引擎吃得到，其他的照自己的尺寸出圖，
+// 這裡就鎖住，免得選了沒作用。
+export function OutputScaleField({
+  caps,
+  renderOption,
+  aspectRatio,
+  value,
+  onChange,
+  disabled,
+  class: cls,
+}: {
+  caps: Capabilities;
+  renderOption?: string;
+  aspectRatio?: string;
+  value?: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  class?: string;
+}) {
+  const choices = caps.render.output_scales || [];
+  // 「3K（實驗性）」→「3K · 3344×1888（實驗性）」：K 只是大概，實際尺寸跟著長寬比走。
+  const text = (s: (typeof choices)[number]) => {
+    const [, name, tag = ""] = s.label.match(/^(.*?)(\s*[（(].*[）)])?$/) || [, s.label];
+    const size = aspectRatio && s.sizes?.[aspectRatio];
+    const dims = size ? size.replace("x", "×") : s.megapixels ? t("約 {v1}MP", { v1: s.megapixels }) : "";
+    return dims ? `${name} · ${dims}${tag}` : s.label;
+  };
+  if (!choices.length) return null;
+  const scalable = !!caps.render.options.find((o) => o.id === renderOption)?.scalable;
+  return (
+    <label class={cls || "chat-field"} title={scalable ? undefined : t("這個美化引擎的輸出尺寸是固定的")}>
+      <span class="chat-meta">{t("輸出尺寸")}</span>
+      <select
+        class="quality-select"
+        value={scalable ? value || caps.render.defaults.output_scale : caps.render.defaults.output_scale}
+        disabled={disabled || !scalable}
+        onChange={(e) => onChange((e.currentTarget as HTMLSelectElement).value)}
+      >
+        {choices.map((s) => (
+          <option value={s.value}>{text(s)}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -249,6 +298,13 @@ export function SettingsEditor({
           </select>
         </label>
         <AspectRatioField caps={caps} value={settings.aspect_ratio} onChange={(aspect_ratio) => set({ aspect_ratio })} />
+        <OutputScaleField
+          caps={caps}
+          renderOption={settings.render_option}
+          aspectRatio={settings.aspect_ratio}
+          value={settings.output_scale}
+          onChange={(output_scale) => set({ output_scale })}
+        />
       </div>
       <div class="chat-settings-portrait">
         <span class="chat-meta">{t("人像修正")}</span>

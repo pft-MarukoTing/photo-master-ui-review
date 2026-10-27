@@ -42,6 +42,7 @@ def default_settings():
         "render_option": capabilities.DEFAULT_RENDER_OPTION,
         "analysis_model": capabilities.DEFAULT_ANALYSIS_MODEL,
         "aspect_ratio": capabilities.DEFAULT_ASPECT_RATIO,
+        "output_scale": capabilities.DEFAULT_OUTPUT_SCALE,
         "run_count": capabilities.DEFAULT_RUN_COUNT,
         "user_prompt": "",
         "overwrite_prompt": False,
@@ -184,6 +185,10 @@ def _apply_setting(plan, key, value, debug):
         error = _check_choice(key, value, capabilities.ASPECT_RATIOS, debug, id_attr="value")
         if error:
             raise ValueError(error)
+    elif key == "output_scale":
+        error = _check_choice(key, value, capabilities.OUTPUT_SCALES, debug, id_attr="value")
+        if error:
+            raise ValueError(error)
     elif key == "run_count":
         limit = capabilities.MAX_RUN_COUNT if debug else capabilities.GENERAL_MAX_RUN_COUNT
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= limit:
@@ -296,6 +301,8 @@ def build_render_form(plan, stage):
         "image_model": option.image_model,
         "analysis_model": plan["analysis_model"],
         "aspect_ratio": plan["aspect_ratio"],
+        # Plans saved before this setting existed have no key.
+        "output_scale": plan.get("output_scale", capabilities.DEFAULT_OUTPUT_SCALE),
         "advanced_options": copy.deepcopy(plan["advanced_options"]),
         "run_count": 1,
     }

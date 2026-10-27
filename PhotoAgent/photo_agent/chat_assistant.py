@@ -270,6 +270,7 @@ def _fields(debug):
     caps = capabilities.describe(debug=debug)
     return {
         "aspect_ratio": {a["value"]: a["label"] for a in caps["render"]["aspect_ratios"]},
+        "output_scale": {s["value"]: s["label"] for s in caps["render"]["output_scales"]},
         "style_options": {g["id"]: {"label": g["label"], "choices": {c["value"]: c["label"] for c in g["choices"]}}
                           for g in caps["style_options"]},
         "advanced_options": {o.key: o.label for o in capabilities.ADVANCED_OPTIONS
@@ -869,6 +870,11 @@ def describe_changes(before, after, analysis, debug=False):
     on, off = i18n.tr("開"), i18n.tr("關")
     add("aspect_ratio", i18n.tr("比例"), ratios.get(before["aspect_ratio"], before["aspect_ratio"]),
         ratios.get(after["aspect_ratio"], after["aspect_ratio"]))
+    scales = fields["output_scale"]
+    # Plans saved before this setting existed have no key.
+    old_scale = before.get("output_scale", capabilities.DEFAULT_OUTPUT_SCALE)
+    new_scale = after.get("output_scale", capabilities.DEFAULT_OUTPUT_SCALE)
+    add("output_scale", i18n.tr("輸出尺寸"), scales.get(old_scale, old_scale), scales.get(new_scale, new_scale))
     for group, spec in fields["style_options"].items():
         add(f"style_options.{group}", spec["label"],
             _choice_label(spec["choices"], before["style_options"].get(group)),

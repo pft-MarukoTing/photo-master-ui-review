@@ -129,6 +129,20 @@ ASPECT_RATIOS: Tuple[Choice, ...] = (
     Choice("16:9", "16:9（桌布）"),
 )
 
+# Output size tier, as a multiple of each edge of the default ~1536x1024
+# render; the W:H still comes from aspect_ratio. Only arbitrary_size models can
+# honour it -- the rest ignore it. Named by long edge: 1K is today's ~1.6MP,
+# 2K ~3.5MP, 3K ~6.3MP, and 4K is the API's 8,294,400-pixel cap (3840x2160 at
+# 16:9; image_tools clamps to it). OpenAI calls anything above 2560x1440
+# experimental, which is where 3K and 4K land.
+OUTPUT_SCALES: Tuple[Choice, ...] = (
+    Choice("1K", "1K（標準）"),
+    Choice("2K", "2K"),
+    Choice("3K", "3K（實驗性）"),
+    Choice("4K", "4K（實驗性）"),
+)
+OUTPUT_SCALE_FACTORS = {"1K": 1.0, "2K": 1.5, "3K": 2.0, "4K": 2.3}
+
 PRESET_IDS = ("natural", "editorial", "product", "portrait", "custom")
 
 # The API accepts up to MAX_RUN_COUNT; outside debug mode the UI offers up to
@@ -136,6 +150,7 @@ PRESET_IDS = ("natural", "editorial", "product", "portrait", "custom")
 MAX_RUN_COUNT = 20
 GENERAL_MAX_RUN_COUNT = 8
 
+DEFAULT_OUTPUT_SCALE = "1K"
 DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst"
 DEFAULT_QUALITY = "medium"
 DEFAULT_ANALYSIS_MODEL = "gpt-5.6-luna"
@@ -270,6 +285,10 @@ def supports_arbitrary_openai_size(api_model: str) -> bool:
     return any(m.arbitrary_size and m.api_model == api_model for m in IMAGE_MODELS)
 
 
+def output_scale_factor(value: str) -> float:
+    return OUTPUT_SCALE_FACTORS.get(value, 1.0)
+
+
 def flag_enabled(flag: Optional[str]) -> bool:
     return flag is None or bool(getattr(config, flag, False))
 
@@ -290,6 +309,24 @@ def _choices(choices, debug):
     return [{"value": c.value, "label": tr(c.label)} for c in choices if not c.hidden and (debug or not c.debug_only)]
 
 
+def _output_scale_choices(debug):
+    """Each tier with the size it actually renders at, so the picker can show
+    「2K · 2512×1408」 for the chosen ratio. auto/original only know their
+    ratio once the photo is analysed, so they get the pixel count instead."""
+    from image_tools import openai_edit_size_for_ratio  # image_tools imports this module
+
+    def size(ratio, scale):
+        w, h = ratio.split(":")
+        return openai_edit_size_for_ratio(int(w), int(h), scale)
+
+    fixed = [a.value for a in ASPECT_RATIOS if ":" in a.value]
+    out = []
+    for c in _choices(OUTPUT_SCALES, debug):
+        w, h = (int(v) for v in size("3:2", c["value"]).split("x"))
+        out.append({**c, "sizes": {r: size(r, c["value"]) for r in fixed}, "megapixels": round(w * h / 1e6, 1)})
+    return out
+
+
 def describe(*, debug: bool = False) -> dict:
     """What a client may offer. Debug-only entries appear only when `debug`;
     flag-gated ones only when their flag is on; internal ones never."""
@@ -304,7 +341,8 @@ def describe(*, debug: bool = False) -> dict:
                      "low_confidence_candidates": bool(getattr(config, "ENABLE_PREVIEW_LOW_CONFIDENCE_CANDIDATES", False))},
         "render": {
             "options": [
-                {"id": o.id, "image_model": o.image_model, "quality": o.quality, "label": o.label}
+                {"id": o.id, "image_model": o.image_model, "quality": o.quality, "label": o.label,
+                 "scalable": IMAGE_MODELS_BY_ID[o.image_model].arbitrary_size}
                 for o in render_options
             ],
             "image_models": [
@@ -314,6 +352,7 @@ def describe(*, debug: bool = False) -> dict:
                 {"id": m.id, "label": m.label} for m in ANALYSIS_MODELS if debug or not m.debug_only
             ],
             "aspect_ratios": _choices(ASPECT_RATIOS, debug),
+            "output_scales": _output_scale_choices(debug),
             "max_run_count": MAX_RUN_COUNT if debug else GENERAL_MAX_RUN_COUNT,
             "defaults": {
                 "render_option": DEFAULT_RENDER_OPTION,
@@ -321,6 +360,7 @@ def describe(*, debug: bool = False) -> dict:
                 "quality": DEFAULT_QUALITY,
                 "analysis_model": DEFAULT_ANALYSIS_MODEL,
                 "aspect_ratio": DEFAULT_ASPECT_RATIO,
+                "output_scale": DEFAULT_OUTPUT_SCALE,
                 "preset": DEFAULT_PRESET,
                 "run_count": DEFAULT_RUN_COUNT,
             },

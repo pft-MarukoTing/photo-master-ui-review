@@ -783,8 +783,9 @@ def edit_photo(
     model: str = IMAGE_MODEL,
     aspect_ratio: str = "auto",
     single_pass_edit: bool = False,
+    output_scale: str = "1K",
 ):
-    """Returns (result, prompt)."""
+    """Returns (result, prompt). ``output_scale`` only applies to arbitrary-size models."""
 
     def resolve_geometry(framed_analysis, img_w, img_h):
         if aspect_ratio == "original":
@@ -796,7 +797,7 @@ def edit_photo(
                 ratio_w, ratio_h = img_w, img_h
             else:
                 ratio_w, ratio_h = _ratio_dimensions(ratio_label)
-        size_param = openai_edit_size_for_ratio(ratio_w, ratio_h) if supports_arbitrary_openai_size(model) else nearest_openai_edit_size(ratio_w, ratio_h)
+        size_param = openai_edit_size_for_ratio(ratio_w, ratio_h, output_scale) if supports_arbitrary_openai_size(model) else nearest_openai_edit_size(ratio_w, ratio_h)
         if "x" in size_param:
             output_w, output_h = (int(v) for v in size_param.lower().split("x", 1))
             ratio_label = f"{output_w}:{output_h}"
@@ -839,7 +840,8 @@ def _post_image_edit(model: str, prompt_text: str, quality: str, size_param: str
 
 # ── Step 5b: eye repair pass (OpenAI) ──────────────────────────────────────────
 
-def edit_eye_repair_pass(image_bytes: bytes, prompt: str, quality: str = "low", model: str = IMAGE_MODEL):
+def edit_eye_repair_pass(image_bytes: bytes, prompt: str, quality: str = "low", model: str = IMAGE_MODEL,
+                         output_scale: str = "1K"):
     """Runs the approved gaze/blink repair(s) as a second, isolated full-image edit
     on top of Step 5's own output (see pipeline._run_eye_repair_pass for why
     this is a second whole-image call rather than a crop-and-paste). OpenAI
@@ -854,7 +856,7 @@ def edit_eye_repair_pass(image_bytes: bytes, prompt: str, quality: str = "low", 
     """
     prompt_text = prompt
     img_w, img_h = get_image_dimensions(image_bytes)
-    size_param = openai_edit_size_for_ratio(img_w, img_h) if supports_arbitrary_openai_size(model) else nearest_openai_edit_size(img_w, img_h)
+    size_param = openai_edit_size_for_ratio(img_w, img_h, output_scale) if supports_arbitrary_openai_size(model) else nearest_openai_edit_size(img_w, img_h)
     jpeg_bytes = prepare_openai_edit_jpeg(image_bytes)
     data = _post_image_edit(model, prompt_text, quality, size_param, jpeg_bytes)
     b64 = (data.get("data") or [{}])[0].get("b64_json")

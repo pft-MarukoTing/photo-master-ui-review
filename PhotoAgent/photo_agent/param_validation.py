@@ -21,6 +21,7 @@ VALID_ANALYSIS_MODELS = tuple(m.id for m in capabilities.ANALYSIS_MODELS)
 # "auto" (from the proposed crop) / "original" (the source frame) / one fixed
 # W:H frame.
 VALID_ASPECT_RATIOS = tuple(c.value for c in capabilities.ASPECT_RATIOS)
+VALID_OUTPUT_SCALES = tuple(c.value for c in capabilities.OUTPUT_SCALES)
 MAX_RUN_COUNT = capabilities.MAX_RUN_COUNT
 
 # Advanced Settings (人像設定 on the upload page) -- bundled into one
@@ -194,6 +195,14 @@ def _validate_params(params: dict) -> dict:
             RESULT_INVALID_PARAMETER,
         )
     normalized["aspect_ratio"] = aspect_ratio
+
+    output_scale = normalized.get("output_scale", capabilities.DEFAULT_OUTPUT_SCALE)
+    if not isinstance(output_scale, str) or output_scale not in VALID_OUTPUT_SCALES:
+        raise RuntimeError(
+            f"{EFFECT_NAME}: output_scale must be one of {VALID_OUTPUT_SCALES}",
+            RESULT_INVALID_PARAMETER,
+        )
+    normalized["output_scale"] = output_scale
 
     normalized["user_prompt"] = optional_text(normalized.get("user_prompt"), "user_prompt")
     if normalized.get('side_reference') is not None:

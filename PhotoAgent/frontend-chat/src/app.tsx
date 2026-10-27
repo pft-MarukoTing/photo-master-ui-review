@@ -2492,6 +2492,7 @@ export function App() {
   const renderPart = (x: Partial<Settings>) => ({
     render_option: x.render_option,
     aspect_ratio: x.aspect_ratio,
+    output_scale: x.output_scale,
     advanced_options: Object.fromEntries((caps?.advanced_options || []).map((o) => [o.key, x.advanced_options?.[o.key] ?? o.default])),
   });
   // 分析好、還沒美化的那張也換成總覽的設定：寫進它自己的 plan，之後一鍵美化就照這個。
@@ -5548,7 +5549,7 @@ function closedAfter(messages: Message[], from: number): boolean {
 // request). 調整後再美化 keeps them, so 美化 can ask first when none changed.
 const ADJUSTABLE = [
   "recipe_checked", "face_issue_overrides", "style_options", "render_option", "aspect_ratio",
-  "advanced_options", "preset", "run_count", "user_prompt", "pose_face_changes",
+  "output_scale", "advanced_options", "preset", "run_count", "user_prompt", "pose_face_changes",
 ] as const;
 
 // Key order and cleared (null) entries don't count as a change.

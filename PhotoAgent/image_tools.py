@@ -924,11 +924,15 @@ _GEMINI_ASPECT_RATIO_CHOICES = [
 # arbitrary "WIDTHxHEIGHT" `size` instead of a fixed enum (the registry's
 # ImageModel.arbitrary_size), so the source photo's exact aspect ratio can be
 # requested directly rather than snapped.
-# The API still requires both edges divisible by 16 and the ratio within
-# 1:3..3:1.
+# The API still requires both edges divisible by 16, the ratio within
+# 1:3..3:1, neither edge above 3840 and 655,360..8,294,400 pixels in total
+# (images/edits `size` reference, checked 2026-10).
 _OPENAI_SIZE_GRID = 16
 _OPENAI_SIZE_MIN_RATIO = 1 / 3
 _OPENAI_SIZE_MAX_RATIO = 3.0
+_OPENAI_SIZE_MAX_EDGE = 3840
+_OPENAI_SIZE_MIN_PIXELS = 655_360
+_OPENAI_SIZE_MAX_PIXELS = 8_294_400
 _OPENAI_SIZE_TARGET_PIXELS = 1536 * 1024  # same pixel budget as the old 1536x1024 enum choice
 
 
@@ -954,19 +958,29 @@ def supports_arbitrary_openai_size(model: str) -> bool:
     return capabilities.supports_arbitrary_openai_size(model)
 
 
-def openai_edit_size_for_ratio(image_width: int, image_height: int) -> str:
+def openai_edit_size_for_ratio(image_width: int, image_height: int, output_scale: str = "1K") -> str:
     """Build a gpt-image-2 `size` string matching the source photo's own
     aspect ratio as closely as the API allows, instead of snapping to one of
     nearest_openai_edit_size's fixed choices. Only meant to be called for
-    models where supports_arbitrary_openai_size is true."""
+    models where supports_arbitrary_openai_size is true.
+
+    `output_scale` multiplies both edges of the default 1536x1024-sized
+    budget (so "3K", factor 2, is four times the pixels); an extreme ratio
+    that would push the long edge past the API's 3840 cap gives up the excess
+    instead."""
     ratio = (image_width / image_height) if image_width and image_height else 1.0
     ratio = max(_OPENAI_SIZE_MIN_RATIO, min(_OPENAI_SIZE_MAX_RATIO, ratio))
 
-    height = math.sqrt(_OPENAI_SIZE_TARGET_PIXELS / ratio)
+    target_pixels = _OPENAI_SIZE_TARGET_PIXELS * capabilities.output_scale_factor(output_scale) ** 2
+    target_pixels = max(_OPENAI_SIZE_MIN_PIXELS, min(_OPENAI_SIZE_MAX_PIXELS, target_pixels))
+    height = math.sqrt(target_pixels / ratio)
     width = height * ratio
+    shrink = min(1.0, _OPENAI_SIZE_MAX_EDGE / max(width, height))
+    width, height = width * shrink, height * shrink
 
     def snap(value: float) -> int:
-        return max(_OPENAI_SIZE_GRID, round(value / _OPENAI_SIZE_GRID) * _OPENAI_SIZE_GRID)
+        snapped = max(_OPENAI_SIZE_GRID, round(value / _OPENAI_SIZE_GRID) * _OPENAI_SIZE_GRID)
+        return min(_OPENAI_SIZE_MAX_EDGE, snapped)
 
     snapped_width, snapped_height = snap(width), snap(height)
 
@@ -982,6 +996,14 @@ def openai_edit_size_for_ratio(image_width: int, image_height: int) -> str:
         snapped_height = math.floor(
             snapped_width / _OPENAI_SIZE_MIN_RATIO / _OPENAI_SIZE_GRID
         ) * _OPENAI_SIZE_GRID
+
+    # Rounding up at the pixel cap (4K) can land just over it; give back one
+    # grid step on the long edge.
+    while snapped_width * snapped_height > _OPENAI_SIZE_MAX_PIXELS:
+        if snapped_width >= snapped_height:
+            snapped_width -= _OPENAI_SIZE_GRID
+        else:
+            snapped_height -= _OPENAI_SIZE_GRID
 
     return f"{snapped_width}x{snapped_height}"
 

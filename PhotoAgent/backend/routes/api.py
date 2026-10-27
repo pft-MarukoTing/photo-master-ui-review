@@ -41,7 +41,7 @@ def _record_history_safely(user, job_id, path, image_key, action_id, params=None
     try:
         history_params = {
             key: (params or {}).get(key)
-            for key in ("preset", "image_quality", "image_model", "analysis_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count", "advanced_options", "single_pass_edit", "stage")
+            for key in ("preset", "image_quality", "image_model", "analysis_model", "aspect_ratio", "output_scale", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count", "advanced_options", "single_pass_edit", "stage")
         }
         for key in ('side_reference','literal_texts'):
             if key in (params or {}):history_params[key]=params[key]
@@ -121,6 +121,7 @@ def _parse_and_validate_params(form, *, chat_body_side_clarification=True):
         "image_model": form.get("image_model", capabilities.DEFAULT_IMAGE_MODEL),
         "analysis_model": form.get("analysis_model", capabilities.DEFAULT_ANALYSIS_MODEL),
         "aspect_ratio": form.get("aspect_ratio", capabilities.DEFAULT_ASPECT_RATIO),
+        "output_scale": form.get("output_scale", capabilities.DEFAULT_OUTPUT_SCALE),
         "ai_photo_editing": str(form.get("ai_photo_editing", "true")).lower() == "true",
         "run_qa": str(form.get("run_qa", current_app.config.get("DEBUG_UI", False))).lower() == "true",
         "overwrite_prompt": str(form.get("overwrite_prompt", "false")).lower() == "true",

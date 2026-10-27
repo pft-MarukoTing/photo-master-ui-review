@@ -86,7 +86,21 @@ def _editor_for(image_model):
 logger = logging.getLogger(__name__)
 
 
-def _run_edit_photo_compat(editor, image_bytes, analysis, quality, preset_key, *, aspect_ratio, single_pass_edit):
+def _accepts_kwarg(editor, name: str) -> bool:
+    try:
+        signature = inspect.signature(editor)
+    except (TypeError, ValueError):
+        # Some extension callables do not expose an inspectable signature;
+        # preserve the current behavior and pass the complete contract.
+        return True
+    return name in signature.parameters or any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
+
+
+def _run_edit_photo_compat(editor, image_bytes, analysis, quality, preset_key, *, aspect_ratio, single_pass_edit,
+                           output_scale=capabilities.DEFAULT_OUTPUT_SCALE):
     """Call an editor while keeping compatibility with legacy/test adapters.
 
     Provider editors in this repository accept ``single_pass_edit``.  A few
@@ -94,28 +108,19 @@ def _run_edit_photo_compat(editor, image_bytes, analysis, quality, preset_key, *
     five-argument contract, so do not make that optional control parameter a
     hard requirement for every callable placed in ``EDIT_PHOTO_BY_MODEL``.
     Built-in editors continue to receive the flag unchanged.
+
+    ``output_scale`` follows the same rule; only editors that can size their
+    output (openai_client.edit_photo) take it, the rest render at their own size.
     """
     kwargs = {"aspect_ratio": aspect_ratio}
-    try:
-        signature = inspect.signature(editor)
-    except (TypeError, ValueError):
-        # Some extension callables do not expose an inspectable signature;
-        # preserve the current behavior and pass the complete contract.
-        accepts_single_pass = True
-    else:
-        accepts_single_pass = (
-            "single_pass_edit" in signature.parameters
-            or any(
-                parameter.kind is inspect.Parameter.VAR_KEYWORD
-                for parameter in signature.parameters.values()
-            )
-        )
-    if accepts_single_pass:
+    if _accepts_kwarg(editor, "single_pass_edit"):
         kwargs["single_pass_edit"] = single_pass_edit
+    if _accepts_kwarg(editor, "output_scale"):
+        kwargs["output_scale"] = output_scale
     return editor(image_bytes, analysis, quality, preset_key, **kwargs)
 
 
-def _run_eye_repair_pass(image_b64: str, analysis: dict, quality: str):
+def _run_eye_repair_pass(image_b64: str, analysis: dict, quality: str, output_scale: str = capabilities.DEFAULT_OUTPUT_SCALE):
     """Step 5b: run the follow-up edit an editor skill asks for on Step 5's output.
 
     Today that is the eyes skill's isolated gaze/blink repair (EyesSkill.followup_edit).
@@ -138,7 +143,9 @@ def _run_eye_repair_pass(image_b64: str, analysis: dict, quality: str):
         model = MODELS["gaze_repair"]
     run_eye_repair_pass = EYE_REPAIR_PASS_BY_MODEL[model]
     result_bytes = base64.b64decode(image_b64)
-    edited_bytes, prompt_text, usage = run_eye_repair_pass(result_bytes, followup.prompt, quality=quality)
+    # Same output_scale as Step 5, so the repair does not shrink a scaled image.
+    scale_kwargs = {"output_scale": output_scale} if _accepts_kwarg(run_eye_repair_pass, "output_scale") else {}
+    edited_bytes, prompt_text, usage = run_eye_repair_pass(result_bytes, followup.prompt, quality=quality, **scale_kwargs)
     return base64.b64encode(edited_bytes).decode(), prompt_text, usage
 
 
@@ -194,8 +201,8 @@ def _analyze_subject_preview(image_bytes: bytes, *, analysis_model: str) -> dict
         "image_size": list(get_image_dimensions(image_bytes)),
         "candidate_selection_mode": ab_preview.MODE, "subject_handoff_policy": ab_preview.POLICY,
         "low_confidence_state": preview.get('low_confidence_state', low_state),
-        "low_confidence_candidates": [{k: c[k] for k in ('candidate_id', 'confidence', 'box', 'face_box')} |
-            {'sent_to_model': c.get('bytes') is not None} for c in candidates],
+        "low_confidence_candidates": [{**{k: c[k] for k in ('candidate_id', 'confidence', 'box', 'face_box')},
+            'sent_to_model': c.get('bytes') is not None} for c in candidates],
         "detections": [{"detection_index": i, "box": c["box"], "face_box": c["face_box"],
                         "confidence": c.get('confidence'), "sent_to_model": c.get("bytes") is not None}
                        for i, c in enumerate(crops, 1)],
@@ -497,6 +504,7 @@ def finish_stage(
     literal_texts: list = None,
     side_reference: dict = None,
     chat_body_side_clarification: bool = True,
+    output_scale: str = capabilities.DEFAULT_OUTPUT_SCALE,
 ) -> dict:
     """Steps 3, 5-6: pass user instruction through, then AI edit + QA (or local enhancement).
 
@@ -630,6 +638,7 @@ def finish_stage(
             preset_key,
             aspect_ratio=edit_aspect_ratio,
             single_pass_edit=single_pass_edit,
+            output_scale=output_scale,
         )
         prompts["image_edit"] = edit_prompt
         prompts["image_edit_resolution"] = edit_result.get("prompt_resolution")
@@ -653,7 +662,7 @@ def finish_stage(
         else:
             pre_edit_image_b64 = image_b64
             try:
-                image_b64, gaze_repair_prompt, gaze_repair_usage = _run_eye_repair_pass(image_b64, analysis, quality)
+                image_b64, gaze_repair_prompt, gaze_repair_usage = _run_eye_repair_pass(image_b64, analysis, quality, output_scale)
                 prompts["gaze_repair_pass"] = gaze_repair_prompt
                 usage["Step 5b - gaze_repair_pass"] = gaze_repair_usage
                 timings["Step 5b - gaze_repair_pass"] = time.time() - t0
@@ -758,6 +767,7 @@ def finish_stage(
         "image_quality": edit_quality,
         "analysis_model": analysis_model,
         "single_pass_edit": single_pass_edit,
+        "output_scale": output_scale,
         "timings": timings,
     }
     if body_review_active:

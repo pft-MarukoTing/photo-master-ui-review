@@ -110,7 +110,7 @@ MAX_RUN_COUNT = 20
 # that code needs no change; per-version values live on each version record.
 _SUMMARY_PARAM_KEYS = (
     "preset", "image_quality", "image_model", "analysis_model", "aspect_ratio",
-    "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count",
+    "output_scale", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count",
     "advanced_options", "single_pass_edit", "stage", "compatibility_version",
 )
 

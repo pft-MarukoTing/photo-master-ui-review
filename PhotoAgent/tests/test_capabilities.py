@@ -106,6 +106,13 @@ class DescribeTest(unittest.TestCase):
         self.assertEqual([m["id"] for m in caps["render"]["analysis_models"]], ["gpt-5.6-luna"])
         self.assertEqual(caps["render"]["max_run_count"], capabilities.GENERAL_MAX_RUN_COUNT)
         self.assertEqual(caps["render"]["defaults"]["render_option"], "gpt-image-2.5-sunburst:medium")
+        self.assertEqual([s["value"] for s in caps["render"]["output_scales"]], ["1K", "2K", "3K", "4K"])
+        self.assertEqual(caps["render"]["defaults"]["output_scale"], "1K")
+        four_k = caps["render"]["output_scales"][-1]
+        self.assertEqual(four_k["sizes"]["16:9"], "3840x2160")
+        self.assertNotIn("auto", four_k["sizes"])
+        self.assertEqual(four_k["megapixels"], 8.3)
+        self.assertTrue(all(o["scalable"] for o in caps["render"]["options"]))
         keys = [o["key"] for o in caps["advanced_options"]]
         self.assertNotIn("calm_hair", keys)
         self.assertNotIn("smile_level", keys)
