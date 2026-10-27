@@ -195,6 +195,7 @@ class ChatRoutesTest(unittest.TestCase):
             # opening or the render note unless it patches one in itself.
             patch.object(chat.chat_assistant, "call_opening", offline),
             patch.object(chat.chat_assistant, "call_render_note", offline),
+            patch.object(chat.chat_assistant, "call_continuation", offline),
         ]
         for p in patches:
             p.start()
@@ -1114,6 +1115,159 @@ class ChatRoutesTest(unittest.TestCase):
         self.history.clear()
         self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"})
         self.assertEqual(self.history[0]["based_on"], render["action_id"])
+
+    # --- 接著這張調整 (render from a version) ----------------------------------
+
+    def finished_version(self, sid, photo, status="success"):
+        """Render `photo` from the original, land it with `status`, and list it
+        in the photo's history; the version as a source_result."""
+        render = self.render(sid, photo)
+        job_id = render["job_ids"][0]
+        self.jobs[job_id]["status"] = status
+        self.status(sid)
+        self.case(photo["case_id"], [(photo["analyze_job_id"], "analyze", [photo["analyze_job_id"]]),
+                                     (render["action_id"], "edit", [job_id])])
+        return {"version_id": render["action_id"], "job_id": job_id, "run": 1}
+
+    def save_draft(self, sid, photo, source, text, revision=0):
+        return self.client.put(self.url(sid, f"/photos/{photo['photo_id']}/continuation-draft"),
+                               json={"user": USER, "source_result": source, "text": text, "revision": revision})
+
+    def render_from(self, sid, photo, source, **extra):
+        return self.client.post(self.url(sid, "/render"), json={
+            "user": USER, "photo_ids": [photo["photo_id"]], "base": "version", "source_result": source, **extra})
+
+    def test_render_from_a_version_is_off_without_its_flag(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", False):
+            self.assertEqual(self.save_draft(sid, photo, source, "remove the cup").status_code, 404)
+            self.assertEqual(self.render_from(sid, photo, source).status_code, 400)
+
+    def test_render_from_a_version_edits_its_output_with_this_rounds_request_only(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"),
+                          json={"user": USER, "plan": {"user_prompt": "warmer"}})
+        source = self.finished_version(sid, photo)
+        new_change = lambda context: {"needs_original": False, "restore": ""}
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True), \
+                patch.object(chat.chat_assistant, "call_continuation", new_change):
+            saved = self.save_draft(sid, photo, source, "  remove the cup  ")
+            self.assertEqual(saved.status_code, 200, saved.get_json())
+            draft = saved.get_json()["photos"][0]["continuation_draft"]
+            self.assertEqual(draft, {"source_result": source, "text": "remove the cup", "revision": 1})
+            # A stale tab cannot overwrite it.
+            self.assertEqual(self.save_draft(sid, photo, source, "older", revision=0).status_code, 409)
+
+            self.history.clear()
+            res = self.render_from(sid, photo, source, draft_revision=1)
+            self.assertEqual(res.status_code, 202, res.get_json())
+            render = res.get_json()["renders"][0]
+            (job_id, engine_params), = [(j, p) for j, p in self.enqueued if j in render["job_ids"]]
+            # The chosen version's output, not the original.
+            self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json"])
+            params = engine_params["acts"][0]["params"]
+            self.assertEqual(params["user_prompt"], "remove the cup")
+            self.assertTrue(params["overwrite_prompt"])
+            self.assertEqual(params["aspect_ratio"], "original")
+            self.assertFalse(any(v is True for v in params["advanced_options"].values()))
+            self.assertTrue(params["analysis"]["_continuation"])
+            self.assertNotIn("_continuation_original", params["analysis"])
+            self.assertNotIn("rejected_corrections", params["analysis"])
+            self.assertEqual(self.history[0]["case_id"], photo["case_id"])
+            self.assertEqual(self.history[0]["based_on"], source["version_id"])
+            self.assertEqual(self.history[0]["params"]["source_result"], source)
+            self.assertEqual(self.history[0]["params"]["base"], "version")
+            self.assertEqual(self.cards(sid, "render_requested")[-1]["source_result"], source)
+
+            self.jobs[job_id]["status"] = "success"
+            done = self.status(sid)
+        card = done["new_messages"][0]["card"]
+        self.assertEqual((card["type"], card["base"], card["source_result"], card["prompt"]),
+                         ("render_done", "version", source, "remove the cup"))
+        state = done["session"]["photos"][0]
+        self.assertEqual(state["active_version"]["version_id"], render["action_id"])
+        self.assertIsNone(state["continuation_draft"])
+        # The photo's own plan is untouched.
+        self.assertEqual(state["plan"]["user_prompt"], "warmer")
+
+    def continuation_job(self, sid, photo, source, text):
+        self.save_draft(sid, photo, source, text)
+        render = self.render_from(sid, photo, source).get_json()["renders"][0]
+        (engine_params,) = [p for j, p in self.enqueued if j in render["job_ids"]]
+        return engine_params
+
+    def test_a_continuation_that_wants_something_back_also_sends_the_original(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        seen = []
+        restore = lambda context: seen.append(context) or {"needs_original": True, "restore": " the mouth "}
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True), \
+                patch.object(chat.chat_assistant, "call_continuation", restore):
+            engine_params = self.continuation_job(sid, photo, source, "嘴巴不要動到")
+        # The version first -- it is what gets edited -- then the original.
+        self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json", photo["src_keys"][0]])
+        self.assertEqual(engine_params["acts"][0]["params"]["analysis"]["_continuation_original"],
+                         {"restore": "the mouth"})
+        self.assertIn("REQUEST: 嘴巴不要動到", seen[0])
+
+    def test_a_continuation_whose_request_cannot_be_read_sends_the_original(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True):
+            engine_params = self.continuation_job(sid, photo, source, "remove the cup")
+        self.assertEqual(engine_params["srcKeys"][1:], [photo["src_keys"][0]])
+        self.assertEqual(engine_params["acts"][0]["params"]["analysis"]["_continuation_original"], {"restore": ""})
+
+    def test_a_continuation_on_an_editor_without_a_second_image_is_not_read(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        gemini = types.SimpleNamespace(provider="gemini")
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True), \
+                patch.object(chat.capabilities, "image_model", lambda model_id: gemini):
+            engine_params = self.continuation_job(sid, photo, source, "嘴巴不要動到")
+        self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json"])
+        self.assertNotIn("_continuation_original", engine_params["acts"][0]["params"]["analysis"])
+
+    def test_render_from_a_version_refuses_a_source_it_cannot_vouch_for(self):
+        sid = self.new_session()
+        photo, other = self.ready_photo(sid), self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        failed = self.finished_version(sid, other, status="error")
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True):
+            for bad, code in (({**source, "run": 2}, 404), ({**source, "job_id": "nope"}, 404),
+                              ({**source, "version_id": photo["analyze_job_id"]}, 404),
+                              ({**source, "run": "1"}, 400), (None, 400)):
+                self.assertEqual(self.save_draft(sid, photo, bad, "x").status_code, code, bad)
+            # Another photo's version is not this photo's.
+            self.assertEqual(self.save_draft(sid, other, source, "x").status_code, 404)
+            self.assertEqual(self.save_draft(sid, other, failed, "x").status_code, 409)
+            # No draft for that source yet.
+            self.assertEqual(self.render_from(sid, photo, source).status_code, 409)
+            self.assertEqual(self.save_draft(sid, photo, source, "remove the cup").status_code, 200)
+            self.assertEqual(self.render_from(sid, photo, source, draft_revision=5).status_code, 409)
+            both = self.client.post(self.url(sid, "/render"), json={
+                "user": USER, "photo_ids": [photo["photo_id"], other["photo_id"]], "base": "version",
+                "source_result": source})
+            self.assertEqual(both.status_code, 400)
+            # Nothing above started a render.
+            self.assertEqual(self.status(sid)["session"]["photos"][0]["status"], "ready")
+
+    def test_a_failed_continuation_keeps_its_draft(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True):
+            self.save_draft(sid, photo, source, "remove the cup")
+            render = self.render_from(sid, photo, source).get_json()["renders"][0]
+            self.jobs[render["job_ids"][0]]["status"] = "error"
+            state = self.status(sid)["session"]["photos"][0]
+        self.assertEqual(state["continuation_draft"]["text"], "remove the cup")
 
     def test_render_all_fails_render_failed(self):
         sid = self.new_session()

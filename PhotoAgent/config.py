@@ -30,6 +30,9 @@ ENABLE_CHAT_REQUEST_FEASIBILITY = False
 # 「僅依個人化需求」(overwrite_prompt) edits also get a light whole-photo retouch
 # from the picked preset after the request. Off sends the request (and styles) alone.
 ENABLE_OVERWRITE_BASELINE_RETOUCH = False
+# Chat only: 「接著這張調整」 edits a chosen version's own output with this round's
+# request alone (no recipe re-applied). Off keeps every render on the original photo.
+ENABLE_CHAT_RENDER_FROM_VERSION = False
 # Call 0 (photo_agent/photo_router.py) before analysis: picks a branch skill by category; off = Call A for every photo, writing photo_summary/scene_* itself.
 ENABLE_PHOTO_ROUTER = True
 SUBJECT_PREVIEW_TIMEOUT_SECONDS = 8.0

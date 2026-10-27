@@ -117,6 +117,19 @@ class OpenAIJpegTests(unittest.TestCase):
             openai_client._post_image_edit('test', 'prompt', 'low', '1024x1024', source)
             self.assertEqual(post.call_args.kwargs['files']['image'], ('photo.jpg', source, 'image/jpeg'))
 
+    def test_a_reference_goes_in_second_as_jpeg(self):
+        source = encoded(picture(), 'PNG')
+        response = {'data': [{'b64_json': base64.b64encode(source).decode()}], 'usage': {}}
+        with patch.object(openai_client, '_post_image_edit', return_value=response) as post:
+            openai_client.edit_photo(source, {'recommended_aspect_ratio': 'original'}, single_pass_edit=True,
+                                     reference_image_bytes=encoded(picture(), 'PNG'))
+        (reference,) = post.call_args.kwargs['extra_jpegs']
+        self.assertEqual(Image.open(io.BytesIO(reference)).format, 'JPEG')
+        with patch.object(openai_client.requests, 'post') as http, patch.object(openai_client, 'checked_json', return_value={}), patch.object(openai_client, '_auth_headers', return_value={}):
+            openai_client._post_image_edit('test', 'prompt', 'low', '1024x1024', b'edited', extra_jpegs=(reference,))
+        self.assertEqual(http.call_args.kwargs['files'], [('image[]', ('photo.jpg', b'edited', 'image/jpeg')),
+                                                          ('image[]', ('reference1.jpg', reference, 'image/jpeg'))])
+
 
 if __name__ == '__main__':
     unittest.main()

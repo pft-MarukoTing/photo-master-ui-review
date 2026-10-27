@@ -338,7 +338,8 @@ def describe(*, debug: bool = False) -> dict:
                      "preview_introduction": bool(getattr(config, "ENABLE_CHAT_SUBJECT_PREVIEW", False)
                                                   and getattr(config, "ENABLE_CHAT_PREVIEW_INTRODUCTION", False)),
                      "subject_preview_format_version": 3,
-                     "low_confidence_candidates": bool(getattr(config, "ENABLE_PREVIEW_LOW_CONFIDENCE_CANDIDATES", False))},
+                     "low_confidence_candidates": bool(getattr(config, "ENABLE_PREVIEW_LOW_CONFIDENCE_CANDIDATES", False)),
+                     "render_from_version": bool(getattr(config, "ENABLE_CHAT_RENDER_FROM_VERSION", False))},
         "render": {
             "options": [
                 {"id": o.id, "image_model": o.image_model, "quality": o.quality, "label": o.label,

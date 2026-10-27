@@ -311,7 +311,10 @@ export function versionsFromMessages(messages: Message[], photoId: string): Vers
     if (c?.type === "render_done" && c.photo_id === photoId && Array.isArray(c.job_ids)) {
       const failed: string[] = c.failed_job_ids || [];
       if (c.job_ids.some((j: string) => !failed.includes(j))) {
-        out.push({ version_id: c.version_id, job_ids: c.job_ids, failed_job_ids: failed, ordinal: out.length + 1 });
+        const v: Version = { version_id: c.version_id, job_ids: c.job_ids, failed_job_ids: failed, ordinal: out.length + 1 };
+        const from = c.base === "version" && out.find((o) => o.version_id === c.source_result?.version_id);
+        if (from) v.from = from.ordinal;
+        out.push(v);
       }
     }
   }

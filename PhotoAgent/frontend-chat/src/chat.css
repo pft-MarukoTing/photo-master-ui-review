@@ -2053,3 +2053,7 @@ button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
 @media (max-width:760px){
   .report-view-when .mode-switch-opt{padding:0 9px;font-size:12px}
 }
+
+/* 接著某一版調整：輸入框上方那條帶著當底的那一版，跟指定人物的 token 同一個樣子。 */
+.chat-footbar .chat-continue-from{max-width:none;margin:var(--sp-2) 0;padding-right:var(--sp-1)}
+.chat-continue-shot{width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0}

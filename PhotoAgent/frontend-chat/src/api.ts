@@ -1,5 +1,5 @@
 import { lang } from "./i18n";
-import type { Capabilities, Dict, Message, Plan, Session, SessionSummary } from "./types";
+import type { Capabilities, Dict, Message, Plan, Session, SessionSummary, SourceResult } from "./types";
 import type { SideAnswer, SideQuestion } from "./side-reference";
 import type { ReportPage } from "./report-page";
 
@@ -335,6 +335,15 @@ export const api = {
     request<{ renders: Dict[]; queued: string[] }>(
       `${sid(id)}/render`,
       { ...json("POST", { photo_ids: photoIds, base: "original", defer_unconfirmed: true }), signal },
+    ),
+  // 接著某一版調整：先存這一輪的需求，再用存下的那份去產生。
+  saveContinuationDraft: (id: string, photoId: string, source: SourceResult, text: string, revision: number) =>
+    request<Session>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/continuation-draft`,
+      json("PUT", { source_result: source, text, revision })),
+  renderFromVersion: (id: string, photoId: string, source: SourceResult, draftRevision: number) =>
+    request<{ renders: Dict[]; queued: string[] }>(
+      `${sid(id)}/render`,
+      json("POST", { photo_ids: [photoId], base: "version", source_result: source, draft_revision: draftRevision }),
     ),
   setActiveVersion: (id: string, photoId: string, v: { version_id: string; job_id: string; run: number }) =>
     request<Session>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/active-version`, json("PUT", v)),

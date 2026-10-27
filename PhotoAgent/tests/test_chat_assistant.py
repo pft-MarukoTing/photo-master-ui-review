@@ -1014,6 +1014,24 @@ class RenderNoteTest(unittest.TestCase):
         self.assertTrue(seen[0][0].startswith(chat_assistant.RENDER_NOTE_INSTRUCTION))
 
 
+class ContinuationReadTest(unittest.TestCase):
+    def test_a_request_to_bring_something_back_names_it(self):
+        seen = []
+        read = chat_assistant.read_continuation(
+            " 嘴巴不要動到 ", model=lambda c: seen.append(c) or {"needs_original": True, "restore": " the mouth "})
+        self.assertEqual(read, {"needs_original": True, "restore": "the mouth"})
+        self.assertTrue(seen[0].endswith("REQUEST: 嘴巴不要動到"))
+
+    def test_a_new_change_goes_without_the_original(self):
+        read = chat_assistant.read_continuation(
+            "把杯子拿掉", model=lambda c: {"needs_original": False, "restore": "the cup"})
+        self.assertEqual(read, {"needs_original": False, "restore": ""})
+
+    def test_an_unclear_answer_sends_the_original(self):
+        self.assertEqual(chat_assistant.read_continuation("嗯", model=lambda c: {}),
+                         {"needs_original": True, "restore": ""})
+
+
 class OpeningTest(unittest.TestCase):
     def test_the_opening_speaks_from_the_recipe(self):
         seen = []

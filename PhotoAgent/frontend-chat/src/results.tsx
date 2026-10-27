@@ -295,6 +295,8 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   if (tags?.hint) details.push("prompt");
   const shown = open && details.includes(open) ? open : null;
   const source = urls.sourceImage(photo.analyze_job_id);
+  // 接著某一版調整時，產生中墊在底下的是當底的那一版，不是原圖。
+  const from = photo.pending_render?.source_result;
   const faceThumbs = useBoxThumbs(tags?.portraits.map((p) => p.box) || [], source);
 
   // Labels while every button's full text fits side by side, icons only once it
@@ -480,7 +482,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
               <img
                 id="original-img"
                 class="compare-img compare-img-original"
-                src={source}
+                src={busy && from ? urls.resultImage(from.job_id, from.run) : source}
                 alt={t("原始照片")}
                 style={arriving ? { visibility: "hidden" } : undefined}
               />
@@ -597,7 +599,9 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                     <path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
                     <circle cx="12" cy="7.8" r="1.1" fill="currentColor" />
                   </svg>
-                  {t("每張美化結果皆由原圖重新產生")}
+                  {versions.some((v) => v.from)
+                    ? t("有幾版是接著別版調整的，其他皆由原圖重新產生")
+                    : t("每張美化結果皆由原圖重新產生")}
                 </span>
               </div>
               <div id="version-strip-track" class="version-strip-track" role="tablist" aria-label={t("這張照片的美化紀錄")}>
@@ -630,7 +634,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                             class={`version-tile${on ? " is-current" : ""}`}
                             role="tab"
                             aria-selected={on}
-                            title={t("第 {ordinal} 版", { ordinal: v.ordinal })}
+                            title={v.from ? t("第 {ordinal} 版・由第 {from} 版調整", { ordinal: v.ordinal, from: v.from }) : t("第 {ordinal} 版", { ordinal: v.ordinal })}
                             onClick={() => {
                               // 點的若是同一版，version_id 沒變、上面的 effect 不會跑，這裡自己切回 After。
                               setOriginPicked(false);

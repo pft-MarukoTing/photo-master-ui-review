@@ -277,8 +277,15 @@ class PhotoAgentJobProcessor:
 
             if stage == "finish":
                 self.logger.info(task_id, f'[{EFFECT_NAME}] Running finish_stage ({len(image_bytes)} bytes)')
+                # A 接著這張調整 that needs the original (chat._continuation_original)
+                # carries it as the second source; the editor gets it as a reference.
+                reference_image_bytes = None
+                if (params["analysis"] or {}).get("_continuation_original") and len(src_paths) > 1:
+                    with open(src_paths[1], 'rb') as f:
+                        reference_image_bytes = f.read()
                 result = finish_stage(
                     image_bytes=image_bytes,
+                    **({'reference_image_bytes': reference_image_bytes} if reference_image_bytes else {}),
                     analysis=params["analysis"],
                     user_prompt=params["user_prompt"],
                     **({'chat_body_side_clarification': params['chat_body_side_clarification']} if 'chat_body_side_clarification' in params else {}),

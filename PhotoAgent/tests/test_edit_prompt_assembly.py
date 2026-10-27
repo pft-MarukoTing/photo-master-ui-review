@@ -48,6 +48,91 @@ class AssembleEditPrompt(unittest.TestCase):
         self.assertNotIn("Pose", prompt)
         self.assertNotIn("Finish:", prompt)
 
+    def test_a_continuation_sends_the_request_alone_even_with_styles_and_baseline_on(self):
+        # 接著這張調整: the source is already a finished version.
+        analysis = {**_analysis("3:2"), "_continuation": True, "style_options": {"lighting": "gold"},
+                    "user_instruction": {"has_user_direction": True, "overwrite_prompt": True,
+                                         "normalized_user_direction": "  Remove the cup.  "}}
+        with patch.object(config, "ENABLE_OVERWRITE_BASELINE_RETOUCH", True):
+            prompt, metadata, strategy = _assemble(analysis)
+        self.assertEqual((metadata, strategy), (None, "continuation"))
+        self.assertTrue(prompt.startswith("Remove the cup.\n\n"))
+        self.assertIn("Do not retouch any further", prompt)
+        self.assertIn("Keep the same aspect ratio, framing, and crop", prompt)
+        self.assertNotIn("- Lighting:", prompt)
+        self.assertNotIn("Baseline retouch:", prompt)
+        self.assertNotIn("Finish:", prompt)
+
+    def test_a_continuation_with_the_original_says_which_image_is_which(self):
+        analysis = {**_analysis("3:2"), "_continuation": True, "_continuation_original": {"restore": " the mouth "},
+                    "user_instruction": {"has_user_direction": True, "overwrite_prompt": True,
+                                         "normalized_user_direction": "Leave the mouth as it was."}}
+        prompt, _, strategy = _assemble(analysis)
+        self.assertEqual(strategy, "continuation")
+        self.assertTrue(prompt.startswith("Leave the mouth as it was.\n\n"))
+        self.assertLess(prompt.index("Do not retouch any further"), prompt.index("Two images are attached."))
+        self.assertIn("The first image is the retouched version to edit", prompt)
+        self.assertIn("Bring back from the original photo: the mouth.", prompt)
+
+    def test_a_continuation_with_nothing_singled_out_names_nothing_to_bring_back(self):
+        analysis = {**_analysis("3:2"), "_continuation": True, "_continuation_original": {"restore": ""},
+                    "user_instruction": {"has_user_direction": True, "overwrite_prompt": True,
+                                         "normalized_user_direction": "Like before."}}
+        prompt = _assemble(analysis)[0]
+        self.assertIn("Two images are attached.", prompt)
+        self.assertNotIn("Bring back from", prompt)
+
+    def test_a_continuation_without_the_original_mentions_one_image_only(self):
+        analysis = {**_analysis("3:2"), "_continuation": True,
+                    "user_instruction": {"has_user_direction": True, "overwrite_prompt": True,
+                                         "normalized_user_direction": "Remove the cup."}}
+        self.assertNotIn("Two images", _assemble(analysis)[0])
+
+    def test_the_worker_hands_the_original_to_an_editor_that_takes_it(self):
+        import pipeline
+        seen = {}
+
+        def fake_edit(image_bytes, analysis, quality, preset_key, reference_image_bytes=None, **kwargs):
+            seen["images"] = (image_bytes, reference_image_bytes)
+            return {"image_b64": "x", "usage": None, "geometry_warnings": []}, "prompt"
+
+        def old_edit(image_bytes, analysis, quality, preset_key, aspect_ratio=None, single_pass_edit=None,
+                     output_scale=None):
+            seen["old"] = True
+            return {"image_b64": "x", "usage": None, "geometry_warnings": []}, "prompt"
+
+        stub = {"_skipped_analysis": True, "_continuation": True, "_continuation_original": {"restore": ""},
+                "_aspect_ratio_pref_at_analysis": "original", "prompts": {}, "timings": {}, "usage": {},
+                "compatibility_version": 1}
+        edited, original = _image_bytes(), _image_bytes(800, 1200)
+        for editor in (fake_edit, old_edit):
+            with patch.dict(pipeline.EDIT_PHOTO_BY_MODEL, {"gpt-image-2": editor}):
+                pipeline.finish_stage(edited, dict(stub), "Like before.", "natural", "medium",
+                                      aspect_ratio="original", overwrite_prompt=True, single_pass_edit=True,
+                                      run_qa=False, chat_body_side_clarification=False,
+                                      reference_image_bytes=original)
+        self.assertEqual(seen["images"], (edited, original))
+        self.assertTrue(seen["old"])  # an editor without a second image still runs
+
+    def test_the_worker_takes_the_chat_continuation_stub_as_is(self):
+        # The stub chat._prepare_continuation hands the worker, with no reframe fields.
+        import pipeline
+        seen = {}
+
+        def fake_edit(image_bytes, analysis, quality, preset_key, **kwargs):
+            seen["analysis"] = analysis
+            return {"image_b64": "x", "usage": None, "geometry_warnings": []}, "prompt"
+
+        stub = {"_skipped_analysis": True, "_continuation": True, "_aspect_ratio_pref_at_analysis": "original",
+                "prompts": {}, "timings": {}, "usage": {}, "compatibility_version": 1}
+        with patch.dict(pipeline.EDIT_PHOTO_BY_MODEL, {"gpt-image-2": fake_edit}):
+            pipeline.finish_stage(_image_bytes(), stub, "Remove the cup.", "natural", "medium",
+                                  aspect_ratio="original", overwrite_prompt=True, single_pass_edit=True,
+                                  run_qa=False, chat_body_side_clarification=False)
+        prompt, _, strategy = _assemble(seen["analysis"])
+        self.assertEqual(strategy, "continuation")
+        self.assertTrue(prompt.startswith("Remove the cup.\n\n"))
+
     def test_overwrite_with_baseline_retouch_adds_the_preset_after_the_styles(self):
         analysis = {**_analysis("3:2"), "style_options": {"lighting": "gold"},
                     "user_instruction": {"has_user_direction": True, "overwrite_prompt": True,

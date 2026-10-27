@@ -100,7 +100,7 @@ def _accepts_kwarg(editor, name: str) -> bool:
 
 
 def _run_edit_photo_compat(editor, image_bytes, analysis, quality, preset_key, *, aspect_ratio, single_pass_edit,
-                           output_scale=capabilities.DEFAULT_OUTPUT_SCALE):
+                           output_scale=capabilities.DEFAULT_OUTPUT_SCALE, reference_image_bytes=None):
     """Call an editor while keeping compatibility with legacy/test adapters.
 
     Provider editors in this repository accept ``single_pass_edit``.  A few
@@ -111,12 +111,15 @@ def _run_edit_photo_compat(editor, image_bytes, analysis, quality, preset_key, *
 
     ``output_scale`` follows the same rule; only editors that can size their
     output (openai_client.edit_photo) take it, the rest render at their own size.
+    ``reference_image_bytes`` too: only an editor that takes a second image gets it.
     """
     kwargs = {"aspect_ratio": aspect_ratio}
     if _accepts_kwarg(editor, "single_pass_edit"):
         kwargs["single_pass_edit"] = single_pass_edit
     if _accepts_kwarg(editor, "output_scale"):
         kwargs["output_scale"] = output_scale
+    if reference_image_bytes is not None and _accepts_kwarg(editor, "reference_image_bytes"):
+        kwargs["reference_image_bytes"] = reference_image_bytes
     return editor(image_bytes, analysis, quality, preset_key, **kwargs)
 
 
@@ -505,6 +508,7 @@ def finish_stage(
     side_reference: dict = None,
     chat_body_side_clarification: bool = True,
     output_scale: str = capabilities.DEFAULT_OUTPUT_SCALE,
+    reference_image_bytes: bytes = None,
 ) -> dict:
     """Steps 3, 5-6: pass user instruction through, then AI edit + QA (or local enhancement).
 
@@ -527,6 +531,10 @@ def finish_stage(
     has an approved blink repair and the request is BLINK_REPAIR_IMAGE_MODEL at
     "medium", Step 5 bumps its own edit call to BLINK_REPAIR_QUALITY --
     reported back as extra-info.image_quality.
+
+    reference_image_bytes: the untouched original beside a 接著這張調整 edit
+    whose request wants something brought back from it; image_bytes stays the
+    photo that is edited.
 
     Returns: {
         result_image: str,          # base64 PNG (no data-URL prefix)
@@ -639,6 +647,7 @@ def finish_stage(
             aspect_ratio=edit_aspect_ratio,
             single_pass_edit=single_pass_edit,
             output_scale=output_scale,
+            reference_image_bytes=reference_image_bytes,
         )
         prompts["image_edit"] = edit_prompt
         prompts["image_edit_resolution"] = edit_result.get("prompt_resolution")

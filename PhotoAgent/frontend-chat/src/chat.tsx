@@ -800,11 +800,15 @@ const qaCache = new Map<string, { verdict: string; score: string; pass: boolean 
 // 再接在它後面，順序才不會先出提示、說明再插進來。
 // shown：這一版正顯示在畫布上。是的話跟畫布用同一張大圖，不多抓；其他版只顯示成小卡，
 // 用中尺寸預覽就夠清楚，不必每次打開都把每一版的大圖抓一遍。
-export function ResultCard({ job, ordinal, failed, next, note, noting, onOpen, shown }: {
+export function ResultCard({ job, ordinal, from, failed, next, continuable, note, noting, onOpen, shown }: {
   job: string;
   ordinal: number;
+  // 接著第幾版調整出來的；從原圖產生的不給。
+  from?: number;
   failed: number;
   next?: boolean;
+  // 有「接著這張調整」可以按。
+  continuable?: boolean;
   note?: string;
   noting?: boolean;
   // 手機上旁邊沒有比較卡，成品放大、點了開大圖檢視。
@@ -861,7 +865,7 @@ export function ResultCard({ job, ordinal, failed, next, note, noting, onOpen, s
         <img src={src} alt={t("第 {ordinal} 版美化結果", { ordinal })} />
       )}
       <figcaption class="chat-result-cap">
-        <h4>{t("第 {ordinal} 版完成", { ordinal })}</h4>
+        <h4>{from ? t("第 {ordinal} 版完成・由第 {from} 版調整", { ordinal, from }) : t("第 {ordinal} 版完成", { ordinal })}</h4>
         {note ? <p class="chat-text">{note}</p> : noting && <p class="chat-text chat-muted">{t("正在對照原圖，整理這版的變化…")}</p>}
         {qa && (
           <div class="chat-verdict">
@@ -874,7 +878,9 @@ export function ResultCard({ job, ordinal, failed, next, note, noting, onOpen, s
           <span class="chat-result-hint-wide">{t("左側可比較 Before / After，也可從「美化紀錄」切換版本。")}</span>
           <span class="chat-result-hint-narrow">{t("上方照片可以跟原圖比，點右上的版本也能切換。")}</span>
         </p>}
-        {next && !noting && <p class="chat-text">{t("想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。")}</p>}
+        {next && !noting && <p class="chat-text">{continuable
+          ? t("想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」；想在這版上再改一點，按「接著這張調整」。也可以直接打字跟我說。")
+          : t("想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。")}</p>}
       </figcaption>
     </figure>
   );

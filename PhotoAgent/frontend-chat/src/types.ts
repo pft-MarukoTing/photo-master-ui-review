@@ -71,13 +71,23 @@ export interface Photo {
   // 補跑中的分析是為了什麼："check" 給使用者看，"render" 是排在它後面的美化。
   reanalysis?: "check" | "render" | null;
   planned_ratio?: string | null;
-  pending_render?: { action_id: string; job_ids: string[]; base?: string } | null;
+  // base "version"：接著某一版調整，source_result 是當底的那一版成品。
+  pending_render?: { action_id: string; job_ids: string[]; base?: string; source_result?: SourceResult } | null;
+  // 接著某一版調整時這一輪的需求，存在伺服器上；revision 防舊分頁蓋掉新的。
+  continuation_draft?: { source_result: SourceResult; text: string; revision: number } | null;
   // 照片本身已經好了，AI 還在寫的開場摘要／這一版的說明（開了「詳細解說」才有）。
   pending_brief?: { job_id: string } | null;
   pending_note?: { version_id: string; job_id?: string } | null;
   queued_render?: Dict | null;
   active_version?: ActiveVersion | null;
   plan: Plan;
+}
+
+// 一版成品裡的一張：接著調整時當底的那張。
+export interface SourceResult {
+  version_id: string;
+  job_id: string;
+  run: number;
 }
 
 export interface Card {
@@ -141,7 +151,7 @@ export interface Choice {
 }
 
 export interface Capabilities {
-  features?: { body_side_clarification?: boolean; subject_preview?: boolean; preview_introduction?: boolean; subject_preview_format_version?: number; low_confidence_candidates?: boolean };
+  features?: { body_side_clarification?: boolean; subject_preview?: boolean; preview_introduction?: boolean; subject_preview_format_version?: number; low_confidence_candidates?: boolean; render_from_version?: boolean };
   render: {
     analysis_models: { id: string; label: string }[];
     aspect_ratios: Choice[];
@@ -173,4 +183,6 @@ export interface Version {
   job_ids: string[];
   failed_job_ids: string[];
   ordinal: number;
+  // 接著哪一版調整出來的（那一版的 ordinal）；從原圖產生的沒有。
+  from?: number;
 }

@@ -784,8 +784,13 @@ def edit_photo(
     aspect_ratio: str = "auto",
     single_pass_edit: bool = False,
     output_scale: str = "1K",
+    reference_image_bytes: bytes = None,
 ):
-    """Returns (result, prompt). ``output_scale`` only applies to arbitrary-size models."""
+    """Returns (result, prompt). ``output_scale`` only applies to arbitrary-size models.
+
+    ``reference_image_bytes`` (a 接著這張調整 that needs the original) goes in as
+    the second image; the prompt says the first is the one edited."""
+    reference_jpegs = (prepare_openai_edit_jpeg(reference_image_bytes),) if reference_image_bytes else ()
 
     def resolve_geometry(framed_analysis, img_w, img_h):
         if aspect_ratio == "original":
@@ -812,7 +817,8 @@ def edit_photo(
         )
 
     def send(jpeg_bytes, prompt_text, geometry):
-        data = _post_image_edit(model, prompt_text, quality, geometry.request["size"], jpeg_bytes)
+        data = _post_image_edit(model, prompt_text, quality, geometry.request["size"], jpeg_bytes,
+                                extra_jpegs=reference_jpegs)
         b64 = (data.get("data") or [{}])[0].get("b64_json")
         if not b64:
             raise RuntimeError("OpenAI 回應沒有包含圖片資料。")
@@ -827,11 +833,17 @@ def edit_photo(
 
 
 @retry_transient
-def _post_image_edit(model: str, prompt_text: str, quality: str, size_param: str, jpeg_bytes: bytes) -> dict:
+def _post_image_edit(model: str, prompt_text: str, quality: str, size_param: str, jpeg_bytes: bytes,
+                     extra_jpegs=()) -> dict:
+    """extra_jpegs go after jpeg_bytes as more ``image[]`` parts; the output
+    follows the first image."""
+    files = ([("image[]", ("photo.jpg", jpeg_bytes, "image/jpeg"))]
+             + [("image[]", (f"reference{i}.jpg", extra, "image/jpeg")) for i, extra in enumerate(extra_jpegs, 1)]
+             if extra_jpegs else {"image": ("photo.jpg", jpeg_bytes, "image/jpeg")})
     resp = requests.post(
         OPENAI_IMAGES_EDITS_URL,
         headers=_auth_headers(),
-        files={"image": ("photo.jpg", jpeg_bytes, "image/jpeg")},
+        files=files,
         data={"model": model, "prompt": prompt_text, "quality": quality, "size": size_param},
         timeout=300,
     )

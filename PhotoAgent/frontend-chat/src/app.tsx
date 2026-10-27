@@ -81,6 +81,7 @@ import type {
   PromptFace,
   Session,
   SessionSummary,
+  SourceResult,
   Version,
 } from "./types";
 import {
@@ -3082,6 +3083,31 @@ export function App() {
     });
   }
 
+  // 接著某一版調整：這一輪的需求先存成這張照片的草稿，再用存下的那份從那一版的成品產生。
+  // 草稿被別的分頁改過（draft_changed）就拿伺服器現在的 revision 蓋一次。
+  function continuePhoto(v: Version, text: string) {
+    if (!session || !photo) return Promise.resolve(false);
+    const id = session.session_id;
+    const pid = photo.photo_id;
+    const source: SourceResult = { version_id: v.version_id, job_id: versionJob(v), run: 1 };
+    const held = photo.continuation_draft;
+    const same = held?.source_result.version_id === source.version_id && held.source_result.job_id === source.job_id &&
+      held.source_result.run === source.run;
+    return run(async () => {
+      let saved: Session;
+      try {
+        saved = await api.saveContinuationDraft(id, pid, source, text, same ? held!.revision : 0);
+      } catch (e) {
+        if (!(e instanceof ApiError && e.body?.error === "draft_changed")) throw e;
+        saved = await api.saveContinuationDraft(id, pid, source, text, e.body.draft?.revision || 0);
+      }
+      const draft = saved.photos.find((p) => p.photo_id === pid)?.continuation_draft;
+      await api.renderFromVersion(id, pid, source, draft?.revision || 0);
+      await afterRender(id, "接著這張調整", "tune", photo.plan);
+      setSelected(null);
+    });
+  }
+
   // 同一段對話裡還沒美化過的每一張一起一鍵美化，各自照自己目前的設定。
   function renderAll() {
     if (!session || !photo) return;
@@ -4102,6 +4128,7 @@ export function App() {
               return newMessage ? "new_message" : ok;
             }}
             onAsk={askPhoto}
+            onContinue={caps?.features?.render_from_version ? continuePhoto : undefined}
             onAnswerWaiting={answerWaiting}
             onPatch={patchFromChat}
             onQuietPrompt={quietPrompt}
@@ -5617,6 +5644,8 @@ export function SessionView(props: {
   error: string;
   onSelectVersion: (v: Version) => void;
   onRender: (label: string, icon: string, patch?: Plan) => void;
+  // 接著某一版調整（render_from_version 開著才有）：text 是這一輪的需求。
+  onContinue?: (v: Version, text: string) => Promise<boolean>;
   // 只剩拖放進畫布這條路會用到 -- 丟一張新的照片進來等於開一個新對話。
   onFile: (f: File) => void;
   // faces 只在沒有分析時用：指的人是本地偵測的框和位置，取代 subjectIndices 送出。
@@ -5755,6 +5784,9 @@ export function SessionView(props: {
   // 再美化一次, or 美化 in a round with nothing changed, asks first; any new
   // message or change drops the question.
   const [confirmRerun, setConfirmRerun] = useState(false);
+  // 按了「接著這張調整」：下一句打的字就是要在這一版上改的地方，送出去直接產生。
+  const [continuing, setContinuing] = useState<Version | null>(null);
+  useEffect(() => setContinuing(null), [photo.photo_id]);
   // 這一輪寫了（或改了）個人化需求，美化前先問：只照需求改，還是順便整張美化。
   // 記著按的是哪顆美化，問完照那顆的字送出去。
   const [askMode, setAskMode] = useState<{ label: string; icon: string } | null>(null);
@@ -6048,6 +6080,12 @@ export function SessionView(props: {
       const answer = await props.onConfirmPeople([], undefined, undefined, undefined, undefined, text);
       if (answer !== "new_message") return answer;
     }
+    if (continuing && props.onContinue) {
+      if (!text.trim()) return false;
+      const ok = await props.onContinue(continuing, text.trim());
+      if (ok) setContinuing(null);
+      return ok;
+    }
     if (pendingProposal && YES.test(text.trim())) {
       await choose(pendingProposal, "apply");
       return true;
@@ -6313,10 +6351,14 @@ export function SessionView(props: {
       <>
         <Chip label={t("看美化項目")} icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
         {analyzeChip}
+        {props.onContinue && (
+          <Chip label={t("接著這張調整")} icon="tune" disabled={busy} title={t("以第 {n} 版為底，只改你接下來說的地方", { n: current.ordinal })}
+            onClick={() => { setContinuing(current); setPointed([]); setComposerKey((k) => k + 1); }} />
+        )}
         <Chip label={t("再美化")} icon="redo" kind="primary" disabled={busy} onClick={() => setConfirmRerun(true)} />
       </>
     );
-    bar = offerAnalyze ? ["看美化項目", "幫我分析", "再美化"] : ["看美化項目", "再美化"];
+    bar = [...(offerAnalyze ? ["看美化項目", "幫我分析"] : ["看美化項目"]), ...(props.onContinue ? ["接著這張調整"] : []), "再美化"];
   } else if (lastOutcome?.card?.type === "render_failed") {
     actionChips = (
       <>
@@ -6340,10 +6382,10 @@ export function SessionView(props: {
     endReply?.type === "llm_reply" &&
     ((!!endReply.proposal && !resolvedChoice[endReply.proposal.id]) || endReply.options?.length > 0);
   const offerCheckAt = (idx: number) =>
-    messages[idx]?.card?.type === "render_done" && idx === lastRender && !adjusting && !textPending(idx) &&
+    messages[idx]?.card?.type === "render_done" && messages[idx].card?.base !== "version" && idx === lastRender && !adjusting && !textPending(idx) &&
     !!photo.plan.overwrite_prompt && (skippedAnalysis || !!analysis) &&
     !messages.slice(idx + 1).some(x => x.card?.type === "check_declined" || x.card?.type === "analysis_brief");
-  const showActionRow = !!actionChips && !textPending(endIdx) && !busy && !props.pendingAsk && photo.status === "ready" && !askMode && !confirmRerun && !endAsks && !pendingPerson && !offerCheckAt(endIdx);
+  const showActionRow = !!actionChips && !textPending(endIdx) && !busy && !props.pendingAsk && photo.status === "ready" && !askMode && !confirmRerun && !endAsks && !pendingPerson && !offerCheckAt(endIdx) && !continuing;
   // 只照需求改完，除了問要不要分析，也給「風格」：只照需求改照樣套得上風格。
   const offerStyle = caps.style_options.length > 0;
   if (!showActionRow) bar = offerCheckAt(endIdx) ? ["好，幫我分析", ...(offerStyle ? [CATEGORIES.style.label] : []), "不用了"] : [];
@@ -6690,6 +6732,13 @@ export function SessionView(props: {
           </AssistantMsg>
         );
       case "render_requested": {
+        if (c.base === "version" && typeof c.prompt === "string") {
+          const from = versions.find((x) => x.version_id === c.source_result?.version_id);
+          return (
+            <AskBubble text={c.prompt}
+              meta={[from ? t("調整第 {n} 版", { n: from.ordinal }) : t("接著調整"), clockLabel(m.created_at)].join(" · ")} />
+          );
+        }
         const meta = renderMeta(caps, photo.plan);
         const l = renderLabelFor([m.id]) || (c.label ? { label: c.label, icon: "spark", meta } : { label: "美化", icon: "spark", meta });
         return (
@@ -6711,8 +6760,10 @@ export function SessionView(props: {
             <ResultCard
               job={versionJob(v)}
               ordinal={v.ordinal}
+              from={v.from}
               failed={(c.failed_job_ids || []).length}
               next={idx === endIdx && !!endRow && !adjusting && !offerCheck}
+              continuable={!!props.onContinue}
               note={typeof c.note === "string" ? c.note : undefined}
               noting={photo.pending_note?.version_id === c.version_id}
               onOpen={() => openVersion(v)}
@@ -7042,13 +7093,23 @@ export function SessionView(props: {
                     <>
                       <FootBar
                         faces={
-                          !pendingPerson && !facesInline && pickable.length > 1 && <FacePicker people={pickable} pointed={pointed} onPoint={setPointed} />
+                          continuing ? (
+                            <span class="chat-composer-who chat-continue-from">
+                              <img class="chat-continue-shot" src={urls.resultThumb(versionJob(continuing))} alt="" />
+                              {t("調整第 {n} 版", { n: continuing.ordinal })}
+                              <button type="button" class="chat-composer-who-x" title={t("不調整這版了")} aria-label={t("不調整這版了")}
+                                onClick={() => setContinuing(null)}>
+                                <Icon name="x" size={12} />
+                              </button>
+                            </span>
+                          ) : !pendingPerson && !facesInline && pickable.length > 1 && <FacePicker people={pickable} pointed={pointed} onPoint={setPointed} />
                         }
                       />
                       <Composer
                         disabled={busy || photo.status === "failed"}
                         onSend={send}
-                        people={pickable}
+                        placeholder={continuing ? [t("想在第 {n} 版上改什麼？", { n: continuing.ordinal }), t("想改什麼？")] : undefined}
+                        people={continuing ? [] : pickable}
                         pointed={pointed}
                         onPoint={setPointed}
                         sendPicked={whoAsked}
