@@ -453,7 +453,9 @@ const UPLOAD_BUTTONS_RE = /(還有其他想改的地方嗎？)?[^。！？!?]*(�
 const UPLOAD_BUTTONS_EN_RE = /(Anything else you'd like to change\?\s*)?[^.!?]*(“Analyze”|“One-Tap Retouch”)[^.!?]*[.!?]?/g;
 const carriedReply = (text: string) => text.replace(UPLOAD_BUTTONS_RE, "").replace(UPLOAD_BUTTONS_EN_RE, "").trim() || t("好。");
 
-function carriedLog(ns: Note[], photoId: string, later: Note | null, events: PreviewReplyEvent[] = []) {
+// Submission may clone every Note to strip preview identities. Carry the waiting
+// question by its original position; the clone preserves order, not object identity.
+function carriedLog(ns: Note[], photoId: string, laterIndex: number, events: PreviewReplyEvent[] = []) {
   const out: { role: "user" | "assistant"; text?: string; card: Dict }[] = [];
   const reply = (text: string) =>
     out.push({ role: "assistant", card: { type: "llm_reply", photo_id: photoId, pre: true, text: carriedReply(text) } });
@@ -476,7 +478,7 @@ function carriedLog(ns: Note[], photoId: string, later: Note | null, events: Pre
     const n = turn.ask;
     const card: Dict = { type: "ask", photo_id: photoId, pre: true };
     if (n.persons.length) card.faces = n.persons.map((p) => ({ box: p.box, thumbnail_box: p.thumbnail_box, preview_person_id: p.preview_person_id, where: p.where }));
-    if (n === later) card.waiting = true;
+    if (n === ns[laterIndex]) card.waiting = true;
     if (turn.part !== "reply") out.push({ role: "user", text: n.text, card });
     if (turn.part !== "user" && n.reply) reply(n.reply);
   }
@@ -2057,7 +2059,7 @@ export function App() {
       uploaded = pid;
       say(p.mode === "analyze" ? t("照片傳好了，準備開始分析…") : p.overwrite ? t("照片傳好了，準備開始調整…") : t("照片傳好了，準備開始美化…"));
       if (p.faces) seedDetectedFaces(urls.sourceImage(added.analyze_job_id), p.faces);
-      const carried = carriedLog(log, pid, p.later, p.events);
+      const carried = carriedLog(log, pid, p.later ? p.log.indexOf(p.later) : -1, p.events);
       if (carried.length) await api.postMessages(id, carried, step());
       if (promptFaces.length) await api.patchPhotoPlan(id, pid, { prompt_faces: promptFaces }, step());
       if (p.mode === "render") {
@@ -3013,7 +3015,7 @@ export function App() {
       // 上傳頁面聊過的接在照片後面。等著回答的那句也在裡面：分析一好，session
       // 的 AI 就回答它，使用者不用再問一次。要在切到 session 頁之前搬好：頁面以
       // 打開時最新的那則為界，之後進來的才打字，搬晚了舊對話會被當成新回覆重打一次。
-      const carried = carriedLog(submissionLog, added.photo_id, later, submittedEvents);
+      const carried = carriedLog(submissionLog, added.photo_id, later ? log.indexOf(later) : -1, submittedEvents);
       let uploadedSession: Session;
       try {
         for (let at = 0; at < carried.length; at += 100) {
