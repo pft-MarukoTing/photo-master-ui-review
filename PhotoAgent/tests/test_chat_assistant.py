@@ -42,6 +42,45 @@ def ask(model, plan=None, history=None):
 
 
 class AskTest(unittest.TestCase):
+    def test_embedded_answer_does_not_get_the_automatic_analysis_nudge(self):
+        for lang, text, reply in (("zh", "照片裡有什麼？", "桌上有一本筆記本。"),
+                                  ("en", "What is in the photo?", "There is a notebook on the desk.")):
+            with self.subTest(lang=lang), chat_assistant.i18n.use(lang):
+                history = [{"role": "user", "text": text, "card": {"type": "ask", "waiting": True}}]
+                model = model_says(reply)
+                result = chat_assistant.ask(analysis(), default_plan(), "ready", history, model=model,
+                    screen={"bar": ["幫我分析", "再美化"], "topics": ["畫面", "設定"]})
+                self.assertEqual(result["reply"], reply)
+                self.assertIn("REPLY PLACEMENT: embedded_answer", model.seen[0])
+
+    def test_a_normal_followup_to_a_waiting_question_keeps_navigation(self):
+        history = [
+            {"role": "user", "text": "照片裡有什麼？", "card": {"type": "ask", "waiting": True}},
+            {"role": "assistant", "card": {"type": "llm_reply", "text": "桌上有一本筆記本。"}},
+            {"role": "user", "text": "好", "card": {"type": "ask"}},
+        ]
+        model = model_says("好。")
+        result = chat_assistant.ask(analysis(), default_plan(), "ready", history, model=model,
+            screen={"bar": ["幫我分析", "再美化"], "topics": []})
+        self.assertIn("REPLY PLACEMENT: standalone", model.seen[0])
+        self.assertIn(chat_assistant.ANALYZE_NUDGE, result["reply"])
+
+    def test_embedded_answer_keeps_requested_caption_choices(self):
+        result = ask(model_says("想放哪一句？", options=["夏日午後", "沿路的風景"], lines=True), history=[
+            {"role": "user", "text": "幫照片想個標題", "card": {"type": "ask", "waiting": True}}])
+        self.assertEqual(result["options"], ["夏日午後", "沿路的風景"])
+        self.assertTrue(result["lines"])
+
+    def test_embedded_applied_change_does_not_append_shared_navigation(self):
+        model = model_says(patch={"style_options": {"lighting": "soft"}})
+        result = chat_assistant.ask(analysis(), default_plan(), "ready", [
+            {"role": "user", "text": "光線改成柔光", "card": {"type": "ask", "waiting": True}}],
+            model=model, screen={"bar": ["照建議直接美化"], "topics": ["畫面", "風格"]})
+        self.assertIsNotNone(result["proposal"])
+        self.assertEqual(result["proposal"]["patch"]["style_options"]["lighting"], "soft")
+        self.assertNotIn("按", result["reply"])
+        self.assertNotIn("下面", result["reply"])
+
     def test_the_version_note_reaches_the_model(self):
         model = model_says()
         history = [

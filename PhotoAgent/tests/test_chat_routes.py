@@ -1880,6 +1880,7 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual([(m["card"]["type"], m["card"]["answers"]) for m in messages], [("llm_reply", posted["id"])])
         self.assertTrue(seen[0].rstrip().endswith("user: 這張做成啤酒海報可以用什麼文案？"))
         self.assertNotIn("not available yet", seen[0])
+        self.assertIn("REPLY PLACEMENT: embedded_answer", seen[0])
         again, seen = self.ask(sid, photo, None, reply, waiting=posted["id"])
         self.assertEqual((again.get_json(), seen), ({"messages": []}, []))
         self.assertEqual(self.ask(sid, photo, None, reply, waiting="nope")[0].status_code, 404)
@@ -1898,7 +1899,8 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual((early.status_code, seen), (409, []))
         self.jobs[started["job_ids"][0]]["status"] = "success"
         self.status(sid)
-        res, _ = self.ask(sid, photo, None, reply, waiting=posted["id"])
+        res, seen = self.ask(sid, photo, None, reply, waiting=posted["id"])
+        self.assertIn("REPLY PLACEMENT: embedded_answer", seen[0])
         self.assertEqual([m["card"]["answers"] for m in res.get_json()["messages"]], [posted["id"]])
 
     def test_ask_rejects_bad_requests(self):

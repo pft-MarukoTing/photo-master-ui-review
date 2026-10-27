@@ -109,8 +109,13 @@ How this tool works. These are the only facts you may state about the tool; if a
 
 INSTRUCTION = """You are the assistant in a photo retouching chat. The user is looking at one photo, its AI analysis, and the edit plan the next render (美化) will use. Reply to the user's latest message.
 
+REPLY PLACEMENT
+- REPLY PLACEMENT is supplied by the application. "standalone" is an ordinary chat reply. "embedded_answer" answers a question deferred until analysis or retouching finished; the page places it before the analysis brief or result and supplies navigation afterwards.
+- For "embedded_answer", answer only the outstanding question. Do not append panel/button directions, invitations to retouch, next-step offers, or a transition into the brief/result. This takes precedence over all navigation requirements below, including NEVER A DEAD END and VOICE. Keep options or proposals genuinely needed to fulfil the question (such as requested captions or a necessary clarification); do not replace them with navigation options.
+
 SCOPE
 - You only handle this photo: what the analysis says about it, what the plan will do, and what this tool can change. That is the whole job.
+- Ground visual answers in ANALYSIS. Something omitted from an analysis is not proof that it is absent from the photo. Distinguish what is visibly depicted from hidden properties that appearance cannot establish; do not infer those properties from an object's name or appearance. When evidence is insufficient, state the limit briefly rather than guessing or claiming a definitive absence.
 - Questions about how this tool works -- what a button, panel, setting or step does, what it can or cannot change, what to do next (「分析在做什麼？」「一鍵美化是什麼意思？」「再美化跟看美化項目差在哪？」) -- are in scope. Answer from TOOL GUIDE in one to three short sentences, then point at SCREEN (see NEVER A DEAD END) as a question offering it (「要不要…？」), not as an instruction to press it.
 - When the user wants to see or change a panel rather than learn what it is -- 「設定」 (美化引擎、長寬比、人像修正), 人像, 畫面, 風格 or 個人化需求 (「我要換美化引擎」「開啟設定」「幫我打開風格」) -- set open to that panel: the page opens it right under your reply, so there is nothing to press. Say in one short line where it is, e.g. 「美化引擎在「設定」裡，打開在下面了。」 Action "none", patch_json "", options []. Open only a panel SCREEN panels lists -- after a render that includes the ones folded into 「看美化項目」, and the page opens the round for it; a panel not listed is not on this photo or cannot change this version, so answer instead. A change you can make in PATCH (a 長寬比, a 風格 choice) goes in patch_json instead, and a question about what a panel does gets an answer with open "".
 - Before declining, ask yourself one thing: is this message about this photo? It is when it concerns what the photo shows, what it could be made into or used for (a poster, a magazine cover, an ad, a post), or words to go with it (a title, a headline, a caption, ad copy). Such a request is in scope even if the conversation never mentioned it, and even if it would be out of scope without the photo (「如果要做成海報，有什麼適合的標題？」「這張適合配什麼文案？」). Read it together with CONVERSATION and PLAN too: a short follow-up (「還有別的嗎？」「再給幾個」) continues what the user is making with this photo.
@@ -343,6 +348,14 @@ You are a senior retoucher talking about this one photo. The user should come aw
 - Being sure never means making things up: what ANALYSIS does not say, you do not say."""
 
 
+def _is_embedded_answer(history):
+    # The waiting ask is moved to the end by _answer_waiting. Ordinary follow-ups
+    # have their own ask card and must retain the normal navigation behaviour.
+    latest = next((m for m in reversed(history) if m.get("role") == "user"), {})
+    card = latest.get("card") or {}
+    return card.get("type") == "ask" and card.get("waiting") is True
+
+
 def build_context(analysis, plan, status, history, debug=False, screen=None):
     analysis = analysis or {}
     trimmed = {k: v for k, v in analysis.items() if k not in DROPPED_ANALYSIS_KEYS and not k.startswith("_")}
@@ -370,6 +383,7 @@ def build_context(analysis, plan, status, history, debug=False, screen=None):
     ]) + CACHE_BREAK + "\n\n".join([
         f"PHOTO STATUS: {status}",
         f"SCREEN: {_dump(screen or {'bar': [], 'topics': []})}",
+        "REPLY PLACEMENT: " + ("embedded_answer" if _is_embedded_answer(history) else "standalone"),
         f"PLAN: {_dump(plan_view)}",
         "CONVERSATION (oldest first, the last line is the message to answer):\n"
         + "\n".join(line for line in lines if line),
@@ -1189,6 +1203,8 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
         return dict(reply=q['text'],render=False,proposal=None,options=[c['label'] for c in q['choices']],
             close=False,lines=False,open='',question_kind='content',answer_mode='choices',
             clarification_subtype='body_side_reference',side_question=q,side_reference=side)
+    embedded_answer = _is_embedded_answer(history)
+    navigation_screen = None if embedded_answer else screen
     context = build_context(analysis, plan, status, history, debug=debug, screen=screen)
     marker = "CONVERSATION (oldest first, the last line is the message to answer):\n"
     context = context.replace(marker, ("" if config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION else SIDE_CHAT_RULE) + session_request.INSTRUCTION + LITERAL_CHOICE_INSTRUCTION + "\nPENDING CLARIFICATION: "
@@ -1236,14 +1252,14 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     if proposal:
         proposal.update(direct=True, undo=_undo_patch(patch, plan))
         if judged and reply:
-            reply = _judged_reply(reply, screen, set(patch) - {"literal_texts"} == {"user_prompt"})
+            reply = _judged_reply(reply, navigation_screen, set(patch) - {"literal_texts"} == {"user_prompt"})
         elif _only_drops_wishes({k:v for k,v in patch.items() if k != "literal_texts"}, plan, analysis or {}):
-            reply = _dropped_reply(_dropped_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis or {}), screen)
+            reply = _dropped_reply(_dropped_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis or {}), navigation_screen)
         else:
             added, _, revised = (_wish_changes(plan.get("user_prompt"), patch["user_prompt"], analysis or {})
                                  if "user_prompt" in patch else ([], [], []))
             # A reworded wish is read back like a new one: what it says now.
-            reply = _applied_reply(changes, screen, _grouped_wishes(added + [(head, new) for head, _, new in revised]))
+            reply = _applied_reply(changes, navigation_screen, _grouped_wishes(added + [(head, new) for head, _, new in revised]))
     # A change goes through its card first, even when the model also said render.
     render = result.get("action") == "render" and not wanted
     options = [] if proposal or render else _options(result.get("options"))
@@ -1260,7 +1276,7 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     lines = bool(options) and result.get("lines") is True
     # 只照需求改的時候，每一則都要讓他知道還可以分析；模型漏講就補上。
     # 在問問題、開始美化或收尾的那則不插嘴。
-    if ANALYZE_BUTTON in ((screen or {}).get("bar") or []) and i18n.label(ANALYZE_BUTTON) not in reply \
+    if not embedded_answer and ANALYZE_BUTTON in ((screen or {}).get("bar") or []) and i18n.label(ANALYZE_BUTTON) not in reply \
             and not (render or close or options or offers_button or opened):
         reply = _cat(reply, i18n.tr(ANALYZE_NUDGE))
     return {"reply": reply, "render": render, "proposal": proposal, "options": options, "close": close, "lines": lines,
