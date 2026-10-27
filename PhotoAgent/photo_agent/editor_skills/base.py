@@ -159,6 +159,10 @@ class EditorSkill:
         """Entries this skill adds to the prompt metadata's color_contract."""
         return {}
 
+    def finalize_prompt(self, prompt, analysis, claimed, ctx):
+        """The finished editor prompt after this skill's own edits; claimed holds this skill's (text, axes) items."""
+        return prompt
+
 
 def _axis_set(value):
     """Flatten the analysis's per-correction axis lists into canonical tags."""

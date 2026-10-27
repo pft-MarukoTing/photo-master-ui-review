@@ -743,6 +743,7 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
             **({"preview_people": precomputed_preview["preview_people"]}
                if precomputed_preview is not None and precomputed_preview["format_version"] == 2 else {}))
     overall_analysis = _stamp_local_face_debug_fields(overall_analysis, face_crops, bindings=bindings)
+    overall_analysis["_source_size"] = list(get_image_dimensions(image_bytes))
     if photo_facts:
         overall_analysis.update({field: photo_facts[field] for field in CALL0_FIELDS})
     if precomputed_preview is not None:

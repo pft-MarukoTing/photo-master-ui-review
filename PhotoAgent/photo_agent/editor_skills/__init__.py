@@ -5,11 +5,14 @@ from .body import BodySkill
 from .expression import ExpressionSkill
 from .eyes import EyesSkill
 from .hair import HairSkill
+from .lens import LensSkill
 from .skin import SkinSkill
 from .symmetry import FaceSymmetrySkill
 
 # Order is the order each person's final-state lines are rendered in.
-EDITOR_SKILLS = (ExpressionSkill(), EyesSkill(), HairSkill(), SkinSkill(), BodySkill(), FaceSymmetrySkill())
+EDITOR_SKILLS = (
+    ExpressionSkill(), EyesSkill(), HairSkill(), SkinSkill(), BodySkill(), FaceSymmetrySkill(), LensSkill(),
+)
 
 
 def editor_features():
@@ -28,5 +31,5 @@ def describe_editor_features():
 
 __all__ = [
     "EDITOR_SKILLS", "BodySkill", "EditContext", "EditorFeature", "EditorSkill", "ExpressionSkill",
-    "EyesSkill", "FaceSymmetrySkill", "HairSkill", "SkinSkill", "describe_editor_features", "editor_features",
+    "EyesSkill", "FaceSymmetrySkill", "HairSkill", "LensSkill", "SkinSkill", "describe_editor_features", "editor_features",
 ]

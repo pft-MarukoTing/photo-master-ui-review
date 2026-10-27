@@ -15,6 +15,8 @@ from prompts import (
     _schema_string_array,
 )
 
+from .decisions import face_frame_position
+
 
 # Spliced into build_portrait_qc_instruction's Call B prompt.
 _HAIR_ANALYSIS_SECTION = """## Hair analysis
@@ -219,6 +221,18 @@ Use unclear only when the expression cannot be seen reliably. Set adjust_safe=fa
 """
 
 
+_LENS_STRETCH_SECTION = """## Wide-angle edge stretch
+Intent: Read whether a wide-angle lens has stretched each listed face toward the frame edge, so the edit can return that face to the proportions it would have at the frame center. Python decides whether the edit runs.
+
+1. scene_projection, from the full photo, the same for every person: follow lines that are straight in reality (door and window frames, wall corners, poles, the horizon, table edges). rectilinear = they stay straight out to the frame edges; curved = they bow into arcs across the frame, a fisheye or barrel look; unclear = no such lines to judge by.
+2. Where the face sits is measured for you in the person list: the face center's distance from the frame center as a share of the way to the corner, and the edge or corner it lies toward. Use it rather than estimating. A wide-angle lens stretches content more the farther it is from the center, outward along that direction; a face near the center carries no edge stretch, whatever its shape.
+3. edge_stretch, from the face crop and the full photo together: compare the face's two halves and outline with what its head turn explains. An edge-stretched face is widened or elongated along that outward line: the half toward the frame edge looks broader or heavier than the inner half and the head reads ovalized toward the edge. A head turned away from the camera shows its far side narrower, so a turn never explains a wider outer half.
+4. Before calling it stretch, rule out what makes one side look larger without the lens: head turn or tilt, hair covering a cheek, side lighting, a one-sided expression, and the person's own asymmetry. A large nose, small ears, or a hand looming toward the lens come from camera-to-face distance, not frame position; that is not edge stretch.
+
+lens_issue fields: scene_projection (rectilinear / curved / unclear); edge_stretch (none / slight / visible / unclear: visible = an ordinary viewer would see this face widened toward the edge, slight = noticeable only on close comparison, unclear = too small, covered or turned away to read); visible_evidence (the features and the direction that support the reading); stretch_confidence (0 to 1); should_fix (always false, Python derives it); reason (one sentence for the user).
+"""
+
+
 _ANALYSIS_RESPONSIBILITIES_PORTRAIT_QC = """- Hair analysis is observation-only: classify hair_state, record evidence, and provide the routed candidate fix_action/correction_plan. Always leave hair_issue.should_fix=false for Python to derive; do not suppress a physical state because it may be intentional or because the selected hair level is unknown.
 - Eye-contact detection is separate from blink repair. Analyze whether the readable eyes are locked to the exact current lens, not merely whether the face points forward. Do not derive should_fix and do not write a repair strategy in this pass.
 - Gaze detection recall check: before finalizing, revisit every listed person's eyes. If any readable eyes are not unmistakably lens-locked and that subject's gaze_issue does not yet reflect it, fix it.
@@ -229,11 +243,11 @@ _ANALYSIS_RESPONSIBILITIES_PORTRAIT_QC = """- Hair analysis is observation-only:
 """
 
 
-_PORTRAIT_QC_PERSONA_HEADER = """You are a meticulous portrait quality-control reviewer. A separate photography-direction pass has already analyzed this photo's composition, color, and crop, and has identified the people listed below. Your only job is to inspect each of them, independently, for four physical/expression states: blink/eye closure, gaze direction, hair disruption, and smile intensity. You are not judging composition, color, or crop. For hair, author only the nested per-person candidate hair_issue.correction_plan required by the observed state; Python decides whether that candidate is enabled.
+_PORTRAIT_QC_PERSONA_HEADER = """You are a meticulous portrait quality-control reviewer. A separate photography-direction pass has already analyzed this photo's composition, color, and crop, and has identified the people listed below. Your only job is to inspect each of them, independently, for blink/eye closure, gaze direction, hair disruption, smile intensity, and wide-angle edge stretch of the face. You are not judging composition, color, or crop. For hair, author only the nested per-person candidate hair_issue.correction_plan required by the observed state; Python decides whether that candidate is enabled.
 
 Return only valid JSON. Keep the JSON keys in English. Every user-visible string value (e.g. each issue's "reason") must be Traditional Chinese.
 
-For every listed person, echo subject_index and local_detection_index exactly as provided. These identifiers are authoritative and are used to merge results; do not derive them from output order. Populate blink_issue, hair_issue, gaze_issue, and smile_issue for that same person. Do not output any top-level correction_plan, correction_axes, correction_inverse, or retouch_recipe.
+For every listed person, echo subject_index and local_detection_index exactly as provided. These identifiers are authoritative and are used to merge results; do not derive them from output order. Populate blink_issue, hair_issue, gaze_issue, smile_issue, and lens_issue for that same person. Do not output any top-level correction_plan, correction_axes, correction_inverse, or retouch_recipe.
 """
 
 
@@ -243,11 +257,14 @@ def _person_list_text(persons):
         box = p.get("box") or {}
         subject_index = p.get("subject_index", p.get("_subject_index", i))
         local_detection_index = p.get("local_detection_index", -1)
+        position = p.get("_face_position")
         entries.append(
             "subject_index={} | local_detection_index={} | {} -- box x={:.3f}, y={:.3f}, w={:.3f}, h={:.3f}".format(
                 subject_index, local_detection_index, p.get("label") or "person",
                 box.get("x", 0), box.get("y", 0), box.get("w", 0), box.get("h", 0),
             )
+            + (" | face center {:.2f} of the way from frame center to corner, toward the {}".format(*position[:2])
+               if position else "")
         )
     return "\n".join(entries)
 
@@ -265,6 +282,9 @@ def portrait_qc_persons(analysis):
             continue
         person = dict(subject)
         person["subject_index"] = subject_index
+        position = face_frame_position(analysis, subject)
+        if position:
+            person["_face_position"] = position
         persons.append(person)
     return persons
 
@@ -291,6 +311,8 @@ def build_portrait_qc_instruction(persons):
         + _GAZE_DETECTION_SECTION
         + "\n"
         + _SMILE_ANALYSIS_SECTION
+        + "\n"
+        + _LENS_STRETCH_SECTION
         + "\n## Portrait-QC responsibilities\n"
         + _ANALYSIS_RESPONSIBILITIES_PORTRAIT_QC
     )
@@ -520,6 +542,16 @@ _SMILE_STATE_SCHEMA = _schema_object({
 })
 
 
+_LENS_ISSUE_SCHEMA = _schema_object({
+    "scene_projection": _schema_enum(("rectilinear", "curved", "unclear")),
+    "edge_stretch": _schema_enum(("none", "slight", "visible", "unclear")),
+    "visible_evidence": _schema_string(),
+    "stretch_confidence": _schema_number(),
+    "should_fix": _schema_boolean(),
+    "reason": _schema_string(),
+})
+
+
 # Call B's per-person output shape (build_portrait_qc_instruction) -- one
 # entry per person handed to Call B. subject_index is the stable merge key;
 # local_detection_index validates the Face crop N association.
@@ -530,6 +562,7 @@ _PERSON_ISSUES_SCHEMA = _schema_object({
     "hair_issue": _HAIR_ISSUE_SCHEMA,
     "gaze_issue": _GAZE_DETECTION_SCHEMA,
     "smile_issue": _SMILE_STATE_SCHEMA,
+    "lens_issue": _LENS_ISSUE_SCHEMA,
 })
 
 

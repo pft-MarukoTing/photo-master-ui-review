@@ -1,8 +1,9 @@
 """Merging Call B/C replies into the analysis and the deterministic blink/gaze/hair decisions."""
 
+import math
 import re
 
-from prompts import _HAIR_ACTION_BY_STATE, _HAIR_FALLBACK_PLAN_BY_STATE
+from prompts import _HAIR_ACTION_BY_STATE, _HAIR_FALLBACK_PLAN_BY_STATE, LENS_AXIS
 
 
 def _default_person_issues():
@@ -52,6 +53,10 @@ def _default_person_issues():
             "should_fix": False, "reason": "不適用",
         },
         "smile_issue": {"smile_intensity": "unclear", "adjust_safe": False, "reason": "不適用"},
+        "lens_issue": {
+            "scene_projection": "unclear", "edge_stretch": "unclear", "visible_evidence": "不適用",
+            "stretch_confidence": 0.0, "should_fix": False, "reason": "不適用",
+        },
     }
 
 
@@ -104,7 +109,7 @@ def merge_portrait_qc_issues(analysis, portrait_qc):
                 )
             )
 
-        for key in ("blink_issue", "hair_issue", "gaze_issue", "smile_issue"):
+        for key in ("blink_issue", "hair_issue", "gaze_issue", "smile_issue", "lens_issue"):
             value = item.get(key)
             if not isinstance(value, dict):
                 raise ValueError(
@@ -981,4 +986,105 @@ def merge_eye_repair_strategies(analysis, repair_response):
     missing = sorted(expected - seen)
     if missing:
         raise ValueError("eye repair plans missing subject_index values: {}".format(missing))
+    return cleaned
+
+
+# How far from the frame center (as a share of the half-diagonal) a face must sit before its stretch is
+# corrected: a visible stretch needs less distance than a slight one, which also needs straight scene lines.
+LENS_VISIBLE_MIN_OFFSET = 0.15
+LENS_SLIGHT_MIN_OFFSET = 0.3
+# A slight stretch on a face narrower than this share of the long side (a far, full-body shot) is too small to correct.
+LENS_SLIGHT_MIN_FACE_WIDTH = 0.12
+_DIRECTIONS = ("right", "lower right", "bottom", "lower left", "left", "upper left", "top", "upper right")
+
+
+def face_frame_position(analysis, subject):
+    """(offset, direction, width) of the subject's detected face, or None.
+
+    offset is the face center's distance from the frame center as a share of the half-diagonal; direction names
+    the frame edge or corner it points toward; width is the face width as a share of the image's long side.
+    """
+    detection = subject.get("local_detection_index")
+    faces = analysis.get("_local_face_boxes") or []
+    if isinstance(detection, bool) or not isinstance(detection, int) or not 1 <= detection <= len(faces):
+        return None
+    box = (faces[detection - 1] or {}).get("face_box") or {}
+    if not all(isinstance(box.get(key), (int, float)) for key in ("x", "y", "w", "h")):
+        return None
+    width, height = analysis.get("_source_size") or (1, 1)
+    dx = (box["x"] + box["w"] / 2 - 0.5) * width
+    dy = (box["y"] + box["h"] / 2 - 0.5) * height
+    sector = int(round(math.degrees(math.atan2(dy, dx)) / 45)) % 8
+    return (math.hypot(dx, dy) / (math.hypot(width, height) / 2), _DIRECTIONS[sector],
+            box["w"] * width / max(width, height))
+
+
+def derive_lens_decisions(analysis):
+    """Derive lens_issue.should_fix from the stretch reading and the face's measured distance from the center.
+
+    A slight stretch counts only in a photo whose straight lines stay straight; a visible one counts in a
+    curved, fisheye-look photo too.
+    """
+    cleaned = dict(analysis)
+    subjects = [dict(subject) for subject in (analysis.get("subjects") or [])]
+    cleaned["subjects"] = subjects
+    curved = any(
+        (subject.get("lens_issue") or {}).get("scene_projection") == "curved"
+        for subject in subjects if subject.get("is_person")
+    )
+    for subject_index, subject in enumerate(subjects):
+        if not subject.get("is_person"):
+            continue
+        issue = dict(subject.get("lens_issue") or {})
+        position = face_frame_position(cleaned, subject)
+        offset, direction, face_width = position or (None, None, None)
+        stretch = issue.get("edge_stretch")
+        issue.update({
+            "should_fix": offset is not None and (
+                (stretch == "visible" and offset >= LENS_VISIBLE_MIN_OFFSET)
+                or (stretch == "slight" and not curved and offset >= LENS_SLIGHT_MIN_OFFSET
+                    and face_width >= LENS_SLIGHT_MIN_FACE_WIDTH)
+            ),
+            "_face_offset": None if offset is None else round(offset, 3),
+            "_face_direction": direction,
+            "_subject_index": subject_index,
+        })
+        subject["lens_issue"] = issue
+    return apply_lens_correction_item(cleaned)
+
+
+def lens_correction_texts(names):
+    """(correction_plan, retouch_recipe, correction_inverse) for the photo's one lens-correction item."""
+    return (
+        "修正廣角變形，主要是" + "、".join(names) + "的臉",
+        "修正廣角造成的邊緣人臉變形",
+        "保留邊緣人物在原圖中的臉部比例",
+    )
+
+
+def apply_lens_correction_item(analysis):
+    """Keep exactly one lens-axis correction item, present only when some person's lens_issue should be fixed."""
+    cleaned = dict(analysis)
+    plan = list(cleaned.get("correction_plan") or [])
+    axes = list(cleaned.get("correction_axes") or [])
+    recipe = list(cleaned.get("retouch_recipe") or [])
+    inverse = list(cleaned.get("correction_inverse") or [])
+    keep = [
+        index for index in range(len(plan))
+        if not (index < len(axes) and LENS_AXIS in (axes[index] or []))
+    ]
+    pick = lambda values: [values[index] for index in keep if index < len(values)]
+    plan, axes, recipe, inverse = pick(plan), pick(axes), pick(recipe), pick(inverse)
+    names = [
+        subject.get("label") or "畫面中的人物"
+        for subject in cleaned.get("subjects") or []
+        if subject.get("is_person") and (subject.get("lens_issue") or {}).get("should_fix")
+    ]
+    if names:
+        plan_text, recipe_text, inverse_text = lens_correction_texts(names)
+        plan.append(plan_text)
+        axes.append([LENS_AXIS])
+        recipe.append(recipe_text)
+        inverse.append(inverse_text)
+    cleaned.update(correction_plan=plan, correction_axes=axes, retouch_recipe=recipe, correction_inverse=inverse)
     return cleaned

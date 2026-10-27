@@ -11,6 +11,7 @@ from .decisions import (
     derive_blink_decisions,
     derive_gaze_decisions,
     derive_hair_decisions,
+    derive_lens_decisions,
     eye_repair_targets,
     merge_eye_repair_strategies,
     merge_portrait_qc_issues,
@@ -45,10 +46,10 @@ class PortraitAnalysisSkill(AnalysisSkill):
 
     name = "portrait"
     description = (
-        "Judges each person's closed eyes, gaze contact, messy hair and smile, plans the eye repairs, "
+        "Judges each person's closed eyes, gaze contact, messy hair, smile and wide-angle face stretch, plans the eye repairs, "
         "and plans Body Reshape when that feature is on."
     )
-    produces = frozenset({"blink_issue", "gaze_issue", "hair_issue", "smile_issue", "body_reshape"})
+    produces = frozenset({"blink_issue", "gaze_issue", "hair_issue", "smile_issue", "lens_issue", "body_reshape"})
 
     def applies_to(self, analysis):
         return bool(portrait_qc_persons(analysis))
@@ -69,6 +70,7 @@ class PortraitAnalysisSkill(AnalysisSkill):
             merged = derive_hair_decisions(merged)
             merged = derive_blink_decisions(merged)
             merged = derive_gaze_decisions(merged)
+            merged = derive_lens_decisions(merged)
             usages.append(data_b.get("usage"))
         except Exception as exc:
             logger.warning(

@@ -1014,4 +1014,7 @@ Global preservation:
     }
     for skill in EDITOR_SKILLS:
         metadata.update(skill.prompt_metadata(analysis))
-    return prompt.strip(), metadata
+    prompt = prompt.strip()
+    for skill in EDITOR_SKILLS:
+        prompt = skill.finalize_prompt(prompt, analysis, claimed[skill.name], skill_ctx)
+    return prompt, metadata

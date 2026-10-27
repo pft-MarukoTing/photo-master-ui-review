@@ -422,6 +422,10 @@ AXIS_DEFINITIONS = {
     "other": "anything the list above does not cover",
 }
 
+# Tags the one lens-correction item the portrait analysis adds after Call B. Call A never writes it, so it stays out
+# of AXIS_DEFINITIONS, which is Call A's vocabulary.
+LENS_AXIS = "lens"
+
 _AXIS_VOCABULARY = ", ".join(f'"{axis}" ({desc})' for axis, desc in AXIS_DEFINITIONS.items())
 
 # Near-misses the analysis model actually produces despite being handed the
