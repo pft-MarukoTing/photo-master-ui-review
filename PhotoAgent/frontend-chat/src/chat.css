@@ -2056,4 +2056,6 @@ button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
 
 /* 接著某一版調整：輸入框上方那條帶著當底的那一版，跟指定人物的 token 同一個樣子。 */
 .chat-footbar .chat-continue-from{max-width:none;margin:var(--sp-2) 0;padding-right:var(--sp-1)}
+/* 接著這張調整時，美化項目還有沒美化的改動：一行小字講它們這次不會用到。 */
+.chat-continue-note{min-width:0;font-size:var(--chat-fs-sm);color:var(--n54);text-wrap:pretty}
 .chat-continue-shot{width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0}

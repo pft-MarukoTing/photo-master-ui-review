@@ -6,7 +6,7 @@ import { sideChoice, type SideAnswer, type SideQuestion } from "./side-reference
 // from the server's messages). Every action is one of the chat API calls;
 // typed messages go to /ask, whose replies may carry a plan change to confirm.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import type { ComponentChildren } from "preact";
+import { Fragment, type ComponentChildren } from "preact";
 import { api, ApiError, setUser, urls, type AskFace, type ReviewTurn, type Screen } from "./api";
 import { isHeic, previewBlob, previewBlobs } from "./heic";
 import {
@@ -21,6 +21,7 @@ import {
   fillNoteBox,
   noteBoxKeys,
   flushPromptDraft,
+  PromptEditor,
   PROMPT_SAVE_MS,
   readNoteBox,
   FacePicker,
@@ -63,6 +64,7 @@ import {
   nameOf,
   OptionsCard,
   pickedStyles,
+  ContinueStyles,
   PROMPT_MAX,
   termOf,
   topicLead,
@@ -3085,7 +3087,7 @@ export function App() {
 
   // 接著某一版調整：這一輪的需求先存成這張照片的草稿，再用存下的那份從那一版的成品產生。
   // 草稿被別的分頁改過（draft_changed）就拿伺服器現在的 revision 蓋一次。
-  function continuePhoto(v: Version, text: string) {
+  function continuePhoto(v: Version, text: string, styles: Record<string, string>) {
     if (!session || !photo) return Promise.resolve(false);
     const id = session.session_id;
     const pid = photo.photo_id;
@@ -3096,10 +3098,10 @@ export function App() {
     return run(async () => {
       let saved: Session;
       try {
-        saved = await api.saveContinuationDraft(id, pid, source, text, same ? held!.revision : 0);
+        saved = await api.saveContinuationDraft(id, pid, source, text, styles, same ? held!.revision : 0);
       } catch (e) {
         if (!(e instanceof ApiError && e.body?.error === "draft_changed")) throw e;
-        saved = await api.saveContinuationDraft(id, pid, source, text, e.body.draft?.revision || 0);
+        saved = await api.saveContinuationDraft(id, pid, source, text, styles, e.body.draft?.revision || 0);
       }
       const draft = saved.photos.find((p) => p.photo_id === pid)?.continuation_draft;
       await api.renderFromVersion(id, pid, source, draft?.revision || 0);
@@ -5645,7 +5647,7 @@ export function SessionView(props: {
   onSelectVersion: (v: Version) => void;
   onRender: (label: string, icon: string, patch?: Plan) => void;
   // 接著某一版調整（render_from_version 開著才有）：text 是這一輪的需求。
-  onContinue?: (v: Version, text: string) => Promise<boolean>;
+  onContinue?: (v: Version, text: string, styles: Record<string, string>) => Promise<boolean>;
   // 只剩拖放進畫布這條路會用到 -- 丟一張新的照片進來等於開一個新對話。
   onFile: (f: File) => void;
   // faces 只在沒有分析時用：指的人是本地偵測的框和位置，取代 subjectIndices 送出。
@@ -5698,8 +5700,8 @@ export function SessionView(props: {
 
   // The options can be changed in one round at a time: after analysis until
   // the first render, and from 調整後再美化 until its render. What was said or
-  // done stays; changing it back is another step. (adjust_cancelled is only
-  // in older sessions.)
+  // done stays; changing it back is another step. 返回 (adjust_cancelled) closes
+  // the round and keeps the plan; the next round picks up from the same start.
   const lastIndex = (test: (type: string) => boolean) => {
     for (let i = messages.length - 1; i >= 0; i--) if (test(messages[i].card?.type || "")) return i;
     return -1;
@@ -5776,6 +5778,22 @@ export function SessionView(props: {
     const touched = changedCats(roundPlan, photo.plan);
     for (const c of cats) if (touched.has(c)) dirtyCats.push(c);
   }
+  // 按「返回」離開、還沒美化的那一輪：改過的項目留在設定裡，這輪的起點也留著。
+  // 下次看美化項目從同一個起點接著，改了什麼才還看得出來；美化完那排把它標在
+  // 「看美化項目」上。接著這張調整（base "version"）不用這些設定，美化完也還留著。
+  let lastPlanRender = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const card = messages[i].card;
+    if (/^render_/.test(card?.type || "") && card?.base !== "version") { lastPlanRender = i; break; }
+  }
+  const parkedPlan: Dict | undefined =
+    !roundOpen && lastCancel > lastAdjust && lastAdjust > lastPlanRender ? roundPlan : undefined;
+  const parkedCats: Category[] = [];
+  if (parkedPlan) {
+    const touched = changedCats(parkedPlan, photo.plan);
+    for (const c of Object.keys(CATEGORIES) as Category[]) if (touched.has(c)) parkedCats.push(c);
+  }
+  const parkedNote = parkedCats.length ? t("改了{v1}，還沒美化", { v1: parkedCats.map((c) => nameOf(c)).join(t("、")) }) : undefined;
 
   // Who the composer is pointed at, and the option fields to flash.
   const [pointed, setPointed] = useState<number[]>([]);
@@ -5784,9 +5802,44 @@ export function SessionView(props: {
   // 再美化一次, or 美化 in a round with nothing changed, asks first; any new
   // message or change drops the question.
   const [confirmRerun, setConfirmRerun] = useState(false);
-  // 按了「接著這張調整」：下一句打的字就是要在這一版上改的地方，送出去直接產生。
+  // 按了「接著這張調整」：之後打的字是要在這一版上改的地方，按「美化」才產生。
   const [continuing, setContinuing] = useState<Version | null>(null);
   useEffect(() => setContinuing(null), [photo.photo_id]);
+  // 這一輪另外挑的風格，跟打的字一起送；只屬於這一輪，不寫進照片的設定。
+  const [contStyles, setContStyles] = useState<Record<string, string>>({});
+  const [contStyleOpen, setContStyleOpen] = useState(false);
+  const contStyled = Object.keys(contStyles).length > 0;
+  // 打的每一句先給 AI 看過（跟上傳頁的個人化需求一樣），收下的累積在 contPrompt，
+  // 可以直接改字；按「美化」才連同風格一起送出。
+  const [contTurns, setContTurnsState] = useState<ContTurn[]>([]);
+  const contTurnsRef = useRef<ContTurn[]>([]);
+  const setContTurns = (turns: ContTurn[]) => {
+    contTurnsRef.current = turns;
+    setContTurnsState(turns);
+  };
+  const [contPrompt, setContPromptState] = useState("");
+  const contPromptRef = useRef("");
+  const setContPrompt = (text: string) => {
+    contPromptRef.current = text;
+    setContPromptState(text);
+  };
+  const [contReviewing, setContReviewing] = useState(false);
+  // 不調整了還在等的 review，回來就不算數。
+  const contGen = useRef(0);
+  useEffect(() => {
+    if (!continuing) {
+      setContStyles({});
+      setContStyleOpen(false);
+      contGen.current++;
+      setContTurns([]);
+      setContPrompt("");
+      setContReviewing(false);
+    }
+  }, [!!continuing]);
+  // 接著調整到一半點了別的版本：改成以那一版為底，打到一半的字留著。
+  useEffect(() => {
+    if (current) setContinuing((was) => (was && was.version_id !== current.version_id ? current : was));
+  }, [current?.version_id]);
   // 這一輪寫了（或改了）個人化需求，美化前先問：只照需求改，還是順便整張美化。
   // 記著按的是哪顆美化，問完照那顆的字送出去。
   const [askMode, setAskMode] = useState<{ label: string; icon: string } | null>(null);
@@ -6075,16 +6128,65 @@ export function SessionView(props: {
   // 頭像已經排在 AI 那句底下可以直接點時，輸入框上面那排就先收起來，免得兩處都能選。
   const facesInline =
     !props.pendingAsk && (asksWho(lastCard) || (lastCard?.type === "llm_reply" && lastCard.question_kind === "person" && !lastCard.proposal && (lastCard.options || []).some((o: string) => !!faceOption(o))));
+  async function reviewCont(line: string) {
+    const gen = contGen.current;
+    const before = contTurnsRef.current;
+    const prompt = contPromptRef.current;
+    const history: ReviewTurn[] = before.flatMap((x): ReviewTurn[] => [
+      { role: "user", text: x.text },
+      ...(x.reply ? [{ role: "assistant" as const, text: x.reply, ...(x.options ? { question: true, options: x.options } : {}) }] : []),
+    ]);
+    setContTurns([...before, { text: line }]);
+    setContReviewing(true);
+    let turn: ContTurn;
+    let start = false;
+    try {
+      const r = await api.promptReview(line, prompt, history, [], prompt ? [{ who: "", text: prompt }] : [],
+        undefined, undefined, undefined, true);
+      if (gen !== contGen.current) return;
+      // 跟前面衝突的，模型把前面那段改寫過；撤回的那句本身不進清單。
+      let next = (r.accepted ? r.merged?.find((m) => m.section === 0)?.text : undefined) ?? contPromptRef.current;
+      if (r.accepted && !r.withdrawn) next = [next, r.line || line].filter(Boolean).join(t("；"));
+      setContPrompt(next);
+      turn = { text: line, reply: r.reply || (r.accepted ? t("好，這句記下來了，按「美化」時一起套用。") : ""),
+        ...(r.ask ? { options: r.options || [] } : {}) };
+      start = r.start === "render";
+    } catch {
+      if (gen !== contGen.current) return;
+      // 問不到就先收下，美化前還能在框裡改。
+      setContPrompt([contPromptRef.current, line].filter(Boolean).join(t("；")));
+      turn = { text: line, reply: t("好，這句先記下來，按「美化」時一起套用。") };
+    } finally {
+      if (gen === contGen.current) setContReviewing(false);
+    }
+    setContTurns([...before, turn]);
+    // 「幫我美化」就是按「美化」。
+    if (start) void continueNow();
+  }
+
+  async function continueNow() {
+    if (!continuing || !props.onContinue) return;
+    try {
+      await flushPromptDraft();
+    } catch {
+      return;
+    }
+    const text = contPromptRef.current.trim();
+    if (!text && !contStyled) return;
+    const ok = await props.onContinue(continuing, text, contStyles);
+    if (ok) setContinuing(null);
+  }
+
   async function send(text: string, si: number[]) {
     if (pendingPerson?.kind === "edit_description" || pendingPerson?.kind === "action" || pendingPerson?.kind === "visual") {
       const answer = await props.onConfirmPeople([], undefined, undefined, undefined, undefined, text);
       if (answer !== "new_message") return answer;
     }
     if (continuing && props.onContinue) {
-      if (!text.trim()) return false;
-      const ok = await props.onContinue(continuing, text.trim());
-      if (ok) setContinuing(null);
-      return ok;
+      const line = text.trim();
+      if (!line) return false;
+      void reviewCont(line);
+      return true;
     }
     if (pendingProposal && YES.test(text.trim())) {
       await choose(pendingProposal, "apply");
@@ -6316,7 +6418,9 @@ export function SessionView(props: {
   // 這一步能按的「看美化項目／美化」接在最新一則 AI 的話底下，不另外在輸入框上面擺
   // 一排：話講到哪，按鈕就在哪。bar 是這幾顆上的字，問 AI 時一起送過去，它的
   // 回覆才指得出現在能按什麼。
-  const enterAdjust = () => props.onPost({ type: "adjust_opened", plan: snapshotOf(photo.plan) });
+  const enterAdjust = () => props.onPost({ type: "adjust_opened", plan: parkedPlan || snapshotOf(photo.plan) });
+  // 返回：回到美化完那排，這輪改的都留著（kept 記下是哪幾項，回話照著講）。
+  const leaveAdjust = () => { setConfirmRerun(false); props.onPost({ type: "adjust_cancelled", kept: dirtyCats }); };
   let bar: string[] = [];
   let actionChips: ComponentChildren = null;
   // 只照需求改的那一版（或這一輪）：除了改需求、美化，每一步都把「幫我分析」
@@ -6327,11 +6431,13 @@ export function SessionView(props: {
   ) : null;
   if (editing && (photo.status === "ready" || (reframing && !renderQueued))) {
     // 調整中只放美化：項目在對話裡點，「看美化項目」再按一次會把這輪的起點重設掉。
+    // 美化完才開的這一輪多一顆「返回」：回到美化完那排，改的都先留著。
     // 改了還沒美化的提示掛在美化鍵上，不再另外寫一行字。
     const label = startLabel;
     const pending = dirtyCats.length ? t("改了{v1}，還沒美化", { v1: dirtyCats.map((c) => nameOf(c)).join(t("、")) }) : undefined;
     actionChips = (
       <>
+        {adjusting && <Chip label={t("返回")} icon="undo" disabled={busy} onClick={leaveAdjust} />}
         {analyzeChip}
         <Chip
           label={t(label)}
@@ -6343,26 +6449,27 @@ export function SessionView(props: {
         />
       </>
     );
-    bar = offerAnalyze ? ["幫我分析", label] : [label];
+    bar = [...(adjusting ? ["返回"] : []), ...(offerAnalyze ? ["幫我分析"] : []), label];
   } else if (photo.status !== "ready") {
     // 分析中、美化中：處理中那張卡已經講了接下來做什麼，不擺按不下去的鍵。
   } else if (versions.length && current) {
     actionChips = (
       <>
-        <Chip label={t("看美化項目")} icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
+        <Chip label={t("看美化項目")} icon="pencil" badge={parkedNote} disabled={busy || !ready} onClick={enterAdjust} />
         {analyzeChip}
         {props.onContinue && (
           <Chip label={t("接著這張調整")} icon="tune" disabled={busy} title={t("以第 {n} 版為底，只改你接下來說的地方", { n: current.ordinal })}
             onClick={() => { setContinuing(current); setPointed([]); setComposerKey((k) => k + 1); }} />
         )}
-        <Chip label={t("再美化")} icon="redo" kind="primary" disabled={busy} onClick={() => setConfirmRerun(true)} />
+        <Chip label={t("再美化")} icon="redo" kind="primary" disabled={busy}
+          onClick={() => (parkedNote ? props.onRender("再美化", "redo") : setConfirmRerun(true))} />
       </>
     );
     bar = [...(offerAnalyze ? ["看美化項目", "幫我分析"] : ["看美化項目"]), ...(props.onContinue ? ["接著這張調整"] : []), "再美化"];
   } else if (lastOutcome?.card?.type === "render_failed") {
     actionChips = (
       <>
-        <Chip label={t("看美化項目")} icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
+        <Chip label={t("看美化項目")} icon="pencil" badge={parkedNote} disabled={busy || !ready} onClick={enterAdjust} />
         <Chip label={t("再試一次")} icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再試一次", "redo")} />
       </>
     );
@@ -6691,10 +6798,15 @@ export function SessionView(props: {
         return (
           <>
             <UserMsg meta={clockLabel(m.created_at)}>
-              <ClickBubble icon="x" label={t("取消調整")} />
+              <ClickBubble icon="undo" label={t("返回")} />
             </UserMsg>
             <AssistantMsg>
-              <p class="chat-text">{t("好，設定已還原成調整前的樣子。")}</p>
+              {/* 舊的對話沒有 kept：那時的取消會把設定還原。 */}
+              <p class="chat-text">{!Array.isArray(m.card?.kept)
+                ? t("好，設定已還原成調整前的樣子。")
+                : m.card.kept.length
+                  ? t("好，{v1}的改動先幫你留著，還沒美化。", { v1: (m.card.kept as Category[]).map((c) => nameOf(c)).join(t("、")) })
+                  : t("好，回到上一步。")}</p>
               {endActions(idx)}
             </AssistantMsg>
           </>
@@ -6735,7 +6847,8 @@ export function SessionView(props: {
         if (c.base === "version" && typeof c.prompt === "string") {
           const from = versions.find((x) => x.version_id === c.source_result?.version_id);
           return (
-            <AskBubble text={c.prompt}
+            <AskBubble text={[c.prompt, ...pickedStyles(styleAnalysis, caps, { style_options: c.style_options || {} })]
+              .filter(Boolean).join(t("、"))}
               meta={[from ? t("調整第 {n} 版", { n: from.ordinal }) : t("接著調整"), clockLabel(m.created_at)].join(" · ")} />
           );
         }
@@ -6770,6 +6883,14 @@ export function SessionView(props: {
               shown={v.version_id === current?.version_id}
             />
             {answerIn(idx)}
+            {/* 接著這張調整不用美化項目的設定：返回時留著的改動，在最新這版提醒一下還在。 */}
+            {c.base === "version" && idx === lastRender && parkedCats.length > 0 && (
+              <p class="chat-text">
+                {t("剛剛在美化項目改的{v1}，這版沒有用到，還幫你留著。想修改的話，按「看美化項目」再看一次，或直接按「再美化」。", {
+                  v1: parkedCats.map((x) => nameOf(x)).join(t("、")),
+                })}
+              </p>
+            )}
             {offerCheck && (
               <>
                 <p class="chat-text">
@@ -7028,7 +7149,7 @@ export function SessionView(props: {
   const screen: Screen = {
     bar: busy || props.pendingAsk || photo.status !== "ready" ? [] : bar,
     topics: editing ? cats.map((c) => CATEGORIES[c].label) : [],
-    pending: [...(adjusting ? dirtyCats.map(c => CATEGORIES[c].label) : []), ...(pendingPerson ? [pendingPerson.text] : [])],
+    pending: [...(adjusting ? dirtyCats : parkedCats).map(c => CATEGORIES[c].label), ...(pendingPerson ? [pendingPerson.text] : [])],
     panels: panels.map((c) => CATEGORIES[c].label),
   };
 
@@ -7094,6 +7215,7 @@ export function SessionView(props: {
                       <FootBar
                         faces={
                           continuing ? (
+                            <>
                             <span class="chat-composer-who chat-continue-from">
                               <img class="chat-continue-shot" src={urls.resultThumb(versionJob(continuing))} alt="" />
                               {t("調整第 {n} 版", { n: continuing.ordinal })}
@@ -7102,13 +7224,17 @@ export function SessionView(props: {
                                 <Icon name="x" size={12} />
                               </button>
                             </span>
+                            {parkedNote && <span class="chat-continue-note">{t("美化項目的改動這次不會用到，會先留著")}</span>}
+                            </>
                           ) : !pendingPerson && !facesInline && pickable.length > 1 && <FacePicker people={pickable} pointed={pointed} onPoint={setPointed} />
                         }
                       />
                       <Composer
-                        disabled={busy || photo.status === "failed"}
+                        disabled={busy || photo.status === "failed" || contReviewing}
                         onSend={send}
-                        placeholder={continuing ? [t("想在第 {n} 版上改什麼？", { n: continuing.ordinal }), t("想改什麼？")] : undefined}
+                        placeholder={continuing
+                          ? [t("想在第 {n} 版上改什麼？", { n: continuing.ordinal }), t("想改什麼？")]
+                          : undefined}
                         people={continuing ? [] : pickable}
                         pointed={pointed}
                         onPoint={setPointed}
@@ -7121,6 +7247,63 @@ export function SessionView(props: {
                   {intro}
                   {markAt < 0 ? items : <>{items.slice(0, markAt)}{reportMark}{items.slice(markAt)}</>}
                   {!placed && endRow && <AssistantMsg>{endRow}</AssistantMsg>}
+                  {continuing && contTurns.map((x, i) => (
+                    <Fragment key={i}>
+                      <AskBubble text={x.text} />
+                      {x.reply && (
+                        <AssistantMsg>
+                          <p class="chat-text">{x.reply}</p>
+                          {!!x.options?.length && i === contTurns.length - 1 && (
+                            <div class="chat-choices">
+                              {x.options.map((o) => (
+                                <Chip key={o} label={o} disabled={busy || contReviewing} onClick={() => void reviewCont(o)} />
+                              ))}
+                            </div>
+                          )}
+                        </AssistantMsg>
+                      )}
+                    </Fragment>
+                  ))}
+                  {continuing && contReviewing && <AssistantMsg>{typing}</AssistantMsg>}
+                  {/* 按了「美化」到動畫出來之間 busy 也要留著這張卡：收掉的話最後一則會變成上面那句
+                      「按下面的「美化」就會開始」，像又講了一次。 */}
+                  {continuing && !contReviewing && (
+                    <AssistantMsg>
+                      {!contTurns.length && (
+                        <p class="chat-text">{t("想改的地方可以一句一句打在下面，我會先幫你看過、記下來；也可以按「風格」換光線、角度這類效果。都好了再按「美化」。")}</p>
+                      )}
+                      {(!!contPrompt || contTurns.length > 0) && (
+                        <div class="chat-card chat-notes">
+                          <span class="chat-meta">{t("個人化需求")}</span>
+                          <PromptEditor value={contPrompt} faces={{}} busy={busy} label={t("個人化需求")}
+                            placeholder={t("還沒有要改的地方")}
+                            onSave={async (text) => setContPrompt(text)}
+                            extra={!!contPrompt && (
+                              <button type="button" class="chat-chip chat-opt-chip is-ghost" disabled={busy} onClick={() => setContPrompt("")}>
+                                {t("清除")}
+                              </button>
+                            )} />
+                        </div>
+                      )}
+                      {contStyleOpen && (
+                        <ContinueStyles analysis={styleAnalysis || ({} as Analysis)} caps={caps} picked={contStyles}
+                          busy={busy} onPick={(styles) => {
+                            setContStyles(Object.fromEntries(
+                              Object.entries(styles).filter(([k, v]) => v && v !== caps.style_options.find((g) => g.id === k)?.default)));
+                            // 選好就收起來：選了什麼看「風格」鍵上的點，要再改就再按一次。
+                            setContStyleOpen(false);
+                          }} />
+                      )}
+                      <div class="chat-choices">
+                        <Chip label={t("風格")} icon="wand" kind={contStyleOpen ? "picked" : undefined}
+                          badge={contStyled ? t("已選風格：{v}", { v: pickedStyles(styleAnalysis, caps, { style_options: contStyles }).join(t("、")) }) : undefined}
+                          disabled={busy} onClick={() => setContStyleOpen((o) => !o)} />
+                        {(!!contPrompt.trim() || contStyled) && (
+                          <Chip label={t("美化")} icon="wand" kind="primary" disabled={busy} onClick={() => void continueNow()} />
+                        )}
+                      </div>
+                    </AssistantMsg>
+                  )}
                   {canShowTargetQuestion(photo) && pendingPerson && !messages.some(m => m.card?.target_question?.question_id === pendingPerson.question_id && m.card?.question_revision === photo.preview_conversation?.revision) &&
                     <AssistantMsg><p class="chat-text">{pendingPerson.text}</p>{formalTargetControls(pendingPerson, true)}</AssistantMsg>}
                   {props.pendingAsk && !(holding(step(messages.length, -1)) && HOSTS.includes(messages[step(messages.length, -1)]?.card?.type || "")) && (
@@ -7231,6 +7414,9 @@ function AnswerList(props: {
     </div>
   );
 }
+
+// 「接著這張調整」打的一句和 AI 的回覆；`options` 是 AI 追問時給的選項。
+type ContTurn = { text: string; reply?: string; options?: string[] };
 
 export function AskBubble({ text, faces, meta }: { text: string; faces?: FaceRef[]; meta?: string }) {
   return (

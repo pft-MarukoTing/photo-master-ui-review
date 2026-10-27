@@ -258,7 +258,12 @@ export const EN: Record<string, string> = {
   "改好按下面的「美化」我就開始": "When you're ready, tap “Retouch” below to start",
   "可以調整{v1}，想先看哪一項？": "You can adjust {v1}. Which would you like to look at first?",
   "點下面的「{v1}」就可以改。": "Tap “{v1}” below to change it.",
-  "取消調整": "Discard Changes",
+  "返回": "Back",
+  "好，{v1}的改動先幫你留著，還沒美化。": "OK, I’ve kept your changes to {v1}. They haven’t been applied yet.",
+  "好，回到上一步。": "OK, back to where you were.",
+  "剛剛在美化項目改的{v1}，這版沒有用到，還幫你留著。想修改的話，按「看美化項目」再看一次，或直接按「再美化」。":
+    "This version didn’t use your changes to {v1}; they’re still kept. To change them, tap “Review Edits” to look them over, or go straight to “Retouch Again”.",
+  "美化項目的改動這次不會用到，會先留著": "Your edit changes won’t be used here; they’re kept for later",
   "好，設定已還原成調整前的樣子。": "OK, your settings are back to how they were.",
   "這次分析沒有成功：{error}": "The analysis failed: {error}",
   "排定的美化也先取消了。": "The scheduled retouch was also canceled. ",
@@ -824,4 +829,9 @@ export const EN: Record<string, string> = {
   "想在第 {n} 版上改什麼？": "What should change in version {n}?",
   "想改什麼？": "What should change?",
   "有幾版是接著別版調整的，其他皆由原圖重新產生": "Some versions adjust another version; the rest are regenerated from the original",
+  "好，這句記下來了，按「美化」時一起套用。": "Got it, noted. It'll be applied when you tap “Retouch”.",
+  "好，這句先記下來，按「美化」時一起套用。": "Noted for now. It'll be applied when you tap “Retouch”.",
+  "想改的地方可以一句一句打在下面，我會先幫你看過、記下來；也可以按「風格」換光線、角度這類效果。都好了再按「美化」。": "Type what you'd like changed below, one thing at a time, and I'll check each one and note it down. You can also tap “Style” to change things like lighting or angle. Tap “Retouch” when you're ready.",
+  "還沒有要改的地方": "Nothing to change yet",
+  "已選風格：{v}": "Styles picked: {v}",
 };

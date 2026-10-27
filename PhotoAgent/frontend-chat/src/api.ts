@@ -186,10 +186,12 @@ export const api = {
   // 項撤回（「帽子拿掉」→「帽子留著」），照 `merged` 改完就好，這句不進清單。
   // `batch`：從好幾張的總覽打的（張數、這批的「分析／美化」鍵名稱、照片清單在哪），
   // AI 就講「這幾張」、只講某一張的話請人去那張改；單張的上傳頁不帶。
+  // `continuation`：「接著這張調整」打的，AI 只指向「美化」，不提分析、不改比例設定。
   promptReview: (text: string, prompt: string, history: ReviewTurn[], people: string[],
     sections: { who: string; text: string }[] = [],
     batch?: { photos: number; unrendered: number; analyze: string; render: string; where: string },
-    sideContext?: { source_sha256: string; analysis_model: string; previous_token?: string }, sideAnswer?: SideAnswer) =>
+    sideContext?: { source_sha256: string; analysis_model: string; previous_token?: string }, sideAnswer?: SideAnswer,
+    continuation = false) =>
     request<{
       accepted: boolean;
       clarification_subtype?: "body_side_reference";
@@ -221,7 +223,7 @@ export const api = {
       `${CHAT}/prompt-review`,
       { ...json("POST", { text, prompt, history, people, sections,
         ...(batch ? {batch} : {}), ...(sideContext ? {side_context:sideContext} : {}),
-        ...(sideAnswer ? {side_answer:sideAnswer} : {}) }), signal: AbortSignal.timeout(65000) },
+        ...(sideAnswer ? {side_answer:sideAnswer} : {}), ...(continuation ? {continuation} : {}) }), signal: AbortSignal.timeout(65000) },
     ),
 
   // batchId：多張上傳的同一批，最近照片會把它們合成一格。
@@ -337,9 +339,10 @@ export const api = {
       { ...json("POST", { photo_ids: photoIds, base: "original", defer_unconfirmed: true }), signal },
     ),
   // 接著某一版調整：先存這一輪的需求，再用存下的那份去產生。
-  saveContinuationDraft: (id: string, photoId: string, source: SourceResult, text: string, revision: number) =>
+  saveContinuationDraft: (id: string, photoId: string, source: SourceResult, text: string,
+    styles: Record<string, string>, revision: number) =>
     request<Session>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/continuation-draft`,
-      json("PUT", { source_result: source, text, revision })),
+      json("PUT", { source_result: source, text, style_options: styles, revision })),
   renderFromVersion: (id: string, photoId: string, source: SourceResult, draftRevision: number) =>
     request<{ renders: Dict[]; queued: string[] }>(
       `${sid(id)}/render`,

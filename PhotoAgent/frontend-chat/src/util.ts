@@ -249,8 +249,10 @@ const EXECUTED_STYLE_MARKERS: Record<string, RegExp> = {
 
 // The non-default 修圖風格 picks the Editor prompt actually carried, as bare
 // option labels ("俯拍", "夜色") -- the labels the option cards offered.
+// 風格例外：使用者自己寫的需求（僅依需求修改、接著這張調整）後面，edit_prompt.py 照樣會接上
+// 挑的風格那段，所以這裡直接讀實際送出的 prompt，不管 overwrite_prompt。
 export function executedStyleLabels(caps: Capabilities, a: Analysis | null | undefined): string[] {
-  const prompt = executedPrompt(a);
+  const prompt = editorPromptText(a);
   const picks = (a?.style_options || {}) as Dict;
   if (!prompt) return [];
   return caps.style_options

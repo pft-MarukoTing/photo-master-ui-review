@@ -81,7 +81,8 @@ def _run(params):
     if stage == STAGE_REVIEW:
         return chat_assistant.review_line(
             params["line"], params.get("prompt", ""), params.get("history", []), params.get("people", []),
-            sections=params.get("sections", []), deadline=params.get('deadline'), batch=params.get("batch"))
+            sections=params.get("sections", []), deadline=params.get('deadline'), batch=params.get("batch"),
+            continuation=params.get("continuation") is True)
     if stage == STAGE_OPENING:
         return chat_assistant.write_opening(params.get("analysis"), params.get("wishes") or "")
     if stage == STAGE_NOTE:

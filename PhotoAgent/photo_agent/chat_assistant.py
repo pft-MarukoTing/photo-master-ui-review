@@ -1633,9 +1633,23 @@ def _batch_text(batch):
     ])
 
 
-def _kept_next(batch):
+# 「接著這張調整」：在已經美化好的某一版上再改。底下只有「美化」一個鍵，
+# 比例和人像修正都沿用那一版，沒有分析可以按。
+CONTINUATION_TEXT = "\n".join([
+    "The user is adjusting one version of the photo that is already rendered, not the upload page. The lines they keep"
+    " are applied together on top of that version when they press 「美化」, the only button here.",
+    "- Never offer or mention 分析, 幫我分析 or 一鍵美化; the button is 「美化」. Never use verdict \"offer\" or \"analyze\".",
+    "- The aspect ratio and 人像修正 switches stay as that version had them: never use verdict \"setting\"; a line"
+    " about the ratio or a switch is kept as a wish like any other.",
+])
+CONTINUATION_NEXT = "還有其他想改的地方嗎？沒有的話，按下面的「美化」就會開始。"
+
+
+def _kept_next(batch, continuation=False):
     """KEPT_NEXT for the overview: which photos the line goes to, then the
     batch's own buttons, which sit right under the reply."""
+    if continuation:
+        return i18n.tr(CONTINUATION_NEXT)
     if not batch:
         return i18n.tr(KEPT_NEXT)
     photos, unrendered = batch.get("photos") or 0, batch.get("unrendered") or 0
@@ -1929,7 +1943,8 @@ def _completion_question(result=None):
         question_kind=_review_question_kind(result), answer_mode=result.get('answer_mode', 'choices'), line='', persons=[], options=_options(result.get('options')), aspect_ratio='', merged=[], withdrawn=False)
 
 
-def review_line(line, prompt, history=(), people=(), *, sections=(), model=None, deadline=None, batch=None):
+def review_line(line, prompt, history=(), people=(), *, sections=(), model=None, deadline=None, batch=None,
+                continuation=False):
     """{kept, start, ask, offer, later, reply, line, persons, options, aspect_ratio, merged} for one line typed on the upload page.
 
     `prompt` is the list as it stands -- the same string the page shows and
@@ -1968,7 +1983,12 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     the batch's 分析／一鍵美化 buttons -- "" when there is nothing left to
     analyze -- and where the photo list is). The model is then told it speaks
     for all of them, sends a line about one photo to that photo, and is never
-    offered 分析 once every photo is analyzed."""
+    offered 分析 once every photo is analyzed.
+
+    `continuation` is set when the line adjusts a version already rendered
+    (「接著這張調整」): the only button is 「美化」, so nothing offers or
+    starts 分析, and the ratio and switches stay as that version had them --
+    a line about them is kept like any other wish."""
     from photo_agent import side_reference
     picked,_ = _split_people(line,people)
     side=side_reference.inspect(line,dict(people_count=len(people),selected_person_ids=picked))
@@ -1996,7 +2016,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
 
     tapped = _ratio_answer(_split_people(line.strip(), people)[1], history)
     if tapped:
-        tapped["reply"] = tapped["reply"].replace(KEPT_NEXT, _kept_next(batch))
+        tapped["reply"] = tapped["reply"].replace(KEPT_NEXT, _kept_next(batch, continuation))
         persons, wish = _split_people(tapped["line"], people)
         if tapped["kept"] and wish:
             wish = _ratio_rest(_split_people(history[-2]["text"], people)[1], wish, run_rest)
@@ -2020,6 +2040,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         LITERAL_CHOICE_INSTRUCTION,
     ]) + ("\n\n" + i18n.pattern("review_note") if i18n.pattern("review_note") else "")) + CACHE_BREAK + "\n\n".join([
         *(["BATCH OVERVIEW:\n" + _batch_text(batch)] if batch else []),
+        *(["CONTINUATION:\n" + CONTINUATION_TEXT] if continuation else []),
         "PEOPLE IN PHOTO:\n" + ("\n".join(people) if people else i18n.tr("（總覽：好幾張照片，這裡不指定人物）") if batch else i18n.tr("（沒有偵測到人臉）")),
         f"LINES SO FAR:\n{_sections_text(sections) or i18n.tr('（還沒有）')}",
         answer_instruction(selected_context),
@@ -2172,6 +2193,12 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
             semantic_pending = True
     verdict = result.get("verdict")
     reply = result.get("reply").strip() if isinstance(result.get("reply"), str) else ""
+    if continuation and verdict == "setting":
+        # 比例、開關沿用那一版：講到的話就當一般需求記下來。
+        verdict = "keep"
+    elif continuation and verdict in ("offer", "analyze"):
+        # 沒有分析可以按：要分析、問要不要開始的，都只是回答。
+        verdict = "answer"
     start = verdict if verdict in ("render", "analyze") else ""
     # Avoid repeating target questions, but never turn an explicitly incomplete
     # action into an executable wish just because the user already answered once.
@@ -2193,7 +2220,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     named.update({i18n.label(o): o for o in OFFER_OPTIONS if i18n.label(o) not in named})
     options = [named.get(o, o) for o in _options(result.get("options"))]
     asked = result.get("asked_ratio") if isinstance(result.get("asked_ratio"), str) else ""
-    nearest = (_nearest_ratio(asked.strip()) if verdict == "keep" and asked.strip() not in REVIEW_RATIOS
+    nearest = (_nearest_ratio(asked.strip()) if verdict == "keep" and not continuation and asked.strip() not in REVIEW_RATIOS
                and result.get("aspect_ratio") not in REVIEW_RATIOS else "")
     if nearest:
         question_kind = "content"
@@ -2201,7 +2228,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         ask, reply, options = True, _ratio_question(asked.strip(), nearest), [
             i18n.tr("換成 {ratio}", ratio=nearest), i18n.tr(RATIO_ASK_AI)]
     # Only an outright 「幫我分析」 starts it; a guessed intent is asked about first.
-    offer = verdict == "offer" or (verdict == "answer" and bool(options))
+    offer = not continuation and (verdict == "offer" or (verdict == "answer" and bool(options)))
     # 總覽每張都分析過了，就只剩一鍵美化可以提。
     starts = ["一鍵美化"] if batch and not batch.get("analyze") else OFFER_OPTIONS
     if offer:
@@ -2214,7 +2241,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
             else BATCH_REDO_OFFER_REPLY if redo else BATCH_RENDER_OFFER_REPLY)
     elif offer:
         reply = _offer_question(reply, options, bool(batch), redo)
-    elif (verdict == "answer" and reply and not after_offer and "？" not in reply and "?" not in reply
+    elif (verdict == "answer" and reply and not after_offer and not continuation and "？" not in reply and "?" not in reply
           and (not batch or batch.get("analyze") or batch.get("render"))):
         # An answer that just stops leaves the user with nothing to tap; 分析
         # is always a next step on this page. One that asks something
@@ -2231,7 +2258,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     # 說了比例、或只是開關人像修正的，直接改「設定」：不然 AI 建議照樣跑，分析還
     # 可能建議相反的裁切，需求跟設定互相打架；設定做得到的也不用再進清單。
     setting = verdict == "setting" and not start and not ask
-    changes = verdict in ("keep", "setting") and not start and not ask
+    changes = verdict in ("keep", "setting") and not start and not ask and not continuation
     ratio = result.get("aspect_ratio") if changes and result.get("aspect_ratio") in REVIEW_RATIOS else ""
     switches = {}
     for o in (result.get("advanced_options") if changes and isinstance(result.get("advanced_options"), list) else []):
@@ -2265,9 +2292,9 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     if withdrawn and not reply:
         reply = i18n.tr(WITHDRAWN_REPLY)
     if setting:
-        reply = _cat(_settings_reply(ratio, switches), _kept_next(batch))
+        reply = _cat(_settings_reply(ratio, switches), _kept_next(batch, continuation))
     elif kept and "？" not in reply and "?" not in reply:
-        reply = _cat(reply or i18n.tr(KEPT_REPLY), replaced, _settings_note(ratio, switches), _kept_next(batch))
+        reply = _cat(reply or i18n.tr(KEPT_REPLY), replaced, _settings_note(ratio, switches), _kept_next(batch, continuation))
     elif ratio or switches or replaced:
         reply = _cat(replaced, _settings_note(ratio, switches), reply)
     if redo:

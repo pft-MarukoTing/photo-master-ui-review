@@ -237,6 +237,11 @@
   // whichever version is stepped to. Set by viewHistoryRecord and by
   // adoptSkippedCaseAnalysis.
   let historyCaseAnalysis = null;
+  // The job that analysis came from. A 接著這張調整 version's own job edits the
+  // finished version it was based on (chat._start_render's srcKeys), so the
+  // next 美化 off it with the full analysis starts from this job's original
+  // photo instead.
+  let historyCaseAnalysisJobId = null;
   // "Who owns the screen right now." Every long-running flow snapshots this
   // when it starts and re-checks it before touching the DOM again, so a job
   // whose result lands after the user has moved on quietly drops its render
@@ -2553,6 +2558,7 @@
   // the next 美化 continues from it.
   function adoptSkippedCaseAnalysis(analysis, jobId) {
     historyCaseAnalysis = analysis;
+    historyCaseAnalysisJobId = jobId || null;
     const userPrompt = els.promptInput?.value || "";
     singleFlowState.analysis = analysis;
     if (jobId) singleFlowState.analyzeJobId = jobId;
@@ -10298,7 +10304,8 @@
       attached || run.result.analysis, params.user_prompt, params.overwrite_prompt && !attached);
     singleFlowState = {
       analysis: restoredAnalysis,
-      analyzeJobId: run.jobId,
+      analyzeJobId: attached && run.result.analysis._continuation && historyCaseAnalysisJobId
+        ? historyCaseAnalysisJobId : run.jobId,
       presetKey: params.preset || "natural",
       preset: presets[params.preset] || presets.natural,
       imageQuality: params.image_quality || extraInfo.image_quality || "medium",
@@ -10448,6 +10455,7 @@
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
 
     historyCaseAnalysis = attachedAnalysis;
+    historyCaseAnalysisJobId = attachedAnalysis ? job.analysis_job_id : null;
     if (job.path === "local") {
       selectedFile = null;
       singleRuns = runs;
@@ -13742,6 +13750,7 @@
   function resetApp() {
     hideError();
     historyCaseAnalysis = null;
+    historyCaseAnalysisJobId = null;
     // Going back to the upload screen hands the screen to nobody -- whatever
     // job is still running in the background (a revise the user kicked off
     // from the results page, say) must not render itself here later, on top

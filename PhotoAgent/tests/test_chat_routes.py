@@ -1129,9 +1129,10 @@ class ChatRoutesTest(unittest.TestCase):
                                      (render["action_id"], "edit", [job_id])])
         return {"version_id": render["action_id"], "job_id": job_id, "run": 1}
 
-    def save_draft(self, sid, photo, source, text, revision=0):
+    def save_draft(self, sid, photo, source, text, revision=0, **extra):
         return self.client.put(self.url(sid, f"/photos/{photo['photo_id']}/continuation-draft"),
-                               json={"user": USER, "source_result": source, "text": text, "revision": revision})
+                               json={"user": USER, "source_result": source, "text": text, "revision": revision,
+                                     **extra})
 
     def render_from(self, sid, photo, source, **extra):
         return self.client.post(self.url(sid, "/render"), json={
@@ -1157,7 +1158,8 @@ class ChatRoutesTest(unittest.TestCase):
             saved = self.save_draft(sid, photo, source, "  remove the cup  ")
             self.assertEqual(saved.status_code, 200, saved.get_json())
             draft = saved.get_json()["photos"][0]["continuation_draft"]
-            self.assertEqual(draft, {"source_result": source, "text": "remove the cup", "revision": 1})
+            self.assertEqual(draft, {"source_result": source, "text": "remove the cup", "style_options": {},
+                                     "revision": 1})
             # A stale tab cannot overwrite it.
             self.assertEqual(self.save_draft(sid, photo, source, "older", revision=0).status_code, 409)
 
@@ -1192,6 +1194,55 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertIsNone(state["continuation_draft"])
         # The photo's own plan is untouched.
         self.assertEqual(state["plan"]["user_prompt"], "warmer")
+
+    def test_a_continuation_can_be_styles_alone(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"),
+                          json={"user": USER, "plan": {"style_options": {"angle": "high"}}})
+        source = self.finished_version(sid, photo)
+        read = []
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True), \
+                patch.object(chat.chat_assistant, "call_continuation", lambda context: read.append(context)):
+            self.assertEqual(self.save_draft(sid, photo, source, "", style_options={"lighting": "nope"}).status_code,
+                             400)
+            saved = self.save_draft(sid, photo, source, " ", style_options={"lighting": "gold", "pose": "default"})
+            self.assertEqual(saved.status_code, 200, saved.get_json())
+            self.assertEqual(saved.get_json()["photos"][0]["continuation_draft"]["style_options"], {"lighting": "gold"})
+            res = self.render_from(sid, photo, source)
+            self.assertEqual(res.status_code, 202, res.get_json())
+            render = res.get_json()["renders"][0]
+        (engine_params,) = [p for j, p in self.enqueued if j in render["job_ids"]]
+        params = engine_params["acts"][0]["params"]
+        self.assertFalse(params.get("user_prompt"))
+        # This round's styles only, not the photo's own.
+        self.assertEqual(params["analysis"]["style_options"], {"lighting": "gold"})
+        # Nothing to bring back, so the request is not read and the original stays out.
+        self.assertEqual(read, [])
+        self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json"])
+        card = self.cards(sid, "render_requested")[-1]
+        self.assertEqual((card["prompt"], card["style_options"]), ("", {"lighting": "gold"}))
+
+    def test_a_continuation_needs_text_or_a_style(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True):
+            saved = self.save_draft(sid, photo, source, "", style_options={"lighting": "default"})
+            self.assertIsNone(saved.get_json()["photos"][0]["continuation_draft"])
+            self.assertEqual(self.render_from(sid, photo, source).status_code, 409)
+
+    def test_a_continuation_points_the_case_at_the_photos_analysis(self):
+        # Its version carries a stub; 面板模式 reads the case's analysis instead.
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True), \
+                patch.object(chat.chat_assistant, "call_continuation", lambda context: {"needs_original": False, "restore": ""}), \
+                patch.object(chat, "attach_case_analysis") as attach:
+            self.save_draft(sid, photo, source, "remove the cup")
+            self.assertEqual(self.render_from(sid, photo, source).status_code, 202)
+        attach.assert_called_once_with(USER, photo["case_id"], photo["analyze_job_id"])
 
     def continuation_job(self, sid, photo, source, text):
         self.save_draft(sid, photo, source, text)
@@ -1701,6 +1752,29 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertTrue(res.get_json()["messages"][1]["card"]["close"])
         plan = self.client.get(self.url(sid), query_string={"user": USER}).get_json()["photos"][0]["plan"]
         self.assertEqual((plan["style_options"], plan["user_prompt"]), (before["style_options"], before["user_prompt"]))
+
+    def test_going_back_keeps_the_changes_and_the_round_start(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        before = photo["plan"]
+        self.client.post(self.url(sid, "/messages"), json={"user": USER, "card": {
+            "type": "adjust_opened", "photo_id": photo["photo_id"],
+            "plan": {"user_prompt": before["user_prompt"], "style_options": before["style_options"]}}})
+        self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"), json={
+            "user": USER, "plan": {"style_options": {"lighting": "soft"}, "user_prompt": "背景換成海邊"}})
+        res = self.client.post(self.url(sid, "/messages"), json={"user": USER, "card": {
+            "type": "adjust_cancelled", "photo_id": photo["photo_id"], "kept": ["lighting"]}})
+        self.assertEqual(res.status_code, 201, res.get_json())
+        plan = self.client.get(self.url(sid), query_string={"user": USER}).get_json()["photos"][0]["plan"]
+        self.assertEqual((plan["style_options"]["lighting"], plan["user_prompt"]), ("soft", "背景換成海邊"))
+        # The next round starts where the parked one did, so the change still shows.
+        log = chat.store.get_messages(USER, sid)
+        self.assertEqual(chat._parked_round_start(log, photo["photo_id"])["user_prompt"], before["user_prompt"])
+        self.assertIsNone(chat._parked_round_start(log + [{"card": {
+            "type": "render_done", "photo_id": photo["photo_id"]}}], photo["photo_id"]))
+        # 接著這張調整 does not use the plan, so its render leaves the changes parked.
+        self.assertIsNotNone(chat._parked_round_start(log + [{"card": {
+            "type": "render_done", "photo_id": photo["photo_id"], "base": "version"}}], photo["photo_id"]))
 
     def test_ask_to_fix_it_renders_right_away(self):
         sid = self.new_session()

@@ -63,6 +63,7 @@ import config as agent_config
 from photo_agent.preview_context import (
     MAX_UPLOAD_BYTES, PREVIEW_CONTEXT_FIELD, source_sha256, preview_versions, validate_preview_binding, validate_preview_context,
 )
+from photo_agent.selections import validate_selections
 from photo_agent.chat_brief import build_brief, person_names, resolve_prompt_faces
 from photo_agent.subject_preview import _valid_subject_box
 from photo_agent.chat_plan import (
@@ -2120,7 +2121,8 @@ def save_continuation_draft(session_id, photo_id):
     """This round's request for 接著這張調整 from one version. One draft per
     photo: a different source starts a new one. `revision` is the one the
     client last saw (0 for none), so a stale tab cannot overwrite a newer
-    draft; an empty text clears it."""
+    draft. `style_options` are styles picked for this round, alone or beside
+    the text; no text and no style clears it."""
     if not agent_config.ENABLE_CHAT_RENDER_FROM_VERSION:
         raise _RequestError("Not found", 404)
     body = _body()
@@ -2132,14 +2134,19 @@ def save_continuation_draft(session_id, photo_id):
         raise _RequestError(f"text must be a string of at most {USER_PROMPT_MAX_LEN} characters")
     if type(revision) is not int:
         raise _RequestError("revision must be an integer")
+    styles = body.get("style_options") or {}
+    error = validate_selections({"options": styles})
+    if error:
+        raise _RequestError(error.replace("selections.options", "style_options"))
+    styles = {k: v for k, v in styles.items() if v not in (None, *capabilities.STYLE_UNSET_VALUES)}
     _resolve_source_result(user, photo, source)
     draft = photo.get("continuation_draft")
     current = draft["revision"] if draft and _same_source(draft["source_result"], source) else 0
     if revision != current:
         return jsonify({"error": "draft_changed", "draft": draft}), 409
     text = text.strip()
-    photo["continuation_draft"] = ({"source_result": source, "text": text, "revision": current + 1}
-                                   if text else None)
+    photo["continuation_draft"] = ({"source_result": source, "text": text, "style_options": styles,
+                                    "revision": current + 1} if text or styles else None)
     store.save_photo_state(user, session_id, photo)
     return jsonify(store.load_session(user, session_id))
 
@@ -2147,9 +2154,10 @@ def save_continuation_draft(session_id, photo_id):
 def _prepare_continuation(photo, draft):
     """_prepare_render for 接著這張調整: the plan's technical choices (model,
     quality, output size, run count) with the draft's text as the whole
-    request. No recipe, selections, styles, preset polish, body reshape, crop
-    or ratio change, and no eye-repair pass: the analysis is a skipped-analysis
-    stub marked _continuation, which edit_prompt reads as request-only."""
+    request, plus the styles picked for this round. No recipe, selections,
+    preset polish, body reshape, crop or ratio change, and no eye-repair pass:
+    the analysis is a skipped-analysis stub marked _continuation, which
+    edit_prompt reads as request-only."""
     plan = photo["plan"]
     form = build_render_form(plan, "finish")
     form.update({"user_prompt": draft["text"], "overwrite_prompt": True, "aspect_ratio": "original",
@@ -2162,8 +2170,11 @@ def _prepare_continuation(photo, draft):
     params["stage"] = "finish"
     analysis = {"_skipped_analysis": True, "_continuation": True, "_aspect_ratio_pref_at_analysis": "original",
                 "prompts": {}, "timings": {}, "usage": {}, "compatibility_version": CURRENT_COMPATIBILITY_VERSION}
+    styles = draft.get("style_options") or {}
+    if styles:
+        analysis["style_options"] = dict(styles)
     reference_key = None
-    original = _continuation_original(draft["text"], params["image_model"])
+    original = _continuation_original(draft["text"], params["image_model"]) if draft["text"] else None
     if original is not None:
         analysis["_continuation_original"] = original
         reference_key = photo["src_keys"][0]
@@ -2201,7 +2212,8 @@ def _render_from_version(user, session_id, session, body):
     if photo["status"] != "ready":
         raise _RequestError(f"photo {photo['photo_id']} is {photo['status']}, not ready to render", 409)
     draft = photo.get("continuation_draft")
-    if not draft or not _same_source(draft["source_result"], source) or not draft["text"]:
+    if not draft or not _same_source(draft["source_result"], source) \
+            or not (draft["text"] or draft.get("style_options")):
         raise _RequestError("draft_missing", 409)
     revision = body.get("draft_revision")
     if revision is not None and revision != draft["revision"]:
@@ -2210,9 +2222,18 @@ def _render_from_version(user, session_id, session, body):
     prepared = _prepare_continuation(photo, draft)
     rendered = _start_render(user, session_id, photo, prepared, VERSION_BASE,
                              source=resolved, draft=copy.deepcopy(draft))
+    if not photo.get("analysis_skipped"):
+        # The version carries a skipped-analysis stub; pointing the case at the
+        # photo's analysis lets 面板模式 read it as analyzed, as it does a
+        # 「只照需求改」 case analyzed afterwards.
+        try:
+            attach_case_analysis(user, photo["case_id"], _analysis_job_id(photo))
+        except Exception:
+            current_app.logger.warning("attach_case_analysis failed for %s", photo["photo_id"], exc_info=True)
     store.append_messages(user, session_id, [store.make_message("user", card={
         "type": "render_requested", "base": VERSION_BASE, "renders": [rendered], "queued": [],
-        "source_result": source, "prompt": draft["text"]})])
+        "source_result": source, "prompt": draft["text"],
+        "style_options": draft.get("style_options") or {}})])
     return jsonify({"renders": [rendered], "queued": []}), 202
 
 
@@ -2824,10 +2845,12 @@ def _apply_directly(user, session_id, photo, reply):
     messages = [store.make_message("user", card={
         "type": "proposal_resolved", "photo_id": photo_id, "proposal_id": proposal["id"], "choice": "apply",
         "auto": True})]
-    if photo.get("status") == "ready" and _round_to_open(store.get_messages(user, session_id), photo_id):
+    log = store.get_messages(user, session_id)
+    if photo.get("status") == "ready" and _round_to_open(log, photo_id):
         messages.append(store.make_message("assistant", card={
             "type": "adjust_opened", "photo_id": photo_id, "via": "proposal", "auto": True,
-            "plan": {k: copy.deepcopy(photo["plan"][k]) for k in ROUND_KEYS if k in photo["plan"]}}))
+            "plan": _parked_round_start(log, photo_id)
+            or {k: copy.deepcopy(photo["plan"][k]) for k in ROUND_KEYS if k in photo["plan"]}}))
     photo["plan"] = plan
     _side_sync_plan(user,session_id,photo)
     if _reframe_if_needed(user, session_id, photo):
@@ -2904,14 +2927,36 @@ def _open_panel(user, session_id, photo, category):
     if photo["plan"].get("overwrite_prompt"):
         snapshot["overwrite_prompt"] = True
     messages = []
-    if _round_to_open(store.get_messages(user, session_id), photo_id):
+    log = store.get_messages(user, session_id)
+    if _round_to_open(log, photo_id):
         messages.append(store.make_message("assistant", card={
-            "type": "adjust_opened", "photo_id": photo_id, "via": "open", "auto": True, "plan": snapshot}))
+            "type": "adjust_opened", "photo_id": photo_id, "via": "open", "auto": True,
+            "plan": _parked_round_start(log, photo_id) or snapshot}))
     # via reply: the reply above said it opens, so no tap bubble of the user's own.
     messages.append(store.make_message("user", card={
         "type": "options_opened", "photo_id": photo_id, "category": category, "via": "reply",
         "plan": copy.deepcopy(snapshot)}))
     return messages
+
+
+def _parked_round_start(log, photo_id):
+    """The plan a round left with 返回 started from, while nothing has been
+    rendered from the plan since (接著這張調整 does not use it): the next round
+    picks up from there, so what that round changed still shows as changed.
+    None otherwise."""
+    start, parked = None, False
+    for m in log:
+        card = m.get("card") or {}
+        if not _about(card, photo_id):
+            continue
+        kind = card.get("type") or ""
+        if kind == "adjust_opened":
+            start, parked = card.get("plan"), False
+        elif kind == "adjust_cancelled":
+            parked = start is not None
+        elif kind.startswith("render_") and card.get("base") != VERSION_BASE:
+            start, parked = None, False
+    return copy.deepcopy(start) if parked and isinstance(start, dict) else None
 
 
 def _about(card, photo_id):
@@ -3140,6 +3185,8 @@ def prompt_review():
                        and len(x["text"]) <= USER_PROMPT_MAX_LEN for x in sections)):
         raise _RequestError(f"sections must be a list of at most {PROMPT_REVIEW_SECTIONS_MAX} {{who, text}} strings")
     batch = _review_batch(body.get("batch"))
+    # 「接著這張調整」：在已經美化好的版本上再改，只有「美化」鍵，比例和設定照舊。
+    continuation = body.get("continuation") is True
     side_out=_side_upload_review(body,text)
     if side_out is not None:return jsonify(side_out)
     try:
@@ -3148,6 +3195,7 @@ def prompt_review():
             "sections": [{"who": x["who"], "text": x["text"]} for x in sections],
             "history": history, "people": [p.strip() for p in people],
             **({"batch": batch} if batch else {}),
+            **({"continuation": True} if continuation else {}),
             "deadline": time.time() + chat_assistant.TIMEOUT_SECONDS}, wait_seconds=PROMPT_REVIEW_WAIT_SECONDS)
     except Exception:
         current_app.logger.exception("chat prompt review failed")
@@ -3686,6 +3734,8 @@ def _advance_rendering(user, session_id, photo, statuses):
         photo["error"] = failed.get("error") or "render failed"
         card = {"type": "render_failed", "photo_id": photo["photo_id"], "version_id": pending["action_id"],
                 "error": photo["error"], "error_code": failed.get("error_code")}
+        if pending.get("base") == VERSION_BASE:
+            card["base"] = VERSION_BASE
     if succeeded and pending.get("base") == VERSION_BASE:
         # Done with the request it was sent; kept after a failure for a retry,
         # and one typed since it went out stays either way.

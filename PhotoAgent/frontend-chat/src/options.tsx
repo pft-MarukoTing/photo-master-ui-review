@@ -542,7 +542,32 @@ function poseNotice(caps: Capabilities, pose: string, r: PoseFaceResult): string
   return lines;
 }
 
-function StyleOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
+const NO_HOT = new Set<string>();
+
+// 接著這張調整挑的風格：只屬於這一輪，不動這張照片的 plan，所以姿勢也不連帶改臉部設定。
+export function ContinueStyles(props: {
+  analysis: Analysis;
+  caps: Capabilities;
+  picked: Record<string, string>;
+  busy: boolean;
+  onPick: (styles: Record<string, string>) => void;
+}) {
+  return (
+    <div class="chat-card chat-options">
+      <StyleOptions
+        analysis={props.analysis}
+        plan={{ style_options: props.picked }}
+        caps={props.caps}
+        busy={props.busy}
+        hot={NO_HOT}
+        plain
+        onPatch={(patch) => props.onPick({ ...props.picked, ...(patch.style_options || {}) })}
+      />
+    </div>
+  );
+}
+
+function StyleOptions({ analysis, plan, caps, busy, hot, onPatch, plain }: Pick<Body, "analysis" | "plan" | "caps" | "busy" | "hot" | "onPatch"> & { plain?: boolean }) {
   const groups = styleGroups(analysis, caps);
   const [open, setOpen] = useState<string | null>(null);
   const [notice, setNotice] = useState<string[]>([]);
@@ -559,7 +584,7 @@ function StyleOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
   // open: the person is mid-choice, not done.
   const pick = (value: string, close = true) => {
     if (!group) return;
-    if (group.id === "pose") {
+    if (group.id === "pose" && !plain) {
       const r = poseFacePatch(analysis, plan, value);
       onPatch({ style_options: { pose: value }, ...r.patch });
       setNotice(poseNotice(caps, value, r));

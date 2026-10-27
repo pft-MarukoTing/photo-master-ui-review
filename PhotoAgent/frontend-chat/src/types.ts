@@ -74,7 +74,12 @@ export interface Photo {
   // base "version"：接著某一版調整，source_result 是當底的那一版成品。
   pending_render?: { action_id: string; job_ids: string[]; base?: string; source_result?: SourceResult } | null;
   // 接著某一版調整時這一輪的需求，存在伺服器上；revision 防舊分頁蓋掉新的。
-  continuation_draft?: { source_result: SourceResult; text: string; revision: number } | null;
+  continuation_draft?: {
+    source_result: SourceResult;
+    text: string;
+    style_options?: Record<string, string>;
+    revision: number;
+  } | null;
   // 照片本身已經好了，AI 還在寫的開場摘要／這一版的說明（開了「詳細解說」才有）。
   pending_brief?: { job_id: string } | null;
   pending_note?: { version_id: string; job_id?: string } | null;

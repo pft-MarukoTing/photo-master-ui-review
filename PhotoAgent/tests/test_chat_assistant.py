@@ -526,6 +526,37 @@ class ReviewLineTest(unittest.TestCase):
         result = chat_assistant.review_line(line, "", model=lambda c: seen.append(c) or answer, batch=batch)
         return result, seen[0]
 
+    def continuation_review(self, answer, line="臉再亮一點"):
+        seen = []
+        result = chat_assistant.review_line(line, "", model=lambda c: seen.append(c) or answer, continuation=True)
+        return result, seen[0]
+
+    # 「接著這張調整」：只有「美化」鍵，收下後指向它，不提分析／一鍵美化。
+    def test_a_continuation_keep_points_at_the_one_button(self):
+        keep = {"verdict": "keep", "reply": "好，這個我記下來了。", "line": "", "options": []}
+        result, context = self.continuation_review(keep)
+        self.assertIn("CONTINUATION:", context)
+        self.assertTrue(result["kept"])
+        self.assertEqual(result["reply"], "好，這個我記下來了。" + chat_assistant.CONTINUATION_NEXT)
+
+    # 沒有分析可以按：模型照樣提議或要開始分析，也只當回答，不給開始的鍵。
+    def test_a_continuation_never_offers_or_starts_analysis(self):
+        for verdict in ("offer", "analyze"):
+            result, _ = self.continuation_review({"verdict": verdict, "reply": "可以喔。", "line": "",
+                                                  "options": ["幫我分析", "一鍵美化"]}, line="幫我看看哪裡要修")
+            self.assertEqual((result["start"], result["offer"], result["options"], result["kept"]),
+                             ("", False, [], False))
+        answer = {"verdict": "answer", "reply": "1*2+3 等於 5。", "line": "", "options": []}
+        result, _ = self.continuation_review(answer, line="1*2+3")
+        self.assertEqual((result["offer"], result["options"], result["reply"]), (False, [], "1*2+3 等於 5。"))
+
+    # 比例和開關沿用那一版：講到的話當一般需求收下，不改設定。
+    def test_a_continuation_keeps_a_ratio_as_a_wish(self):
+        answer = {"verdict": "setting", "reply": "", "line": "", "options": [], "aspect_ratio": "9:16"}
+        result, _ = self.continuation_review(answer, line="做成 9:16")
+        self.assertTrue(result["kept"])
+        self.assertEqual((result["aspect_ratio"], result["advanced_options"]), ("", {}))
+
     def test_the_overview_tells_the_model_it_speaks_for_a_batch(self):
         _, context = self.batch_review({"verdict": "drop", "reply": "好。", "line": "", "options": []})
         self.assertIn("BATCH OVERVIEW:", context)

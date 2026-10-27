@@ -32,20 +32,34 @@ def build_overwrite_baseline_block(preset_key):
     )
 
 
-def build_continuation_block():
+def build_continuation_block(has_request=True, has_styles=False):
     """What a 接著這張調整 edit must leave alone.
 
     The source is an already-retouched version, so any extra polish the editor adds
     stacks on top of the last one and drifts further from the photo with each round.
+    Styles picked for this round are changes asked for, like the request: they may
+    relight, re-pose or reframe what they select.
     """
+    if not has_styles:
+        return (
+            "This photo is already a finished, retouched version. Make only the change requested above and treat "
+            "everything else as final.\n"
+            "- Keep everything the request does not mention exactly as it is: every face and identity, expression, "
+            "eyes, skin texture, hair, body shape, pose, clothing, background, and every object.\n"
+            "- Do not retouch any further: no extra smoothing, slimming, relighting, color grading, contrast, "
+            "saturation, or sharpening beyond what the request asks for.\n"
+            "- Keep the same aspect ratio, framing, and crop; do not zoom, extend, shift, or reframe the scene."
+        )
+    asked = "the request above and the selected styles" if has_request else "the selected styles above"
     return (
-        "This photo is already a finished, retouched version. Make only the change requested above and treat "
+        f"This photo is already a finished, retouched version. Make only the changes {asked} call for and treat "
         "everything else as final.\n"
-        "- Keep everything the request does not mention exactly as it is: every face and identity, expression, eyes, "
+        f"- Keep everything {asked} do not touch exactly as it is: every face and identity, expression, eyes, "
         "skin texture, hair, body shape, pose, clothing, background, and every object.\n"
-        "- Do not retouch any further: no extra smoothing, slimming, relighting, color grading, contrast, saturation, "
-        "or sharpening beyond what the request asks for.\n"
-        "- Keep the same aspect ratio, framing, and crop; do not zoom, extend, shift, or reframe the scene."
+        "- Do not retouch any further: no extra smoothing, slimming, relighting, color grading, contrast, "
+        f"saturation, or sharpening beyond what {asked} ask for.\n"
+        "- Keep the same aspect ratio. Keep the framing and crop too, unless a selected style changes the framing "
+        "size or camera angle."
     )
 
 
@@ -82,10 +96,15 @@ def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio
     from photo_agent.side_reference import editor_instruction as side_instruction
     side_contract = (side_instruction(user_instruction.get('original_user_direction') or user_direction)
                      if user_instruction.get('chat_body_side_clarification', True) else '')
-    if framed_analysis.get("_continuation") and user_direction.strip():
+    continuation_styles = (build_style_override_block(framed_analysis, alongside_request=bool(user_direction.strip()))
+                           if framed_analysis.get("_continuation") else "")
+    if framed_analysis.get("_continuation") and (user_direction.strip() or continuation_styles):
         # 接著這張調整: the source is already a finished version, so only this
-        # round's request applies -- never the styles or a baseline retouch again.
-        prompt_text = user_direction.strip() + "\n\n" + build_continuation_block()
+        # round's request and the styles picked for it apply -- never a baseline
+        # retouch again.
+        prompt_text = "\n\n".join(filter(None, (
+            user_direction.strip(), continuation_styles,
+            build_continuation_block(bool(user_direction.strip()), bool(continuation_styles)))))
         original = framed_analysis.get("_continuation_original")
         if original is not None:
             prompt_text += "\n\n" + build_continuation_original_block((original.get("restore") or "").strip())

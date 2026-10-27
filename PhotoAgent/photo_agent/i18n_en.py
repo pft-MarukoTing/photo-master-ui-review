@@ -272,6 +272,7 @@ TEXT = {
     "或": " or ",
     "還有其他想改的地方嗎？沒有的話，可以按下面的{buttons}。": "Anything else you'd like to change? If not, tap {buttons} below.",
     "還有其他想改的地方嗎？": "Anything else you'd like to change?",
+    "還有其他想改的地方嗎？沒有的話，按下面的「美化」就會開始。": "Anything else you'd like to change? If not, tap “Retouch” below to start.",
     "（總覽：好幾張照片，這裡不指定人物）": "(Overview: several photos, no specific person)",
     "我的照片": "My Photos",
     "要修改或調整其他項目，可以點下面的美化項目，或按「{label}」我就開始。": "To change this or adjust other items, tap an item below, or tap “{label}” to start.",

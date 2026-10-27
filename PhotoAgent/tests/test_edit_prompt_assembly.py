@@ -48,9 +48,9 @@ class AssembleEditPrompt(unittest.TestCase):
         self.assertNotIn("Pose", prompt)
         self.assertNotIn("Finish:", prompt)
 
-    def test_a_continuation_sends_the_request_alone_even_with_styles_and_baseline_on(self):
+    def test_a_continuation_sends_the_request_alone_even_with_baseline_on(self):
         # 接著這張調整: the source is already a finished version.
-        analysis = {**_analysis("3:2"), "_continuation": True, "style_options": {"lighting": "gold"},
+        analysis = {**_analysis("3:2"), "_continuation": True,
                     "user_instruction": {"has_user_direction": True, "overwrite_prompt": True,
                                          "normalized_user_direction": "  Remove the cup.  "}}
         with patch.object(config, "ENABLE_OVERWRITE_BASELINE_RETOUCH", True):
@@ -59,8 +59,33 @@ class AssembleEditPrompt(unittest.TestCase):
         self.assertTrue(prompt.startswith("Remove the cup.\n\n"))
         self.assertIn("Do not retouch any further", prompt)
         self.assertIn("Keep the same aspect ratio, framing, and crop", prompt)
-        self.assertNotIn("- Lighting:", prompt)
+        self.assertNotIn("User-selected style", prompt)
         self.assertNotIn("Baseline retouch:", prompt)
+        self.assertNotIn("Finish:", prompt)
+
+    def test_a_continuation_adds_the_styles_picked_for_it_after_the_request(self):
+        analysis = {**_analysis("3:2"), "_continuation": True, "style_options": {"lighting": "gold"},
+                    "user_instruction": {"has_user_direction": True, "overwrite_prompt": True,
+                                         "normalized_user_direction": "Remove the cup."}}
+        with patch.object(config, "ENABLE_OVERWRITE_BASELINE_RETOUCH", True):
+            prompt, _, strategy = _assemble(analysis)
+        self.assertEqual(strategy, "continuation")
+        self.assertTrue(prompt.startswith("Remove the cup.\n\nUser-selected styles apply in addition"))
+        self.assertLess(prompt.index("- Lighting:"), prompt.index("Do not retouch any further"))
+        self.assertIn("the request above and the selected styles", prompt)
+        self.assertIn("unless a selected style changes the framing size or camera angle", prompt)
+        self.assertNotIn("Baseline retouch:", prompt)
+
+    def test_a_continuation_with_only_styles_sends_the_styles(self):
+        analysis = {**_analysis("3:2"), "_continuation": True, "style_options": {"lighting": "gold"},
+                    "user_instruction": {"has_user_direction": False, "overwrite_prompt": True,
+                                         "normalized_user_direction": ""}}
+        prompt, _, strategy = _assemble(analysis)
+        self.assertEqual(strategy, "continuation")
+        self.assertTrue(prompt.startswith("User-selected style overrides"))
+        self.assertIn("- Lighting:", prompt)
+        self.assertIn("the selected styles above", prompt)
+        self.assertNotIn("request above", prompt)
         self.assertNotIn("Finish:", prompt)
 
     def test_a_continuation_with_the_original_says_which_image_is_which(self):
@@ -132,6 +157,25 @@ class AssembleEditPrompt(unittest.TestCase):
         prompt, _, strategy = _assemble(seen["analysis"])
         self.assertEqual(strategy, "continuation")
         self.assertTrue(prompt.startswith("Remove the cup.\n\n"))
+
+    def test_the_worker_takes_a_style_only_continuation(self):
+        import pipeline
+        seen = {}
+
+        def fake_edit(image_bytes, analysis, quality, preset_key, **kwargs):
+            seen["analysis"] = analysis
+            return {"image_b64": "x", "usage": None, "geometry_warnings": []}, "prompt"
+
+        stub = {"_skipped_analysis": True, "_continuation": True, "_aspect_ratio_pref_at_analysis": "original",
+                "style_options": {"lighting": "gold"},
+                "prompts": {}, "timings": {}, "usage": {}, "compatibility_version": 1}
+        with patch.dict(pipeline.EDIT_PHOTO_BY_MODEL, {"gpt-image-2": fake_edit}):
+            pipeline.finish_stage(_image_bytes(), stub, "", "natural", "medium",
+                                  aspect_ratio="original", overwrite_prompt=True, single_pass_edit=True,
+                                  run_qa=False, chat_body_side_clarification=False)
+        prompt, _, strategy = _assemble(seen["analysis"])
+        self.assertEqual(strategy, "continuation")
+        self.assertIn("- Lighting:", prompt)
 
     def test_overwrite_with_baseline_retouch_adds_the_preset_after_the_styles(self):
         analysis = {**_analysis("3:2"), "style_options": {"lighting": "gold"},
