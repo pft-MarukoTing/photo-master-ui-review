@@ -6232,7 +6232,8 @@ export function SessionView(props: {
     return photo.plan?.user_prompt || "";
   };
 
-  function replyBody(m: (typeof messages)[number], idx: number) {
+  // Embedded answers keep their own choices/proposals; the host adds shared navigation last.
+  function replyBody(m: (typeof messages)[number], idx: number, navigation = true) {
     const c = m.card!;
     return (
       <>
@@ -6255,10 +6256,10 @@ export function SessionView(props: {
           />
         )}
         {/* 直接套用的卡後面沒有使用者的那一下，引導就接在同一則話裡。 */}
-        {c.proposal && idx + 1 === guideAt && messages[idx + 1].card?.auto && firstGuide()}
+        {navigation && c.proposal && idx + 1 === guideAt && messages[idx + 1].card?.auto && firstGuide()}
         {/* 直接套用之後還是在調整中：跟一般回覆一樣把項目接在底下，不然只剩最後
             那顆「美化」能按。後面跟著的只有套用自己寫進來的紀錄時，這則就是最後一句。 */}
-        {c.proposal?.direct &&
+        {navigation && c.proposal?.direct &&
           idx + 1 !== guideAt &&
           editing &&
           cats.length > 0 &&
@@ -6349,8 +6350,8 @@ export function SessionView(props: {
               </div>
             );
           }
-          if (idx === guideAt) return firstGuide();
-          return open && editing && cats.length > 0 ? <div class="chat-choices">{catChips()}</div> : null;
+          if (navigation && idx === guideAt) return firstGuide();
+          return navigation && open && editing && cats.length > 0 ? <div class="chat-choices">{catChips()}</div> : null;
         })()}
       </>
     );
@@ -6370,16 +6371,16 @@ export function SessionView(props: {
   );
   const answered = useRef<string | null>(null);
   // 那句問題的回答接在照片好了的那則訊息裡（分析摘要，或一鍵美化的成品），同一顆
-  // 頭像講完，不另起一段。回答還在路上時，那則訊息先停在摘要，底下是打字中的三個
-  // 點；接下來的引導等回答到了再一起出現，版面才不會在中間被插一段。
+  // 頭像講完，不另起一段。先回答原問題，再顯示摘要／成品與操作引導；回答還在路上
+  // 時先顯示打字提示，避免摘要先出現、稍後又被回答往下推。
   const HOSTS = ["analysis_ready", "render_done"];
   const holding = (idx: number) =>
     step(idx, 1) >= messages.length && ready && !!waiting && (!!props.pendingAsk || answered.current !== waiting.id);
   // 分析摘要（analysis_brief）跟在 analysis_ready 後面寫進來，但畫面上不另外顯示，
   // 找前後一則時要跳過它。
   const SILENT = ["analysis_brief"];
-  // 摘要／成品說明是另外排隊寫的，晚幾秒才到。還在寫的時候那則訊息只放淡字佔位，
-  // 後面的引導、回答、按鈕都先不出，等字到了再一起接上，順序才不會亂。
+  // 摘要／成品說明與補答各自排隊。先完成的回答可以先顯示；摘要要等補答，
+  // 共用引導和操作則等兩者完成。等待時保留文字提示，不讓訊息只剩空白或三個點。
   const briefPending = !!photo.pending_brief && !brief;
   const textPending = (idx: number) => {
     const c = messages[idx]?.card;
@@ -6392,11 +6393,17 @@ export function SessionView(props: {
     return i;
   };
   const answerIn = (idx: number) => {
-    if (textPending(idx)) return null;
-    if (holding(idx)) return typing;
+    if (holding(idx)) {
+      const label = textPending(idx)
+        ? messages[idx]?.card?.type === "analysis_ready"
+          ? t("正在整理分析重點…")
+          : t("正在對照原圖，整理這版的變化…")
+        : t("正在整理回覆…");
+      return <><p class="chat-text chat-muted" role="status">{label}</p>{typing}</>;
+    }
     const i = step(idx, 1);
     const next = messages[i];
-    return next?.card?.type === "llm_reply" && next.card.answers ? replyBody(next, i) : null;
+    return next?.card?.type === "llm_reply" && next.card.answers ? replyBody(next, i, false) : null;
   };
 
   // 帶過來的問題如果要使用者挑一個（文案、選項）或確認一個提案，先讓他把這件事
@@ -6491,10 +6498,10 @@ export function SessionView(props: {
     endReply?.type === "llm_reply" &&
     ((!!endReply.proposal && !resolvedChoice[endReply.proposal.id]) || endReply.options?.length > 0);
   const offerCheckAt = (idx: number) =>
-    messages[idx]?.card?.type === "render_done" && messages[idx].card?.base !== "version" && idx === lastRender && !adjusting && !textPending(idx) &&
+    messages[idx]?.card?.type === "render_done" && messages[idx].card?.base !== "version" && idx === lastRender && !adjusting && !holding(idx) && !textPending(idx) &&
     !!photo.plan.overwrite_prompt && (skippedAnalysis || !!analysis) &&
     !messages.slice(idx + 1).some(x => x.card?.type === "check_declined" || x.card?.type === "analysis_brief");
-  const showActionRow = !!actionChips && !textPending(endIdx) && !busy && !props.pendingAsk && photo.status === "ready" && !askMode && !confirmRerun && !endAsks && !pendingPerson && !offerCheckAt(endIdx) && !continuing;
+  const showActionRow = !!actionChips && !holding(endIdx) && !textPending(endIdx) && !busy && !props.pendingAsk && photo.status === "ready" && !askMode && !confirmRerun && !endAsks && !pendingPerson && !offerCheckAt(endIdx) && !continuing;
   // 只照需求改完，除了問要不要分析，也給「風格」：只照需求改照樣套得上風格。
   const offerStyle = caps.style_options.length > 0;
   if (!showActionRow) bar = offerCheckAt(endIdx) ? ["好，幫我分析", ...(offerStyle ? [CATEGORIES.style.label] : []), "不用了"] : [];
@@ -6554,17 +6561,27 @@ export function SessionView(props: {
           const answer = answerIn(idx);
           return answer ? <AssistantMsg>{answer}{endActions(idx)}</AssistantMsg> : null;
         }
-        if (!analysis) return <AssistantMsg><p class="chat-text">{t("分析完成。")}</p>{endActions(idx)}</AssistantMsg>;
+        const answer = answerIn(idx);
+        if (!analysis) return (
+          <AssistantMsg>
+            {answer}
+            {!holding(idx) && <p class="chat-text">{t("分析完成。")}</p>}
+            {endActions(idx)}
+          </AssistantMsg>
+        );
         return (
           <AssistantMsg>
-            {skippedAnalysis ? null : brief ? (
+            {answer}
+            {!holding(idx) && !skippedAnalysis && brief && answer && (
+              <p class="chat-text">{t("接著是這張照片的美化建議：")}</p>
+            )}
+            {holding(idx) || skippedAnalysis ? null : brief ? (
               <BriefCard brief={brief} />
             ) : photo.pending_brief ? (
-              <p class="chat-text chat-muted">{t("正在整理分析重點…")}</p>
+              <p class="chat-text chat-muted" role="status">{t("正在整理分析重點…")}</p>
             ) : (
               <p class="chat-text">{t("分析完成。")}</p>
             )}
-            {answerIn(idx)}
             {fresh && !holding(idx) && !textPending(idx) && !deferGuide && lastStepIdx < 0 && firstGuide()}
             {endActions(idx)}
           </AssistantMsg>
@@ -6727,7 +6744,7 @@ export function SessionView(props: {
             )}
             <AssistantMsg>
               <p class="chat-text">{openLine}</p>
-              {check && (brief ? <BriefCard brief={brief} /> : photo.pending_brief && <p class="chat-text chat-muted">{t("正在整理分析重點…")}</p>)}
+              {check && (brief ? <BriefCard brief={brief} /> : photo.pending_brief && <p class="chat-text chat-muted" role="status">{t("正在整理分析重點…")}</p>)}
               {check && live && !!promptNow && <p class="chat-text chat-muted">{t("你的需求會留著，這次會連同分析的建議一起美化。")}</p>}
               {/* 「幫我分析」想知道的是還有哪裡能修，摘要已經回答了；下一步多半是照著美化，
                   所以先只給「看美化項目／美化」，想細調再展開項目。後面已經接著別的話
@@ -6870,9 +6887,14 @@ export function SessionView(props: {
         // 分析的照片手上可能還沒有分析，照樣要問（checkOriginal 會先補跑）。這版
         // 之後才補做的分析（自訂模式按了「幫我分析」）也算問過了：摘要接在後面。
         const offerCheck = offerCheckAt(idx);
+        const answer = answerIn(idx);
         return (
           <AssistantMsg>
-            <ResultCard
+            {answer}
+            {!holding(idx) && answer && (
+              <p class="chat-text">{t("照片也美化完成了，以下是這次的結果：")}</p>
+            )}
+            {!holding(idx) && <ResultCard
               job={versionJob(v)}
               ordinal={v.ordinal}
               from={v.from}
@@ -6883,10 +6905,9 @@ export function SessionView(props: {
               noting={photo.pending_note?.version_id === c.version_id}
               onOpen={() => openVersion(v)}
               shown={v.version_id === current?.version_id}
-            />
-            {answerIn(idx)}
+            />}
             {/* 接著這張調整不用美化項目的設定：返回時留著的改動，在最新這版提醒一下還在。 */}
-            {c.base === "version" && idx === lastRender && parkedCats.length > 0 && (
+            {!holding(idx) && c.base === "version" && idx === lastRender && parkedCats.length > 0 && (
               <p class="chat-text">
                 {t("剛剛在美化項目改的{v1}，這版沒有用到，還幫你留著。想修改的話，按「看美化項目」再看一次，或直接按「再美化」。", {
                   v1: parkedCats.map((x) => nameOf(x)).join(t("、")),

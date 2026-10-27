@@ -4,6 +4,9 @@
 // the page puts next to each other keep their own spaces.
 
 export const EN: Record<string, string> = {
+  "照片也美化完成了，以下是這次的結果：": "Your photo has also been enhanced. Here is the result:",
+  "正在整理回覆…": "Preparing your answer…",
+  "接著是這張照片的美化建議：": "Next, here are my suggestions for enhancing this photo:",
   // Punctuation the page joins things with
   "、": ", ",
   "{v1}和{v2}": "{v1} and {v2}",
