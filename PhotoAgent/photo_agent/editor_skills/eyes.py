@@ -317,6 +317,20 @@ _BLINK_IDENTITY_SCOPE = (
 )
 
 
+# With a balanced face the user-directed Eyes item sets eye size and position, so a blink repair keeps only lashes and makeup.
+_USER_STATE_BLINK_IDENTITY_SCOPE = (
+    " For each named blink repair, adjust the eyelid margins, crease, and lid endpoints; preserve lashes and makeup, "
+    "with brows, eye centers and eye size where the user-directed final state sets them."
+)
+
+# Gaze target for a person with a balanced face: the analyzer's own wording usually also freezes the eye openings.
+_USER_STATE_GAZE_ADJUSTMENT = (
+    "move both irises and pupils so the two visual axes meet at the camera lens, parallel and natural, with no "
+    "crossed eyes, side-eye or excess sclera. Eye openings, eyelids, eye size and eye shape follow the "
+    "user-directed Eyes item; this gaze change only moves the irises and pupils"
+)
+
+
 _BLINK_PAIR_RULES = (
     "- Shared eye-pair target for every named blink repair: finish both eyes with the same natural degree "
     "of opening. Match their opening size and shape, visible iris width, upper- and lower-lid contours, "
@@ -416,7 +430,10 @@ def _eye_state_lines(state, *, subject_has_blink, style_options, include_gaze_me
     if include_gaze_method and state.get("gaze"):
         gaze_method = state.get("method") or "eyes_only"
         gaze_strength = state.get("strength") or "moderate"
-        eye_adjustment = _safe_gaze_eye_adjustment(state.get("eye_adjustment"))
+        eye_adjustment = (
+            _USER_STATE_GAZE_ADJUSTMENT if state.get(FACE_SYMMETRY)
+            else _safe_gaze_eye_adjustment(state.get("eye_adjustment"))
+        )
         head_face_adjustment = _safe_gaze_head_face_adjustment(
             state.get("head_face_adjustment"),
             allow_pose_change="pose" in style_options,
@@ -542,7 +559,8 @@ class EyesSkill(EditorSkill):
         return {MODE_HEAD_ALIGNED_GAZE} if _has_head_aligned_gaze(resolved) else set()
 
     def identity_scope(self, resolved, ctx):
-        scope = _BLINK_IDENTITY_SCOPE if "blink" in _resolved_features(resolved) else ""
+        blink_scope = _USER_STATE_BLINK_IDENTITY_SCOPE if has_user_face_state(resolved) else _BLINK_IDENTITY_SCOPE
+        scope = blink_scope if "blink" in _resolved_features(resolved) else ""
         if _has_head_aligned_gaze(resolved):
             scope += (
                 " An authorized eyes-plus-head/face gaze endpoint may update viewpoint projection only through its specified bounded head orientation; anatomical proportions remain fixed"
@@ -555,12 +573,14 @@ class EyesSkill(EditorSkill):
         rules = []
         if "blink" in features:
             rules.extend((_RULE_EYELIDS, rule) for rule in _BLINK_PAIR_RULES)
-        if any({"smile", "gaze"}.issubset(set(item["features"])) for item in resolved):
+        # A balanced face sets eye openings and size itself; these rules would pin them to the source.
+        balanced = has_user_face_state(resolved)
+        if not balanced and any({"smile", "gaze"}.issubset(set(item["features"])) for item in resolved):
             rules.append((_RULE_SMILE_GAZE,
                 "- Where smile and gaze affect the same person, gaze changes iris/pupil direction only. Let laughter "
                 "narrow both eyelids together through natural cheek lift while retaining clear iris visibility."
             ))
-        if "gaze" in features:
+        if not balanced and "gaze" in features:
             rules.append((_RULE_GAZE,
                 "- For gaze edits, retain iris size/color/texture and pupil proportions; change only necessary sclera balance and catchlight placement, preserving catchlight count, shape, brightness, and light-source logic."
             ))

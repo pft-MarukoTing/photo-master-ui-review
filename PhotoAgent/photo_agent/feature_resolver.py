@@ -31,7 +31,13 @@ from photo_agent.editor_skills.base import (
     _style_change_footprint,
 )
 from photo_agent.editor_skills.face import render_shared_face_rules, resolve_feature_contracts
-from photo_agent.editor_skills.symmetry import FACE_GEOMETRY_TASK_INTRO, face_geometry_guard
+from photo_agent.editor_skills.skin import FACE_TONAL_PREFIX
+from photo_agent.editor_skills.symmetry import (
+    FACE_GEOMETRY_TASK_INTRO,
+    FaceSymmetrySkill,
+    face_geometry_guard,
+    face_geometry_guard_line,
+)
 
 _HIDDEN_PRESERVE = frozenset().union(*(skill.hidden_preserve for skill in EDITOR_SKILLS))
 
@@ -509,6 +515,61 @@ def build_feature_contracts(analysis, *, include_gaze=True, include_blink=True):
     return contracts
 
 
+def _face_first_prompt(
+    analysis, resolved, ctx, claimed, *, task_intro, crop_block, other_corrections, visual_target_block,
+    user_preserved_block, finish_text, style_block, global_lines, user_text, revision_text,
+):
+    """The prompt for a photo with a user-requested balanced face: the face balance first, every other
+    approved edit listed together after it, then the preservation rules."""
+    face_blocks, balanced_edits, other_people, preserve_blocks = [], [], [], []
+    for item in resolved:
+        balance_lines, other_lines = [], []
+        for skill in EDITOR_SKILLS:
+            target = balance_lines if isinstance(skill, FaceSymmetrySkill) else other_lines
+            target.extend(skill.subject_lines(item, ctx))
+        heading = [f"Subject: {item['subject']}", f"Approximate location: {json.dumps(item['box'], ensure_ascii=False)}"]
+        if balance_lines:
+            face_blocks.append("\n".join(heading + balance_lines + [face_geometry_guard_line(item["subject"])]))
+            balanced_edits += other_lines
+        elif other_lines:
+            other_people += heading + other_lines
+        preserve = ", ".join(value.replace("_", " ") for value in sorted(set(item["preserve"]) - _HIDDEN_PRESERVE))
+        preserve_blocks.append(f"Preserve for {item['subject']}:\n- Preserve: {preserve}.")
+
+    # The light target's own framing lines refer to the usual layout and are left out.
+    target_lines = [
+        line for line in visual_target_block.split("\n")[1:]
+        if not line.startswith(("- Reviewed finished result", "- User-preserved choices below override"))
+    ]
+    color_lines = "\n".join(
+        line for skill in EDITOR_SKILLS for line in skill.color_lines(analysis, claimed[skill.name], ctx)
+    ).split("\n")
+    tonal_lines = [line for line in color_lines if line.startswith(FACE_TONAL_PREFIX)]
+    skin_lines = [line for line in color_lines if line and not line.startswith(FACE_TONAL_PREFIX)]
+    removal = ["- " + OCCLUDED_PERSON_REMOVAL_RULE] if has_approved_distraction_removal(analysis) else []
+    edits = balanced_edits + target_lines + [f"- {item}" for item in other_corrections] + removal + tonal_lines + other_people
+    preserved_choices = "\n".join(
+        line for line in user_preserved_block.split("\n") if line != "- Apply the approved correction plan everywhere else."
+    )
+    shared_face_block = render_shared_face_rules(EDITOR_SKILLS, resolved, ctx)
+    execution_block = "".join(skill.execution_block(analysis, resolved, ctx) for skill in EDITOR_SKILLS)
+
+    sections = [task_intro, "\n\n".join(face_blocks)]
+    if edits:
+        sections.append("Together with the face balance above, apply these approved edits:\n" + "\n".join(edits))
+    sections.append(f"Required framing:\n{crop_block}")
+    if preserved_choices:
+        sections.append(preserved_choices)
+    sections.append("\n\n".join(preserve_blocks))
+    sections += [block.strip("\n") for block in (shared_face_block, "\n".join(skin_lines), execution_block) if block]
+    sections.append(f"Finish:\n{finish_text}")
+    if style_block:
+        sections.append(f"Mandatory style overrides:\n{style_block}")
+    sections.append(f"Global preservation:\n{global_lines}")
+    sections.append(f"User direction:\n{user_text}{revision_text}")
+    return "\n\n".join(sections) + "\n"
+
+
 def build_compact_editor_prompt(
     analysis, preset_prompt, user_direction, crop_plan, *, preset_key="natural", include_gaze=True,
     include_blink=True, revision_feedback=None, raw_crop_instruction=None, raw_style_instruction=None,
@@ -719,6 +780,8 @@ def build_compact_editor_prompt(
     if "pose" not in style_options:
         spatial_preserve.extend(["pose", "gesture", "interaction points"])
     spatial_preserve_text = ", ".join(spatial_preserve)
+    if user_face_geometry:
+        spatial_preserve_text += "; a user-directed final state still reshapes that person's face and features"
     if style_footprint:
         style_scope_text = "- Selected style options may change only: " + ", ".join(sorted(style_footprint)) + "."
     elif end_state_crop_active:
@@ -778,7 +841,7 @@ def build_compact_editor_prompt(
         if user_face_geometry:
             facial_locality = (
                 facial_locality[:-1]
-                + ", except the facial contour and the small, natural head correction a user-directed final state sets."
+                + ", except the facial contour, feature balance and small, natural head correction a user-directed final state sets."
             )
     if style_footprint and resolved:
         terms = [term for skill in EDITOR_SKILLS for term in skill.final_state_terms(analysis)]
@@ -839,7 +902,7 @@ def build_compact_editor_prompt(
         facial_identity_line = ""
     elif user_face_geometry:
         facial_identity_line = (
-            "\n- Preserve each person's anatomical facial proportions and profile identity, except what that person's user-directed final state sets. Keep head yaw/pitch and projected eye–nose–mouth geometry fixed unless a resolved eyes-plus-head/face gaze endpoint, a user-directed final state, or selected style explicitly changes them; then change only what it specifies."
+            "\n- Preserve each person's anatomical facial proportions and profile identity, except what that person's user-directed final state sets. Keep head yaw/pitch fixed unless a resolved eyes-plus-head/face gaze endpoint, a user-directed final state, or selected style changes it; a user-directed final state sets that person's eye–nose–mouth geometry."
         )
     else:
         facial_identity_line = (
@@ -869,7 +932,23 @@ def build_compact_editor_prompt(
             f"\n\nUser direction:\n{user_text}{user_priority_text}"
         )
 
-    prompt = f"""{task_intro}
+    global_lines = (
+        f"{global_preservation}{facial_identity_line}\n"
+        f"- Preserve these unselected properties from the original: {spatial_preserve_text}.\n"
+        f"{style_scope_text}{locality_lines}\n"
+        f"- Preserve {texture_text}. Do not add text, logos, watermarks, people, props, or a different background.\n"
+        "- Every required final state above is mandatory. Do not restore a captured property that an authorized feature needs to change."
+    )
+    if user_face_geometry and not body_reshape_active and "pose" not in style_options:
+        prompt = _face_first_prompt(
+            analysis, resolved, skill_ctx, claimed,
+            task_intro=task_intro, crop_block=compact_crop_block, other_corrections=other_corrections,
+            visual_target_block=visual_target_block, user_preserved_block=user_preserved_block,
+            finish_text=finish_text, style_block=compact_style_block, global_lines=global_lines,
+            user_text=user_text, revision_text=revision_text,
+        )
+    else:
+        prompt = f"""{task_intro}
 
 Required framing:
 {compact_crop_block}{removal_face_block}

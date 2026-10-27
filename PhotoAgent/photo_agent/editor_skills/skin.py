@@ -5,12 +5,16 @@ import re
 from prompts import _has_person
 
 from .base import EditorSkill
+from .symmetry import face_symmetry_requests
 
 _SKIN_TERMS = (
     "膚色", "皮膚", "臉色", "臉部", "面部", "face tone", "skin", "complexion",
 )
 _SKIN_FALLBACK_AXES = {"white_balance", "hue", "saturation", "tint"}
 _FACE_TONAL_AXES = {"exposure", "shadow", "highlight", "contrast"}
+
+# Line prefix of an approved local face-tonal correction; the face-balance layout lists it among the edits.
+FACE_TONAL_PREFIX = "- Approved local face tonal correction:"
 
 _QA_SKIN = 0
 _CAP_SKIN = 30
@@ -81,8 +85,13 @@ class SkinSkill(EditorSkill):
             f"- Approved skin correction: {item} Apply it as the named cast correction and stop at the recorded native complexion."
             for item in skin_corrections
         )
+        retaining = (
+            "retaining complexion; facial geometry follows any user-directed final state"
+            if face_symmetry_requests(analysis) else
+            "retaining facial geometry and complexion"
+        )
         face_tonal_text = "\n".join(
-            f"- Approved local face tonal correction: {item} Apply it across the full named region, including clothing when specified; brighten skin through exposure while retaining facial geometry and complexion."
+            f"{FACE_TONAL_PREFIX} {item} Apply it across the full named region, including clothing when specified; brighten skin through exposure while {retaining}."
             for item in face_tonal_corrections
         )
         lines.extend([

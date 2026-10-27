@@ -329,9 +329,10 @@ _IDENTITY_GEOMETRY_RULE = (
     "eye–nose–mouth layout, eye-globe size, eye centers and interocular distance, nose geometry, philtrum "
     "length, and ear shape."
 )
-_USER_STATE_IDENTITY_RULE = _IDENTITY_GEOMETRY_RULE.replace(
-    "- Fixed identity geometry:",
-    "- Fixed identity geometry, for everything a person's user-directed final state does not set:",
+_USER_STATE_IDENTITY_RULE = (
+    "- Identity geometry: a person's user-directed final state sets that face's contour, chin, nose line, eye "
+    "height, size and opening, brows and mouth, and takes precedence over the rest of this rule. Everything else "
+    "keeps the source head/face proportions, cheekbone structure, philtrum length, and ear shape."
 )
 
 # Endpoint key of a user's request that one person's face read balanced left to right.
@@ -347,6 +348,8 @@ _EYE_MAKEUP_CARRY_RULE = (
     "- Carry the original lash line/lashes, brow design, eyeliner, eyeshadow, mascara, false lashes, glasses, "
     "and reflections through authorized movement without redesigning, enhancing, removing, or replacing them."
 )
+# A balanced face may level and re-arch the brows, so only their colour and hairs are carried.
+_USER_STATE_MAKEUP_CARRY_RULE = _EYE_MAKEUP_CARRY_RULE.replace("brow design", "brow color and hair texture")
 
 
 def _resolved_features(resolved):
@@ -363,7 +366,7 @@ def render_shared_face_rules(skills, resolved, ctx):
     for skill in skills:
         rules.extend(skill.face_rules(resolved, ctx))
     if facial:
-        rules.append((100, _EYE_MAKEUP_CARRY_RULE))
+        rules.append((100, _USER_STATE_MAKEUP_CARRY_RULE if has_user_face_state(resolved) else _EYE_MAKEUP_CARRY_RULE))
     rules.sort(key=lambda rule: rule[0])
     return (
         "\nShared facial execution rules:\n" + "\n".join(text for _, text in rules)

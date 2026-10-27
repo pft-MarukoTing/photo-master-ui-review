@@ -7,7 +7,7 @@ from prompts import (
 )
 
 from .base import EditorFeature, EditorSkill
-from .face import _BASE_PRESERVE, _EYE_IDENTITY_PRESERVE, _box, _resolved_features
+from .face import FACE_SYMMETRY, _BASE_PRESERVE, _EYE_IDENTITY_PRESERVE, _box, _resolved_features, has_user_face_state
 
 
 def _smile_contracts(analysis):
@@ -101,16 +101,26 @@ class ExpressionSkill(EditorSkill):
                 state_lines.append(
                     f"- This person's mouth is not clearly visible in the source. If it is visible after the edit, render {smile_text} on the existing face—{replacement_guard}; otherwise carry the expression only through the visible cheeks and eyes."
                 )
+        if state_lines and smile != "neutral" and state.get(FACE_SYMMETRY):
+            state_lines[-1] += (
+                " The smile is symmetric: both mouth corners lift equally, with the lips level and centered as the "
+                "Mouth item sets."
+            )
         return state_lines
 
     def face_rules(self, resolved, ctx):
         rules = []
         if "smile" in _resolved_features(resolved):
+            # A balanced face sets the mouth and eyes itself, so the rule pinning a smile to the captured
+            # landmarks is left out and the folds may even out between the two sides.
+            balanced = has_user_face_state(resolved)
+            if not balanced:
+                rules.append((_RULE_EXPRESSION,
+                    "- For every smile target, limit expression movement to mouth-corner position and opening, cheek soft-tissue lift, brow/periocular tension, and eyelid aperture over the fixed landmarks above. Coordinate them as one expression, using the captured mouth center, lip contour/volume, and visible dental characteristics rather than regenerating or beautifying the whole face."
+                ))
             rules.append((_RULE_EXPRESSION,
-                "- For every smile target, limit expression movement to mouth-corner position and opening, cheek soft-tissue lift, brow/periocular tension, and eyelid aperture over the fixed landmarks above. Coordinate them as one expression, using the captured mouth center, lip contour/volume, and visible dental characteristics rather than regenerating or beautifying the whole face."
-            ))
-            rules.append((_RULE_EXPRESSION,
-                "- Retain the original skin age and fold pattern. Existing crow's-feet, under-eye creases, and nasolabial folds may compress minimally but must not become deeper, darker, sharper, longer, or more numerous."
+                "- Retain the original skin age and fold pattern. Existing crow's-feet, under-eye creases, and nasolabial folds may compress minimally but must not become deeper, darker, sharper, longer, or more numerous"
+                + ("; the two sides may even out where the face-balance items require it." if balanced else ".")
             ))
         if any(item["final_state"].get("smile_level") == "laughing" for item in resolved):
             rules.append((_RULE_LAUGHTER,
