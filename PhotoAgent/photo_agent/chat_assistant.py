@@ -1378,6 +1378,7 @@ An empty options list never means person. Ask meaning/content questions even whe
 photo has zero or one person. Do not invent an owner for unrelated or unclear input.
 
 VERDICT
+- Resolve who is responsible for a missing choice before treating it as missing information. When the user asks you to suggest, generate, recommend or choose content, the unspecified content is delegated to you; do not ask the user to supply that same content. This applies to words, scene ideas, colours, styles and other supported creative choices. A request to propose alternatives is not permission to apply one. If suggestions depend on seeing the photo, offer analysis and set later=true. Still clarify genuinely necessary constraints or targets the user has not delegated. A request to apply the user's own exact content without providing it needs clarification instead.
 - "keep" -- the line asks for something to be done to this photo: a person's hair, eyes, gaze, expression, skin, body, pose, clothing or accessories; the background, the scene, the lighting, the colour, the crop or the style. Taking things out of the scene, tidying it up or putting something into it is a wish about the photo like any other (「把桌上的垃圾都移掉」、「去掉背景的電線」、「幫我加個背景」) -- it reads like an errand in the real world, but it is an edit to this image. When part of NEW LINE is something 「設定」 does by itself (THE SETTINGS FIELDS), that part goes to the settings fields and "line" is only the rest (「做成限動，天空藍一點」 -> "line" 「天空藍一點」, "aspect_ratio" "9:16"). Keep it even if it repeats a wish already in LINES SO FAR for a different person, or changes one the user wrote earlier: a later wish wins, and THE "merged" FIELD takes the earlier one out. When you are unsure, keep.
 - "setting" -- everything NEW LINE asks for is something 「設定」 does by itself: a frame shape in RATIOS, or turning one of SWITCHES on or off (THE SETTINGS FIELDS) -- 「做成限動」、「裁成 4:5」、「閉眼不用修」、「表情不要動」、「幫大家看鏡頭」. The page changes 「設定」 and nothing goes into the list. "line" is "".
 - "clarify" -- the wish is about this photo, but the user's own words leave out something only they can say. Only two cases:
@@ -1417,7 +1418,7 @@ Sometimes NEW LINE does not ask for anything new: it only takes back a wish in L
 - Any other case: false.
 
 THE "later" FIELD
-Some questions can only be answered once the photo is analyzed: how to retouch this photo, what could be fixed or what would suit it (「這張要怎麼修？」、「適合什麼風格？」), words to go with this photo (a title, ad copy, a caption), and questions about what it shows that PEOPLE IN PHOTO cannot answer. When you offer 分析 for one of them, "later" is true: whichever of 分析 or 一鍵美化 the user then starts, NEW LINE goes along to the editor, and the editor answers it as soon as the photo is done -- after 分析, or after the retouch for 一鍵美化 -- so the user does not have to ask again. Word the promise so it holds for both: 「分析或美化好之後，我就…」, never 「分析完我就…」. Everything else is false: a line that only sounds ready to go (「這樣就好」、「然後呢？」) asks nothing, and an offer that leads with 一鍵美化 is for a user who is ready to go, with no question left to answer.
+This records an outstanding question or requested recommendation that needs the photo's analysis, independently of the verdict or which start button is listed first. Set later=true whenever this reply leaves NEW LINE to be answered after analysis or retouching, including an answer or clarification that offers that route. If you promise a response after analysis, later must be true; do not make that promise with later=false. For a delegated suggestion, offer to analyze instead of asking the user to invent the answer themselves. Word the promise so it holds for either start: analysis or retouching. Set later=false when this turn is only a start command, an executable edit, a withdrawal, a tool explanation already answered, or a clarification requiring only the user's own information. Do not infer a pending answer merely from an invitation to analyze.
 
 THE SETTINGS FIELDS
 「設定」 has the 長寬比 (RATIOS lists its values) and the SWITCHES, set for every person in the photo before anything starts. When the verdict is "keep" or "setting", they carry what NEW LINE asks of them; every other verdict: "aspect_ratio" "", "advanced_options" [].
@@ -1976,8 +1977,8 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     is about when the model carried them over, and [] otherwise. `start` is
     "render" or "analyze" when the line asks to start one of them now, and ""
     otherwise. `offer` means the reply asks whether to start one of them,
-    with `options` to answer it; `later` that the offer is to analyze first
-    and answer the line itself once that is done. `aspect_ratio` is the
+    with `options` to answer it; `later` independently records a response
+    owed after analysis or retouching, even if this turn is a clarification. `aspect_ratio` is the
     長寬比 the line asks for (a REVIEW_RATIOS value), for the page to set,
     and "" otherwise; `advanced_options` the 人像修正 switches it turns on or
     off ({key: on}). A line those say all of is not kept: only 「設定」 changes.
@@ -2269,8 +2270,9 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         # 那句講的是某一張，接一句「要不要幫你分析？」會像在問那一張。
         if not (batch and (batch.get("where") or i18n.tr("我的照片")) in reply):
             reply = _offer_question(reply, options, bool(batch), redo)
-    # Only a question an offer of 分析 promises to answer afterwards.
-    later = offer and result.get("later") is True and options[0] == OFFER_OPTIONS[0]
+    # A deferred answer is not tied to an offer's UI shape or button order.
+    # Executable edits and start commands must never become waiting questions.
+    later = not continuation and verdict in ("offer", "answer", "clarify") and result.get("later") is True
     # 說了比例、或只是開關人像修正的，直接改「設定」：不然 AI 建議照樣跑，分析還
     # 可能建議相反的裁切，需求跟設定互相打架；設定做得到的也不用再進清單。
     setting = verdict == "setting" and not start and not ask

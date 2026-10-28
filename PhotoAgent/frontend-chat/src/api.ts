@@ -208,7 +208,7 @@ export const api = {
       ask?: boolean;
       question_kind?: "person" | "meaning" | "content";
       offer?: boolean;
-      // The offer is to analyze first and answer the line itself afterwards.
+      // An answer is owed after analysis/retouching, independently of offer/ask.
       later?: boolean;
       options?: string[];
       line?: string;

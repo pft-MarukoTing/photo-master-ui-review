@@ -157,9 +157,10 @@ type Note = {
   askedResolved?: boolean;
   // The AI asked whether to start 分析／一鍵美化 for them instead of starting
   // it. Not a question about the line: the answer is a line of its own.
-  // `later`: the line is a question only the analysis can answer (「這張適合
-  // 什麼文案？」), so a yes carries it into the session to be answered there.
   offered?: { options: string[]; later?: boolean };
+  // A response owed after analysis/retouching, independent of offer vs. clarify.
+  // offered.later remains readable for notes saved by older versions.
+  later?: boolean;
   // What goes in the list when this line only makes sense next to an earlier
   // one: the answer to that question completed (「頭髮換顏色」＋「棕色」→
   // 「頭髮換成棕色」), or a line carrying on from an earlier wish written out
@@ -328,11 +329,11 @@ const whoPrefix = (ps: PrePerson[]) => (ps.length ? t("{v1}：", { v1: facesRef(
 // What one note says while it is the line being checked.
 const noteLine = (n: Note) => whoPrefix(n.persons) + n.text;
 
-// 上傳頁面答不出來、AI 說分析完再回答的那句問題：AI 剛問完要不要先分析，現在
-// 開始了（分析或一鍵美化都算），這句就跟著進 session，照片好了再回答。
+// 上傳頁面仍欠一個回答的問題；回覆可能是邀請、追問或普通說明。
+// 開始分析或一鍵美化時，把這個待答問題帶進 session，不依賴回覆的顯示分類。
 function laterNote(ns: Note[]): Note | null {
   const last = ns[ns.length - 1];
-  return last?.offered?.later ? last : null;
+  return last?.later || last?.offered?.later ? last : null;
 }
 
 // 個人化需求分段：一個人一段，沒指定對象的全部一段，照第一次提到的順序排。一句
@@ -2820,7 +2821,8 @@ export function App() {
         ...(r.ask ? { asked: { options: r.options || [], kind: r.question_kind || "meaning",
           subtype: r.clarification_subtype, side_question: r.side_question } } : {}),
         ...(r.side_reference_token ? { sideToken: r.side_reference_token } : {}),
-        ...(r.offer ? { offered: { options: r.options || [], ...(r.later ? { later: true } : {}) } } : {}),
+        ...(r.offer ? { offered: { options: r.options || [] } } : {}),
+        ...(r.later ? { later: true } : {}),
         ...(r.accepted && !r.withdrawn ? completed(r.line, r.persons) : {}),
         ...(r.accepted && !r.withdrawn ? { literalTexts: r.literal_texts || r.request_semantics?.flatMap(s => s.literal_text ? [s.literal_text] : []) || [] } : {}),
         ...(r.verbatim ? { verbatim: true, wish: note.text, persons: [], selectionSource: undefined } : {}),

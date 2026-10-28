@@ -547,6 +547,48 @@ class AskTest(unittest.TestCase):
 
 
 class ReviewLineTest(unittest.TestCase):
+    def test_deferred_recommendation_survives_a_clarification_in_either_language(self):
+        cases = (("zh", "幫這張照片想一句話", "想用自己的文字嗎？也可以分析後讓我建議。"),
+                 ("en", "Please suggest words for this photo", "Have your own words? I can also suggest some after analysis."),
+                 ("en", "Recommend a background for this photo", "Any constraints? I can suggest a background after analysis."))
+        for lang, text, reply in cases:
+            with self.subTest(lang=lang, text=text), chat_assistant.i18n.use(lang):
+                result = chat_assistant.review_line(text, "", model=lambda context: {
+                    "verdict": "clarify", "reply": reply, "line": "", "options": [],
+                    "question_kind": "content", "answer_mode": "free_text", "later": True})
+                self.assertTrue(result["later"])
+                self.assertTrue(result["ask"])
+                self.assertFalse(result["offer"])
+                self.assertFalse(result["kept"])
+                self.assertFalse(result["start"])
+
+    def test_deferred_answer_does_not_depend_on_offer_or_button_order(self):
+        for verdict, reply, options in (("answer", "I can suggest a style after analysis. Any preference?", []),
+                                       ("offer", "Analyze or retouch first?", ["一鍵美化", "幫我分析"])):
+            with self.subTest(verdict=verdict):
+                result = chat_assistant.review_line("Suggest a style", "", model=lambda context: {
+                    "verdict": verdict, "reply": reply, "options": options, "later": True})
+                self.assertTrue(result["later"])
+                self.assertFalse(result["kept"])
+
+    def test_non_deferred_clarification_and_offer_do_not_invent_pending_answers(self):
+        for verdict in ("clarify", "offer"):
+            with self.subTest(verdict=verdict):
+                result = chat_assistant.review_line("Use my own text", "", model=lambda context: {
+                    "verdict": verdict, "reply": "What exact text should I use?", "line": "",
+                    "options": [], "question_kind": "content", "answer_mode": "free_text", "later": False})
+                self.assertFalse(result["later"])
+
+    def test_start_commands_edits_and_continuations_cannot_become_waiting_questions(self):
+        for verdict in ("analyze", "render", "keep", "setting"):
+            with self.subTest(verdict=verdict):
+                result = chat_assistant.review_line("Make it brighter", "", model=lambda context: {
+                    "verdict": verdict, "reply": "OK", "line": "", "options": [], "later": True})
+                self.assertFalse(result["later"])
+        result = chat_assistant.review_line("Suggest a style", "", continuation=True, model=lambda context: {
+            "verdict": "answer", "reply": "Any preference?", "options": [], "later": True})
+        self.assertFalse(result["later"])
+
     def review(self, verdict, reply=""):
         return chat_assistant.review_line(
             "幫我分析一下", "", model=lambda context: {"verdict": verdict, "reply": reply, "line": "", "options": []})

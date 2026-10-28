@@ -2033,8 +2033,13 @@ class ChatRoutesTest(unittest.TestCase):
         res, _ = self.review("幫這張想個標題", {"verdict": "offer", "reply": "要不要我先幫你分析這張照片？",
                                              "line": "", "options": ["幫我分析", "一鍵美化"], "later": True})
         self.assertTrue(res.get_json()["later"])
-        res, _ = self.review("這樣就好", {"verdict": "offer", "reply": "要不要直接幫你一鍵美化？",
+        # Button order is presentation, not evidence that the question is answered.
+        res, _ = self.review("這張適合什麼風格？", {"verdict": "offer", "reply": "分析或美化後會提供風格建議。要先開始嗎？",
                                        "line": "", "options": ["一鍵美化", "幫我分析"], "later": True})
+        self.assertTrue(res.get_json()["later"])
+        # Being ready to retouch has no outstanding question.
+        res, _ = self.review("這樣就好", {"verdict": "offer", "reply": "要不要直接幫你一鍵美化？",
+                                       "line": "", "options": ["一鍵美化", "幫我分析"], "later": False})
         self.assertNotIn("later", res.get_json())
 
     # The buttons under an answer offer 分析, so its last sentence must too: a
@@ -2068,6 +2073,20 @@ class ChatRoutesTest(unittest.TestCase):
     # An answer to the offer is not the answer to a question about a wish: a
     # 「好」 there is never stitched onto the line before it, and a question
     # right after an offer is still asked.
+    def test_prompt_review_carries_deferred_answer_outside_offer_branch(self):
+        for verdict in ("clarify", "answer", "offer"):
+            with self.subTest(verdict=verdict):
+                res, _ = self.review("Suggest something for this photo", {
+                    "verdict": verdict, "reply": "I can suggest it after analysis. Any preferences?",
+                    "line": "", "options": [], "question_kind": "content", "answer_mode": "free_text", "later": True})
+                self.assertEqual(res.status_code, 200)
+                answer = res.get_json()
+                self.assertTrue(answer["later"])
+                self.assertFalse(answer["accepted"])
+                self.assertNotIn("start", answer)
+                self.assertEqual(bool(answer.get("ask")), verdict == "clarify")
+                self.assertEqual(bool(answer.get("offer")), verdict == "offer")
+
     def test_after_an_offer_the_next_line_stands_alone(self):
         history = [{"role": "user", "text": "頭髮換顏色"},
                    {"role": "assistant", "text": "要不要我先幫你分析？", "question": True, "offer": True,

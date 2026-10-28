@@ -3243,10 +3243,10 @@ def prompt_review():
         # starts until they say so -- the options say it for them.
         out["offer"] = True
         out["options"] = answer["options"]
-        if answer["later"]:
-            # A question only the analysis can answer: once the user says yes,
-            # the page carries it into the session to be answered there.
-            out["later"] = True
+    # A pending answer may accompany a clarification or plain reply too.
+    # Preserve the contract independently of the buttons rendered for this turn.
+    if answer.get("later") and not accepted and not answer["start"] and not continuation:
+        out["later"] = True
     if accepted and answer["line"] and not answer.get('verbatim'):
         out["line"] = answer["line"][:USER_PROMPT_MAX_LEN]
         if answer["persons"]:
