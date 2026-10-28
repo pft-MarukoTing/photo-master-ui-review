@@ -13,6 +13,7 @@ import re
 import time
 from functools import lru_cache
 from dataclasses import dataclass
+import config
 
 from photo_agent.subject_preview import COORDINATE_SPACE, _valid_subject_box, validate_subject_preview
 
@@ -52,11 +53,15 @@ def preview_versions():
         config.SUBJECT_PREVIEW_MAX_DETECTIONS, config.SUBJECT_PREVIEW_LOW_CONFIDENCE_THRESHOLD,
         config.SUBJECT_PREVIEW_MAX_LOW_CONFIDENCE_CANDIDATES,
         config.SUBJECT_PREVIEW_MAX_LOW_CONFIDENCE_ZOOMS, config.SUBJECT_PREVIEW_AB_MAX_OUTPUT_TOKENS,
-        ab_preview.POLICY, ab_preview.MODE, ab_preview.LOCATION_POLICY))
+        ab_preview.POLICY, ab_preview.MODE, ab_preview.LOCATION_POLICY,
+        True))
     return {"detector": "sdl-exif-v1:" + digest(repr((_FACE_CROP_MAX_COUNT, _FACE_CROP_MAX_SIDE,
                 _FACE_DETECT_CONFIDENCE_THRESHOLD, _FACE_DETECT_NMS_THRESHOLD)) + detector_code + model_hash),
-            "prompt": digest(SUBJECT_PREVIEW_INSTRUCTION + ab_preview.INSTRUCTION + ab_preview.FIXED_INSTRUCTION + policy),
-            "schema": digest(json.dumps([SUBJECT_PREVIEW_RESPONSE_SCHEMA, ab_preview.selection_schema()], sort_keys=True))}
+            "prompt": digest(SUBJECT_PREVIEW_INSTRUCTION
+                + ab_preview.selection_instruction(detector_only=True)
+                + ab_preview.FIXED_INSTRUCTION + policy),
+            "schema": digest(json.dumps([SUBJECT_PREVIEW_RESPONSE_SCHEMA,
+                ab_preview.selection_schema(detector_only=True)], sort_keys=True))}
 
 
 def validate_preview_binding(binding, *, check_age=True):
@@ -110,11 +115,14 @@ class AnalysisPreview:
     context: dict
     source_sha256: str
     analysis_model: str
+    detector_only: bool = True
 
 
 def validate_analysis_preview(preview, *, image_bytes, analysis_model):
     if not isinstance(preview, AnalysisPreview):
         raise ValueError('invalid_analysis_preview')
+    if preview.detector_only is not True:
+        raise ValueError('analysis_preview_policy_mismatch')
     if preview.source_sha256 != source_sha256(image_bytes) or preview.analysis_model != analysis_model:
         raise ValueError('analysis_preview_source_mismatch')
     context = preview.context

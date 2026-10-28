@@ -214,7 +214,7 @@ def _analyze_subject_preview(image_bytes: bytes, *, analysis_model: str) -> dict
     result["timing"] = {"detector_seconds": round(detector_seconds, 4),
         "llm_seconds": metrics["duration_seconds"], "worker_seconds": round(time.perf_counter() - started, 4),
         "completed_at": time.time()}
-    result["usage"] = {k: metrics.get(k) for k in ("model", "usage", "attempted")}
+    result["usage"] = {k: metrics.get(k) for k in ("model", "usage", "attempted", "diagnostics")}
     return result
 
 
