@@ -10252,6 +10252,23 @@
   // params onto itself -- right for the version viewHistoryRecord opens on,
   // and the only thing available at all for a case with no version list
   // (a pre-v3 entry, or a /case fetch that failed).
+  // The params of the version a 接著這張調整 version was made from, past any
+  // continuations in between. Read off versionParams (source_result marks a
+  // continuation), since an older version's result isn't loaded yet. Its own
+  // params when the source is gone.
+  function continuationSourceParams(run) {
+    let params = run.versionParams || {};
+    const seen = new Set([run.versionNumber]);
+    for (let from = run.versionFrom; params.source_result && from != null && !seen.has(from);) {
+      seen.add(from);
+      const source = (singleRuns || []).find((r) => r.versionNumber === from);
+      if (!source?.versionParams) break;
+      params = source.versionParams;
+      from = source.versionFrom;
+    }
+    return params;
+  }
+
   function applyHistoryVersionContext(run, fallbackParams) {
     const params = run.versionParams || fallbackParams || {};
     // params.* is absent (rather than falsy-but-present) only for an entry
@@ -10262,10 +10279,17 @@
     // more accurate fallback than a blind default for that one specifically.
     const extraInfo = run.result["extra-info"] || {};
     const attached = run.result.analysis?._skipped_analysis ? historyCaseAnalysis : null;
+    // A continuation's own request and ratio are that one round's (the chat's
+    // 接著調整 text, at "original"), no choice of the user's for the photo:
+    // taken as one, the chat page -- handed them on a mode switch -- or the
+    // next 美化 would act on them, and arriving from the chat page they read
+    // as unsent edits. The photo's own are the version it was made from.
+    const continuation = isContinuationRun(run);
+    const caseParams = continuation ? continuationSourceParams(run) : params;
     // Analyzed since: the next 美化 works off the full analysis, not just
     // the 個人化需求 the version was made with.
     const { analysis: restoredAnalysis, selections } = restoreReviseSelections(
-      attached || run.result.analysis, params.user_prompt, params.overwrite_prompt && !attached);
+      attached || run.result.analysis, caseParams.user_prompt, caseParams.overwrite_prompt && !attached);
     singleFlowState = {
       analysis: restoredAnalysis,
       analyzeJobId: attached && run.result.analysis._continuation && historyCaseAnalysisJobId
@@ -10275,12 +10299,10 @@
       imageQuality: params.image_quality || extraInfo.image_quality || "medium",
       imageModel: params.image_model || extraInfo.image_model || "gpt-image-2",
       analysisModel: params.analysis_model || extraInfo.analysis_model || "gpt-5.6-luna",
-      // A continuation is always rendered at "original" (it keeps the framing
-      // of the version it came from), so that is no choice of the user's:
-      // taken as one, the next 美化 -- or the chat page, on a mode switch --
-      // re-plans the analysis's composition for it.
-      aspectRatio: attached && run.result.analysis._continuation
-        ? attached._aspect_ratio_pref_at_analysis || "auto" : params.aspect_ratio || "auto",
+      // Analyzed since: the ratio that analysis was planned for, or a new
+      // ratio would re-plan its composition.
+      aspectRatio: continuation && attached
+        ? attached._aspect_ratio_pref_at_analysis || "auto" : caseParams.aspect_ratio || "auto",
       aiPhotoEditing: params.ai_photo_editing != null ? params.ai_photo_editing : !!extraInfo.image_model,
       runQa: params.run_qa != null ? params.run_qa : true,
       singlePassEdit: resolvedSinglePassEdit(params.single_pass_edit, extraInfo.single_pass_edit),
