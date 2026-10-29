@@ -91,7 +91,7 @@ def upload_to_req_url(request_spec, data):
 def run_photo_agent_task(access_token, src_files, preset="natural", image_quality="medium",
                           image_model=DEFAULT_IMAGE_MODEL, aspect_ratio="auto", ai_photo_editing=True, run_qa=True,
                           user_prompt=None, overwrite_prompt=False, stage=None, analysis=None, advanced_options=None,
-                          single_pass_edit=True, req_id=1):
+                          single_pass_edit=True, findings_cards=False, req_id=1):
     """POST /task/run.action with the photoAgent payload shape.
 
     UNVERIFIED against the real AIPoC service -- see module docstring.
@@ -125,6 +125,9 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
             on Step 5's own bundled edit call -- same UNCONFIRMED caveat as
             advanced_options: silently ignored (today's two-call behavior
             stands) if the remote build hasn't picked this param up yet.
+        findings_cards: also write the per-aspect findings cards into the
+            analysis -- same UNCONFIRMED caveat: ignored by a remote build
+            that predates the param.
 
     Returns the parsed JSON body -- caller reads body["result"]["taskId"].
     """
@@ -148,6 +151,8 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
         params["advanced_options"] = advanced_options
     if single_pass_edit:
         params["single_pass_edit"] = single_pass_edit
+    if findings_cards:
+        params["findings_cards"] = True
     payload = {
         "payload": {
             "acts": [{"id": 0, "params": params}],
