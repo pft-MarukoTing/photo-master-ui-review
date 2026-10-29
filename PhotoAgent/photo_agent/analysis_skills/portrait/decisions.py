@@ -3,6 +3,7 @@
 import math
 import re
 
+from photo_agent import i18n
 from prompts import _HAIR_ACTION_BY_STATE, _HAIR_FALLBACK_PLAN_BY_STATE, LENS_AXIS
 
 
@@ -1057,7 +1058,7 @@ def lens_correction_texts(names):
     """(correction_plan, retouch_recipe, correction_inverse) for the photo's one lens-correction item."""
     return (
         "修正廣角變形，主要是" + "、".join(names) + "的臉",
-        "修正廣角造成的邊緣人臉變形",
+        i18n.tr("修正廣角造成的邊緣人臉變形"),
         "保留邊緣人物在原圖中的臉部比例",
     )
 

@@ -313,6 +313,8 @@ TEXT = {
     "指定人物的預覽與此照片不符，請重新指定。": "The selected person's preview doesn't match this photo. Please choose again.",
     "指定的人物未完成身份確認，請重新指定或清除該需求。": "The selected person hasn't been confirmed. Please choose again or clear the request.",
     "指定的人物未納入本次分析，請重新確認需求。": "The selected person isn't part of this analysis. Please confirm the request again.",
+    # The lens-correction review item (analysis_skills/portrait/decisions.py)
+    "修正廣角造成的邊緣人臉變形": "Correct wide-angle stretch on faces near the frame edge",
 }
 
 
