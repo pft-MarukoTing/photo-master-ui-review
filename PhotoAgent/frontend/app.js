@@ -1192,11 +1192,17 @@
   const DROP_REVIEW_FOR_VERSION = tr("還沒美化的調整會換成這一版的設定。確定要切換嗎？");
 
   // True when the edits were handed over and the chat page will pick them up.
+  // A handoff from the chat page this one never got to apply goes back as it
+  // came: handing back this page's own controls would undo what was done there.
+  // compositions is the analysis's _composition_by_ratio, so a ratio already
+  // planned here is adopted there, not planned again.
   function writeModeHandoff(caseKey) {
-    const review = caseKey ? readReviewState() : null;
+    const unapplied = caseKey && pendingModeHandoff?.case_id === caseKey ? pendingModeHandoff : null;
+    const review = unapplied || (caseKey ? readReviewState() : null);
     if (!review) return false;
+    const compositions = unapplied ? unapplied.compositions : singleFlowState.analysis._composition_by_ratio;
     try {
-      sessionStorage.setItem(MODE_HANDOFF_KEY, JSON.stringify({ case_id: caseKey, at: Date.now(), ...review }));
+      sessionStorage.setItem(MODE_HANDOFF_KEY, JSON.stringify({ ...review, case_id: caseKey, at: Date.now(), compositions }));
       return true;
     } catch {
       return false; // nothing carried over -- the switch itself still goes ahead
@@ -1226,7 +1232,6 @@
     const handoff = pendingModeHandoff;
     if (!handoff || handoff.case_id !== currentCaseHistoryImageKey || currentDetailBatchRecord()) return;
     pendingModeHandoff = null;
-    if (!(Date.now() - (handoff.at || 0) < MODE_HANDOFF_MAX_AGE_MS)) return;
 
     const model = findModelQualityOptionByPair(handoff.image_model, handoff.image_quality);
     if (model && model.model === handoff.image_model && model.quality === handoff.image_quality) {
@@ -1274,6 +1279,15 @@
       ["pose", "angle", "lighting", "size"].map((k) => [k, style[k] || "default"]));
     applyStyleSelections({ options, recipeChecked });
     updateInlineAnalysisContinueBtnState();
+    // Every ratio the chat page already planned joins _composition_by_ratio --
+    // not just the one handed over -- so picking any of them later is adopted
+    // as is, not planned again (the case reloads its analysis from history).
+    const analysis = singleFlowState?.analysis;
+    const handed = Object.entries(handoff.compositions || {})
+      .filter(([r, state]) => state?._aspect_ratio_pref_at_analysis === r);
+    if (analysis && handed.length) {
+      analysis._composition_by_ratio = { ...(analysis._composition_by_ratio || {}), ...Object.fromEntries(handed) };
+    }
     // Last: a ratio this photo has no composition for asks before reframing,
     // the same confirm a pick from the picker gets.
     const ratio = handoff.aspect_ratio;

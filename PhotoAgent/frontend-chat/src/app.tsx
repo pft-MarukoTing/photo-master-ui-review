@@ -824,6 +824,8 @@ export function renderFailedIn(s: Session, photoId: string): boolean {
 }
 
 const isBusy = (p: Photo) => p.status === "analyzing" || p.status === "reframing" || p.status === "rendering";
+// 沿用另一個模式排好的構圖：幾秒就好、構圖也沒變，不顯示「重新構圖」。
+const quietReframe = (p: Photo) => p.status === "reframing" && !!p.pending_reframe?.handed;
 // 分析放在哪支 job：分析那支，或後來改比例時重新構圖的那支。
 const analysisJob = (p: Photo) => p.analysis_job_id || p.analyze_job_id;
 
@@ -1300,9 +1302,10 @@ export function App() {
       const analysis = r?.status === "success" ? (r.result?.analysis as Analysis) : null;
       const patch = handoffPatch(h, p.plan, c, analysis);
       // 引擎在一般帳號可能不給改，被擋就不帶這項，其他照樣帶。
-      await api.patchPhotoPlan(s.session_id, p.photo_id, patch).catch(() => {
+      // 構圖帶著那邊排好的過來：長寬比在那邊規劃過，就沿用，不重新規劃一次。
+      await api.patchPhotoPlan(s.session_id, p.photo_id, patch, undefined, h.compositions).catch(() => {
         const { render_option, ...rest } = patch;
-        return api.patchPhotoPlan(s.session_id, p.photo_id, rest);
+        return api.patchPhotoPlan(s.session_id, p.photo_id, rest, undefined, h.compositions);
       });
       // 改了 plan 可能開始重新構圖、多一句提問，所以整個對話要重抓。
       const next = await api.getSession(s.session_id);
@@ -4786,7 +4789,7 @@ function photoState(p: Photo, renderFailed = false): { key: string; text: string
     ? { key: "error", text: t("失敗") }
     : p.status === "rendering" || p.queued_render || p.pending_render
       ? { key: "processing", text: t("美化中") }
-      : isBusy(p)
+      : isBusy(p) && !quietReframe(p)
         ? { key: "analyzing", text: t("分析中") }
         : renderFailed
           ? { key: "error", text: t("失敗") }
@@ -6966,7 +6969,9 @@ export function SessionView(props: {
         return (
           <AssistantMsg>
             <p class="chat-text">
-              {t("已{by}規劃好新構圖，下次美化時會套用到照片上。", { by: reframeBy(c.aspect_ratio) })}
+              {c.handed
+                ? t("已沿用面板模式{by}規劃的構圖，下次美化時會套用到照片上。", { by: reframeBy(c.aspect_ratio) })
+                : t("已{by}規劃好新構圖，下次美化時會套用到照片上。", { by: reframeBy(c.aspect_ratio) })}
               {idx === messages.length - 1 && !isBusy(photo)
                 ? editing
                   ? cats.length
@@ -7085,7 +7090,7 @@ export function SessionView(props: {
     : photo.status === "analyzing"
       ? { stage: "analyzing", title: t("正在分析照片"), lines: analyzeSubMessages(renderQueued, !!waiting) }
       : reframing
-        ? {
+        ? quietReframe(photo) ? null : {
             stage: "reframing",
             title: t("正在重新構圖"),
             lines: [

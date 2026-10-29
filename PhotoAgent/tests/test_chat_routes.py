@@ -889,6 +889,41 @@ class ChatRoutesTest(unittest.TestCase):
         self.patch_plan(sid, photo, {"aspect_ratio": "4:5"})
         self.assertEqual(len(self.enqueued), before)
 
+    def test_reframe_reuses_a_composition_handed_over(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        planned = {"_aspect_ratio_pref_at_analysis": "4:5", "aspect_ratio": "4:5",
+                   "retouch_recipe": ["重新構圖：裁成 4:5 人像"], "subject_category": "food"}
+        res = self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"), json={
+            "user": USER, "plan": {"aspect_ratio": "4:5"},
+            "compositions": {"4:5": planned, "1:1": {"_aspect_ratio_pref_at_analysis": "1:1"}}})
+        self.assertEqual(res.status_code, 200, res.get_json())
+        by_ratio = self.enqueued[-1][1]["acts"][0]["params"]["analysis"]["_composition_by_ratio"]
+        # Every ratio the other mode planned comes along, so picking 1:1 next
+        # is a cache hit too.
+        self.assertEqual(sorted(by_ratio), ["1:1", "4:5"])
+        self.assertEqual(by_ratio["4:5"]["retouch_recipe"], ["重新構圖：裁成 4:5 人像"])
+        self.assertNotIn("subject_category", by_ratio["4:5"])
+        # Only adopting it: told as such, not as a new 重新構圖.
+        job_id = self.enqueued[-1][0]
+        self.assertTrue(self.photo_row(sid, photo)["pending_reframe"]["handed"])
+        self.per_job_analysis({job_id: {**self.analysis, "_aspect_ratio_pref_at_analysis": "4:5"}})
+        self.jobs[job_id]["status"] = "success"
+        row = self.photo_row(sid, photo)
+        self.assertEqual((row["status"], row["planned_ratio"]), ("ready", "4:5"))
+        self.assertEqual([c["handed"] for c in self.cards(sid, "reframe_done")], [True])
+
+    def test_handed_composition_filed_under_another_ratio_is_ignored(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        res = self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"), json={
+            "user": USER, "plan": {"aspect_ratio": "4:5"},
+            "compositions": {"4:5": {"_aspect_ratio_pref_at_analysis": "1:1", "aspect_ratio": "1:1"}}})
+        self.assertEqual(res.status_code, 200, res.get_json())
+        analysis = self.enqueued[-1][1]["acts"][0]["params"]["analysis"]
+        self.assertNotIn("4:5", analysis.get("_composition_by_ratio") or {})
+        self.assertFalse(self.photo_row(sid, photo)["pending_reframe"]["handed"])
+
     def test_failed_reframe_puts_the_ratio_back(self):
         sid = self.new_session()
         photo = self.ready_photo(sid)

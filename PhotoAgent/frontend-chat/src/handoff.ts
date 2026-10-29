@@ -28,6 +28,9 @@ export interface Handoff {
   user_prompt?: string;
   overwrite_prompt?: boolean;
   recipe?: Record<string, boolean>;
+  // 分析裡每個長寬比已經排好的構圖（_composition_by_ratio）。接手的那邊換到
+  // 同一個長寬比時直接沿用，不重新規劃構圖。
+  compositions?: Record<string, any>;
 }
 
 export function writeHandoff(caseId: string, plan: Plan, caps: Capabilities, analysis?: Analysis) {
@@ -47,6 +50,7 @@ export function writeHandoff(caseId: string, plan: Plan, caps: Capabilities, ana
     user_prompt: plan.user_prompt,
     overwrite_prompt: plan.overwrite_prompt,
     recipe: items.length ? Object.fromEntries(items.map((t, i) => [t, (plan.recipe_checked || [])[i] !== false])) : undefined,
+    compositions: analysis?._composition_by_ratio,
   };
   try {
     sessionStorage.setItem(KEY, JSON.stringify(h));

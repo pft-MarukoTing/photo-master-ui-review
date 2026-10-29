@@ -57,6 +57,7 @@ from backend.services.report import get_report_by_id, get_report_chat, get_repor
 from backend.services.template_params import get_engine_params_template
 from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, image_to_data_url
+from prompts import COMPOSITION_STATE_KEYS
 from photo_agent import capabilities, chat_assistant, chat_jobs, i18n
 from compatibility_version import CURRENT_COMPATIBILITY_VERSION
 import config as agent_config
@@ -1639,7 +1640,11 @@ def patch_all_plans(session_id):
 def patch_photo_plan(session_id, photo_id):
     """One photo's plan, any time. While the photo is rendering this only
     affects its next render; while it is queued, the queued render uses it.
-    A new 長寬比 on a ready photo starts re-planning its composition."""
+    A new 長寬比 on a ready photo starts re-planning its composition.
+
+    compositions: what 面板模式 already planned for this photo (its
+    analysis's _composition_by_ratio), handed over on a mode switch, so a
+    ratio picked there is adopted rather than planned again."""
     body = _body()
     user = _user(body.get("user"))
     photo = _photo(_session(user, session_id), photo_id)
@@ -1656,20 +1661,39 @@ def patch_photo_plan(session_id, photo_id):
         photo['side_question_id']=None
         store.save_photo_state(user,session_id,photo)
         _side_ensure_question(user,session_id,photo)
-    _reframe_if_needed(user, session_id, photo)
+    _reframe_if_needed(user, session_id, photo, compositions=body.get("compositions"))
     return jsonify({"photo_id": photo_id, "plan": plan, "status": photo["status"]})
 
 
 # --- reframe ---------------------------------------------------------------
 
-def _reframe_if_needed(user, session_id, photo, analysis=None):
+def _handed_compositions(compositions):
+    """Every composition the other mode planned, out of its
+    _composition_by_ratio, by ratio. Composition keys only, and only ones
+    planned for the ratio they are filed under -- any other would leave the
+    photo planned for a different ratio, and re-plan all over again."""
+    if not isinstance(compositions, dict):
+        return {}
+    return {
+        ratio: {key: state[key] for key in COMPOSITION_STATE_KEYS if key in state}
+        for ratio, state in compositions.items()
+        if isinstance(state, dict)
+        and str(state.get("_aspect_ratio_pref_at_analysis") or "").strip().lower() == ratio
+    }
+
+
+def _reframe_if_needed(user, session_id, photo, analysis=None, compositions=None):
     """Re-plan a ready photo's composition when its plan's 長寬比 is not the
     one its analysis was planned for -- the results page's 長寬比 change
     (pipeline.reframe_stage), run as soon as the ratio is picked. A render
     asked for meanwhile waits in queued_render. Returns True if one started.
 
     planned_ratio caches the analysis's ratio on the photo, so the common
-    case -- nothing to re-plan -- reads no analysis."""
+    case -- nothing to re-plan -- reads no analysis.
+
+    The compositions handed over in `compositions` join the analysis's
+    _composition_by_ratio, which reframe_stage reuses without calling the
+    model: the framing the other mode showed, not a new one."""
     if photo["status"] != "ready":
         return False
     ratio = photo["plan"].get("aspect_ratio") or "auto"
@@ -1693,6 +1717,11 @@ def _reframe_if_needed(user, session_id, photo, analysis=None):
     if error:
         current_app.logger.warning("reframe not started for %s: %s", photo["photo_id"], error)
         return False
+    # All of them, not just this ratio's: a later pick of one the other mode
+    # planned is then a cache hit too.
+    handed = _handed_compositions(compositions)
+    if handed:
+        analysis = {**analysis, "_composition_by_ratio": {**(analysis.get("_composition_by_ratio") or {}), **handed}}
     params["stage"] = "reframe"
     params["analysis"] = analysis
     engine_params = get_engine_params_template()
@@ -1701,7 +1730,9 @@ def _reframe_if_needed(user, session_id, photo, analysis=None):
     job_id = enqueue(engine_params, src_content=None)
     photo["status"] = "reframing"
     photo["error"] = None
-    photo["pending_reframe"] = {"job_id": job_id, "aspect_ratio": ratio, "previous": planned}
+    # handed: only adopting the other mode's composition -- done in moments,
+    # so it shows no 重新構圖 in progress, and its 完成 says so.
+    photo["pending_reframe"] = {"job_id": job_id, "aspect_ratio": ratio, "previous": planned, "handed": ratio in handed}
     store.save_photo_state(user, session_id, photo)
     return True
 
@@ -1754,8 +1785,11 @@ def _advance_reframing(user, session_id, photo, statuses):
     photo["analysis_job_id"] = pending["job_id"]
     photo["planned_ratio"] = _planned_for(after)
     photo["error"] = None
+    # handed still gets its line: the chat's last word on the composition
+    # would otherwise be the ratio from before the switch.
     messages = [store.make_message("assistant", card={
-        "type": "reframe_done", "photo_id": photo_id, "aspect_ratio": pending["aspect_ratio"]})]
+        "type": "reframe_done", "photo_id": photo_id, "aspect_ratio": pending["aspect_ratio"],
+        "handed": bool(pending.get("handed"))})]
     # Changed again while this one ran: re-plan for that one, the queued
     # render still waiting.
     if _reframe_if_needed(user, session_id, photo, after):

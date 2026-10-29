@@ -280,6 +280,7 @@ export const EN: Record<string, string> = {
   "這次美化沒有成功：{error}。": "The retouch failed: {error}.",
   "可以回到首頁換一張照片，或按「看美化項目」換個方式再試。": "You can go back to the home page and choose another photo, or tap “Review Edits” and try a different approach.",
   "已{by}規劃好新構圖，下次美化時會套用到照片上。": "Planned the new framing {by}; it will be applied to the photo on the next retouch. ",
+  "已沿用面板模式{by}規劃的構圖，下次美化時會套用到照片上。": "Using the framing planned {by} in panel mode; it will be applied to the photo on the next retouch. ",
   "還想調整其他項目可以點下面的項目，或按「{goLabel}」我就開始。": "To adjust anything else, tap an item below, or tap “{goLabel}” to start.",
   "按下面的按鈕就會用新構圖美化。": "Tap the button below to retouch with the new framing.",
   "{by}重新構圖沒有成功：{error}。比例先改回「{ratio}」": "Reframing {by} failed: {error}. The ratio has been set back to “{ratio}”",

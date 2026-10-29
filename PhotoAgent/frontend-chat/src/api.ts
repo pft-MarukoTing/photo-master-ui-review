@@ -328,8 +328,10 @@ export const api = {
     ),
   patchPlan: (id: string, plan: Plan, signal?: AbortSignal) =>
     request<Dict>(`${sid(id)}/plan`, { ...json("PATCH", { plan }), signal }),
-  patchPhotoPlan: (id: string, photoId: string, plan: Plan, signal?: AbortSignal) =>
-    request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/plan`, { ...json("PATCH", { plan }), signal }),
+  // compositions: the other mode's _composition_by_ratio, handed over on a mode
+  // switch, so a 長寬比 already planned there is reused instead of planned again.
+  patchPhotoPlan: (id: string, photoId: string, plan: Plan, signal?: AbortSignal, compositions?: Dict) =>
+    request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/plan`, { ...json("PATCH", { plan, compositions }), signal }),
   // 「幫我分析」 on a photo uploaded with 「只照需求改」, whose analysis was skipped.
   analyze: (id: string, photoId: string) =>
     request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/analyze`, json("POST", {})),
