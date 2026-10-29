@@ -459,7 +459,7 @@ class OpenAIAspectRatioTests(unittest.TestCase):
 
     def test_output_scale_sizes_stay_within_openai_limits(self):
         ratios = [(1, 8), (1, 3), (9, 16), (2, 3), (3, 4), (4, 5), (1, 1), (5, 4), (4, 3), (3, 2), (16, 9), (3, 1), (8, 1)]
-        for scale in ("1K", "2K", "3K", "4K"):
+        for scale in ("1K", "2K"):
             for width, height in ratios:
                 with self.subTest(scale=scale, ratio=f"{width}:{height}"):
                     w, h = (int(v) for v in openai_edit_size_for_ratio(width, height, scale).split("x"))
@@ -473,10 +473,9 @@ class OpenAIAspectRatioTests(unittest.TestCase):
         for width, height in ((1, 1), (16, 9), (4, 5)):
             self.assertEqual(openai_edit_size_for_ratio(width, height), openai_edit_size_for_ratio(width, height, "1K"))
             base_w, _ = (int(v) for v in openai_edit_size_for_ratio(width, height).split("x"))
-            big_w, _ = (int(v) for v in openai_edit_size_for_ratio(width, height, "3K").split("x"))
-            self.assertAlmostEqual(big_w / base_w, 2.0, delta=0.05)
+            big_w, _ = (int(v) for v in openai_edit_size_for_ratio(width, height, "2K").split("x"))
+            self.assertAlmostEqual(big_w / base_w, 1.5, delta=0.05)
         self.assertEqual(openai_edit_size_for_ratio(3, 2, "unknown"), openai_edit_size_for_ratio(3, 2))
-        self.assertEqual(openai_edit_size_for_ratio(16, 9, "4K"), "3840x2160")
 
     @patch.object(
         openai_client,
@@ -486,11 +485,11 @@ class OpenAIAspectRatioTests(unittest.TestCase):
     def test_output_scale_reaches_the_size_param(self, post_edit):
         openai_client.edit_photo(
             _image_bytes(), _analysis("1:1", crop_enabled=False), model="gpt-image-2", aspect_ratio="auto",
-            output_scale="3K",
+            output_scale="2K",
         )
         w, h = (int(v) for v in post_edit.call_args.args[3].split("x"))
         self.assertEqual(w, h)
-        self.assertGreater(w, 2000)
+        self.assertGreater(w, 1600)
 
     @patch.object(
         openai_client,

@@ -40,10 +40,10 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(plan["aspect_ratio"], "4:5")
 
     def test_output_scale_accepts_listed_values_only(self):
-        plan, error = apply_plan_patch(default_plan(), {"output_scale": "3K"})
+        plan, error = apply_plan_patch(default_plan(), {"output_scale": "2K"})
         self.assertIsNone(error)
-        self.assertEqual(plan["output_scale"], "3K")
-        for bad in ("2x", "5K", "", 2):
+        self.assertEqual(plan["output_scale"], "2K")
+        for bad in ("2x", "3K", "4K", "5K", "", 2):
             self.assertIsNotNone(apply_plan_patch(default_plan(), {"output_scale": bad})[1])
 
     def test_run_count_limit_follows_debug(self):

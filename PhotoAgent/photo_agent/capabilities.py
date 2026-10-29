@@ -132,16 +132,14 @@ ASPECT_RATIOS: Tuple[Choice, ...] = (
 # Output size tier, as a multiple of each edge of the default ~1536x1024
 # render; the W:H still comes from aspect_ratio. Only arbitrary_size models can
 # honour it -- the rest ignore it. Named by long edge: 1K is today's ~1.6MP,
-# 2K ~3.5MP, 3K ~6.3MP, and 4K is the API's 8,294,400-pixel cap (3840x2160 at
-# 16:9; image_tools clamps to it). OpenAI calls anything above 2560x1440
-# experimental, which is where 3K and 4K land.
+# 2K ~3.5MP. 3K and 4K (above OpenAI's experimental 2560x1440 line) were
+# dropped; plans and settings saved with them fall back to 2K.
 OUTPUT_SCALES: Tuple[Choice, ...] = (
     Choice("1K", "1K（標準）"),
     Choice("2K", "2K"),
-    Choice("3K", "3K（實驗性）"),
-    Choice("4K", "4K（實驗性）"),
 )
-OUTPUT_SCALE_FACTORS = {"1K": 1.0, "2K": 1.5, "3K": 2.0, "4K": 2.3}
+OUTPUT_SCALE_FACTORS = {"1K": 1.0, "2K": 1.5}
+RETIRED_OUTPUT_SCALES = {"3K": "2K", "4K": "2K"}
 
 PRESET_IDS = ("natural", "editorial", "product", "portrait", "custom")
 

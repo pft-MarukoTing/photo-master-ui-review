@@ -197,6 +197,8 @@ def _validate_params(params: dict) -> dict:
     normalized["aspect_ratio"] = aspect_ratio
 
     output_scale = normalized.get("output_scale", capabilities.DEFAULT_OUTPUT_SCALE)
+    if isinstance(output_scale, str):
+        output_scale = capabilities.RETIRED_OUTPUT_SCALES.get(output_scale, output_scale)
     if not isinstance(output_scale, str) or output_scale not in VALID_OUTPUT_SCALES:
         raise RuntimeError(
             f"{EFFECT_NAME}: output_scale must be one of {VALID_OUTPUT_SCALES}",

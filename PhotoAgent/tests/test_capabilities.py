@@ -69,6 +69,10 @@ class RegistryConsistencyTest(unittest.TestCase):
         self.assertEqual(params["image_quality"], capabilities.DEFAULT_QUALITY)
         self.assertEqual(params["analysis_model"], capabilities.DEFAULT_ANALYSIS_MODEL)
 
+    def test_retired_output_scales_fall_back_to_2k(self):
+        for retired in ("3K", "4K"):
+            self.assertEqual(_validate_params({"output_scale": retired})["output_scale"], "2K")
+
     def test_advanced_option_defaults_are_unchanged(self):
         self.assertEqual(ADVANCED_OPTION_DEFAULTS, {
             "eye_closed_detection": True,
@@ -106,12 +110,12 @@ class DescribeTest(unittest.TestCase):
         self.assertEqual([m["id"] for m in caps["render"]["analysis_models"]], ["gpt-5.6-luna"])
         self.assertEqual(caps["render"]["max_run_count"], capabilities.GENERAL_MAX_RUN_COUNT)
         self.assertEqual(caps["render"]["defaults"]["render_option"], "gpt-image-2.5-sunburst:medium")
-        self.assertEqual([s["value"] for s in caps["render"]["output_scales"]], ["1K", "2K", "3K", "4K"])
+        self.assertEqual([s["value"] for s in caps["render"]["output_scales"]], ["1K", "2K"])
         self.assertEqual(caps["render"]["defaults"]["output_scale"], "1K")
-        four_k = caps["render"]["output_scales"][-1]
-        self.assertEqual(four_k["sizes"]["16:9"], "3840x2160")
-        self.assertNotIn("auto", four_k["sizes"])
-        self.assertEqual(four_k["megapixels"], 8.3)
+        two_k = caps["render"]["output_scales"][-1]
+        self.assertEqual(two_k["sizes"]["16:9"], "2512x1408")
+        self.assertNotIn("auto", two_k["sizes"])
+        self.assertEqual(two_k["megapixels"], 3.5)
         self.assertTrue(all(o["scalable"] for o in caps["render"]["options"]))
         keys = [o["key"] for o in caps["advanced_options"]]
         self.assertNotIn("calm_hair", keys)

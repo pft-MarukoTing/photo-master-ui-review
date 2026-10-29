@@ -140,6 +140,12 @@ export function OutputScaleField({
   class?: string;
 }) {
   const choices = caps.render.output_scales || [];
+  // 之前存的 3K／4K 已經拿掉了，拉回最大的 2K，免得畫面顯示的跟實際出圖的不一樣。
+  const top = choices[choices.length - 1]?.value;
+  const outOfRange = !!value && !!top && !choices.some((s) => s.value === value);
+  useEffect(() => {
+    if (outOfRange && !disabled) onChange(top!);
+  }, [outOfRange, disabled]);
   // 「3K（實驗性）」→「3K · 3344×1888（實驗性）」：K 只是大概，實際尺寸跟著長寬比走。
   const text = (s: (typeof choices)[number]) => {
     const [, name, tag = ""] = s.label.match(/^(.*?)(\s*[（(].*[）)])?$/) || [, s.label];
@@ -154,7 +160,7 @@ export function OutputScaleField({
       <span class="chat-meta">{t("輸出尺寸")}</span>
       <select
         class="quality-select"
-        value={scalable ? value || caps.render.defaults.output_scale : caps.render.defaults.output_scale}
+        value={scalable ? (outOfRange ? top : value || caps.render.defaults.output_scale) : caps.render.defaults.output_scale}
         disabled={disabled || !scalable}
         onChange={(e) => onChange((e.currentTarget as HTMLSelectElement).value)}
       >

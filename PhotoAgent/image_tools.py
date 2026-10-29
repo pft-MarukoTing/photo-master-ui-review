@@ -965,7 +965,7 @@ def openai_edit_size_for_ratio(image_width: int, image_height: int, output_scale
     models where supports_arbitrary_openai_size is true.
 
     `output_scale` multiplies both edges of the default 1536x1024-sized
-    budget (so "3K", factor 2, is four times the pixels); an extreme ratio
+    budget (so "2K", factor 1.5, is 2.25 times the pixels); an extreme ratio
     that would push the long edge past the API's 3840 cap gives up the excess
     instead."""
     ratio = (image_width / image_height) if image_width and image_height else 1.0
@@ -997,7 +997,7 @@ def openai_edit_size_for_ratio(image_width: int, image_height: int, output_scale
             snapped_width / _OPENAI_SIZE_MIN_RATIO / _OPENAI_SIZE_GRID
         ) * _OPENAI_SIZE_GRID
 
-    # Rounding up at the pixel cap (4K) can land just over it; give back one
+    # Rounding up at the pixel cap can land just over it; give back one
     # grid step on the long edge.
     while snapped_width * snapped_height > _OPENAI_SIZE_MAX_PIXELS:
         if snapped_width >= snapped_height:

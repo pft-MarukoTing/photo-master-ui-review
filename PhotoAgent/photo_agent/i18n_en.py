@@ -68,8 +68,6 @@ TEXT = {
     "3:2（相機）": "3:2 (Camera)",
     "16:9（桌布）": "16:9 (Wallpaper)",
     "1K（標準）": "1K (Standard)",
-    "3K（實驗性）": "3K (Experimental)",
-    "4K（實驗性）": "4K (Experimental)",
     "姿勢": "Pose",
     "俏皮": "Playful",
     "自然抓拍": "Candid",
