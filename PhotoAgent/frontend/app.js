@@ -810,9 +810,8 @@
     // paths where an analysis or personal direction is already available.
     if (tipsOnly) return [];
     const progress = runCount > 1 ? tr("（已完成 {doneCount}/{runCount} 張）", { doneCount, runCount }) : "";
-    const shownAnalysis = stripDisabledTopicItems(analysis, selections?.advanced_options);
     const messages = window.PhotoAgentResults.buildPlannedEditMessages({
-      analysis: shownAnalysis, selections: selections || {}, userPrompt, overwritePrompt, aiPhotoEditing });
+      analysis, selections: selections || {}, userPrompt, overwritePrompt, aiPhotoEditing });
     // Play the submitted choices first, without a generic preamble. The
     // scheduler only cycles edit tips once this entire snapshot is consumed.
     if (messages.length) return messages;
@@ -2243,8 +2242,7 @@
     const batchRecord = currentDetailBatchRecord();
     const rawAnalysis = batchRecord ? batchRecord.analysis : singleFlowState?.analysis;
     if (!rawAnalysis) return;
-    const shownAnalysis = stripDisabledTopicItems(rawAnalysis, readAdvancedOptionsFromDom("ap"));
-    if (!correctionAxesIncludeCrop((shownAnalysis.correction_axes || [])[index])) return;
+    if (!correctionAxesIncludeCrop((rawAnalysis.correction_axes || [])[index])) return;
     const owner = batchRecord || singleFlowState;
     if (!input.checked) {
       if (owner) {
@@ -2365,10 +2363,9 @@
   // by recipe text onto the new list (the reframing item may move or vanish).
   function adoptReframedAnalysisOffScreen(record, analysis, pref) {
     if (Array.isArray(record.recipeChecked) && record.analysis) {
-      const options = effectiveAdvancedOptions(record);
-      const oldRecipes = stripDisabledTopicItems(record.analysis, options).retouch_recipe || [];
+      const oldRecipes = record.analysis.retouch_recipe || [];
       const checkedByText = new Map(oldRecipes.map((text, i) => [text, record.recipeChecked[i]]));
-      const newRecipes = stripDisabledTopicItems(analysis, options).retouch_recipe || [];
+      const newRecipes = analysis.retouch_recipe || [];
       record.recipeChecked = newRecipes.map((text) =>
         /^重新構圖\s*[:：]/.test(text) ? true : checkedByText.get(text) !== false);
     }
@@ -2417,7 +2414,7 @@
     });
     owner.analysis = analysis;
     if (state) applyCompositionToRender(state);
-    refreshRecipeList(stripDisabledTopicItems(analysis, readAdvancedOptionsFromDom("ap")));
+    refreshRecipeList(analysis);
     els.apRecipeList?.querySelectorAll("li").forEach((li) => {
       const input = li.querySelector('input[type="checkbox"]');
       const label = labelOf(li);
@@ -2578,7 +2575,7 @@
     if (jobId) singleFlowState.analyzeJobId = jobId;
     setCurrentCaseAnalysisVersion(analysis);
     lastSingleSelections = { ...(lastSingleSelections || {}), userPrompt, overwritePrompt: false };
-    renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset, expanded: true });
+    renderAnalysisPreview({ analysis, preset: singleFlowState.preset, expanded: true });
     applyAdvancedOptionsOption(recordAdvancedOptions(singleFlowState.advancedOptions, analysis), "ap");
     if (els.promptInput) els.promptInput.value = userPrompt;
     if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = false;
@@ -2797,68 +2794,6 @@
     applyPoseSuggestions(pose, { notify: false });
   }
 
-  // Mirrors prompts.py's _GAZE_LEAK_KEYWORDS/_BLINK_LEAK_KEYWORDS/
-  // _HAIR_LEAK_KEYWORDS/_SMILE_LEAK_KEYWORDS + _is_disabled_topic_text
-  // exactly (keep both in sync
-  // if either changes). The backend force-strips any correction_plan item
-  // matching these once the corresponding toggle is off -- both at analyze
-  // time (pipeline.py's analyze_stage) and again defensively in
-  // build_edit_prompt -- so without the same filter here, 修圖建議 would show
-  // (and let the user leave checked) items the backend has already silently
-  // dropped, or is about to.
-  const GAZE_LEAK_KEYWORDS = ["鏡頭", "眼神", "視線", "目光", "eye contact", "gaze", "camera lens", "looking at the camera", "look at the camera"];
-  const BLINK_LEAK_KEYWORDS = ["睜開", "張開眼", "半閉", "閉眼", "眼皮", "reopen", "half-closed", "half closed", "blink"];
-  const HAIR_LEAK_KEYWORDS = ["髮", "hair"];
-  const SMILE_LEAK_KEYWORDS = ["笑", "嘴角", "smile", "grin"];
-
-  function isDisabledTopicText(text, advancedOptions) {
-    // Historical/imported singleFlowState reconstructions (viewHistoryRecord,
-    // importAsSingle) never set .advancedOptions -- undefined here defaults
-    // to "everything enabled" (same as the Python side's `analysis.get(...)
-    // or {}`), a safe no-op since those records' analysis already had its
-    // disabled-topic items stripped once, backend-side, at their own analyze
-    // time.
-    const options = advancedOptions || {};
-    const lowered = String(text || "").toLowerCase();
-    const gazeEnabled = options.gaze_contact_detection !== false;
-    const blinkEnabled = options.eye_closed_detection !== false;
-    const hairEnabled = options.hair_mess_detection !== false;
-    const smileEnabled = options.smile_adjustment !== false;
-    if (!gazeEnabled && GAZE_LEAK_KEYWORDS.some((kw) => lowered.includes(kw.toLowerCase()))) return true;
-    if (!blinkEnabled && BLINK_LEAK_KEYWORDS.some((kw) => lowered.includes(kw.toLowerCase()))) return true;
-    if (!hairEnabled && HAIR_LEAK_KEYWORDS.some((kw) => lowered.includes(kw.toLowerCase()))) return true;
-    if (!smileEnabled && SMILE_LEAK_KEYWORDS.some((kw) => lowered.includes(kw.toLowerCase()))) return true;
-    return false;
-  }
-
-  // Client-side mirror of prompts.py's strip_disabled_topic_items: drops any
-  // correction_plan item whose text names a topic the current toggles have
-  // disabled, and re-indexes retouch_recipe/correction_axes/correction_inverse
-  // (aligned 1:1 with correction_plan) to match -- same guard as the Python
-  // version, only touching an array if its length still matches plan's own
-  // (skips anything already out of sync rather than mis-aligning it further).
-  // Called with the SAME advancedOptions both when rendering 修圖建議
-  // (renderAnalysisPreview's callers, refreshInlineRecipeList) and when
-  // building the submitted analysis (apply_selections, server-side) -- so
-  // recipeChecked (read straight off however many checkboxes actually got
-  // rendered) always lines up with correction_plan's post-strip length on
-  // both ends, with no separate index-remapping needed.
-  function stripDisabledTopicItems(analysis, advancedOptions) {
-    const plan = (analysis && analysis.correction_plan) || [];
-    if (!plan.length) return analysis;
-    const keepIndices = [];
-    plan.forEach((item, i) => { if (!isDisabledTopicText(item, advancedOptions)) keepIndices.push(i); });
-    if (keepIndices.length === plan.length) return analysis;
-    const pick = (arr) => (Array.isArray(arr) && arr.length === plan.length) ? keepIndices.map((i) => arr[i]) : arr;
-    return {
-      ...analysis,
-      correction_plan: pick(analysis.correction_plan),
-      retouch_recipe: pick(analysis.retouch_recipe),
-      correction_axes: pick(analysis.correction_axes),
-      correction_inverse: pick(analysis.correction_inverse)
-    };
-  }
-
   // Syncs the toggles' displayed checked state to `advancedOptions` without
   // pushing it onto any state -- same split as applyModelQualityOption vs.
   // applyModelQualityChange, so switching which batch record's revise panel
@@ -2903,7 +2838,6 @@
       batchSettings.advancedOptions = advancedOptions;
     }
     syncFaceReviewAdvancedOptions(advancedOptions);
-    refreshInlineRecipeList();
     updateInlineAnalysisContinueBtnState();
     refreshApCaseSettings({ fromUser: true });
   }
@@ -2945,26 +2879,6 @@
     applyAdvancedOptionsOption(defaultAdvancedOptions(), "upload");
     applyAdvancedOptionsOption(defaultAdvancedOptions(), "ap");
     applySinglePassEditOption(DEFAULT_SINGLE_PASS_EDIT);
-  }
-
-  // Re-filters whichever analysis the (currently open) inline revise panel
-  // is showing against the JUST-changed toggles, and re-fills #ap-recipe-list
-  // from that -- so turning e.g. 亂髮偵測 off immediately drops any hair-mess
-  // items from 修圖建議 instead of leaving them checked and showing as if
-  // they'll still be applied, when build_edit_prompt is actually about to
-  // strip them server-side regardless (see stripDisabledTopicItems's own
-  // doc). A no-op if the panel isn't open or there's no analysis yet -- same
-  // "harmless before/without a live session" shape as applyAdvancedOptionsChange
-  // itself. Same "always resets to checked" behavior as every other
-  // renderAnalysisPreview/refreshRecipeList call in the app -- any recipe
-  // items the user had unchecked by hand are re-checked along with this, same
-  // trade-off as switching batch records or revisiting history already makes.
-  function refreshInlineRecipeList() {
-    if (!els.analysisPreview || els.analysisPreview.hidden) return;
-    const batchRecord = currentDetailBatchRecord();
-    const analysis = batchRecord ? batchRecord.analysis : (singleFlowState && singleFlowState.analysis);
-    if (!analysis) return;
-    refreshRecipeList(stripDisabledTopicItems(analysis, readAdvancedOptionsFromDom("ap")));
   }
 
   // "Set all" concept: flipping one of these OFF is the same as the user
@@ -3677,7 +3591,7 @@
     // 美化 button (e.g. a 待美化 record opened straight from the history
     // drawer, which doesn't go through resetApp).
     clearInlineAnalysisWait();
-    renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset });
+    renderAnalysisPreview({ analysis, preset });
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = !isDebugUiActive;
     // Step 2 already ran by the time this review screen shows -- populate
     // #timing-details/#timing-list with just that much now (finishSingleFlow
@@ -5868,7 +5782,7 @@
         // Straight through, no stop: still populate the analysis-preview DOM
         // (finishSingleFlow reads its recipe checkboxes/style picks/prompt
         // straight from there) but never show the panel or wait for a click.
-        renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset });
+        renderAnalysisPreview({ analysis, preset });
         await finishSingleFlow();
       } else {
         await runPendingReviewFlow(analysis, preset);
@@ -6504,7 +6418,7 @@
     const readOnly = !isCompatible(singleFlowState.analysis);
     if (readOnly) markHistoryCaseArchived();
     setAnalysisPreviewDisabled(readOnly);
-    renderAnalysisPreview({ analysis: stripDisabledTopicItems(singleFlowState.analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset, expanded: true });
+    renderAnalysisPreview({ analysis: singleFlowState.analysis, preset: singleFlowState.preset, expanded: true });
     // Paint this record's global 人像修正設定 independently before restoring any
     // per-person choices. Pose below changes only the latter.
     applyAdvancedOptionsOption(
@@ -9978,8 +9892,8 @@
     // had in them, while singleFlowState already holds THIS record's own
     // parameters, restored from its job above. Display-only: singleFlowState
     // is correct as-is and finishSingleFlow reads the four settings from it,
-    // but 人像設定 IS read back off the DOM (applyAdvancedOptionsChange,
-    // refreshInlineRecipeList), so leaving it stale changed what a revise of
+    // but 人像設定 IS read back off the DOM (applyAdvancedOptionsChange),
+    // so leaving it stale changed what a revise of
     // this record would actually send.
     applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
     applyAnalysisModelOption(findAnalysisModelOption(singleFlowState.analysisModel));
@@ -12791,7 +12705,7 @@
     // record's revise. Both are results-page analysis views, so keep the
     // panel expanded by default in either state.
     renderAnalysisPreview({
-      analysis: stripDisabledTopicItems(record.analysis, effectiveAdvancedOptions(record)),
+      analysis: record.analysis,
       preset: batchSettings.preset,
       expanded: true
     });
@@ -13685,8 +13599,7 @@
   // the reviewed analysis (photo_agent/selections.py's apply_selections) --
   // this used to happen here, as buildEffectiveAnalysis, so only the rewritten
   // analysis ever reached the server. recipeChecked stays indexed against the
-  // same stripDisabledTopicItems(analysis, advancedOptions) list the review
-  // screen rendered; the backend strips with those same toggles first.
+  // correction_plan list the review screen rendered.
   function buildEditSelections({
     options, recipeChecked, advancedOptions, faceIssueOverrides, bodyReshapeEnabled
   } = {}) {

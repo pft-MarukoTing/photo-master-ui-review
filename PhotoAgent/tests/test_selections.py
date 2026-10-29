@@ -41,13 +41,13 @@ class ApplySelectionsTest(unittest.TestCase):
         self.assertEqual(out["rejected_axes"], ["brightness"])
         self.assertEqual(out["rejected_preserve"], ["keep subject exposure"])
 
-    def test_recipe_indexes_follow_the_stripped_list(self):
-        # Gaze off drops item 1, so index 1 now refers to the crop item.
+    def test_toggles_do_not_reindex_recipe_checked(self):
+        # Gaze off leaves correction_plan as is, so index 2 is still the crop item.
         out = apply_selections(base_analysis(), {
             "advanced_options": {"gaze_contact_detection": False},
-            "recipe_checked": [True, False],
+            "recipe_checked": [True, True, False],
         })
-        self.assertEqual(out["correction_plan"], ["brighten the subject"])
+        self.assertEqual(out["correction_plan"], ["brighten the subject", "make eye contact with the camera"])
         self.assertEqual(out["rejected_corrections"], ["reframe to 4:5"])
         self.assertEqual(out["_advanced_options"], {"gaze_contact_detection": False})
 

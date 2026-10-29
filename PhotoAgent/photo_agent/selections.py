@@ -10,12 +10,10 @@ so every entry point (and later the chat tools) shares one implementation.
 
 selections (every key optional):
     advanced_options      dict  人像修正設定 toggles as currently set. When
-                                present, correction_plan items naming a
-                                disabled topic are stripped first, and the dict
-                                replaces analysis["_advanced_options"].
+                                present, it replaces analysis["_advanced_options"].
     recipe_checked        list  修圖建議 checkbox state, indexed by position in
-                                correction_plan AFTER that strip (the same list
-                                the review screen rendered). False = rejected;
+                                correction_plan (the same list the review
+                                screen rendered). False = rejected;
                                 true/null/missing = kept.
     face_issue_overrides  dict  {"<subject_index>:<category>": False |
                                 {"allowed": bool, "level": str}}, as produced
@@ -31,13 +29,6 @@ import copy
 import prompts
 from photo_agent import capabilities
 from photo_agent.param_validation import normalize_advanced_options
-
-_ADVANCED_TOPIC_KEYS = (
-    "gaze_contact_detection",
-    "eye_closed_detection",
-    "hair_mess_detection",
-    "smile_adjustment",
-)
 
 # Only composition reframing counts as "crop" here -- mirrors app.js's
 # CROP_AXIS_NAMES, which the review screen uses for the same decision.
@@ -169,15 +160,6 @@ def _override_subject_index(text):
 def correction_axes_include_crop(entry):
     axes = entry if isinstance(entry, list) else [entry]
     return any(str(axis or "").strip().lower() in _CROP_AXIS_NAMES for axis in axes)
-
-
-def strip_for_toggles(analysis, advanced_options):
-    """prompts.strip_disabled_topic_items against the given toggles rather
-    than the analysis's baked-in ones. A toggle counts as off only when it is
-    literally False, the same rule the review screen renders with. The
-    _advanced_options it reads is overwritten by apply_selections anyway."""
-    toggles = {key: (advanced_options or {}).get(key) is not False for key in _ADVANCED_TOPIC_KEYS}
-    return prompts.strip_disabled_topic_items({**analysis, "_advanced_options": toggles})
 
 
 def _apply_body_reshape(effective, body_reshape_enabled, feature_enabled):
@@ -347,10 +329,7 @@ def apply_selections(analysis, selections, *, body_reshape_feature_enabled=None)
         body_reshape_feature_enabled = prompts.body_reshape_enabled()
     advanced_options = selections.get("advanced_options")
 
-    # Strip first, so recipe_checked lines up with the list the review screen
-    # rendered from these same toggles.
-    base = strip_for_toggles(analysis, advanced_options) if advanced_options is not None else analysis
-    base = copy.deepcopy(base)
+    base = copy.deepcopy(analysis)
     effective = copy.deepcopy(base)
 
     _apply_body_reshape(effective, selections.get("body_reshape_enabled"), body_reshape_feature_enabled)

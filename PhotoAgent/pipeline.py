@@ -32,6 +32,7 @@ from prompts import (
     build_overall_analysis_instruction,
     body_reshape_enabled,
     strip_body_reshape,
+    strip_dedicated_route_items,
     sanitize_body_reshape_analysis,
     get_body_reshape_edit_prompt,
     body_reshape_items,
@@ -306,7 +307,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
             analysis = skill.skip(analysis)
     else:
         analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options, analysis_model=analysis_model, **preview_args)
-    analysis = sanitize_body_reshape_analysis(analysis)
+    analysis = strip_dedicated_route_items(sanitize_body_reshape_analysis(analysis))
     if not body_reshape_enabled():
         # Keep the stage boundary clean even when an alternate analyzer or a
         # retry returns an analysis object carrying a stale body plan.
@@ -366,8 +367,8 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # debug-UI /rerun both hand them back automatically, with the stored
     # analysis recording which corrections that run allowed.
     # Recorded, not applied here: eye_closed_detection/hair_mess_detection/
-    # gaze_contact_detection now only gate the EDIT stage (selections'
-    # strip_for_toggles and the compact contracts) -- analysis always runs full
+    # gaze_contact_detection now only gate the EDIT stage (the compact
+    # contracts) -- analysis always runs full
     # detection regardless of these three, so the review screen shows every
     # genuine finding and a later revise can turn a toggle back on without
     # re-analyzing the photo.

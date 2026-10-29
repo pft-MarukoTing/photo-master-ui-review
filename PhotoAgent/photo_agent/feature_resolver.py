@@ -21,6 +21,7 @@ from prompts import (
     build_user_preserved_choices,
     has_approved_alignment_correction,
     has_approved_distraction_removal,
+    is_dedicated_route_axes,
 )
 from photo_agent.editor_skills import EDITOR_SKILLS, EditContext
 from photo_agent.editor_skills.base import (
@@ -50,7 +51,7 @@ _DEDICATED_ROUTE_TERMS = (
 def _has_dedicated_route(text, axes):
     """Eye, expression and hair items are executed from each person's own issue, not the general plan."""
     if axes:
-        return "expression" in axes or any("hair" in axis for axis in axes)
+        return is_dedicated_route_axes(axes)
     # Analyses saved before correction_axes existed can only be judged by their text.
     lowered = str(text or "").lower()
     return any(term in lowered for term in _DEDICATED_ROUTE_TERMS)

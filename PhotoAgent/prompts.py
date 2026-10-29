@@ -448,6 +448,7 @@ AXIS_ALIASES = {
     "eyes": "expression", "eye": "expression", "blink": "expression", "blinking": "expression",
     "closed_eyes": "expression", "half_closed_eyes": "expression", "squint": "expression",
     "facial_expression": "expression", "expression": "expression",
+    "smile": "expression", "smiling": "expression", "grin": "expression", "laugh": "expression",
     "hairs": "hair", "hairstyle": "hair", "hair_tidiness": "hair", "messy_hair": "hair",
     "flyaway": "hair", "flyaways": "hair", "stray_hair": "hair", "stray_hairs": "hair",
     "bangs": "hair", "fringe": "hair", "frizz": "hair", "frizzy": "hair",
@@ -2382,94 +2383,29 @@ def _build_crop_instruction_block(
     return "\n".join(lines)
 
 
-# "鏡頭"/camera-lens language is a reliable gaze-repair signal on its own --
-# blink-repair items ask to reopen/relax eyes and never reference the camera
-# lens or gaze direction, so this does not need to be more clever than that.
-_GAZE_LEAK_KEYWORDS = ("鏡頭", "眼神", "視線", "目光", "eye contact", "gaze", "camera lens", "looking at the camera", "look at the camera")
-_BLINK_LEAK_KEYWORDS = ("睜開", "張開眼", "半閉", "閉眼", "眼皮", "reopen", "half-closed", "half closed", "blink")
-# "髮"/"hair" alone, rather than enumerating 瀏海/髮絲/碎髮/髮型/... -- every
-# hair-tidying correction_plan item names the hair itself somewhere, and the
-# same "nothing legitimate to false-positive against" reasoning below applies
-# here too, so the broad match costs nothing extra.
-_HAIR_LEAK_KEYWORDS = ("髮", "hair")
-# 笑容調整 is the only thing in this prompt that touches a mouth's expression,
-# so with it off there is nothing legitimate for these to match against --
-# see strip_disabled_topic_items on why that is what makes a keyword test
-# safe enough here.
-_SMILE_LEAK_KEYWORDS = ("笑", "嘴角", "smile", "grin")
+def is_dedicated_route_axes(axes):
+    """Whether canonical axes mark eye, expression or hair work, which runs only from each person's own issue."""
+    return "expression" in axes or any("hair" in axis for axis in axes)
 
 
-def _is_disabled_topic_text(text, gaze_enabled, blink_enabled, hair_enabled, smile_enabled=True):
-    """True if `text` names a topic whose Advanced Settings toggle is off.
+def strip_dedicated_route_items(analysis):
+    """Drops correction_plan items tagged with eye, expression or hair axes, with their
+    correction_axes/correction_inverse/retouch_recipe entries at the same index.
 
-    Shared by strip_disabled_topic_items' correction_plan, inverse and recipe
-    filters.
+    Call A is told to leave that work to each person's blink/gaze/hair/smile_issue, but still writes some
+    (strands across a face filed as a distraction). The editor never runs them, so they leave the review list too.
     """
-    lowered = str(text or "").lower()
-    if not gaze_enabled and any(kw.lower() in lowered for kw in _GAZE_LEAK_KEYWORDS):
-        return True
-    if not blink_enabled and any(kw.lower() in lowered for kw in _BLINK_LEAK_KEYWORDS):
-        return True
-    if not hair_enabled and any(kw.lower() in lowered for kw in _HAIR_LEAK_KEYWORDS):
-        return True
-    if not smile_enabled and any(kw.lower() in lowered for kw in _SMILE_LEAK_KEYWORDS):
-        return True
-    return False
-
-
-def strip_disabled_topic_items(analysis):
-    """Drops correction_plan items (and their correction_axes/correction_inverse/
-    retouch_recipe counterparts at the same index) that describe gaze, blink,
-    hair, or smile work when the matching Advanced Settings toggle is off.
-
-    Exists because should_fix=false on the structured gaze_issue/blink_issue/
-    hair_issue fields, and even an explicit "do not add this to
-    correction_plan for any reason" instruction in the disabled-toggle
-    prompt override, have both been observed not to stop the analysis model
-    from writing a free-text correction_plan item anyway -- a real run with
-    gaze_contact_detection off still produced three gaze-redirection
-    correction_plan items, none backed by an approved gaze_issue because
-    there wasn't supposed to be one.
-
-    There is no structured field to check here -- correction_plan is free
-    text with no subject/kind tag -- so this is a keyword match, deliberately
-    scoped to run only when the corresponding toggle is off: with the toggle
-    off, a matching item is never legitimate, so the usual false-positive
-    risk of keyword matching (harmless here even if a match is coincidental,
-    since there is nothing legitimate for it to be a false positive against)
-    does not apply the way it would if this ran unconditionally.
-    """
-    advanced_options = analysis.get("_advanced_options") or {}
-    gaze_enabled = advanced_options.get("gaze_contact_detection", True)
-    blink_enabled = advanced_options.get("eye_closed_detection", True)
-    hair_enabled = advanced_options.get("hair_mess_detection", True)
-    smile_enabled = advanced_options.get("smile_adjustment", True)
-    if gaze_enabled and blink_enabled and hair_enabled and smile_enabled:
-        return analysis
-
     plan = list(analysis.get("correction_plan") or [])
-    if not plan:
+    axes = analysis.get("correction_axes") or []
+    if not plan or len(axes) != len(plan):
         return analysis
-
-    keep_indices = [
-        i for i, item in enumerate(plan)
-        if not _is_disabled_topic_text(item, gaze_enabled, blink_enabled, hair_enabled, smile_enabled)
-    ]
+    keep_indices = [i for i in range(len(plan)) if not is_dedicated_route_axes(_axis_set([axes[i]]))]
     if len(keep_indices) == len(plan):
         return analysis
-
-    logger.warning(
-        "correction_plan contained %d gaze/blink/hair/smile item(s) despite the matching Advanced "
-        "Settings toggle being off; removing them",
-        len(plan) - len(keep_indices),
-    )
+    logger.warning("correction_plan contained %d eye/expression/hair item(s); removing them",
+                   len(plan) - len(keep_indices))
     cleaned = dict(analysis)
-    cleaned["correction_plan"] = [plan[i] for i in keep_indices]
-    # Positionally aligned with correction_plan but not guaranteed the same
-    # length -- an untrustworthy analysis output already falls back gracefully
-    # elsewhere (see _axes_aligned) -- so only reindex a list that actually
-    # has an entry at every kept position.
-    for key in ("correction_axes", "correction_inverse", "retouch_recipe"):
+    for key in ("correction_plan", "correction_axes", "correction_inverse", "retouch_recipe"):
         values = analysis.get(key) or []
         if len(values) == len(plan):
             cleaned[key] = [values[i] for i in keep_indices]
