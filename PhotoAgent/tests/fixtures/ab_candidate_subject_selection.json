@@ -1,0 +1,438 @@
+{
+  "contract": "Revised v3: Stage 2.0 fixed human membership; Stage 2.1 fills ID-keyed details, never reselects people.",
+  "a_crop": {
+    "box": {
+      "x": 0.65,
+      "y": 0.35,
+      "w": 0.2,
+      "h": 0.2
+    },
+    "face_box": {
+      "x": 0.7,
+      "y": 0.4,
+      "w": 0.08,
+      "h": 0.08
+    }
+  },
+  "b_candidate": {
+    "candidate_id": "b1",
+    "confidence": 0.5502,
+    "box": {
+      "x": 0.34,
+      "y": 0.26,
+      "w": 0.15,
+      "h": 0.16
+    },
+    "face_box": {
+      "x": 0.39,
+      "y": 0.3,
+      "w": 0.05,
+      "h": 0.06
+    },
+    "sent_to_model": false
+  },
+  "girl_person_box": {
+    "x": 0.3,
+    "y": 0.25,
+    "w": 0.2,
+    "h": 0.35
+  },
+  "boy_id": "pp_11111111111111111111111111111111",
+  "girl_id": "pp_22222222222222222222222222222222",
+  "scenes": [
+    {
+      "name": "pool_companions",
+      "story": "泳池照片前方男孩與後方女孩共同入鏡，兩人是拍攝群體。",
+      "reply": {
+        "main_subject_kind": "group",
+        "primary_detection_index": null,
+        "summary": "泳池照片前方男孩與後方女孩共同入鏡，兩人是拍攝群體。",
+        "detections": [
+          {
+            "detection_index": 1,
+            "role": "included",
+            "face_readable": true,
+            "label": "前方男孩",
+            "selection_evidence": "intended_subject",
+            "reason": "泳池照片前方男孩與後方女孩共同入鏡，兩人是拍攝群體。"
+          }
+        ],
+        "low_confidence_reviews": [
+          {
+            "candidate_id": "b1",
+            "role": "included",
+            "face_readable": true,
+            "label": "後方女孩",
+            "selection_evidence": "shared_interaction",
+            "reason": "泳池照片前方男孩與後方女孩共同入鏡，兩人是拍攝群體。"
+          }
+        ],
+        "additional_people": [
+          {
+            "label": "後方女孩",
+            "role": "included",
+            "face_readable": true,
+            "box": {
+              "x": 0.3,
+              "y": 0.25,
+              "w": 0.2,
+              "h": 0.35
+            },
+            "thumbnail_candidate_id": "b1",
+            "selection_evidence": "shared_interaction",
+            "reason": "泳池照片前方男孩與後方女孩共同入鏡，兩人是拍攝群體。"
+          }
+        ],
+        "scene_intent": "泳池照片前方男孩與後方女孩共同入鏡，兩人是拍攝群體。"
+      },
+      "expected_people": [
+        "前方男孩",
+        "後方女孩"
+      ]
+    },
+    {
+      "name": "unrelated_background",
+      "story": "前方男孩是拍攝對象，後方女孩屬另一個無互動群體。",
+      "reply": {
+        "main_subject_kind": "person",
+        "primary_detection_index": 1,
+        "summary": "前方男孩是拍攝對象，後方女孩屬另一個無互動群體。",
+        "detections": [
+          {
+            "detection_index": 1,
+            "role": "included",
+            "face_readable": true,
+            "label": "前方男孩",
+            "selection_evidence": "intended_subject",
+            "reason": "前方男孩是拍攝對象，後方女孩屬另一個無互動群體。"
+          }
+        ],
+        "low_confidence_reviews": [
+          {
+            "candidate_id": "b1",
+            "role": "bystander",
+            "face_readable": true,
+            "label": "背景候選",
+            "selection_evidence": "unrelated_group",
+            "reason": "前方男孩是拍攝對象，後方女孩屬另一個無互動群體。"
+          }
+        ],
+        "additional_people": [],
+        "scene_intent": "前方男孩是拍攝對象，後方女孩屬另一個無互動群體。"
+      },
+      "expected_people": [
+        "前方男孩"
+      ]
+    },
+    {
+      "name": "texture_false_positive",
+      "story": "男孩是拍攝對象，低分框實際是船體花紋。",
+      "reply": {
+        "main_subject_kind": "person",
+        "primary_detection_index": 1,
+        "summary": "男孩是拍攝對象，低分框實際是船體花紋。",
+        "detections": [
+          {
+            "detection_index": 1,
+            "role": "included",
+            "face_readable": true,
+            "label": "前方男孩",
+            "selection_evidence": "intended_subject",
+            "reason": "男孩是拍攝對象，低分框實際是船體花紋。"
+          }
+        ],
+        "low_confidence_reviews": [
+          {
+            "candidate_id": "b1",
+            "role": "not_real_face",
+            "face_readable": false,
+            "label": "背景候選",
+            "selection_evidence": "not_real_face",
+            "reason": "男孩是拍攝對象，低分框實際是船體花紋。"
+          }
+        ],
+        "additional_people": [],
+        "scene_intent": "男孩是拍攝對象，低分框實際是船體花紋。"
+      },
+      "expected_people": [
+        "前方男孩"
+      ]
+    },
+    {
+      "name": "ambiguous_background",
+      "story": "男孩是拍攝對象，遠處小框無法確定是否為共同入鏡人物。",
+      "reply": {
+        "main_subject_kind": "person",
+        "primary_detection_index": 1,
+        "summary": "男孩是拍攝對象，遠處小框無法確定是否為共同入鏡人物。",
+        "detections": [
+          {
+            "detection_index": 1,
+            "role": "included",
+            "face_readable": true,
+            "label": "前方男孩",
+            "selection_evidence": "intended_subject",
+            "reason": "男孩是拍攝對象，遠處小框無法確定是否為共同入鏡人物。"
+          }
+        ],
+        "low_confidence_reviews": [
+          {
+            "candidate_id": "b1",
+            "role": "uncertain",
+            "face_readable": true,
+            "label": "背景候選",
+            "selection_evidence": "insufficient_evidence",
+            "reason": "男孩是拍攝對象，遠處小框無法確定是否為共同入鏡人物。"
+          }
+        ],
+        "additional_people": [],
+        "scene_intent": "男孩是拍攝對象，遠處小框無法確定是否為共同入鏡人物。"
+      },
+      "expected_people": [
+        "前方男孩"
+      ]
+    },
+    {
+      "name": "high_score_stranger_low_score_subject",
+      "story": "高分清楚的人是路過陌生人，低分女孩才是擺拍主體。",
+      "reply": {
+        "main_subject_kind": "person",
+        "primary_detection_index": null,
+        "summary": "高分清楚的人是路過陌生人，低分女孩才是擺拍主體。",
+        "detections": [
+          {
+            "detection_index": 1,
+            "role": "bystander",
+            "face_readable": true,
+            "label": "前方男孩",
+            "selection_evidence": "incidental_background",
+            "reason": "高分清楚的人是路過陌生人，低分女孩才是擺拍主體。"
+          }
+        ],
+        "low_confidence_reviews": [
+          {
+            "candidate_id": "b1",
+            "role": "included",
+            "face_readable": true,
+            "label": "後方女孩",
+            "selection_evidence": "intended_subject",
+            "reason": "高分清楚的人是路過陌生人，低分女孩才是擺拍主體。"
+          }
+        ],
+        "additional_people": [
+          {
+            "label": "後方女孩",
+            "role": "included",
+            "face_readable": true,
+            "box": {
+              "x": 0.3,
+              "y": 0.25,
+              "w": 0.2,
+              "h": 0.35
+            },
+            "thumbnail_candidate_id": "b1",
+            "selection_evidence": "intended_subject",
+            "reason": "高分清楚的人是路過陌生人，低分女孩才是擺拍主體。"
+          }
+        ],
+        "scene_intent": "高分清楚的人是路過陌生人，低分女孩才是擺拍主體。"
+      },
+      "expected_people": [
+        "後方女孩"
+      ]
+    },
+    {
+      "name": "no_human_subject",
+      "story": "拍攝的是水上遊具，兩個候選均是無關路人。",
+      "reply": {
+        "main_subject_kind": "non_person",
+        "primary_detection_index": null,
+        "summary": "拍攝的是水上遊具，兩個候選均是無關路人。",
+        "detections": [
+          {
+            "detection_index": 1,
+            "role": "bystander",
+            "face_readable": true,
+            "label": "前方男孩",
+            "selection_evidence": "incidental_background",
+            "reason": "拍攝的是水上遊具，兩個候選均是無關路人。"
+          }
+        ],
+        "low_confidence_reviews": [
+          {
+            "candidate_id": "b1",
+            "role": "bystander",
+            "face_readable": true,
+            "label": "背景候選",
+            "selection_evidence": "incidental_background",
+            "reason": "拍攝的是水上遊具，兩個候選均是無關路人。"
+          }
+        ],
+        "additional_people": [],
+        "scene_intent": "拍攝的是水上遊具，兩個候選均是無關路人。"
+      },
+      "expected_people": []
+    },
+    {
+      "name": "adjacent_table",
+      "story": "主體男孩與另一桌女孩距離近，但沒有共同擺拍或互動。",
+      "reply": {
+        "main_subject_kind": "person",
+        "primary_detection_index": 1,
+        "summary": "主體男孩與另一桌女孩距離近，但沒有共同擺拍或互動。",
+        "detections": [
+          {
+            "detection_index": 1,
+            "role": "included",
+            "face_readable": true,
+            "label": "前方男孩",
+            "selection_evidence": "intended_subject",
+            "reason": "主體男孩與另一桌女孩距離近，但沒有共同擺拍或互動。"
+          }
+        ],
+        "low_confidence_reviews": [
+          {
+            "candidate_id": "b1",
+            "role": "bystander",
+            "face_readable": true,
+            "label": "背景候選",
+            "selection_evidence": "unrelated_group",
+            "reason": "主體男孩與另一桌女孩距離近，但沒有共同擺拍或互動。"
+          }
+        ],
+        "additional_people": [],
+        "scene_intent": "主體男孩與另一桌女孩距離近，但沒有共同擺拍或互動。"
+      },
+      "expected_people": [
+        "前方男孩"
+      ]
+    },
+    {
+      "name": "occluded_companion",
+      "story": "後方女孩被船遮住且臉很小，但共同擺拍證據清楚。",
+      "reply": {
+        "main_subject_kind": "group",
+        "primary_detection_index": null,
+        "summary": "後方女孩被船遮住且臉很小，但共同擺拍證據清楚。",
+        "detections": [
+          {
+            "detection_index": 1,
+            "role": "included",
+            "face_readable": true,
+            "label": "前方男孩",
+            "selection_evidence": "shared_pose",
+            "reason": "後方女孩被船遮住且臉很小，但共同擺拍證據清楚。"
+          }
+        ],
+        "low_confidence_reviews": [
+          {
+            "candidate_id": "b1",
+            "role": "included",
+            "face_readable": false,
+            "label": "後方女孩",
+            "selection_evidence": "shared_pose",
+            "reason": "後方女孩被船遮住且臉很小，但共同擺拍證據清楚。"
+          }
+        ],
+        "additional_people": [
+          {
+            "label": "後方女孩",
+            "role": "included",
+            "face_readable": false,
+            "box": {
+              "x": 0.3,
+              "y": 0.25,
+              "w": 0.2,
+              "h": 0.35
+            },
+            "thumbnail_candidate_id": "b1",
+            "selection_evidence": "shared_pose",
+            "reason": "後方女孩被船遮住且臉很小，但共同擺拍證據清楚。"
+          }
+        ],
+        "scene_intent": "後方女孩被船遮住且臉很小，但共同擺拍證據清楚。"
+      },
+      "expected_people": [
+        "前方男孩",
+        "後方女孩"
+      ]
+    }
+  ],
+  "formal_fixed_people_response": {
+    "photo_summary": "男孩和女孩是 2.0 已確認的拍攝人物。",
+    "person_details": {
+      "pp_11111111111111111111111111111111": {
+        "label": "正式名稱的男孩",
+        "is_person": true,
+        "box": {
+          "x": 0.65,
+          "y": 0.35,
+          "w": 0.2,
+          "h": 0.2
+        },
+        "prominence": 1,
+        "skin": "自然膚色",
+        "reason": "沿用已確認人物並分析細節。"
+      },
+      "pp_22222222222222222222222222222222": {
+        "label": "正式名稱的女孩",
+        "is_person": true,
+        "box": {
+          "x": 0.3,
+          "y": 0.25,
+          "w": 0.2,
+          "h": 0.35
+        },
+        "prominence": 0.8,
+        "skin": "自然膚色",
+        "reason": "沿用已確認人物並分析細節。"
+      }
+    },
+    "scene_subjects": []
+  },
+  "formal_unreadable_girl_response": {
+    "photo_summary": "人物清單仍有男孩和女孩，女孩臉部細節不足。",
+    "person_details": {
+      "pp_11111111111111111111111111111111": {
+        "label": "男孩",
+        "is_person": true,
+        "box": {
+          "x": 0.65,
+          "y": 0.35,
+          "w": 0.2,
+          "h": 0.2
+        },
+        "prominence": 1,
+        "skin": "自然膚色",
+        "reason": "臉部細節足夠。"
+      },
+      "pp_22222222222222222222222222222222": {
+        "label": "女孩",
+        "is_person": false,
+        "box": {
+          "x": 0.3,
+          "y": 0.25,
+          "w": 0.2,
+          "h": 0.35
+        },
+        "prominence": 0.8,
+        "skin": "無法判定",
+        "reason": "細節無法可靠判定，仍保留已確認人物。"
+      }
+    },
+    "scene_subjects": []
+  },
+  "no_candidate_companion": {
+    "preview_person_id": "pp_33333333333333333333333333333333",
+    "label": "無偵測框的同伴",
+    "box": {
+      "x": 0.05,
+      "y": 0.05,
+      "w": 0.15,
+      "h": 0.2
+    },
+    "face_readable": false,
+    "selection_evidence": "shared_pose",
+    "reason": "全圖確認共同入鏡，但 ONNX 沒有候選框。"
+  }
+}

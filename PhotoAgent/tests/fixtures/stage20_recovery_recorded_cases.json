@@ -1,0 +1,1680 @@
+[
+  {
+    "filename": "000001436.jpg",
+    "repetition": 1,
+    "batch": "stage20-none-portrait488-repeat3-20261027",
+    "reply": {
+      "main_subject_kind": "group",
+      "primary_detection_index": 1,
+      "summary": "全幅照片呈現一個在高爾夫球場共同互動的家庭式群體：男子與男孩在左側，女子抱著嬰兒在右側；畫面意圖是記錄這組共同活動與互動的人物。",
+      "additional_people": [],
+      "detections": {
+        "1": {
+          "role": "included",
+          "face_readable": true,
+          "label": "戴白帽的男子",
+          "selection_evidence": "shared_interaction",
+          "reason": "標記框內是同一顆有完整頭部輪廓的臉，可見雙眼區域、鼻子與嘴部；他站在球場旁並與男孩共同參與畫面中的高爾夫活動。"
+        },
+        "2": {
+          "role": "included",
+          "face_readable": true,
+          "label": "戴綠帽的女子",
+          "selection_evidence": "shared_interaction",
+          "reason": "標記框內可見同一顆頭部的雙眼區域、鼻子和嘴部，臉部解剖結構連貫；她抱著嬰兒並參與同一高爾夫互動場景。"
+        },
+        "3": {
+          "role": "included",
+          "face_readable": false,
+          "label": "戴綠帽的男孩",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "標記框內確有連貫的孩童臉部輪廓，但帽簷遮住眼睛區域，無法直接辨識雙眼區域與完整鼻口配置，因此不符合可讀性門檻。"
+        }
+      },
+      "low_confidence_reviews": {
+        "b1": {
+          "role": "uncertain",
+          "face_readable": false,
+          "label": "被抱著的嬰兒",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "標記框內是嬰兒的側面低頭姿勢，主要可見頭部輪廓、頭髮與耳朵；眼睛及鼻口配置未能同時直接辨識，屬不可讀的窄側面。"
+        }
+      },
+      "scene_intent": "這是高爾夫球場上的共同活動與互動畫面；男子、女子及孩子們被安排在同一場景中，女子抱著嬰兒並靠近球桿，男子與男孩位於球場另一側。"
+    },
+    "crops": [
+      {
+        "detection_index": 1,
+        "box": {
+          "x": 0.10333790580704161,
+          "y": 0.03559463986599665,
+          "w": 0.16598079561042525,
+          "h": 0.1541038525963149
+        },
+        "face_box": {
+          "x": 0.14860539551897575,
+          "y": 0.08165829145728644,
+          "w": 0.07544581618655692,
+          "h": 0.07705192629815745
+        },
+        "confidence": 0.899693489074707,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 2,
+        "box": {
+          "x": 0.747599451303155,
+          "y": 0.10971524288107203,
+          "w": 0.1623228166438043,
+          "h": 0.14824120603015076
+        },
+        "face_box": {
+          "x": 0.791952446273434,
+          "y": 0.1541038525963149,
+          "w": 0.07361682670324646,
+          "h": 0.07412060301507538
+        },
+        "confidence": 0.8930604457855225,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 3,
+        "box": {
+          "x": 0.1957018747142204,
+          "y": 0.3722780569514238,
+          "w": 0.1440329218106996,
+          "h": 0.10720268006700168
+        },
+        "face_box": {
+          "x": 0.23502514860539553,
+          "y": 0.4045226130653266,
+          "w": 0.06538637402834933,
+          "h": 0.05360134003350084
+        },
+        "confidence": 0.7439505457878113,
+        "sent_to_model": true
+      }
+    ],
+    "candidates": [
+      {
+        "candidate_id": "b1",
+        "confidence": 0.6009182929992676,
+        "box": {
+          "x": 0.6561499771376315,
+          "y": 0.3019262981574539,
+          "w": 0.14586191129401005,
+          "h": 0.10217755443886097
+        },
+        "face_box": {
+          "x": 0.6959304983996342,
+          "y": 0.3324958123953099,
+          "w": 0.06630086877000457,
+          "h": 0.05108877721943048
+        },
+        "sent_to_model": true
+      }
+    ],
+    "low_state": "ready",
+    "error": "invalid_ab_decision"
+  },
+  {
+    "filename": "000003374.jpg",
+    "repetition": 2,
+    "batch": "stage20-none-portrait488-repeat3-20261027",
+    "reply": {
+      "main_subject_kind": "person",
+      "primary_detection_index": 1,
+      "summary": "網球場上，一名戴紫色頭帶的網球員面向鏡頭微笑並舉拳，旁邊有攝影師；背景觀眾大多失焦，非主要拍攝對象。",
+      "additional_people": [],
+      "detections": {
+        "1": {
+          "role": "included",
+          "face_readable": true,
+          "label": "戴紫色頭帶的網球員",
+          "selection_evidence": "intended_subject",
+          "reason": "矩形內可見完整且連貫的頭部輪廓，雙眼區域、鼻子、嘴部和臉部五官均位於同一張臉上；全身姿態與舉拳動作顯示他是畫面的主要拍攝對象。"
+        },
+        "2": {
+          "role": "bystander",
+          "face_readable": true,
+          "label": "戴帽及耳機的攝影師",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內是真實且可辨識的側前三分之二臉，可見眼部、鼻子及嘴部；但他正在旁邊操作攝影機，屬於拍攝現場的工作人員而非被拍攝的主體。"
+        }
+      },
+      "low_confidence_reviews": {
+        "b1": {
+          "role": "uncertain",
+          "face_readable": false,
+          "label": "背景模糊人物",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內只有嚴重失焦的膚色輪廓，無法確認雙眼區域、鼻子與嘴部在同一頭部上的可讀結構。"
+        },
+        "b2": {
+          "role": "uncertain",
+          "face_readable": false,
+          "label": "上方背景模糊人物",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內僅見模糊的頭部或膚色形狀，五官細節不可辨，無法通過臉部可讀性門檻。"
+        },
+        "b3": {
+          "role": "uncertain",
+          "face_readable": false,
+          "label": "球拍旁背景模糊人物",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內是被嚴重模糊的背景人物區域，雙眼、鼻子及嘴部布局無法可靠辨識。"
+        },
+        "b4": {
+          "role": "uncertain",
+          "face_readable": false,
+          "label": "左側背景模糊人物",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內只有失焦的膚色與輪廓，沒有足夠可見的雙眼區域及鼻嘴結構以確認可讀臉部。"
+        }
+      },
+      "scene_intent": "照片意圖是捕捉網球員在球場上的慶祝姿勢與表情；攝影師是現場工作者，背景人物屬 incidental 背景，不納入拍攝主體。"
+    },
+    "crops": [
+      {
+        "detection_index": 1,
+        "box": {
+          "x": 0.4226866883116883,
+          "y": 0.06402439024390244,
+          "w": 0.17775974025974026,
+          "h": 0.3024390243902439
+        },
+        "face_box": {
+          "x": 0.47118506493506496,
+          "y": 0.1548780487804878,
+          "w": 0.08076298701298701,
+          "h": 0.15121951219512195
+        },
+        "confidence": 0.9422457814216614,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 2,
+        "box": {
+          "x": 0.8238636363636364,
+          "y": 0.1847560975609756,
+          "w": 0.1434659090909091,
+          "h": 0.2707317073170732
+        },
+        "face_box": {
+          "x": 0.8630275974025974,
+          "y": 0.2658536585365854,
+          "w": 0.06513798701298701,
+          "h": 0.1353658536585366
+        },
+        "confidence": 0.7877764701843262,
+        "sent_to_model": true
+      }
+    ],
+    "candidates": [
+      {
+        "candidate_id": "b1",
+        "confidence": 0.6194499731063843,
+        "box": {
+          "x": 0.35633116883116883,
+          "y": 0.34146341463414637,
+          "w": 0.08867694805194805,
+          "h": 0.16158536585365854
+        },
+        "face_box": {
+          "x": 0.3804788961038961,
+          "y": 0.3899390243902439,
+          "w": 0.040381493506493504,
+          "h": 0.08079268292682927
+        },
+        "sent_to_model": true
+      },
+      {
+        "candidate_id": "b2",
+        "confidence": 0.5944225788116455,
+        "box": {
+          "x": 0.7051542207792207,
+          "y": 0.05,
+          "w": 0.08340097402597403,
+          "h": 0.15121951219512195
+        },
+        "face_box": {
+          "x": 0.7278814935064936,
+          "y": 0.09542682926829268,
+          "w": 0.03794642857142857,
+          "h": 0.07560975609756097
+        },
+        "sent_to_model": true
+      },
+      {
+        "candidate_id": "b3",
+        "confidence": 0.5581656098365784,
+        "box": {
+          "x": 0.2169237012987013,
+          "y": 0.5304878048780488,
+          "w": 0.09760551948051949,
+          "h": 0.19390243902439025
+        },
+        "face_box": {
+          "x": 0.2435064935064935,
+          "y": 0.588719512195122,
+          "w": 0.044439935064935064,
+          "h": 0.09695121951219512
+        },
+        "sent_to_model": false
+      },
+      {
+        "candidate_id": "b4",
+        "confidence": 0.5024587512016296,
+        "box": {
+          "x": 0.17877435064935066,
+          "y": 0.17621951219512194,
+          "w": 0.11383928571428571,
+          "h": 0.18902439024390244
+        },
+        "face_box": {
+          "x": 0.20982142857142858,
+          "y": 0.2329268292682927,
+          "w": 0.05174512987012987,
+          "h": 0.09451219512195122
+        },
+        "sent_to_model": false
+      }
+    ],
+    "low_state": "ready",
+    "error": "invalid_ab_decision"
+  },
+  {
+    "filename": "000004260.jpg",
+    "repetition": 3,
+    "batch": "stage20-none-portrait488-repeat3-20261027",
+    "reply": {
+      "main_subject_kind": "group",
+      "primary_detection_index": 1,
+      "summary": "照片主要呈現一對手牽手走出建築物的男女；周圍另有多名背景行人。",
+      "additional_people": [],
+      "detections": {
+        "1": {
+          "role": "included",
+          "face_readable": true,
+          "label": "前景禿頭鬍鬚男子",
+          "selection_evidence": "intended_subject",
+          "reason": "矩形內可見完整頭部輪廓，雙眼、鼻子、嘴部與鬍鬚均清楚可辨；他位於前景並與女子牽手同行，是畫面主要拍攝對象。"
+        },
+        "2": {
+          "role": "included",
+          "face_readable": true,
+          "label": "前景金髮女子",
+          "selection_evidence": "intended_subject",
+          "reason": "矩形內是同一頭部上的清楚眼睛、鼻子與嘴部，臉部朝向鏡頭；她位於前景並與男子牽手同行，屬於主要拍攝對象。"
+        },
+        "3": {
+          "role": "bystander",
+          "face_readable": true,
+          "label": "右側眼鏡女子",
+          "selection_evidence": "incidental_background",
+          "reason": "矩形內可辨識雙眼、鼻子和嘴部，但她位於後方人群中，未與前景兩人形成共同姿勢或互動，屬背景行人。"
+        },
+        "4": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "後方模糊女子",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內雖呈現疑似人臉輪廓，但影像過度模糊，雙眼區域及鼻嘴配置無法可靠辨識，因此不符合可讀性門檻。"
+        }
+      },
+      "low_confidence_reviews": {},
+      "scene_intent": "街頭紀實式照片，主要意圖是捕捉前景一對手牽手同行的男女；其他人物是建築出口附近的背景行人。"
+    },
+    "crops": [
+      {
+        "detection_index": 1,
+        "box": {
+          "x": 0.609895337773549,
+          "y": 0.052613713509843854,
+          "w": 0.21788772597526165,
+          "h": 0.20095044127630685
+        },
+        "face_box": {
+          "x": 0.6693625118934349,
+          "y": 0.11303462321792261,
+          "w": 0.09895337773549001,
+          "h": 0.10047522063815342
+        },
+        "confidence": 0.9063886404037476,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 2,
+        "box": {
+          "x": 0.181255946717412,
+          "y": 0.08723693143245079,
+          "w": 0.21122740247383445,
+          "h": 0.1846571622539036
+        },
+        "face_box": {
+          "x": 0.23882017126546146,
+          "y": 0.1425661914460285,
+          "w": 0.0960989533777355,
+          "h": 0.0923285811269518
+        },
+        "confidence": 0.9138522744178772,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 3,
+        "box": {
+          "x": 0.7668886774500476,
+          "y": 0.10149355057705363,
+          "w": 0.17078972407231208,
+          "h": 0.1296673455532926
+        },
+        "face_box": {
+          "x": 0.813510941960038,
+          "y": 0.14052953156822812,
+          "w": 0.07754519505233111,
+          "h": 0.0648336727766463
+        },
+        "confidence": 0.8842951655387878,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 4,
+        "box": {
+          "x": 0.4352997145575642,
+          "y": 0.06924643584521385,
+          "w": 0.14509990485252142,
+          "h": 0.12152070604209098
+        },
+        "face_box": {
+          "x": 0.4747859181731684,
+          "y": 0.10556687033265445,
+          "w": 0.06612749762131304,
+          "h": 0.06076035302104549
+        },
+        "confidence": 0.8760934472084045,
+        "sent_to_model": false
+      }
+    ],
+    "candidates": [],
+    "low_state": "ready",
+    "error": "invalid_ab_decision"
+  },
+  {
+    "filename": "000004429.jpg",
+    "repetition": 3,
+    "batch": "stage20-none-portrait488-repeat3-20261027",
+    "reply": {
+      "main_subject_kind": "person",
+      "primary_detection_index": 1,
+      "summary": "照片以推行行李車、穿西裝的前景男子為主要拍攝對象；後方兩人同處畫面，但較像陪同或背景人物，未見明確共同擺拍互動。",
+      "additional_people": [],
+      "detections": {
+        "1": {
+          "role": "included",
+          "face_readable": true,
+          "label": "前景推行李車的鬍鬚男子",
+          "selection_evidence": "intended_subject",
+          "reason": "位於畫面中央前景，身體與行李車完整可見；矩形內是同一頭部，雙眼區、鼻子、嘴部與臉部輪廓均可辨識。"
+        },
+        "2": {
+          "role": "bystander",
+          "face_readable": true,
+          "label": "後方右側穿皮衣男子",
+          "selection_evidence": "incidental_background",
+          "reason": "矩形內為真實且可辨識的正面偏側臉，雙眼區、鼻口與頭部輪廓可見；但位於主要人物後方，未顯示與前景人物共同擺拍。"
+        },
+        "3": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "後方左側戴眼鏡女子",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內確為頭部與臉部，但影像明顯失焦且臉部細節模糊，無法可靠評估雙眼區及鼻口布局。"
+        }
+      },
+      "low_confidence_reviews": {},
+      "scene_intent": "室內行進中的新聞或紀實攝影；前景男子推著行李車是明確主體，後方人物為未見共同互動或擺拍證據的陪同行人。"
+    },
+    "crops": [
+      {
+        "detection_index": 1,
+        "box": {
+          "x": 0.37514285714285717,
+          "y": 0.08272610372910416,
+          "w": 0.2282857142857143,
+          "h": 0.44492070295756536
+        },
+        "face_box": {
+          "x": 0.43742857142857144,
+          "y": 0.21603086155165024,
+          "w": 0.10371428571428572,
+          "h": 0.22246035147878268
+        },
+        "confidence": 0.9348921775817871,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 2,
+        "box": {
+          "x": 0.614,
+          "y": 0.0,
+          "w": 0.16142857142857142,
+          "h": 0.24432061723103302
+        },
+        "face_box": {
+          "x": 0.658,
+          "y": 0.02186026575225032,
+          "w": 0.07342857142857143,
+          "h": 0.15902271753107586
+        },
+        "confidence": 0.9518594741821289,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 3,
+        "box": {
+          "x": 0.2611428571428571,
+          "y": 0.12344620660094299,
+          "w": 0.12485714285714286,
+          "h": 0.24174882126018002
+        },
+        "face_box": {
+          "x": 0.29514285714285715,
+          "y": 0.19588512644663522,
+          "w": 0.056857142857142856,
+          "h": 0.12087441063009001
+        },
+        "confidence": 0.846779465675354,
+        "sent_to_model": true
+      }
+    ],
+    "candidates": [],
+    "low_state": "ready",
+    "error": "invalid_ab_decision"
+  },
+  {
+    "filename": "000004633.jpg",
+    "repetition": 1,
+    "batch": "stage20-none-portrait488-repeat3-20261027",
+    "reply": {
+      "main_subject_kind": "group",
+      "primary_detection_index": 2,
+      "summary": "照片主體是兩名正在握手並交談的前景人物；右側側面男子與其互動，但臉部可讀性不足。右後方男子為 incidental 背景人物。",
+      "additional_people": [],
+      "detections": {
+        "1": {
+          "role": "uncertain",
+          "face_readable": false,
+          "label": "戴黑帽的鬍鬚男子",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "目標內可見同一頭部的帽簷、鼻部、鬍鬚與耳朵，但為狹窄側面，遠側眼區及完整鼻口配置不可可靠辨識，未達可讀性門檻。"
+        },
+        "2": {
+          "role": "included",
+          "face_readable": true,
+          "label": "戴墨鏡帽的鬍鬚男子",
+          "selection_evidence": "shared_interaction",
+          "reason": "目標內有完整頭部輪廓，雙眼區、鼻子與嘴部均可見；他在前景與另一人握手並交談，是明確互動主體。"
+        },
+        "3": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "右後方短髮男子",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "目標內是同一頭部的狹窄側面，只能看到單側眼鼻輪廓，另一眼區與完整口鼻配置不可可靠評估；且位於互動場景後方，非主要攝影對象。"
+        }
+      },
+      "low_confidence_reviews": {},
+      "scene_intent": "以戶外活動場地為背景，攝影重點是前景兩名男子握手交談的互動；其他人屬背景或旁觀者。"
+    },
+    "crops": [
+      {
+        "detection_index": 1,
+        "box": {
+          "x": 0.53700414446418,
+          "y": 0.0,
+          "w": 0.2128478389579633,
+          "h": 0.5159209995969367
+        },
+        "face_box": {
+          "x": 0.5950266429840142,
+          "y": 0.15034260378879485,
+          "w": 0.09680284191829484,
+          "h": 0.26118500604594924
+        },
+        "confidence": 0.8925725221633911,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 2,
+        "box": {
+          "x": 0.1142687981053878,
+          "y": 0.015316404675534058,
+          "w": 0.23860272350503256,
+          "h": 0.4143490528012898
+        },
+        "face_box": {
+          "x": 0.17939609236234458,
+          "y": 0.13945989520354696,
+          "w": 0.108348134991119,
+          "h": 0.2071745264006449
+        },
+        "confidence": 0.9533892869949341,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 3,
+        "box": {
+          "x": 0.8206039076376554,
+          "y": 0.13583232567513098,
+          "w": 0.17939609236234458,
+          "h": 0.3571140669085046
+        },
+        "face_box": {
+          "x": 0.8709295441089402,
+          "y": 0.2430471584038694,
+          "w": 0.08407341622261694,
+          "h": 0.1785570334542523
+        },
+        "confidence": 0.9197860360145569,
+        "sent_to_model": true
+      }
+    ],
+    "candidates": [],
+    "low_state": "ready",
+    "error": "invalid_ab_decision"
+  },
+  {
+    "filename": "000004797.jpg",
+    "repetition": 1,
+    "batch": "stage20-none-portrait488-repeat3-20261027",
+    "reply": {
+      "main_subject_kind": "group",
+      "primary_detection_index": 1,
+      "summary": "照片以一群穿橘色制服的學生圍繞筆電共同討論為主，前景五人形成明顯的共享互動；左後方兩位人物較模糊，屬背景旁觀者。",
+      "additional_people": [],
+      "detections": {
+        "1": {
+          "role": "included",
+          "face_readable": true,
+          "label": "前景右側短髮男子",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內可見完整頭部輪廓、雙眼區域、鼻子與嘴部；他與同伴共同面向筆電並抬手互動，屬主要合照群組。"
+        },
+        "2": {
+          "role": "included",
+          "face_readable": true,
+          "label": "後方中間短髮男子",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內是同一頭部上的雙眼、鼻子與嘴部，五官清楚；他俯身靠近前景小組並參與共同討論。"
+        },
+        "3": {
+          "role": "included",
+          "face_readable": true,
+          "label": "左後方捲髮女子",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內可見連貫頭部輪廓、雙眼、鼻子與嘴部；她俯身靠近桌邊小組，與前景人物共享互動。"
+        },
+        "4": {
+          "role": "included",
+          "face_readable": true,
+          "label": "前景中央長瀏海女子",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內可辨識雙眼區域、鼻子和嘴部均位於同一張臉上；她坐在筆電旁並與小組共同觀看。"
+        },
+        "5": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "左側模糊背景人物",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內雖呈現人臉輪廓，但影像嚴重失焦，雙眼與鼻口配置無法可靠辨識；且位於背景。"
+        },
+        "6": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "左側後方模糊人物",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內僅有低解析度側向臉部，雙眼區域及鼻口布局無法可靠評估，屬背景人物。"
+        }
+      },
+      "low_confidence_reviews": {
+        "b1": {
+          "role": "included",
+          "face_readable": true,
+          "label": "前景左側長髮女子",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內可見同一頭部的側前三分之二臉、雙眼區域、鼻子與嘴部；她坐在桌邊並與其他人共同觀看筆電。"
+        }
+      },
+      "scene_intent": "這是一張以學生小組在室內圍繞筆電合作學習、討論或展示為主的合照；前景與靠近桌邊的人物共享同一互動場景，左後方模糊人物則是偶然入鏡的背景旁觀者。"
+    },
+    "crops": [
+      {
+        "detection_index": 1,
+        "box": {
+          "x": 0.5904850746268657,
+          "y": 0.37359550561797755,
+          "w": 0.1984608208955224,
+          "h": 0.33848314606741575
+        },
+        "face_box": {
+          "x": 0.644589552238806,
+          "y": 0.4750702247191011,
+          "w": 0.09025186567164178,
+          "h": 0.16924157303370788
+        },
+        "confidence": 0.9422836899757385,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 2,
+        "box": {
+          "x": 0.4666511194029851,
+          "y": 0.04459269662921348,
+          "w": 0.2042910447761194,
+          "h": 0.3279494382022472
+        },
+        "face_box": {
+          "x": 0.5223880597014925,
+          "y": 0.14290730337078653,
+          "w": 0.09281716417910447,
+          "h": 0.1639747191011236
+        },
+        "confidence": 0.9481930732727051,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 3,
+        "box": {
+          "x": 0.17210820895522388,
+          "y": 0.11657303370786516,
+          "w": 0.18889925373134328,
+          "h": 0.3258426966292135
+        },
+        "face_box": {
+          "x": 0.2236473880597015,
+          "y": 0.21418539325842698,
+          "w": 0.08582089552238806,
+          "h": 0.16292134831460675
+        },
+        "confidence": 0.9330361485481262,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 4,
+        "box": {
+          "x": 0.42607276119402987,
+          "y": 0.42064606741573035,
+          "w": 0.19146455223880596,
+          "h": 0.27247191011235955
+        },
+        "face_box": {
+          "x": 0.4783115671641791,
+          "y": 0.5024578651685393,
+          "w": 0.08698694029850747,
+          "h": 0.13623595505617977
+        },
+        "confidence": 0.9154561161994934,
+        "sent_to_model": false
+      },
+      {
+        "detection_index": 5,
+        "box": {
+          "x": 0.0,
+          "y": 0.28265449438202245,
+          "w": 0.07882462686567164,
+          "h": 0.18609550561797752
+        },
+        "face_box": {
+          "x": 0.008395522388059701,
+          "y": 0.33848314606741575,
+          "w": 0.04407649253731343,
+          "h": 0.09304775280898876
+        },
+        "confidence": 0.8582504987716675,
+        "sent_to_model": false
+      },
+      {
+        "detection_index": 6,
+        "box": {
+          "x": 0.05387126865671642,
+          "y": 0.3128511235955056,
+          "w": 0.09071828358208955,
+          "h": 0.16292134831460675
+        },
+        "face_box": {
+          "x": 0.07859141791044776,
+          "y": 0.3616573033707865,
+          "w": 0.04127798507462686,
+          "h": 0.08146067415730338
+        },
+        "confidence": 0.7611637115478516,
+        "sent_to_model": false
+      }
+    ],
+    "candidates": [
+      {
+        "candidate_id": "b1",
+        "confidence": 0.7136315703392029,
+        "box": {
+          "x": 0.28544776119402987,
+          "y": 0.38553370786516855,
+          "w": 0.1298973880597015,
+          "h": 0.3595505617977528
+        },
+        "face_box": {
+          "x": 0.3208955223880597,
+          "y": 0.49332865168539325,
+          "w": 0.05900186567164179,
+          "h": 0.1797752808988764
+        },
+        "sent_to_model": true
+      }
+    ],
+    "low_state": "ready",
+    "error": "invalid_ab_decision"
+  },
+  {
+    "filename": "000005807.jpg",
+    "repetition": 2,
+    "batch": "stage20-none-portrait488-repeat3-20261027",
+    "reply": {
+      "main_subject_kind": "group",
+      "primary_detection_index": 1,
+      "summary": "室內音樂排練場景；前景及中央的演奏者共同構成主要拍攝群體，背景人物較像 incidental 活動參與者。",
+      "additional_people": [],
+      "detections": {
+        "1": {
+          "role": "included",
+          "face_readable": true,
+          "label": "側面金髮女性",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內可見完整頭部輪廓、雙眼區域、鼻子與嘴部，正側身查看樂譜並與中央演奏者共同排練。"
+        },
+        "2": {
+          "role": "included",
+          "face_readable": true,
+          "label": "鬍鬚男性",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內是同一頭部上的雙眼、鼻子、嘴部及鬍鬚，面向樂譜與旁側女性共同進行音樂排練。"
+        },
+        "3": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "背景黑衣男性",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內雖可見真實頭部輪廓，但影像模糊且眼鼻嘴布局無法可靠辨識，未通過可讀性門檻。"
+        }
+      },
+      "low_confidence_reviews": {
+        "b1": {
+          "role": "not_real_face",
+          "face_readable": false,
+          "label": "手部",
+          "selection_evidence": "not_real_face",
+          "reason": "矩形內是前臂連接手掌與彎曲手指，沒有獨立頭部輪廓；所見形狀由手指、掌部和手腕構成，並非臉部。"
+        }
+      },
+      "scene_intent": "照片呈現一群人在室內進行音樂排練；中央男性與側面的女性共同查看樂譜，前景演奏者也屬同一排練情境，背景人物則未被清楚納入主要拍攝互動。"
+    },
+    "crops": [
+      {
+        "detection_index": 1,
+        "box": {
+          "x": 0.36840562719812425,
+          "y": 0.14444444444444443,
+          "w": 0.15562719812426729,
+          "h": 0.29259259259259257
+        },
+        "face_box": {
+          "x": 0.41090269636576787,
+          "y": 0.2324074074074074,
+          "w": 0.07063305978898007,
+          "h": 0.14629629629629629
+        },
+        "confidence": 0.8940965533256531,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 2,
+        "box": {
+          "x": 0.5155334114888629,
+          "y": 0.20185185185185187,
+          "w": 0.13980070339976552,
+          "h": 0.29444444444444445
+        },
+        "face_box": {
+          "x": 0.5536342321219226,
+          "y": 0.2902777777777778,
+          "w": 0.06359906213364595,
+          "h": 0.14722222222222223
+        },
+        "confidence": 0.8835036158561707,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 3,
+        "box": {
+          "x": 0.7116060961313013,
+          "y": 0.2949074074074074,
+          "w": 0.10228604923798358,
+          "h": 0.16203703703703703
+        },
+        "face_box": {
+          "x": 0.7394490035169988,
+          "y": 0.3435185185185185,
+          "w": 0.04660023446658851,
+          "h": 0.08101851851851852
+        },
+        "confidence": 0.7612849473953247,
+        "sent_to_model": true
+      }
+    ],
+    "candidates": [
+      {
+        "candidate_id": "b1",
+        "confidence": 0.5299270153045654,
+        "box": {
+          "x": 0.4633645955451348,
+          "y": 0.44722222222222224,
+          "w": 0.12456037514654161,
+          "h": 0.14814814814814814
+        },
+        "face_box": {
+          "x": 0.49736225087924973,
+          "y": 0.49166666666666664,
+          "w": 0.05656506447831184,
+          "h": 0.07407407407407407
+        },
+        "sent_to_model": true
+      }
+    ],
+    "low_state": "ready",
+    "error": "invalid_ab_decision"
+  },
+  {
+    "filename": "000007456.jpg",
+    "repetition": 1,
+    "batch": "stage20-none-portrait488-repeat3-20261027",
+    "reply": {
+      "main_subject_kind": "group",
+      "primary_detection_index": 2,
+      "summary": "拳擊擂台上的勝利場景；主要畫面為舉手慶祝的拳手，倒地拳手與裁判共同構成核心互動，觀眾多為背景人物。",
+      "additional_people": [],
+      "detections": {
+        "1": {
+          "role": "bystander",
+          "face_readable": true,
+          "label": "背景男性",
+          "selection_evidence": "incidental_background",
+          "reason": "矩形內是有完整頭部與五官的男性，但位於觀眾席後方，未參與擂台上的主要互動。"
+        },
+        "2": {
+          "role": "included",
+          "face_readable": true,
+          "label": "舉手慶祝的鬍鬚拳手",
+          "selection_evidence": "intended_subject",
+          "reason": "矩形內可見同一頭部上的雙眼、鼻部與張口，為擂台中央舉手慶祝的主要人物。"
+        },
+        "3": {
+          "role": "included",
+          "face_readable": true,
+          "label": "低頭的裁判",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內可見連貫頭部輪廓、眼鼻口與鬍鬚；他正俯身處理倒地拳手，參與核心擂台互動。"
+        },
+        "4": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "欄繩後模糊男性",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內的臉被欄繩遮擋且嚴重失焦，雙眼與鼻口布局無法可靠辨識。"
+        },
+        "5": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "手臂後模糊男性",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內僅見被前景手臂遮擋的模糊臉部，眼部與鼻口細節不足。"
+        },
+        "6": {
+          "role": "bystander",
+          "face_readable": true,
+          "label": "場邊鬍鬚男性",
+          "selection_evidence": "incidental_background",
+          "reason": "矩形內可辨識雙眼、鼻口與鬍鬚的真實臉部，但他在場邊拍攝，非主要擂台人物。"
+        },
+        "7": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "觀眾女性",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內雖有頭部與五官位置，但影像過小且模糊，雙眼與鼻口布局不足以作預覽辨識。"
+        },
+        "8": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "欄繩後觀眾",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內的臉被欄繩橫向遮住並失焦，無法可靠確認雙眼區域及鼻口布局。"
+        },
+        "9": {
+          "role": "bystander",
+          "face_readable": true,
+          "label": "戴墨鏡的觀眾",
+          "selection_evidence": "incidental_background",
+          "reason": "矩形內可見真實頭部、墨鏡所在的雙眼區域及鼻口輪廓，但屬後方觀眾。"
+        },
+        "10": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "戴墨鏡的背景人物",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內臉部受墨鏡、陰影與失焦影響，眼部和鼻口布局不能充分讀取。"
+        },
+        "11": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "上方模糊男性",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內只見被裁切且失焦的部分臉部，無法可靠評估雙眼區域與鼻口。"
+        }
+      },
+      "low_confidence_reviews": {
+        "b1": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "欄繩後男性",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內是真實但被欄繩遮住且失焦的臉，眼鼻口布局不可讀。"
+        },
+        "b2": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "背景女性",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內可見臉部輪廓與嘴唇，但影像模糊且眼部細節不足，未達可讀門檻。"
+        },
+        "b3": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "拳套後方人物",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內的臉被欄繩及白色拳套大幅遮擋，只能看到不完整模糊五官。"
+        },
+        "b4": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "欄繩後戴眼鏡男性",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內臉部被欄繩遮住且失焦，雙眼與鼻口布局無法可靠辨識。"
+        },
+        "b5": {
+          "role": "not_real_face",
+          "face_readable": false,
+          "label": "拳手肩膀刺青",
+          "selection_evidence": "not_real_face",
+          "reason": "矩形內是連續的肩膀皮膚與放射狀刺青，不具頭部輪廓；所謂眼鼻口只是刺青與皮膚形狀。"
+        },
+        "b6": {
+          "role": "bystander",
+          "face_readable": false,
+          "label": "欄繩後男性",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內是真實臉部但被欄繩遮擋且失焦，無法同時可靠辨認雙眼區域與鼻口布局。"
+        }
+      },
+      "scene_intent": "這是一張以拳擊賽場勝利與裁判介入為核心的新聞／體育攝影；中央拳手舉起雙拳，裁判俯身靠近倒地拳手，三者形成主要互動，後方觀眾與攝影者屬背景。"
+    },
+    "crops": [
+      {
+        "detection_index": 1,
+        "box": {
+          "x": 0.01692047377326565,
+          "y": 0.21763683753258037,
+          "w": 0.1661590524534687,
+          "h": 0.26498696785403997
+        },
+        "face_box": {
+          "x": 0.0622673434856176,
+          "y": 0.29713292788879236,
+          "w": 0.0754653130287648,
+          "h": 0.13249348392701998
+        },
+        "confidence": 0.8553359508514404,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 2,
+        "box": {
+          "x": 0.5576988155668359,
+          "y": 0.0,
+          "w": 0.15160744500846024,
+          "h": 0.23848827106863596
+        },
+        "face_box": {
+          "x": 0.5989847715736041,
+          "y": 0.06168549087749783,
+          "w": 0.06903553299492386,
+          "h": 0.1264118158123371
+        },
+        "confidence": 0.905665397644043,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 3,
+        "box": {
+          "x": 0.24027072758037224,
+          "y": 0.2046046915725456,
+          "w": 0.13671742808798645,
+          "h": 0.18245004344048654
+        },
+        "face_box": {
+          "x": 0.27749576988155666,
+          "y": 0.2593397046046916,
+          "w": 0.0622673434856176,
+          "h": 0.09122502172024327
+        },
+        "confidence": 0.9236007928848267,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 4,
+        "box": {
+          "x": 0.0311336717428088,
+          "y": 0.0,
+          "w": 0.1350253807106599,
+          "h": 0.14596003475238922
+        },
+        "face_box": {
+          "x": 0.06802030456852792,
+          "y": 0.02432667245873154,
+          "w": 0.06125211505922166,
+          "h": 0.08688097306689835
+        },
+        "confidence": 0.826988697052002,
+        "sent_to_model": false
+      },
+      {
+        "detection_index": 5,
+        "box": {
+          "x": 0.7116751269035533,
+          "y": 0.1255430060816681,
+          "w": 0.12656514382402706,
+          "h": 0.17636837532580366
+        },
+        "face_box": {
+          "x": 0.7461928934010152,
+          "y": 0.17854039965247612,
+          "w": 0.05752961082910321,
+          "h": 0.08818418766290183
+        },
+        "confidence": 0.8579514026641846,
+        "sent_to_model": false
+      },
+      {
+        "detection_index": 6,
+        "box": {
+          "x": 0.8057529610829103,
+          "y": 0.23892267593397046,
+          "w": 0.12521150592216582,
+          "h": 0.17549956559513466
+        },
+        "face_box": {
+          "x": 0.839932318104907,
+          "y": 0.291485664639444,
+          "w": 0.05685279187817259,
+          "h": 0.08774978279756733
+        },
+        "confidence": 0.9097268581390381,
+        "sent_to_model": false
+      },
+      {
+        "detection_index": 7,
+        "box": {
+          "x": 0.12351945854483926,
+          "y": 0.14031277150304083,
+          "w": 0.12791878172588833,
+          "h": 0.1633362293657689
+        },
+        "face_box": {
+          "x": 0.15837563451776648,
+          "y": 0.1894005212858384,
+          "w": 0.05820642978003384,
+          "h": 0.08166811468288444
+        },
+        "confidence": 0.8741332292556763,
+        "sent_to_model": false
+      },
+      {
+        "detection_index": 8,
+        "box": {
+          "x": 0.21218274111675126,
+          "y": 0.060816681146828845,
+          "w": 0.1350253807106599,
+          "h": 0.15030408340573415
+        },
+        "face_box": {
+          "x": 0.2490693739424704,
+          "y": 0.10599478714161599,
+          "w": 0.06125211505922166,
+          "h": 0.07515204170286707
+        },
+        "confidence": 0.8056297898292542,
+        "sent_to_model": false
+      },
+      {
+        "detection_index": 9,
+        "box": {
+          "x": 0.9235194585448393,
+          "y": 0.0994787141615986,
+          "w": 0.07648054145516074,
+          "h": 0.1833188531711555
+        },
+        "face_box": {
+          "x": 0.9522842639593908,
+          "y": 0.15464813205907907,
+          "w": 0.047715736040609136,
+          "h": 0.09165942658557776
+        },
+        "confidence": 0.7481402158737183,
+        "sent_to_model": false
+      },
+      {
+        "detection_index": 10,
+        "box": {
+          "x": 0.7874788494077835,
+          "y": 0.0,
+          "w": 0.1116751269035533,
+          "h": 0.10599478714161599
+        },
+        "face_box": {
+          "x": 0.8179357021996616,
+          "y": 0.005212858384013901,
+          "w": 0.050761421319796954,
+          "h": 0.07211120764552563
+        },
+        "confidence": 0.766282320022583,
+        "sent_to_model": false
+      },
+      {
+        "detection_index": 11,
+        "box": {
+          "x": 0.6717428087986463,
+          "y": 0.0,
+          "w": 0.1143824027072758,
+          "h": 0.08774978279756733
+        },
+        "face_box": {
+          "x": 0.7028764805414551,
+          "y": 0.0008688097306689834,
+          "w": 0.052115059221658204,
+          "h": 0.06211989574283232
+        },
+        "confidence": 0.7804038524627686,
+        "sent_to_model": false
+      }
+    ],
+    "candidates": [
+      {
+        "candidate_id": "b1",
+        "confidence": 0.7292280793190002,
+        "box": {
+          "x": 0.41759729272419627,
+          "y": 0.0,
+          "w": 0.14145516074450085,
+          "h": 0.1841876629018245
+        },
+        "face_box": {
+          "x": 0.45617597292724194,
+          "y": 0.0473501303214596,
+          "w": 0.06429780033840947,
+          "h": 0.09774109470026064
+        },
+        "sent_to_model": true
+      },
+      {
+        "candidate_id": "b2",
+        "confidence": 0.6815887689590454,
+        "box": {
+          "x": 0.09543147208121827,
+          "y": 0.0,
+          "w": 0.116751269035533,
+          "h": 0.08036490008688098
+        },
+        "face_box": {
+          "x": 0.1272419627749577,
+          "y": 0.0008688097306689834,
+          "w": 0.05313028764805414,
+          "h": 0.05690703735881842
+        },
+        "sent_to_model": true
+      },
+      {
+        "candidate_id": "b3",
+        "confidence": 0.6508843898773193,
+        "box": {
+          "x": 0.8291032148900169,
+          "y": 0.0,
+          "w": 0.13637901861252116,
+          "h": 0.19678540399652475
+        },
+        "face_box": {
+          "x": 0.8663282571912013,
+          "y": 0.05516941789748045,
+          "w": 0.06192893401015229,
+          "h": 0.10121633362293658
+        },
+        "sent_to_model": false
+      },
+      {
+        "candidate_id": "b4",
+        "confidence": 0.6389563083648682,
+        "box": {
+          "x": 0.30558375634517765,
+          "y": 0.14900086880973068,
+          "w": 0.132994923857868,
+          "h": 0.1902693310165074
+        },
+        "face_box": {
+          "x": 0.34179357021996615,
+          "y": 0.2059079061685491,
+          "w": 0.06057529610829103,
+          "h": 0.0951346655082537
+        },
+        "sent_to_model": false
+      },
+      {
+        "candidate_id": "b5",
+        "confidence": 0.5585691928863525,
+        "box": {
+          "x": 0.49983079526226737,
+          "y": 0.09687228496959166,
+          "w": 0.12013536379018612,
+          "h": 0.18071242397914858
+        },
+        "face_box": {
+          "x": 0.5326565143824027,
+          "y": 0.15117289313640314,
+          "w": 0.0544839255499154,
+          "h": 0.09035621198957429
+        },
+        "sent_to_model": false
+      },
+      {
+        "candidate_id": "b6",
+        "confidence": 0.5197622179985046,
+        "box": {
+          "x": 0.43147208121827413,
+          "y": 0.0,
+          "w": 0.14382402707275804,
+          "h": 0.15030408340573415
+        },
+        "face_box": {
+          "x": 0.47072758037225043,
+          "y": 0.02519548218940052,
+          "w": 0.06531302876480541,
+          "h": 0.0894874022589053
+        },
+        "sent_to_model": false
+      }
+    ],
+    "low_state": "ready",
+    "error": "invalid_ab_decision"
+  },
+  {
+    "filename": "000000731.jpg",
+    "repetition": 1,
+    "batch": "stage20-low-portrait488-repeat3-20261028",
+    "reply": {
+      "main_subject_kind": "group",
+      "primary_detection_index": 2,
+      "summary": "戶外人群護送一名穿西裝的年長男子步行；畫面呈現集體行進與護衛互動。",
+      "additional_people": [],
+      "detections": {
+        "1": {
+          "role": "uncertain",
+          "face_readable": false,
+          "label": "前景白衣口罩男子",
+          "selection_evidence": "intended_subject",
+          "reason": "矩形內可見完整頭部、雙眼區域與鼻樑，但黑色口罩遮住口鼻，無法直接評估嘴部，因此未通過可讀性門檻。"
+        },
+        "2": {
+          "role": "included",
+          "face_readable": true,
+          "label": "中央灰鬍西裝男子",
+          "selection_evidence": "intended_subject",
+          "reason": "矩形內是連貫的真實頭部輪廓，雙眼、鼻子與嘴部均直接可見；他位於行進人群中央，是畫面中被護送的主要人物。"
+        }
+      },
+      "low_confidence_reviews": {
+        "b1": {
+          "role": "uncertain",
+          "face_readable": false,
+          "label": "右前方白口罩男子",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內是真實側面頭部，但僅呈現狹窄側面，遠側眼區不可見，且口罩遮住口鼻，無法可靠辨識完整臉部佈局。"
+        },
+        "b2": {
+          "role": "uncertain",
+          "face_readable": false,
+          "label": "左側藍口罩男子",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內是真實頭部側後方，主要可見耳朵、髮線與部分側臉；眼部與口鼻佈局不完整，未達臉部可讀性門檻。"
+        },
+        "b3": {
+          "role": "uncertain",
+          "face_readable": false,
+          "label": "中左白衣口罩男子",
+          "selection_evidence": "insufficient_evidence",
+          "reason": "矩形內可見真實頭部、部分雙眼區域與鼻樑，但黑色口罩遮住嘴部，無法直接確認完整鼻口配置與表情。"
+        }
+      },
+      "scene_intent": "這是一張以中央西裝男子及其周圍護衛、同行者集體步行為主的新聞式現場照片；多名人物共享同一行進場景，但口罩或側面角度使部分候選人的臉部不可讀。"
+    },
+    "crops": [
+      {
+        "detection_index": 1,
+        "box": {
+          "x": 0.16669781349280507,
+          "y": 0.14465937762825903,
+          "w": 0.14931788450756867,
+          "h": 0.2523128679562658
+        },
+        "face_box": {
+          "x": 0.20743786208185386,
+          "y": 0.22035323801513879,
+          "w": 0.06783778732947113,
+          "h": 0.1261564339781329
+        },
+        "confidence": 0.7858055830001831,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 2,
+        "box": {
+          "x": 0.4711268921696879,
+          "y": 0.14241659657975891,
+          "w": 0.09512240702672398,
+          "h": 0.17045135968601066
+        },
+        "face_box": {
+          "x": 0.49710334516912724,
+          "y": 0.1934398654331371,
+          "w": 0.04316950102784526,
+          "h": 0.08522567984300533
+        },
+        "confidence": 0.7883101105690002,
+        "sent_to_model": true
+      }
+    ],
+    "candidates": [
+      {
+        "candidate_id": "b1",
+        "confidence": 0.5725052356719971,
+        "box": {
+          "x": 0.8333021865071949,
+          "y": 0.08494533221194281,
+          "w": 0.14034759857970472,
+          "h": 0.28483319315951783
+        },
+        "face_box": {
+          "x": 0.8716127826574472,
+          "y": 0.17045135968601066,
+          "w": 0.06372640627920015,
+          "h": 0.14241659657975891
+        },
+        "sent_to_model": true
+      },
+      {
+        "candidate_id": "b2",
+        "confidence": 0.5701194405555725,
+        "box": {
+          "x": 0.055129882264997196,
+          "y": 0.2380151387720774,
+          "w": 0.09923378807699496,
+          "h": 0.1564339781328848
+        },
+        "face_box": {
+          "x": 0.08222762100541955,
+          "y": 0.28483319315951783,
+          "w": 0.04503831059615025,
+          "h": 0.0782169890664424
+        },
+        "sent_to_model": true
+      },
+      {
+        "candidate_id": "b3",
+        "confidence": 0.5374839901924133,
+        "box": {
+          "x": 0.3119043169501028,
+          "y": 0.1934398654331371,
+          "w": 0.0911979069332835,
+          "h": 0.15250911129800954
+        },
+        "face_box": {
+          "x": 0.33675948420855917,
+          "y": 0.23913652929632745,
+          "w": 0.04148757241637077,
+          "h": 0.07625455564900477
+        },
+        "sent_to_model": false
+      }
+    ],
+    "low_state": "ready",
+    "error": "invalid_ab_decision"
+  },
+  {
+    "filename": "000009728.jpg",
+    "repetition": 1,
+    "batch": "stage20-none-portrait488-repeat3-20261027",
+    "reply": {
+      "main_subject_kind": "group",
+      "primary_detection_index": 1,
+      "summary": "教室內多名學生正在寫作業；前景三名女孩與周圍同學共同構成被拍攝的課堂場景。候選臉部均為真實人臉，但僅將前景共同入鏡且面部可讀者列為可選主體。",
+      "additional_people": [],
+      "detections": {
+        "1": {
+          "role": "included",
+          "face_readable": false,
+          "label": "低頭寫作業、戴白頭巾的女孩",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內可見同一頭部的眼睛、鼻子與嘴部，人物在前景與其他學生共同入鏡並正在寫作業；但低頭且眼部部分受角度影響，未達預覽圖示的雙眼區域清晰度門檻。"
+        },
+        "2": {
+          "role": "included",
+          "face_readable": true,
+          "label": "前景長髮女孩",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內可見完整頭部輪廓，雙眼區域、鼻子與嘴部均直接可辨；她位於前景課桌旁，與其他學生共同參與課堂拍攝。"
+        },
+        "3": {
+          "role": "included",
+          "face_readable": true,
+          "label": "前景花頭巾女孩",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內可見同一頭部的完整臉部輪廓、雙眼、鼻子與嘴部；她在前景與旁人共同入鏡並參與課堂活動。"
+        },
+        "4": {
+          "role": "bystander",
+          "face_readable": true,
+          "label": "中景白頭巾女孩",
+          "selection_evidence": "incidental_background",
+          "reason": "矩形內可見同一頭部的雙眼、鼻子與嘴部，臉部可讀；但她位於中景學生群中，沒有足夠證據顯示是前景攝影意圖中的共同主體。"
+        }
+      },
+      "low_confidence_reviews": {
+        "b1": {
+          "role": "bystander",
+          "face_readable": true,
+          "label": "右中景白頭巾女孩",
+          "selection_evidence": "incidental_background",
+          "reason": "矩形內可見完整頭部輪廓、雙眼區域、鼻子與嘴部；她在後方座位中屬背景同學，未見與前景主體共享特定姿勢或互動。"
+        },
+        "b2": {
+          "role": "included",
+          "face_readable": true,
+          "label": "中景黑衣白頭巾女孩",
+          "selection_evidence": "shared_interaction",
+          "reason": "矩形內可見同一頭部的雙眼、鼻子與嘴部，臉部清楚；她與前景學生同處課桌及課堂活動中，屬共同入鏡的學生。"
+        },
+        "b3": {
+          "role": "bystander",
+          "face_readable": true,
+          "label": "左中景灰頭巾女孩",
+          "selection_evidence": "incidental_background",
+          "reason": "矩形內可見頭部輪廓及雙眼、鼻子、嘴部；位於後排背景，沒有明確攝影互動證據。"
+        },
+        "b4": {
+          "role": "bystander",
+          "face_readable": true,
+          "label": "後排紅頭巾女孩",
+          "selection_evidence": "incidental_background",
+          "reason": "矩形內可見完整頭部輪廓、雙眼、鼻子與嘴部；她位於後排背景，僅為課堂環境中的旁觀學生。"
+        }
+      },
+      "scene_intent": "這是一張教室課堂活動的群體照片，學生們坐在課桌前寫作業並共同入鏡；前景三名女孩及鄰近參與課堂的學生較符合攝影意圖，後排可辨臉孔主要是背景同學。"
+    },
+    "crops": [
+      {
+        "detection_index": 1,
+        "box": {
+          "x": 0.14109141791044777,
+          "y": 0.4961376404494382,
+          "w": 0.22061567164179105,
+          "h": 0.27457865168539325
+        },
+        "face_box": {
+          "x": 0.20125932835820895,
+          "y": 0.5786516853932584,
+          "w": 0.10027985074626866,
+          "h": 0.13728932584269662
+        },
+        "confidence": 0.8090506792068481,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 2,
+        "box": {
+          "x": 0.5240205223880597,
+          "y": 0.3693820224719101,
+          "w": 0.16068097014925373,
+          "h": 0.2893258426966292
+        },
+        "face_box": {
+          "x": 0.5678638059701493,
+          "y": 0.45610955056179775,
+          "w": 0.07299440298507463,
+          "h": 0.1446629213483146
+        },
+        "confidence": 0.9339585304260254,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 3,
+        "box": {
+          "x": 0.7017257462686567,
+          "y": 0.4392556179775281,
+          "w": 0.16068097014925373,
+          "h": 0.2675561797752809
+        },
+        "face_box": {
+          "x": 0.7455690298507462,
+          "y": 0.5196629213483146,
+          "w": 0.07299440298507463,
+          "h": 0.13377808988764045
+        },
+        "confidence": 0.9124266505241394,
+        "sent_to_model": true
+      },
+      {
+        "detection_index": 4,
+        "box": {
+          "x": 0.3400186567164179,
+          "y": 0.3728932584269663,
+          "w": 0.09934701492537314,
+          "h": 0.16502808988764045
+        },
+        "face_box": {
+          "x": 0.3670708955223881,
+          "y": 0.42240168539325845,
+          "w": 0.045242537313432835,
+          "h": 0.08251404494382023
+        },
+        "confidence": 0.8506082892417908,
+        "sent_to_model": false
+      }
+    ],
+    "candidates": [
+      {
+        "candidate_id": "b1",
+        "confidence": 0.6700087785720825,
+        "box": {
+          "x": 0.6161380597014925,
+          "y": 0.36973314606741575,
+          "w": 0.09071828358208955,
+          "h": 0.1699438202247191
+        },
+        "face_box": {
+          "x": 0.6408582089552238,
+          "y": 0.42064606741573035,
+          "w": 0.04127798507462686,
+          "h": 0.08497191011235955
+        },
+        "sent_to_model": true
+      },
+      {
+        "candidate_id": "b2",
+        "confidence": 0.6578934788703918,
+        "box": {
+          "x": 0.478544776119403,
+          "y": 0.3922050561797753,
+          "w": 0.09328358208955224,
+          "h": 0.15589887640449437
+        },
+        "face_box": {
+          "x": 0.503964552238806,
+          "y": 0.43890449438202245,
+          "w": 0.042444029850746266,
+          "h": 0.07794943820224719
+        },
+        "sent_to_model": true
+      },
+      {
+        "candidate_id": "b3",
+        "confidence": 0.5496653318405151,
+        "box": {
+          "x": 0.28428171641791045,
+          "y": 0.3848314606741573,
+          "w": 0.07532649253731344,
+          "h": 0.14536516853932585
+        },
+        "face_box": {
+          "x": 0.3048041044776119,
+          "y": 0.42837078651685395,
+          "w": 0.034281716417910446,
+          "h": 0.07268258426966293
+        },
+        "sent_to_model": false
+      },
+      {
+        "candidate_id": "b4",
+        "confidence": 0.51772540807724,
+        "box": {
+          "x": 0.43656716417910446,
+          "y": 0.35990168539325845,
+          "w": 0.07695895522388059,
+          "h": 0.14396067415730338
+        },
+        "face_box": {
+          "x": 0.45755597014925375,
+          "y": 0.40308988764044945,
+          "w": 0.034981343283582086,
+          "h": 0.07198033707865169
+        },
+        "sent_to_model": false
+      }
+    ],
+    "low_state": "ready",
+    "error": "invalid_face_readability"
+  }
+]
