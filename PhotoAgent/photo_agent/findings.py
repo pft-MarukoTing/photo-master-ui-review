@@ -5,7 +5,7 @@ import re
 
 from photo_agent import i18n
 from photo_agent.branch_skills.food.instructions import LOOK_PREFIX
-from prompts import AXIS_ALIASES, LENS_AXIS
+from prompts import AXIS_ALIASES, LENS_AXIS, smile_adjustment_suggested
 
 CATEGORIES = ("light_color", "background", "portrait", "clarity", "composition")
 # Portrait comes from the portrait-QC pass, so the analysis model writes only the other five.
@@ -30,7 +30,10 @@ _AXIS_CATEGORY = {
 # These axes name one specific reviewable decision, so an item carrying one always belongs to its card.
 _FIXED_AXIS_CATEGORY = {"crop": "composition", "alignment": "composition", LENS_AXIS: "composition"}
 
-_PORTRAIT_TOGGLES = {"blink": "eye_closed_detection", "gaze": "gaze_contact_detection", "hair": "hair_mess_detection"}
+_PORTRAIT_TOGGLES = {
+    "blink": "eye_closed_detection", "gaze": "gaze_contact_detection", "hair": "hair_mess_detection",
+    "smile": "smile_adjustment",
+}
 
 
 def _axes(entry):
@@ -54,11 +57,18 @@ _PORTRAIT_KINDS = {
     "blink": ("閉眼", "讓{who}自然睜開眼睛"),
     "gaze": ("眼睛沒有看向鏡頭", "讓{who}看向鏡頭"),
     "hair": ("頭髮凌亂", "整理{who}的亂髮"),
+    "smile": ("笑容可以調整", "讓{who}自然微笑"),
 }
 # The lens item comes from the portrait-QC pass, so its finding is written here rather than by a model.
 LENS_FINDING = "偵測到有人物在畫面邊緣被廣角拉寬。"
 # The food look item is a suggested style on this page; other screens keep its own prefix.
 FOOD_LOOK_LABEL = "建議風格："
+
+
+def _portrait_flagged(subject, kind):
+    """Whether the analysis suggests this fix for one person: a smile is suggested, not a defect to fix."""
+    issue = subject.get(f"{kind}_issue") or {}
+    return smile_adjustment_suggested(issue) if kind == "smile" else bool(issue.get("should_fix"))
 
 
 def _portrait_reading(analysis):
@@ -70,7 +80,7 @@ def _portrait_reading(analysis):
     for kind, (problem, action) in _PORTRAIT_KINDS.items():
         if options.get(_PORTRAIT_TOGGLES[kind], True) is False:
             continue
-        hit = [(index, subject) for index, subject in people if (subject.get(f"{kind}_issue") or {}).get("should_fix")]
+        hit = [(index, subject) for index, subject in people if _portrait_flagged(subject, kind)]
         if not hit:
             continue
         if len(people) == 1:
@@ -80,7 +90,7 @@ def _portrait_reading(analysis):
         elif len(hit) == 1:
             named = hit[0][1].get("label") or i18n.tr("這位人物")
         else:
-            named = i18n.tr("{n} 位人物", n=len(hit))
+            named = i18n.tr("{n}位人物", n=len(hit))
         items.append({"index": None, "kind": kind, "subject_indices": [index for index, _ in hit],
                       "text": i18n.tr(action, who=named)})
         problems.append(i18n.tr(problem))
