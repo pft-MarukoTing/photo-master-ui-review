@@ -2026,14 +2026,14 @@ class ChatRoutesTest(unittest.TestCase):
     def test_a_drop_acknowledgement_without_an_interpretation_asks_first(self):
         res, _ = self.review("把桌上的垃圾都移掉", {"verdict": "drop", "reply": "好，這個我記下來了。"})
         self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.chat_assistant.INTERPRETATION_CLARIFY_REPLY,
-            "ask": True, "options": ['把「把桌上的垃圾都移掉」放到照片中'], "question_kind": "meaning"})
+            "ask": True, "options": [], "question_kind": "meaning"})
 
     def test_unrelated_text_without_a_supported_interpretation_asks_first(self):
         res, _ = self.review("幫我翻譯這段英文", {
             "verdict": "drop", "reply": "這個我沒辦法回答，我只能幫你處理這張照片的修圖。"})
         self.assertEqual(res.get_json(), {
             "accepted": False, "reply": chat.chat_assistant.INTERPRETATION_CLARIFY_REPLY,
-            "ask": True, "options": ['把「幫我翻譯這段英文」放到照片中'], "question_kind": "meaning"})
+            "ask": True, "options": [], "question_kind": "meaning"})
 
     # The two start buttons in words: the page presses the one asked for.
     def test_a_typed_start_starts_it(self):
@@ -2153,7 +2153,7 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(res.get_json(), {"accepted": True, "reply": chat.PROMPT_REVIEW_KEPT_REPLY})
         res, _ = self.review("??", {"verdict": "drop", "reply": ""})
         self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.chat_assistant.INTERPRETATION_CLARIFY_REPLY,
-            "ask": True, "options": ['把「??」放到照片中'], "question_kind": "meaning"})
+            "ask": True, "options": [], "question_kind": "meaning"})
 
     # The model is not a gate the user can be left standing behind.
     def test_a_model_failure_lets_the_line_through(self):
@@ -2181,7 +2181,7 @@ class ChatRoutesTest(unittest.TestCase):
         res, _ = self.review("他的眼睛放大", {"verdict": "clarify", "reply": "", "line": "", "options": []},
                              people=["照片中從左邊數來第 1 位", "照片中從左邊數來第 2 位"])
         self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.chat_assistant.CLARIFY_REPLY,
-                                          "ask": True, "options": ['把「他的眼睛放大」放到照片中'], "question_kind": "meaning"})
+                                          "ask": True, "options": [], "question_kind": "meaning"})
 
     # The answer comes back as the whole wish, with the person split off for
     # the page to attach.

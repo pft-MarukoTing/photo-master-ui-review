@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from config import STYLE_OPTION_INSTRUCTIONS
 from photo_agent.analysis_skills.portrait.decisions import (
@@ -117,10 +118,11 @@ def body_reshape_analysis():
             "label": "central woman",
             "box": {"x": .2, "y": .1, "w": .5, "h": .8},
             "is_person": True,
+            "body_reshape": {
+                "should_edit": True,
+                "edit_prompt": "自然修飾人物可見腰腹與身形輪廓，保持衣物邊界及背景透視連續",
+            },
         }],
-        "body_reshape": {
-            "edit_prompt": "自然修飾整體身形比例並保持真實協調",
-        },
         "correction_plan": [],
         "correction_axes": [],
     }
@@ -218,20 +220,22 @@ class NestedIssueReading(unittest.TestCase):
 
 
 class BodyReshapePromptRouting(unittest.TestCase):
+    @patch("config.ENABLE_BODY_RESHAPE", True)
     def test_compact_editor_prompt_routes_one_holistic_prompt_verbatim(self):
         analysis = body_reshape_analysis()
+        body_prompt = analysis["subjects"][0]["body_reshape"]["edit_prompt"]
         shared_block = build_body_reshape_edit_block(analysis)
         prompt, metadata = build_compact_editor_prompt(analysis, "", "", {})
 
         self.assertTrue(shared_block)
         self.assertIn(shared_block, prompt)
         self.assertEqual(
-            prompt.count("自然修飾整體身形比例並保持真實協調"),
+            prompt.count(body_prompt),
             1,
         )
         self.assertNotIn("key_points", prompt)
         self.assertNotIn("target_pct", prompt)
-        self.assertEqual(metadata["body_reshape_edit_prompt"], "自然修飾整體身形比例並保持真實協調")
+        self.assertEqual(metadata["body_reshape_edit_prompt"], body_prompt)
 
 
 def blink_strategy():

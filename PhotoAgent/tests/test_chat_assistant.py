@@ -870,7 +870,8 @@ class ReviewLineTest(unittest.TestCase):
     # 上傳頁說了比例（「做成限動」），「設定」的長寬比就跟著改，不讓 AI 建議跟需求打架。
     def ratio(self, verdict, value, line="做成限動", wish="", switches=(), rest=None):
         def model(context):
-            if context.startswith(chat_assistant.RATIO_REST_INSTRUCTION):
+            # Chat policy instructions may precede the ratio-rest task.
+            if chat_assistant.RATIO_REST_INSTRUCTION in context:
                 left = context.split("LEFT: ", 1)[1]
                 return {"line": left if rest is None else rest}
             return {"verdict": verdict, "reply": "", "line": wish, "options": [], "later": False,
@@ -956,7 +957,7 @@ class ReviewLineTest(unittest.TestCase):
 
         # Only what is left of the wish once the ratio is out goes to the model.
         def model(context):
-            if not context.startswith(chat_assistant.RATIO_REST_INSTRUCTION):
+            if chat_assistant.RATIO_REST_INSTRUCTION not in context:
                 raise AssertionError("the model was asked to review")
             said, left = context.split("SAID: ", 1)[1].split("\nLEFT: ")
             if asked is not None:

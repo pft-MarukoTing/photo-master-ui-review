@@ -10,13 +10,26 @@ import argparse
 import json
 from pathlib import Path
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from photo_agent.feature_resolver import build_compact_editor_prompt
 from prompts import get_body_reshape_edit_prompt
 
 
-BODY_PROMPT = "自然修飾整體身形比例並保持真實協調"
+BODY_PROMPT = "自然修飾人物可見腰腹與身形輪廓，保持衣物邊界及背景透視連續"
+
+
+def body_analysis():
+    return {
+        "subjects": [{
+            "label": "主要人物",
+            "is_person": True,
+            "box": {"x": .1, "y": .1, "w": .6, "h": .8},
+            "body_reshape": {"should_edit": True, "edit_prompt": BODY_PROMPT},
+        }],
+        "correction_plan": [],
+        "correction_axes": [],
+    }
 
 
 def analyze_then_edit(image, analyze_fn, edit_fn, *, editor_prompt_fn=None):
@@ -87,9 +100,10 @@ def main(argv=None):
     return 0
 
 
+@patch("config.ENABLE_BODY_RESHAPE", True)
 class BodyReshapeApiToEditTests(unittest.TestCase):
     def test_harness_makes_one_editor_call_with_analyzer_prompt(self):
-        analyzer = Mock(return_value={"body_reshape": {"edit_prompt": BODY_PROMPT}})
+        analyzer = Mock(return_value=body_analysis())
         editor = Mock(return_value="generated-image")
 
         record = analyze_then_edit(b"source", analyzer, editor)
@@ -118,12 +132,7 @@ class BodyReshapeApiToEditTests(unittest.TestCase):
             self.assertNotIn(removed, html)
 
     def test_editor_prompt_builder_keeps_body_sentence_once(self):
-        analysis = {
-            "body_reshape": {"edit_prompt": BODY_PROMPT},
-            "subjects": [],
-            "correction_plan": [],
-            "correction_axes": [],
-        }
+        analysis = body_analysis()
         record = analyze_then_edit(b"source", lambda _: analysis, lambda _, prompt: prompt)
         self.assertEqual(record["actual_editor_prompt"].count(BODY_PROMPT), 1)
 
