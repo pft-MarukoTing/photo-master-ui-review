@@ -5,6 +5,12 @@ window.PhotoAgentApi = (() => {
   // so the same build works unprefixed (local) and prefixed (prod).
   const BASE_URL = window.PhotoAgentConfig.apiBaseUrl || window.location.pathname.replace(/\/[^/]*$/, "");
 
+  // Debug-only 分析卡片 switch: every analysis this page starts also writes analysis.findings.
+  let findingsCards = false;
+  function setFindingsCards(enabled) {
+    findingsCards = !!enabled;
+  }
+
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -51,6 +57,7 @@ window.PhotoAgentApi = (() => {
     // joins it later) -- sent as one JSON field instead of one form field per
     // toggle, so a new toggle never needs a new form.append call here.
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
+    form.append("findings_cards", findingsCards ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
     // "取代最終送給編輯模型的完整指令" checkbox beside 補充指令 (index.html) --
     // tells the backend to send user_prompt verbatim as the whole edit-model
@@ -270,6 +277,7 @@ window.PhotoAgentApi = (() => {
     form.append("run_qa", runQa === false ? "false" : "true");
     form.append("single_pass_edit", singlePassEdit ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
+    form.append("findings_cards", findingsCards ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
     // Lets the backend record this analyze-only job into history (see
     // api.py's /analyze) -- without it, a manual-review upload had no history
@@ -297,6 +305,7 @@ window.PhotoAgentApi = (() => {
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
+    form.append("findings_cards", findingsCards ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
     // Lets the backend record each analyze-only job into history (see
     // api.py's /analyze-batch) -- same reasoning as analyzeJob() above, one
@@ -333,6 +342,7 @@ window.PhotoAgentApi = (() => {
         run_qa: runQa === false ? "false" : "true",
         single_pass_edit: !!singlePassEdit,
         advanced_options: advancedOptions || {},
+        findings_cards: findingsCards,
         user_prompt: userPrompt || "",
         user: user || ""
       })
@@ -490,6 +500,7 @@ window.PhotoAgentApi = (() => {
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
+    form.append("findings_cards", findingsCards ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
 
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/aipoc/analyze`, {
@@ -513,6 +524,7 @@ window.PhotoAgentApi = (() => {
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
+    form.append("findings_cards", findingsCards ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
 
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/aipoc/analyze-batch`, {
@@ -831,6 +843,7 @@ window.PhotoAgentApi = (() => {
 
   return {
     fetchWithRetry,
+    setFindingsCards,
     submitJob,
     pollJobStatus,
     getJobResult,

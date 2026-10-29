@@ -1361,6 +1361,7 @@
     #ap-review-tab-recipe { --hue: var(--hue-recipe); }
     #ap-review-tab-style  { --hue: var(--hue-style); }
     #ap-review-tab-prompt { --hue: var(--hue-prompt); }
+    #ap-review-tab-findings { --hue: var(--hue-recipe); }
     .ap-review-tab .ic { color: var(--hue); opacity: .5; flex-shrink: 0; transition: opacity .15s; }
     .ap-review-tab.is-active .ic { opacity: 1; }
     .ap-review-tab.is-active {
@@ -1377,6 +1378,7 @@
     #ap-review-panel:has(#ap-review-tab-recipe.is-active) { --active-hue: var(--hue-recipe); }
     #ap-review-panel:has(#ap-review-tab-style.is-active)  { --active-hue: var(--hue-style); }
     #ap-review-panel:has(#ap-review-tab-prompt.is-active) { --active-hue: var(--hue-prompt); }
+    #ap-review-panel:has(#ap-review-tab-findings.is-active) { --active-hue: var(--hue-recipe); }
     /* .ap-review-tab/.ap-face-tabs/#ap-recipe-list/
        .ap-style-option-grid/.ap-style-scroll-hint each set their own display
        (flex/grid) unconditionally -- an author rule for the same property
@@ -1387,6 +1389,7 @@
     .ap-review-tab[hidden],
     .ap-face-tabs[hidden],
     #ap-recipe-list[hidden],
+    #ap-findings-cards[hidden],
     .ap-style-option-grid[hidden],
     .ap-style-scroll-hint[hidden] { display: none; }
 
@@ -5637,6 +5640,10 @@
                           <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 10.5l1.8 1.8L14.5 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 16l1.8 1.8L14.5 13.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                           <span class="ap-review-tab-label">畫面建議</span>
                         </button>
+                        <button type="button" class="ap-review-tab" id="ap-review-tab-findings" hidden>
+                          <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="4" y="13" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="13" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/></svg>
+                          <span class="ap-review-tab-label">分析卡片</span>
+                        </button>
                         <!-- 修圖風格分類按鈕留在 tab 內；點選分類後，
                              由 app.js 開啟 #ap-style-modal 顯示該分類的
                              example images。 -->
@@ -5657,6 +5664,7 @@
                   </summary>
                   <div class="ap-toggle-card-body">
                     <ul id="ap-recipe-list" class="step-inline-list" hidden></ul>
+                    <div id="ap-findings-cards" class="ap-findings-cards" hidden></div>
                     <div class="ap-face-detail" id="ap-face-detail">
                       <!-- results.js moves this stable Body Reshape control after
                            the selected person's face-issue rows, so it stays
@@ -7005,6 +7013,16 @@
       </div>
       <label class="ios-switch">
         <input id="two-stage-edit-toggle" type="checkbox">
+        <span class="ios-track"><span class="ios-thumb"></span></span>
+      </label>
+    </label>
+    <label id="findings-cards-row" class="option-row" style="display: none;">
+      <div class="option-text">
+        <span class="option-label">分析卡片</span>
+        <span class="option-desc">分析時另外把美化項目整理成光線色彩、背景、人像、清晰度、構圖的評等卡片（app 審閱畫面用），會多一次分析呼叫。</span>
+      </div>
+      <label class="ios-switch">
+        <input id="findings-cards-toggle" type="checkbox">
         <span class="ios-track"><span class="ios-thumb"></span></span>
       </label>
     </label>

@@ -46,7 +46,8 @@
     getReports,
     updateReportStatus,
     deleteReport,
-    reportScreenshotUrl
+    reportScreenshotUrl,
+    setFindingsCards
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, isGuestUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
   const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, closePersonalizePopover, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, syncReframingRatioLock, restoreCompositionState, applyCompositionToRender, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
@@ -942,6 +943,8 @@
     if (isDebug && els.processingPathSelect) els.processingPathSelect.value = "local";
     if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";
     if (els.twoStageEditRow) els.twoStageEditRow.style.display = isDebug ? "" : "none";
+    if (els.findingsCardsRow) els.findingsCardsRow.style.display = isDebug ? "" : "none";
+    applyFindingsCardsOption();
     if (els.promptOverwriteRow) els.promptOverwriteRow.style.display = isDebug ? "" : "none";
     // 生成張數 (RUN count > 1) is being pulled from the release build for now
     // -- hide both pickers (upload-page settings-modal + results-page
@@ -2025,6 +2028,13 @@
   applySinglePassEditOption(DEFAULT_SINGLE_PASS_EDIT);
   els.twoStageEditToggle?.addEventListener("change", () =>
     applyTwoStageEditChange(els.twoStageEditToggle.checked));
+
+  // 分析卡片 (debug only): later analyses also write analysis.findings, shown in the review panel's own tab.
+  function applyFindingsCardsOption() {
+    setFindingsCards(isDebugUiActive && !!els.findingsCardsToggle?.checked);
+  }
+  if (els.findingsCardsToggle) els.findingsCardsToggle.checked = false;
+  els.findingsCardsToggle?.addEventListener("change", applyFindingsCardsOption);
 
   // 分析模型 selector (Steps 2/3/6's shared model) -- only #analysis-model
   // (upload page) is actually selectable; #ap-analysis-model (analyze-preview
@@ -11294,6 +11304,9 @@
     if (!els.twoStageEditRow) return;
     if (body && els.twoStageEditRow.parentElement !== body) {
       body.appendChild(els.twoStageEditRow);
+    }
+    if (body && els.findingsCardsRow && els.findingsCardsRow.parentElement !== body) {
+      body.appendChild(els.findingsCardsRow);
     }
   }
 

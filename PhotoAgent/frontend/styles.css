@@ -4347,6 +4347,29 @@ button.version-origin-tile:focus-visible {
   color: #fff;
   font-size: 14px;
 }
+.ap-findings-cards { display: flex; flex-direction: column; gap: 10px; }
+.ap-findings-summary { margin: 0; font-size: 13px; color: var(--text-2); }
+.ap-finding-card {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-2);
+}
+.ap-finding-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ap-finding-name { font-weight: 700; color: var(--text); }
+.ap-finding-rating {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.ap-finding-card[data-rating="needs_work"] .ap-finding-rating { background: rgba(239, 68, 68, .14); color: var(--red); }
+.ap-finding-card[data-rating="could_be_better"] .ap-finding-rating { background: rgba(245, 158, 11, .16); color: #d97706; }
+.ap-finding-card[data-rating="good"] .ap-finding-rating { background: rgba(1, 179, 123, .18); color: var(--green); }
+.ap-finding-text { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.ap-finding-items { margin: 6px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--text); }
+
 #ap-recipe-list li.is-reframing .step-cb-label {
   display: none;
 }

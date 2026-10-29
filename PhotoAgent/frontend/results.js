@@ -2527,10 +2527,12 @@ window.PhotoAgentResults = (() => {
   // analysis, or the 人像檢查 tab's content disappearing out from under it).
   function applyActiveReviewTab() {
     if (els.apReviewTabRecipe) els.apReviewTabRecipe.classList.toggle("is-active", activeReviewTab === "recipe");
+    if (els.apReviewTabFindings) els.apReviewTabFindings.classList.toggle("is-active", activeReviewTab === "findings");
     if (els.apReviewTabFace) els.apReviewTabFace.classList.toggle("is-active", activeReviewTab === "face");
     if (els.apReviewTabStyle) els.apReviewTabStyle.classList.toggle("is-active", activeReviewTab === "style");
     if (els.apReviewTabPrompt) els.apReviewTabPrompt.classList.toggle("is-active", activeReviewTab === "prompt");
     if (els.apRecipeList) els.apRecipeList.hidden = activeReviewTab !== "recipe";
+    if (els.apFindingsCards) els.apFindingsCards.hidden = activeReviewTab !== "findings";
     if (els.apFaceDetail) els.apFaceDetail.hidden = activeReviewTab !== "face";
     if (els.apFaceTabs) els.apFaceTabs.hidden = activeReviewTab !== "face";
     if (els.apReviewStyle) els.apReviewStyle.hidden = activeReviewTab !== "style";
@@ -2584,6 +2586,7 @@ window.PhotoAgentResults = (() => {
   }
   [
     [els.apReviewTabRecipe, "recipe"],
+    [els.apReviewTabFindings, "findings"],
     [els.apReviewTabFace, "face"],
     [els.apReviewTabStyle, "style"],
     [els.apReviewTabPrompt, "prompt"]
@@ -3557,6 +3560,7 @@ window.PhotoAgentResults = (() => {
     }
 
     fillCheckList(els.apRecipeList, analysis.retouch_recipe, [tr("尚未取得畫面建議。")]);
+    renderFindingsCards(analysis);
     renderFaceThumbnails(analysis);
 
     // Rebuild the style-option groups each run (defaults to "Default
@@ -3580,6 +3584,60 @@ window.PhotoAgentResults = (() => {
       els.apAdvancedSettingsFold.hidden = !isPerson;
       if (!isPerson) els.apAdvancedSettingsFold.open = false;
     }
+  }
+
+  const FINDING_CATEGORY_LABELS = {
+    light_color: "光線色彩", light: "光線", color: "色彩", background: "背景",
+    portrait: "人像", clarity: "清晰度", composition: "構圖"
+  };
+  const FINDING_RATING_LABELS = { needs_work: "需要處理", could_be_better: "可以更好", good: "良好" };
+
+  // The 分析卡片 tab (debug only): analysis.findings as the app's review screen groups it. Hidden when the
+  // analysis was made without the 分析卡片 switch.
+  function renderFindingsCards(analysis) {
+    const cards = Array.isArray(analysis?.findings?.cards) ? analysis.findings.cards : [];
+    if (els.apReviewTabFindings) els.apReviewTabFindings.hidden = !cards.length;
+    if (!cards.length && activeReviewTab === "findings") activeReviewTab = "recipe";
+    if (!els.apFindingsCards) return;
+    els.apFindingsCards.innerHTML = "";
+    if (!cards.length) return;
+    const count = cards.reduce((sum, card) => sum + (card.items || []).length, 0);
+    const summary = document.createElement("p");
+    summary.className = "ap-findings-summary";
+    summary.textContent = tr("共 {count} 項可改善", { count });
+    els.apFindingsCards.appendChild(summary);
+    cards.forEach((card) => {
+      const box = document.createElement("section");
+      box.className = "ap-finding-card";
+      box.dataset.rating = card.rating;
+      const head = document.createElement("div");
+      head.className = "ap-finding-head";
+      const name = document.createElement("span");
+      name.className = "ap-finding-name";
+      name.textContent = tr(FINDING_CATEGORY_LABELS[card.category] || card.category);
+      const rating = document.createElement("span");
+      rating.className = "ap-finding-rating";
+      rating.textContent = tr(FINDING_RATING_LABELS[card.rating] || card.rating);
+      head.append(name, rating);
+      box.appendChild(head);
+      if (card.finding) {
+        const finding = document.createElement("p");
+        finding.className = "ap-finding-text";
+        finding.textContent = card.finding;
+        box.appendChild(finding);
+      }
+      if ((card.items || []).length) {
+        const list = document.createElement("ul");
+        list.className = "ap-finding-items";
+        card.items.forEach((item) => {
+          const li = document.createElement("li");
+          li.textContent = item.text;
+          list.appendChild(li);
+        });
+        box.appendChild(list);
+      }
+      els.apFindingsCards.appendChild(box);
+    });
   }
 
   // Narrow re-fill of just #ap-recipe-list -- for when the panel is already
