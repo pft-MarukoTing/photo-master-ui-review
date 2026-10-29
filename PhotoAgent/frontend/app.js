@@ -10275,7 +10275,12 @@
       imageQuality: params.image_quality || extraInfo.image_quality || "medium",
       imageModel: params.image_model || extraInfo.image_model || "gpt-image-2",
       analysisModel: params.analysis_model || extraInfo.analysis_model || "gpt-5.6-luna",
-      aspectRatio: params.aspect_ratio || "auto",
+      // A continuation is always rendered at "original" (it keeps the framing
+      // of the version it came from), so that is no choice of the user's:
+      // taken as one, the next 美化 -- or the chat page, on a mode switch --
+      // re-plans the analysis's composition for it.
+      aspectRatio: attached && run.result.analysis._continuation
+        ? attached._aspect_ratio_pref_at_analysis || "auto" : params.aspect_ratio || "auto",
       aiPhotoEditing: params.ai_photo_editing != null ? params.ai_photo_editing : !!extraInfo.image_model,
       runQa: params.run_qa != null ? params.run_qa : true,
       singlePassEdit: resolvedSinglePassEdit(params.single_pass_edit, extraInfo.single_pass_edit),
