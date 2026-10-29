@@ -7,7 +7,7 @@ import { lang, listOf, SOURCE, t } from "./i18n";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { urls } from "./api";
 import { fillNoteBox, noteBoxKeys, promptFaces, promptSections, PromptEditor, readPromptBox, type FaceRef } from "./chat";
-import { FACE_CATEGORIES, faceEntries, LEVEL_OPTIONS, POSE_FACE_RULES, poseFacePatch, type FaceEntry, type FaceIssue, type PoseFaceResult } from "./face";
+import { FACE_CATEGORIES, faceEntries, LEVEL_OPTIONS, POSE_FACE_RULES, poseFacePatch, sendsLevel, type FaceEntry, type FaceIssue, type PoseFaceResult } from "./face";
 import { Icon } from "./icons";
 import { AspectRatioField, OutputScaleField } from "./settings";
 import type { Analysis, Capabilities, FaceOverride, Plan } from "./types";
@@ -261,6 +261,7 @@ function LevelChip(props: {
   label: string;
   levels: { value: string; label: string }[];
   value: string;
+  current?: string;
   on: boolean;
   open: boolean;
   hot?: boolean;
@@ -336,10 +337,11 @@ function LevelChip(props: {
               role="menuitemradio"
               aria-checked={o.value === cur.value}
               class={o.value === cur.value ? "is-picked" : undefined}
+              disabled={o.value === props.current}
               onClick={() => props.onPick(o.value)}
             >
               <span class="chat-opt-menu-tick">{o.value === cur.value && <Icon name="check" size={14} />}</span>
-              {o.label}
+              {o.value === props.current ? t("{level}（目前）", { level: o.label }) : o.label}
             </button>
           ))}
         </div>
@@ -394,7 +396,7 @@ function FaceOptions({ analysis, plan, faces, busy, hot, onPatch }: Body) {
       {f.issues.map((issue) => {
         const off = locked[issue.option] === false;
         const toggle = () =>
-          set(issue, issue.allowed ? false : issue.levelUserTouched && issue.level ? { allowed: true, level: issue.level } : { allowed: true });
+          set(issue, issue.allowed ? false : sendsLevel(issue) ? { allowed: true, level: issue.level! } : { allowed: true });
         const levels = LEVEL_OPTIONS[issue.category];
         if (levels && !off)
           return (
@@ -402,6 +404,7 @@ function FaceOptions({ analysis, plan, faces, busy, hot, onPatch }: Body) {
               label={issue.label}
               levels={levels}
               value={issue.level || levels[0].value}
+              current={issue.current}
               on={issue.allowed}
               open={openLevel === issue.key}
               suggested={issue.flagged}

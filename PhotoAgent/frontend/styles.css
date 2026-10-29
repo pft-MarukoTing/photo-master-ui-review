@@ -2340,6 +2340,7 @@ body[data-theme-mode="light"] .ios-thumb {
   font-size: 11.5px;
   line-height: 1.2;
 }
+:lang(en) .quality-select.ap-face-issue-level-select { flex-basis: 118px; width: 118px; }
 .ap-face-issue-level-select:disabled { opacity: .45; cursor: not-allowed; }
 
 /* Holistic Body Reshape review control (#ap-body-reshape-control, results.js):

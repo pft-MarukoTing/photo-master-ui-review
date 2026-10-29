@@ -224,7 +224,9 @@ def _analyzer_flagged_face_issue(issue, category):
         return False
     if _js_truthy(issue.get("_user_disabled")):
         return True
-    return issue.get("adjust_safe" if category == "smile_issue" else "should_fix") is True
+    if category == "smile_issue":
+        return prompts.smile_adjustment_suggested(issue)
+    return issue.get("should_fix") is True
 
 
 def _apply_face_issue_overrides(effective, overrides):
@@ -284,7 +286,7 @@ def _apply_face_issue_overrides(effective, overrides):
             if category in ("hair_issue", "blink_issue", "gaze_issue"):
                 issue["_user_forced"] = issue.get("should_fix") is not True
             elif category == "smile_issue":
-                issue["_user_forced"] = True
+                issue["_user_forced"] = not prompts.smile_adjustment_suggested(issue)
     effective["_disabled_face_issues"] = disabled_face_issues
 
 

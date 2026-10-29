@@ -1354,6 +1354,7 @@ div.chat-proposal-row{cursor:default}
   font:inherit;font-size:var(--chat-fs-sm);color:var(--n84)}
 .chat-opt-menu button:hover,.chat-opt-menu button:focus-visible{background:var(--tonal-lo);color:var(--accent-text)}
 .chat-opt-menu button.is-picked{color:var(--accent-text);font-weight:600}
+.chat-opt-menu button:disabled{background:none;color:var(--n54);cursor:default}
 /* 打勾的位置一直留著，沒打勾的字才不會往左跳一格。 */
 .chat-opt-menu-tick{display:inline-flex;width:14px;flex-shrink:0;color:var(--accent)}
 @keyframes chat-opt-menu-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}

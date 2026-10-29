@@ -228,9 +228,9 @@ PORTRAIT_FIXES: Tuple[PortraitFix, ...] = (
         Choice("dynamic", "保留髮絲動態"), Choice("tidy", "梳整俐落"),
     ), default_level="dynamic"),
     PortraitFix("smile_issue", "笑容", "smile_adjustment", levels=(
-        Choice("auto", "自動"), Choice("neutral", "不笑"), Choice("gentle", "微笑"),
+        Choice("neutral", "不笑"), Choice("gentle", "微笑"),
         Choice("broad", "開朗笑"), Choice("laughing", "大笑"),
-    ), default_level="auto", level_aliases=SMILE_LEVEL_ALIASES),
+    ), default_level="gentle", level_aliases=SMILE_LEVEL_ALIASES),
     # Its global switch is selections.body_reshape_enabled, not an advanced option.
     PortraitFix("body_reshape", "身形調整", None, flag="ENABLE_BODY_RESHAPE"),
 )

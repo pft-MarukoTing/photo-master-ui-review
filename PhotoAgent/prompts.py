@@ -2612,6 +2612,13 @@ def _normalize_smile_intensity(value):
     return None
 
 
+def smile_adjustment_suggested(issue):
+    """True when the analysis suggests adding a smile: a readable neutral face marked safe to edit."""
+    if not isinstance(issue, dict) or issue.get("adjust_safe") is not True:
+        return False
+    return _normalize_smile_intensity(issue.get("smile_intensity") or issue.get("smile_state")) == "neutral"
+
+
 def _smile_target_state(level, current):
     """The target intensity for one face, or None to leave it as captured."""
     if level == "auto":

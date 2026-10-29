@@ -24,13 +24,44 @@ export const LEVEL_OPTIONS: Record<string, { value: string; label: string }[]> =
     { value: "tidy", label: t("梳整俐落") },
   ],
   smile_issue: [
-    { value: "auto", label: t("自動") },
     { value: "neutral", label: t("不笑") },
     { value: "gentle", label: t("微笑") },
     { value: "broad", label: t("開朗笑") },
     { value: "laughing", label: t("大笑") },
   ],
 };
+
+const SMILE_INTENSITY_ALIASES: Record<string, string> = {
+  no_smile: "neutral",
+  closed_smile: "gentle",
+  toothy_smile: "broad",
+  bright_smile: "broad",
+};
+
+// The analyzer's smile reading as one of the four levels, or "" when unreadable.
+function smileIntensityOf(match: Dict): string {
+  const value = String(match.smile_intensity || match.smile_state || "").trim().toLowerCase();
+  const level = SMILE_INTENSITY_ALIASES[value] || value;
+  return LEVEL_OPTIONS.smile_issue.some((o) => o.value === level) ? level : "";
+}
+
+// Level a switched-on smile starts at: never the reading itself, which would change nothing.
+const SMILE_DEFAULT_LEVEL: Record<string, string> = { neutral: "gentle", gentle: "broad", broad: "gentle", laughing: "gentle" };
+
+// Mirrors prompts.smile_adjustment_suggested: only a readable neutral face that is safe to edit.
+function smileAdjustmentSuggested(match: Dict): boolean {
+  return match.adjust_safe === true && smileIntensityOf(match) === "neutral";
+}
+
+// Whether the analysis proposes this fix for the person, before any user choice.
+function analyzerSuggests(field: string, match: Dict): boolean {
+  return field === "smile_issue" ? smileAdjustmentSuggested(match) : match[FLAG_FIELD[field]] === true;
+}
+
+// Smile always carries its level: without one the backend falls back to auto,
+// which leaves an already-smiling face unchanged.
+export const sendsLevel = (issue: FaceIssue) =>
+  !!issue.level && (issue.levelUserTouched || issue.category === "smile_issue");
 
 export interface Box {
   x: number;
@@ -48,6 +79,8 @@ export interface FaceIssue {
   allowed: boolean;
   level: string | null;
   levelUserTouched: boolean;
+  // The analyzer's reading for a level category ("" when unreadable or not applicable).
+  current: string;
 }
 
 export interface FaceEntry {
@@ -104,16 +137,24 @@ function issuesFor(subject: Dict, index: number, overrides: Record<string, FaceO
     if (!match || typeof match !== "object") continue;
     const forced = !!match._user_forced;
     const disabled = !!match._user_disabled;
+    const suggested = analyzerSuggests(c.field, match);
+    const userLevel = match._user_level && match._user_level !== "auto" ? match._user_level : null;
     const key = `${index}:${c.field}`;
     const issue: FaceIssue = {
       key,
       category: c.field,
       label: c.label,
       option: c.option,
-      flagged: match[c.flagField] === true || disabled,
-      allowed: (match[c.flagField] === true || forced) && !disabled,
-      level: c.field === "hair_issue" ? match._user_level || "dynamic" : c.field === "smile_issue" ? match._user_level || "auto" : null,
-      levelUserTouched: !!match._user_level,
+      flagged: suggested || disabled,
+      allowed: (suggested || forced) && !disabled,
+      level:
+        c.field === "hair_issue"
+          ? userLevel || "dynamic"
+          : c.field === "smile_issue"
+            ? userLevel || SMILE_DEFAULT_LEVEL[smileIntensityOf(match)] || "gentle"
+            : null,
+      levelUserTouched: !!userLevel,
+      current: c.field === "smile_issue" ? smileIntensityOf(match) : "",
     };
     const o = overrides[key];
     if (o === false) issue.allowed = false;
@@ -312,7 +353,7 @@ export function executedPortraits(a: Analysis | null | undefined): PortraitDone[
       for (const def of EXECUTED_FACE_TAGS) {
         const match = subject[def.field];
         if (!match || typeof match !== "object" || advanced[def.option] === false) continue;
-        const allowed = (match[FLAG_FIELD[def.field]] === true || !!match._user_forced) && !match._user_disabled;
+        const allowed = (analyzerSuggests(def.field, match) || !!match._user_forced) && !match._user_disabled;
         if (allowed && hasSubjectMarker(prompt, subject, def.markers, def.field === "smile_issue", people.length)) {
           tags.push(def.label);
         }
@@ -348,7 +389,7 @@ export function overridesFromEntries(entries: FaceEntry[]): Record<string, FaceO
   for (const e of entries) {
     for (const issue of e.issues) {
       if (issue.allowed === false) out[issue.key] = false;
-      else if (issue.level && issue.levelUserTouched) out[issue.key] = { allowed: true, level: issue.level };
+      else if (sendsLevel(issue)) out[issue.key] = { allowed: true, level: issue.level! };
       else if (issue.allowed) out[issue.key] = { allowed: true };
     }
   }
@@ -421,12 +462,14 @@ export function poseFacePatch(a: Analysis, plan: Plan, pose: string): PoseFaceRe
     for (const f of entries) {
       const issue = f.issues.find((x) => x.category === rule.category);
       if (!issue || (rule.onlyWhenAllowed && !issue.allowed)) continue;
-      const allowed = rule.values.allowed ?? issue.allowed;
-      const level = rule.values.level ?? issue.level;
+      // Someone already at the suggested smile needs no change, so their switch goes off.
+      const atTarget = !!rule.values.level && rule.values.level === issue.current;
+      const allowed = atTarget ? false : (rule.values.allowed ?? issue.allowed);
+      const level = atTarget ? issue.level : (rule.values.level ?? issue.level);
       if (allowed === issue.allowed && level === issue.level) continue;
       const after: FaceOverride = !allowed
         ? false
-        : level && (rule.values.level || issue.levelUserTouched)
+        : level && (rule.values.level || sendsLevel(issue))
           ? { allowed: true, level }
           : { allowed: true };
       changes[issue.key] = { before: overrides[issue.key] ?? null, after };

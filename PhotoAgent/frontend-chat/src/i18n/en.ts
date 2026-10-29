@@ -184,6 +184,7 @@ export const EN: Record<string, string> = {
   "這段對話的照片": "Photos in this chat",
   "個人化需求（當時內容）": "My Requests (at the time)",
   "目前沒有個人化需求。": "No requests yet.",
+  "{level}（目前）": "{level} (current)",
   "已儲存": "Saved",
   "已確認：{answer}": "Confirmed: {answer}",
   "確認這筆需求的對象": "Confirm Who This Is For",

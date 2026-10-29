@@ -1578,17 +1578,13 @@ window.PhotoAgentResults = (() => {
   // flagField/flagWhen/flagText/okText control which issues get the "allow
   // AI to fix this" toggle in buildPersonIssueItems below: flagged means there
   // is a proposed action for the user to accept or decline. The first three
-  // flag on should_fix (true = a fix is proposed). smile_issue has no
-  // should_fix at all -- its equivalent field is adjust_safe, and adjust_
-  // safe=true is the case with a proposed action (auto mode may adjust the
-  // smile), so it flags at true, not false. adjust_safe=false is shown as a
-  // warning with the switch initially off, but smile alone remains manually
-  // controllable so the user can explicitly override that recommendation.
+  // flag on should_fix (true = a fix is proposed). smile_issue flags only a
+  // readable neutral face with adjust_safe=true (smileAdjustmentSuggested).
   const FACE_ISSUE_CATEGORIES = [
     { field: "blink_issue", label: tr("閉眼偵測"), flagField: "should_fix", flagWhen: true, flagText: tr("需要修正"), okText: tr("無需修正") },
     { field: "gaze_issue", label: tr("眼神對焦"), flagField: "should_fix", flagWhen: true, flagText: tr("需要修正"), okText: tr("無需修正") },
     { field: "hair_issue", label: tr("亂髮偵測"), flagField: "should_fix", flagWhen: true, flagText: tr("需要修正"), okText: tr("無需修正") },
-    { field: "smile_issue", label: tr("笑容調整@@人像檢查"), flagField: "adjust_safe", flagWhen: true, flagText: tr("可以調整"), okText: tr("不建議調整") },
+    { field: "smile_issue", label: tr("笑容調整@@人像檢查"), flagField: "adjust_safe", flagWhen: true, flagText: tr("建議微笑"), okText: tr("不建議調整") },
     { field: "body_reshape", label: tr("身形調整"), flagField: "should_edit", flagWhen: true, flagText: tr("可以調整"), okText: tr("無須修正") }
   ];
 
@@ -1604,8 +1600,31 @@ window.PhotoAgentResults = (() => {
   const LEVEL_SELECT_CATEGORIES = ["hair_issue", "smile_issue"];
   const FACE_ISSUE_LEVEL_CHOICES = {
     hair_issue: [["dynamic", tr("保留髮絲動態")], ["tidy", tr("梳整俐落")]],
-    smile_issue: [["auto", tr("自動")], ["neutral", tr("不笑")], ["gentle", tr("微笑")], ["broad", tr("開朗笑")], ["laughing", tr("大笑")]]
+    smile_issue: [["neutral", tr("不笑")], ["gentle", tr("微笑")], ["broad", tr("開朗笑")], ["laughing", tr("大笑")]]
   };
+
+  const SMILE_INTENSITY_ALIASES = { no_smile: "neutral", closed_smile: "gentle", toothy_smile: "broad", bright_smile: "broad" };
+
+  // The analyzer's smile reading as one of the four levels, or "" when unreadable.
+  function smileIntensityOf(issue) {
+    const value = String(issue?.smile_intensity || issue?.smile_state || "").trim().toLowerCase();
+    const level = SMILE_INTENSITY_ALIASES[value] || value;
+    return FACE_ISSUE_LEVEL_CHOICES.smile_issue.some(([choice]) => choice === level) ? level : "";
+  }
+
+  // Mirrors prompts.smile_adjustment_suggested: only a readable neutral face that is safe to edit.
+  function smileAdjustmentSuggested(issue) {
+    return issue?.adjust_safe === true && smileIntensityOf(issue) === "neutral";
+  }
+
+  // Level a switched-on smile starts at: never the reading itself, which would change nothing.
+  const SMILE_DEFAULT_LEVEL = { neutral: "gentle", gentle: "broad", broad: "gentle", laughing: "gentle" };
+
+  function smileOkText(issue) {
+    if (issue?.adjust_safe !== true) return tr("不建議調整");
+    const current = FACE_ISSUE_LEVEL_CHOICES.smile_issue.find(([choice]) => choice === smileIntensityOf(issue));
+    return current ? tr("目前為{level}", { level: current[1] }) : tr("無法辨識表情");
+  }
 
   // Intersection over the SMALLER of the two boxes' own area (the
   // Szymkiewicz-Simpson overlap coefficient), not plain IoU -- faceBox and
@@ -1709,17 +1728,21 @@ window.PhotoAgentResults = (() => {
       // category) is applied at render time in buildPersonIssueItems below,
       // via faceIssueGloballyEnabled/reviewAdvancedOptions -- not baked in
       // here. So this stays the plain per-analysis verdict.
+      const isSmile = category.field === "smile_issue";
+      const suggested = isSmile
+        ? smileAdjustmentSuggested(match)
+        : match[category.flagField] === category.flagWhen;
       const flagged = isBodyReshape
         ? bodyAnalysisStatus === "error" || bodyAdjustable
-        : match[category.flagField] === category.flagWhen || wasUserDisabled;
+        : suggested || wasUserDisabled;
       const allowed = isBodyReshape
         ? bodyAdjustable && !wasUserDisabled && !bodyDisabled
-        : (match[category.flagField] === category.flagWhen || wasUserForced) && !wasUserDisabled;
+        : (suggested || wasUserForced) && !wasUserDisabled;
       return {
         label: category.label,
         flagged,
         flagText: category.flagText,
-        okText: category.okText,
+        okText: isSmile ? smileOkText(match) : category.okText,
         reason: isBodyReshape ? (match.report || match.reason || "") : (match.reason || ""),
         report: isBodyReshape && typeof match.report === "string" ? match.report.trim() : "",
         promptDisplay: isBodyReshape && typeof match.prompt_display === "string"
@@ -1736,10 +1759,13 @@ window.PhotoAgentResults = (() => {
         allowed,
         level: category.field === "hair_issue"
           ? (match._user_level || "dynamic")
-          : category.field === "smile_issue"
-            ? (match._user_level || "auto")
+          : isSmile
+            ? (match._user_level && match._user_level !== "auto"
+              ? match._user_level
+              : SMILE_DEFAULT_LEVEL[smileIntensityOf(match)] || "gentle")
             : null,
-        levelUserTouched: !!match._user_level,
+        smileCurrent: isSmile ? smileIntensityOf(match) : "",
+        levelUserTouched: !!match._user_level && match._user_level !== "auto",
         allowedTouchVersion: 0,
         levelTouchVersion: 0,
         poseSuggestedFields: {}
@@ -1952,7 +1978,10 @@ window.PhotoAgentResults = (() => {
       (entry.issues || []).forEach((issue) => {
         if (!issue.flagged && !MANUAL_OVERRIDE_CATEGORIES.includes(issue.category)) return;
         if (issue.allowed === false) overrides[`${issue.subjectIndex}:${issue.category}`] = false;
-        else if (issue.level && (issue.levelUserTouched || issue.poseSuggestedFields?.level)) {
+        // Smile always carries its level: without one the backend falls back to
+        // auto, which leaves an already-smiling face unchanged.
+        else if (issue.level && (issue.levelUserTouched || issue.poseSuggestedFields?.level
+          || issue.category === "smile_issue")) {
           overrides[`${issue.subjectIndex}:${issue.category}`] = { allowed: true, level: issue.level };
         }
         // blink/gaze have no level (LEVEL_SELECT_CATEGORIES) -- an on toggle
@@ -2158,7 +2187,7 @@ window.PhotoAgentResults = (() => {
   // Applies the Pose recommendation only to each person's own controls; the
   // shared 人像修正設定 modal is deliberately untouched. Gaze-off poses switch
   // every person's gaze item off; explicit smile poses opt every person in
-  // at that smile level; Dynamic changes hair level only for people whose
+  // at that smile level, except anyone already at it, whose switch goes off; Dynamic changes hair level only for people whose
   // own hair item is already enabled. Returns only net-visible category
   // changes: a category restored and then immediately set to the same value
   // by the new Pose is omitted, which keeps the combined notice accurate.
@@ -2191,7 +2220,8 @@ window.PhotoAgentResults = (() => {
         const issue = (entry.issues || []).find((item) => item.category === category);
         if (!issue || (onlyWhenAllowed && !issue.allowed)) return;
         const fields = {};
-        Object.entries(values).forEach(([field, value]) => {
+        const personValues = values.level && values.level === issue.smileCurrent ? { allowed: false } : values;
+        Object.entries(personValues).forEach(([field, value]) => {
           if (issue[field] === value) return;
           const versionKey = field === "allowed" ? "allowedTouchVersion" : "levelTouchVersion";
           fields[field] = {
@@ -2791,7 +2821,7 @@ window.PhotoAgentResults = (() => {
           : failed
             ? tr("分析失敗")
           : !issue.flagged
-            ? (isManualOverride && issue.allowed
+            ? (isManualOverride && issue.allowed && issue.category !== "smile_issue"
                 ? tr("已手動開啟")
                 : issue.okText)
             : (issue.allowed ? issue.flagText : tr("已設定不修正"));
@@ -2817,8 +2847,10 @@ window.PhotoAgentResults = (() => {
         const choices = FACE_ISSUE_LEVEL_CHOICES[issue.category];
         choices.forEach(([value, label]) => {
           const option = document.createElement("option");
+          const isCurrent = value === issue.smileCurrent;
           option.value = value;
-          option.textContent = label;
+          option.textContent = isCurrent ? tr("{level}（目前）", { level: label }) : label;
+          option.disabled = isCurrent;
           select.appendChild(option);
         });
         select.value = issue.level || choices[0][0];
