@@ -40,17 +40,21 @@ STAGES = (STAGE_ASK, STAGE_REVIEW, STAGE_OPENING, STAGE_NOTE, STAGE_FACE_WISHES,
 
 
 def cache_note(spent):
-    """「 cache 11868/12706 (+840 written)」: of the input tokens these calls
-    sent, how many the provider read from its prompt cache, and how many it
-    wrote there -- for the worker's log, to see the cache work."""
-    details = [(u.get("input_tokens") or 0, (u.get("input_tokens_details") or {}))
-               for u in (e.get("usage") for e in spent or []) if isinstance(u, dict)]
-    if not details:
+    """「 cache 11868/12706 (+840 written) out 412 (reasoning 260)」: of the
+    input tokens these calls sent, how many the provider read from its prompt
+    cache, and how many it wrote there; then the tokens they got back, and how
+    many of those went to reasoning -- for the worker's log, to see the cache
+    work and what a job costs."""
+    usages = [u for u in (e.get("usage") for e in spent or []) if isinstance(u, dict)]
+    if not usages:
         return ""
-    total = sum(t for t, _ in details)
-    read = sum(d.get("cached_tokens") or 0 for _, d in details)
-    written = sum(d.get("cache_write_tokens") or 0 for _, d in details)
-    return f" cache {read}/{total}" + (f" (+{written} written)" if written else "")
+    total = sum(u.get("input_tokens") or 0 for u in usages)
+    read = sum((u.get("input_tokens_details") or {}).get("cached_tokens") or 0 for u in usages)
+    written = sum((u.get("input_tokens_details") or {}).get("cache_write_tokens") or 0 for u in usages)
+    out = sum(u.get("output_tokens") or 0 for u in usages)
+    reasoning = sum((u.get("output_tokens_details") or {}).get("reasoning_tokens") or 0 for u in usages)
+    return (f" cache {read}/{total}" + (f" (+{written} written)" if written else "")
+            + f" out {out}" + (f" (reasoning {reasoning})" if reasoning else ""))
 
 
 def run(params, spent=None):

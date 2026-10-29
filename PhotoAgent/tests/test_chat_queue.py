@@ -82,12 +82,17 @@ class ChatJobsRunTest(unittest.TestCase):
     def test_the_model_calls_a_job_makes_are_handed_back_for_the_log(self):
         def review(*args, **kwargs):
             chat_jobs.chat_assistant.SPENT.get().append({"model": "m", "usage": {
-                "input_tokens": 100, "input_tokens_details": {"cached_tokens": 80, "cache_write_tokens": 5}}})
+                "input_tokens": 100, "input_tokens_details": {"cached_tokens": 80, "cache_write_tokens": 5},
+                "output_tokens": 40, "output_tokens_details": {"reasoning_tokens": 25}}})
+            chat_jobs.chat_assistant.SPENT.get().append({"model": "m", "usage": {
+                "input_tokens": 50, "input_tokens_details": {"cached_tokens": 30}, "output_tokens": 10}})
             return {"kept": True}
         spent = []
         with patch.object(chat_jobs.chat_assistant, "review_line", review):
             chat_jobs.run({"stage": chat_jobs.STAGE_REVIEW, "line": "瘦臉"}, spent)
-        self.assertEqual(chat_jobs.cache_note(spent), " cache 80/100 (+5 written)")
+        self.assertEqual(chat_jobs.cache_note(spent), " cache 110/150 (+5 written) out 50 (reasoning 25)")
+        # A usage without its details still makes a line.
+        self.assertEqual(chat_jobs.cache_note([{"usage": {"input_tokens": 7}}]), " cache 0/7 out 0")
         self.assertEqual(chat_jobs.cache_note([]), "")
         self.assertIsNone(chat_jobs.chat_assistant.SPENT.get())
 
