@@ -612,13 +612,18 @@ def write_render_note(analysis, plan, *, before=None, after=None, previous_plan=
         this_round = _dump(rows) if rows else "(same plan as before: a new take)"
     notes = [n.strip() for n in earlier_notes if isinstance(n, str) and n.strip()]
     only_wishes = bool(plan.get("overwrite_prompt")) and bool((plan.get("user_prompt") or "").strip())
+    # Like ask's context: the instructions (the same for every photo), then
+    # the photo's analysis (the same for every version), each followed by a
+    # CACHE_BREAK; what this version changed comes last.
     context = "\n\n".join([
         _localized(RENDER_REVIEW_INSTRUCTION if images else RENDER_NOTE_INSTRUCTION),
         *([ONLY_WISHES_POLISHED_RULE if config.ENABLE_OVERWRITE_BASELINE_RETOUCH else ONLY_WISHES_RULE]
           if only_wishes else []),
+    ]) + CACHE_BREAK + "\n\n".join([
         f"ANALYSIS: {_dump(trimmed)}",
         f"FACES: {_dump(_faces_view(analysis))}",
         f"RECIPE: {_dump(recipe)}",
+    ]) + CACHE_BREAK + "\n\n".join([
         f"PLAN: {_dump(plan_view)}",
         f"APPLIED SETTINGS: {_dump(_applied_settings(plan, analysis))}",
         f"THIS ROUND: {this_round}",
@@ -645,8 +650,9 @@ def write_opening(analysis, wishes="", *, model=None):
         return value.strip() if isinstance(value, str) else ""
 
     issues = [t.strip() for t in analysis.get("detected_issues") or [] if isinstance(t, str) and t.strip()]
-    context = "\n\n".join([
-        _localized(OPENING_INSTRUCTION),
+    # The instructions are the same for every photo: a CACHE_BREAK after them
+    # keeps the rest, which is this photo's alone, out of the cache.
+    context = _localized(OPENING_INSTRUCTION) + CACHE_BREAK + "\n\n".join([
         "PHOTO:\n" + _dump({"summary": field("photo_summary"), "main_subject": field("main_subject"),
                              "scene": field("scene_type")}),
         "GOAL:\n" + _dump({"edit_intent": field("edit_intent"), "mood": field("composition_mood")}),

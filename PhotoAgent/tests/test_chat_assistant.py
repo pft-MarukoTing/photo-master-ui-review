@@ -1104,6 +1104,20 @@ class RenderNoteTest(unittest.TestCase):
     def test_an_empty_note_is_none(self):
         self.assertIsNone(chat_assistant.write_render_note(analysis(), default_plan(), model=lambda c, i: {"note": " "}))
 
+    # 同一張照片的每一版：說明和分析兩段一字不差，從快取讀；這一版的改動在最後。
+    def test_what_stays_the_same_for_a_photo_comes_first(self):
+        seen = []
+        plan = {**default_plan(), "aspect_ratio": "4:5"}
+        for kwargs in ({}, {"previous_plan": default_plan(), "earlier_notes": ["提亮了主體。"]}):
+            chat_assistant.write_render_note(analysis(), plan if kwargs else default_plan(), before="data:a",
+                                             after="data:b", model=lambda c, i: seen.append(c) or {"note": "x"}, **kwargs)
+        first, second = (c.split(chat_assistant.CACHE_BREAK) for c in seen)
+        self.assertEqual(first[:2], second[:2])
+        self.assertEqual(first[0], chat_assistant.RENDER_REVIEW_INSTRUCTION)
+        self.assertTrue(first[1].startswith("ANALYSIS:"))
+        self.assertTrue(first[2].startswith("PLAN:"))
+        self.assertNotEqual(first[2], second[2])
+
     def test_with_both_images_the_model_compares_them(self):
         seen = []
 
@@ -1163,6 +1177,9 @@ class OpeningTest(unittest.TestCase):
         chat_assistant.write_opening(analysis(), " 天空改成夕陽 ",
                                      model=lambda c: seen.append(c) or {"lead": "x", "points": ["y"]})
         self.assertIn("WISHES: 天空改成夕陽", seen[0])
+        stable, rest = seen[0].split(chat_assistant.CACHE_BREAK)
+        self.assertEqual(stable, chat_assistant.OPENING_INSTRUCTION)
+        self.assertTrue(rest.startswith("PHOTO:"))
 
     def test_no_recipe_no_model(self):
         def model(context):
