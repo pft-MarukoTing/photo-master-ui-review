@@ -1461,20 +1461,6 @@ div.chat-proposal-row{cursor:default}
   #upload-section .upload-gallery-col .history-grid>.demo-image-tile:nth-child(16n+9):nth-last-child(n+4){grid-column:2/span 2;grid-row:span 2}
 }
 
-/* 美化紀錄最後面的空位：這一輪改過設定、還沒按美化。畫到紀錄裡，是因為旁邊
-   那張 After 看起來就是最新的，離開再回來時沒有別的地方會說它不是。虛線框、
-   不可點、沿用 .version-tile 的 64px 與 9px 圓角，所以它和前面幾格對得齊，
-   又一眼看得出還沒有東西。 */
-.version-tile.is-pending{
-  display:flex;align-items:center;justify-content:center;
-  border:2px dashed var(--border-2);background:transparent;color:var(--n54);cursor:default}
-.version-tile.is-pending:hover{transform:none}
-.version-group.is-pending .version-group-label{color:var(--n54);font-weight:500}
-/* 跟著 styles.css 把格子縮到 54px 的那個斷點走。 */
-@media (max-width:560px){
-  .version-tile.is-pending svg{width:16px;height:16px}
-}
-
 /* Header buttons: same compact pill 面板模式 gives its header row
    (index.html <style>: #changelog-btn.btn/#chat-ui-btn.btn/... ), instead of
    the taller, 10px-radius .btn-sm, so switching modes doesn't change them. */

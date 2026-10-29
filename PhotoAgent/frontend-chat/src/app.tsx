@@ -7284,7 +7284,10 @@ export function SessionView(props: {
                 photo={photo}
                 versions={versions}
                 current={current}
-                pending={adjusting && !unchanged}
+                // 看著美化項目或接著這張調整時就在；離開時沒改什麼才收掉，改過的
+                // （返回後留著的 parkedCats）留到美化為止。面板模式同一套
+                // （app.js 的 syncAdjustingTile）。
+                pending={adjusting || !!continuing || parkedCats.length > 0}
                 busy={busyCopy}
                 onSelect={props.onSelectVersion}
                 onViewer={() => setViewing(true)}

@@ -4083,11 +4083,13 @@
     // styles.css) needs this state and isn't a descendant of #results-canvas-row.
     if (els.resultsBody) els.resultsBody.classList.add("showing-analysis");
     updateAnalysisPreviewMaxHeight();
+    syncAdjustingTile();
   }
 
   function closeInlineAnalysisPanel() {
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
     if (els.resultsBody) els.resultsBody.classList.remove("showing-analysis");
+    syncAdjustingTile();
     els.analysisPreview.hidden = true;
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
@@ -4235,6 +4237,7 @@
   // with no snapshot, so there's nothing to flag for an image's very first
   // review.
   function updateInlineAnalysisContinueBtnState() {
+    syncAdjustingTile();
     if (!els.inlineAnalysisContinueBtn) return;
     els.inlineAnalysisContinueBtn.classList.toggle("is-blocked", inlineReviseHasNoChanges());
   }
@@ -12185,6 +12188,41 @@
     wrap.append(tile, label);
     return wrap;
   }
+
+  // The 調整中 slot the chat page has (ResultsCanvas's pending): built hidden
+  // with the strip, shown by syncAdjustingTile.
+  function buildAdjustingTile() {
+    const group = document.createElement("div");
+    group.className = "version-group is-pending";
+    group.hidden = true;
+    const tiles = document.createElement("div");
+    tiles.className = "version-group-tiles";
+    const tile = document.createElement("div");
+    tile.className = "version-tile is-pending";
+    tile.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">'
+      + '<path d="M4 8h5M13 8h7M4 16h9M17 16h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'
+      + '<circle cx="11" cy="8" r="2.2" stroke="currentColor" stroke-width="1.8"/>'
+      + '<circle cx="15" cy="16" r="2.2" stroke="currentColor" stroke-width="1.8"/></svg>';
+    tiles.append(tile);
+    const label = document.createElement("span");
+    label.className = "version-group-label";
+    label.textContent = tr("調整中");
+    group.append(tiles, label);
+    return group;
+  }
+
+  // Shown from 接著這張調整 being picked, or from the review fields moving off
+  // what the version on screen was made with, until a 美化 or a 取消 that
+  // leaves nothing unsent. Not on top of a 待美化 tile, which already says
+  // the next version is waiting.
+  function syncAdjustingTile() {
+    const slot = els.versionStripTrack?.querySelector(".version-group.is-pending");
+    if (!slot) return;
+    const runs = versionStripRuns;
+    const panelShowing = !!els.resultsCanvasRow?.classList.contains("showing-analysis");
+    slot.hidden = !(runs === singleRuns && !hasPendingAnalysisTile(runs)
+      && ((activeContinuation() && panelShowing) || isReviewDirty()));
+  }
   // Mirrors whichever currentIdx the last renderVersionStrip call was given --
   // kept around purely so openVersionStripPreviewModal (mobile's tap
   // alternative to the hover preview, see below) can mark the right tile
@@ -12347,11 +12385,12 @@
           group.dataset.versionId = run.versionId || "";
           groupTiles = document.createElement("div");
           groupTiles.className = "version-group-tiles";
-          // No per-version label: the tiles are in order and the one in play
-          // already carries the accent border, so a number under each would
-          // only restate what the row shows. The 原圖 tile keeps its label
-          // because it is the one tile whose role is not obvious from position.
-          group.append(groupTiles);
+          // One label per version, as the chat page has it: the N images of
+          // one edit share it.
+          const label = document.createElement("span");
+          label.className = "version-group-label";
+          label.textContent = tr("第 {n} 版", { n: run.versionNumber });
+          group.append(groupTiles, label);
           versionsScroll.append(group);
         }
         const tile = document.createElement("button");
@@ -12391,6 +12430,7 @@
         groupTiles.append(tile);
       });
       if (pending) versionsScroll.append(buildPendingAnalysisTile(originImg.src));
+      versionsScroll.append(buildAdjustingTile());
     }
     versionStripCurrentIdx = currentIdx;
     syncVersionStripCurrent({ reveal: true });
@@ -12447,6 +12487,7 @@
       // only just been appended and the track has no scroll extent yet.
       if (isCurrent && reveal) requestAnimationFrame(() => revealVersionTile(tile));
     });
+    syncAdjustingTile();
     syncPhotoViewer();
   }
 
@@ -12478,7 +12519,10 @@
         group.className = "version-group";
         groupTiles = document.createElement("div");
         groupTiles.className = "version-group-tiles";
-        group.append(groupTiles);
+        const label = document.createElement("span");
+        label.className = "version-group-label";
+        label.textContent = tr("第 {n} 版", { n: run.versionNumber });
+        group.append(groupTiles, label);
         els.versionStripPreviewModalGrid.append(group);
       }
       const tile = document.createElement("button");

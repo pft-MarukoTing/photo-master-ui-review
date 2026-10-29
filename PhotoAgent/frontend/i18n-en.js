@@ -162,6 +162,7 @@ window.PHOTOAGENT_CATALOGS.en = {
   "確定要刪除這 {length} 筆處理紀錄嗎？": "Delete these {length} {length|item|items}?",
   "美化完成": "Retouched",
   "待美化": "To retouch",
+  "調整中": "Editing",
   "{n} 張": "{n} {n|photo|photos}",
   "刪除紀錄": "Delete",
   "無法載入版本紀錄。": "Couldn't load the release notes.",

@@ -3226,6 +3226,21 @@ button.version-origin-tile:focus-visible {
   opacity: .4;
 }
 .version-pending .version-group-label { color: var(--accent); }
+/* The 調整中 slot after the last version: this round's settings are being
+   worked on and not 美化'd yet, so the After beside it is not the newest
+   word. Dashed and inert like .version-pending, but neutral -- it is not the
+   accent's next step until the user sends it. Shared by both pages. */
+.version-tile.is-pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--border-2);
+  background: transparent;
+  color: rgba(var(--on-surface-rgb),.54);
+  cursor: default;
+}
+.version-tile.is-pending:hover { transform: none; }
+.version-group.is-pending .version-group-label { color: rgba(var(--on-surface-rgb),.54); font-weight: 500; }
 /* Which image within its own edit, shown only where a version produced more
    than one -- a corner chip rather than extra label text, so a 1-image
    version and a 3-image one still occupy the same vertical space. */
@@ -3300,6 +3315,7 @@ button.version-origin-tile:focus-visible {
   .version-tile { width: 54px; height: 54px; }
   .version-origin-tile { width: 54px; height: 54px; }
   .version-pending-tile { width: 54px; height: 54px; }
+  .version-tile.is-pending svg { width: 16px; height: 16px; }
   .version-strip-divider { height: 54px; }
   .version-strip-origin { gap: 10px; }
   .version-strip { margin: 10px -12px -12px; padding: 8px 10px; }
