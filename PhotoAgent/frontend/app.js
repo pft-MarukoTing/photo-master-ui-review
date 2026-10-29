@@ -15101,7 +15101,7 @@
   // box (a fresh render replacing <li>s, or the `hidden` toggle when
   // applyActiveReviewTab switches tabs), which only a childList/attribute
   // observer -- not a resize one -- would ever see.
-  [els.apRecipeList, els.apFaceDetail].forEach((list) => {
+  [els.apRecipeList, els.apFaceDetail, els.apFindingsCards].forEach((list) => {
     if (!list) return;
     list.addEventListener("scroll", () => updateListScrollCue(list));
     new MutationObserver(() => updateListScrollCue(list)).observe(list, {

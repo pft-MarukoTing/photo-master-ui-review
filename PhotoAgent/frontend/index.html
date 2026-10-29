@@ -1691,7 +1691,8 @@
        while still capping+scrolling internally whenever a tab's content is
        actually longer than that. */
     #ap-recipe-list,
-    #ap-face-detail {
+    #ap-face-detail,
+    #ap-findings-cards {
       max-height: 100%;
       overflow-y: auto;
     }
@@ -1701,15 +1702,18 @@
        by the max-height cap above read as a layout bug (a flush edge with
        no visual sign there's more below), not "this scrolls". */
     #ap-recipe-list.has-more-below,
-    #ap-face-detail.has-more-below {
+    #ap-face-detail.has-more-below,
+    #ap-findings-cards.has-more-below {
       box-shadow: inset 0 -24px 16px -18px rgba(0,0,0,.45);
     }
     #ap-recipe-list.has-more-above,
-    #ap-face-detail.has-more-above {
+    #ap-face-detail.has-more-above,
+    #ap-findings-cards.has-more-above {
       box-shadow: inset 0 24px 16px -18px rgba(0,0,0,.45);
     }
     #ap-recipe-list.has-more-above.has-more-below,
-    #ap-face-detail.has-more-above.has-more-below {
+    #ap-face-detail.has-more-above.has-more-below,
+    #ap-findings-cards.has-more-above.has-more-below {
       box-shadow: inset 0 24px 16px -18px rgba(0,0,0,.45), inset 0 -24px 16px -18px rgba(0,0,0,.45);
     }
     .ap-style-name {
