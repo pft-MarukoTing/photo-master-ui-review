@@ -866,7 +866,7 @@ export function ResultCard({ job, ordinal, from, failed, next, continuable, note
       )}
       <figcaption class="chat-result-cap">
         <h4>{from ? t("第 {ordinal} 版完成・由第 {from} 版調整", { ordinal, from }) : t("第 {ordinal} 版完成", { ordinal })}</h4>
-        {note ? <p class="chat-text">{note}</p> : noting && <p class="chat-text chat-muted">{t("正在對照原圖，整理這版的變化…")}</p>}
+        {note ? <p class="chat-text">{note}</p> : noting && <p class="chat-text chat-muted">{from ? t("正在對照第 {from} 版，整理這版的變化…", { from }) : t("正在對照原圖，整理這版的變化…")}</p>}
         {qa && (
           <div class="chat-verdict">
             {t("輸出評語")} <b class={qa.pass ? "" : "is-warn"}>{qa.verdict}</b>

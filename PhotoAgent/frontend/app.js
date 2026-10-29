@@ -2575,7 +2575,8 @@
     if (jobId) singleFlowState.analyzeJobId = jobId;
     setCurrentCaseAnalysisVersion(analysis);
     lastSingleSelections = { ...(lastSingleSelections || {}), userPrompt, overwritePrompt: false };
-    renderAnalysisPreview({ analysis, preset: singleFlowState.preset, expanded: true });
+    renderAnalysisPreview({ analysis, preset: singleFlowState.preset, expanded: true,
+      requestOnly: isContinuationRun(singleRuns[singleMirrorIndex]) });
     applyAdvancedOptionsOption(recordAdvancedOptions(singleFlowState.advancedOptions, analysis), "ap");
     if (els.promptInput) els.promptInput.value = userPrompt;
     if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = false;
@@ -2584,15 +2585,39 @@
 
   const SKIP_HINT_TEXT = tr("這個版本只依照個人化需求修圖，沒有分析整張照片，所以沒有 AI 的修圖建議。可以直接在下方修改個人化需求；想要 AI 給建議的話，請按「美化」左邊的「幫我分析」。");
 
+  // #ap-skip-hint for the version on screen: a 接著這張調整 version is named
+  // like the chat names it (第 N 版完成・由第 M 版調整) and summed up by the
+  // chat's note on it, or failing that by the request it was made with.
+  // Even once the case has been analyzed, such a version keeps its
+  // request-only panel (renderAnalysisPreview's requestOnly): its note in
+  // place of 照片總覽, no 人像檢查/畫面建議.
+  function isContinuationRun(run) {
+    return Boolean(run?.result?.analysis?._continuation) && run.versionNumber != null;
+  }
+
+  function paintSkipHint() {
+    const run = singleRuns[singleMirrorIndex];
+    const continuation = isContinuationRun(run);
+    if (els.apSkipHintTitle) {
+      els.apSkipHintTitle.textContent = !continuation ? tr("這張照片沒有做分析")
+        : run.versionFrom ? tr("第 {n} 版完成・由第 {m} 版調整", { n: run.versionNumber, m: run.versionFrom })
+        : tr("第 {n} 版完成", { n: run.versionNumber });
+    }
+    if (!els.apSkipHintText) return;
+    const request = (run?.versionParams?.user_prompt || "").trim();
+    els.apSkipHintText.textContent = !continuation ? SKIP_HINT_TEXT
+      : run.versionNote || (request ? tr("依你的需求調整：「{request}」", { request }) : tr("依你挑的風格調整。"));
+  }
+
   function setSkipHintBusy(busy) {
     if (els.apSkipAnalyzeBtn) {
       els.apSkipAnalyzeBtn.disabled = busy;
       els.apSkipAnalyzeBtn.textContent = busy ? tr("分析中…") : tr("幫我分析");
     }
-    if (els.apSkipHintText) {
-      els.apSkipHintText.textContent = busy
-        ? tr("正在分析整張照片，完成後建議會顯示在這裡。")
-        : SKIP_HINT_TEXT;
+    if (busy && els.apSkipHintText) {
+      els.apSkipHintText.textContent = tr("正在分析整張照片，完成後建議會顯示在這裡。");
+    } else if (!busy) {
+      paintSkipHint();
     }
     const btn = els.inlineAnalysisContinueBtn;
     if (!btn) return;
@@ -6418,7 +6443,9 @@
     const readOnly = !isCompatible(singleFlowState.analysis);
     if (readOnly) markHistoryCaseArchived();
     setAnalysisPreviewDisabled(readOnly);
-    renderAnalysisPreview({ analysis: singleFlowState.analysis, preset: singleFlowState.preset, expanded: true });
+    renderAnalysisPreview({ analysis: singleFlowState.analysis, preset: singleFlowState.preset, expanded: true,
+      requestOnly: isContinuationRun(singleRuns[singleMirrorIndex]) });
+    paintSkipHint();
     // Paint this record's global 人像修正設定 independently before restoring any
     // per-person choices. Pose below changes only the latter.
     applyAdvancedOptionsOption(
@@ -9585,6 +9612,11 @@
     if (!shown.length || !latestRuns.length) return null;
     const latest = shown[shown.length - 1];
     const flat = [];
+    const fromNumber = (version) => {
+      const sourceId = version.params?.source_result?.version_id;
+      const index = sourceId ? shown.findIndex((v) => v.version_id === sourceId) : -1;
+      return index >= 0 ? index + 1 : null;
+    };
     shown.forEach((version, vi) => {
       const versionPath = version.path || fallbackPath;
       const entries = version === latest ? latestRuns : version.results.map((r) => ({
@@ -9609,6 +9641,10 @@
           // (applyHistoryVersionContext).
           versionParams: version.params || null,
           versionCreatedAt: version.created_at || null,
+          // A 接著這張調整 version: which version it was made from (null when
+          // that one is gone), and the chat's note on it, if one was written.
+          versionFrom: fromNumber(version),
+          versionNote: version.note || null,
           runInVersion: ri + 1,
           runsInVersion: entries.length,
         });

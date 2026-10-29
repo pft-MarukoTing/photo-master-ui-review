@@ -244,10 +244,12 @@ def _group_versions(records):
             "created_at": record.get("created_at") or 0,
             "based_on": record.get("based_on"),
             "params": record.get("params") or {},
+            "note": None,
             "path": record.get("path") or "local",
             "results": [],
             "runs": [],
         })
+        version["note"] = version["note"] or record.get("note")
         version["created_at"] = min(version["created_at"] or record.get("created_at") or 0,
                                     record.get("created_at") or 0)
         version["results"].append({
@@ -447,6 +449,19 @@ def attach_case_analysis(username, case_id, job_id):
     (get_history_entry's analysis_job_id) to fill in the stub analysis such a
     case's renders carry."""
     pf_redis_client.hset(_case_analysis_key(username), case_id, job_id)
+
+
+def set_version_note(username, case_id, version_id, note):
+    """Keep the chat's note on a finished version (詳細解說) with the version,
+    so 面板模式 shows it too. Unlike everything above this rewrites existing
+    fields, but only ones whose job has already finished: record_history
+    writes a field again only when that same job is submitted again, which
+    happens before a note can exist."""
+    targets = [r for r in _load_version_records(username, case_id) if r["version_id"] == version_id]
+    for record in targets:
+        payload = {k: v for k, v in record.items() if k not in ("field", "version_id", "job_id", "run")}
+        pf_redis_client.hset(_versions_key(username, case_id), record["field"], json.dumps({**payload, "note": note}))
+    return bool(targets)
 
 
 # ── Pruning ───────────────────────────────────────────────────────────────

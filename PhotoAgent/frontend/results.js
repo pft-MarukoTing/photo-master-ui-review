@@ -2249,6 +2249,10 @@ window.PhotoAgentResults = (() => {
   // below -- renderFaceReviewCards falls back to "recipe" right after if
   // this particular photo has no faces to show there.
   let activeReviewTab = "face";
+  // Set by renderAnalysisPreview's requestOnly: the version on screen was
+  // made from another one (接著這張調整), so its panel reads as a request-only
+  // version even when the case has an analysis -- no 人像檢查/畫面建議.
+  let reviewRequestOnly = false;
 
   // Every locally-detected face (openai_client.analyze_photo's
   // _local_face_boxes), not just the <=3 that got a zoomed crop sent to the
@@ -2394,7 +2398,8 @@ window.PhotoAgentResults = (() => {
   function renderFaceReviewCards() {
     const tabs = els.apFaceTabs;
     if (!tabs) return;
-    if (els.apReviewTabFace) els.apReviewTabFace.hidden = !faceThumbEntries.length;
+    if (els.apReviewTabFace) els.apReviewTabFace.hidden = reviewRequestOnly || !faceThumbEntries.length;
+    if (reviewRequestOnly && activeReviewTab === "face") activeReviewTab = "prompt";
     if (!faceThumbEntries.length) {
       tabs.innerHTML = "";
       if (els.apFaceDetail) els.apFaceDetail.innerHTML = "";
@@ -3435,7 +3440,7 @@ window.PhotoAgentResults = (() => {
   // renderFaceReviewCards, called both from here and later re-renders (e.g.
   // applyBatchReviewSelections), can read the same setting without it being
   // re-threaded through every call.
-  function renderAnalysisPreview({ analysis, preset, expanded = true }) {
+  function renderAnalysisPreview({ analysis, preset, expanded = true, requestOnly = false }) {
     // This is a full render for a newly selected photo/RUN. The overview's
     // disclosure state is view-local, so it must not carry an expanded card
     // (or that card's scroll position) over from the previously shown image.
@@ -3453,7 +3458,9 @@ window.PhotoAgentResults = (() => {
     // empty 畫面建議 tab goes, and the panel opens on 個人化需求 -- the
     // part that still applies. 風格調整 stays: the picked style is sent after
     // the user's request. (人像檢查 hides itself: the stub has no faces.)
-    const skipped = Boolean(analysis?._skipped_analysis);
+    // A requestOnly version reads the same way, analysis or not.
+    reviewRequestOnly = requestOnly;
+    const skipped = requestOnly || Boolean(analysis?._skipped_analysis);
     if (els.apSkipHint) els.apSkipHint.hidden = !skipped;
     if (els.apPhotoSummary) els.apPhotoSummary.hidden = skipped;
     if (els.apReviewTabRecipe) els.apReviewTabRecipe.hidden = skipped;

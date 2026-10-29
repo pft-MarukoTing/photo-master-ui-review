@@ -121,6 +121,7 @@ window.PhotoAgentDom = (() => {
     apPhotoSummaryBadge: document.querySelector("#ap-photo-summary-badge"),
     apPhotoSummaryToggle: document.querySelector("#ap-photo-summary-toggle"),
     apSkipHint: document.querySelector("#ap-skip-hint"),
+    apSkipHintTitle: document.querySelector("#ap-skip-hint-title"),
     apAnalysisShellTitleText: document.querySelector("#ap-analysis-shell-title-text"),
     apAnalysisShellDesc: document.querySelector("#ap-analysis-shell-desc"),
     apSkipHintText: document.querySelector("#ap-skip-hint-text"),

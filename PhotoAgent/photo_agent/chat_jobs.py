@@ -89,6 +89,11 @@ def _run(params):
             continuation=params.get("continuation") is True)
     if stage == STAGE_OPENING:
         return chat_assistant.write_opening(params.get("analysis"), params.get("wishes") or "")
+    if stage == STAGE_NOTE and params.get("continuation"):
+        continuation = params["continuation"]
+        return chat_assistant.write_continuation_note(
+            params.get("analysis"), continuation.get("request") or "", continuation.get("style_options") or {},
+            before=params.get("before"), after=params.get("after"), earlier_notes=params.get("earlier_notes") or ())
     if stage == STAGE_NOTE:
         return chat_assistant.write_render_note(
             params.get("analysis"), params["plan"], before=params.get("before"), after=params.get("after"),

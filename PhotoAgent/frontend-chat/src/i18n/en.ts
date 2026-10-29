@@ -816,6 +816,7 @@ export const EN: Record<string, string> = {
   "這項需求尚未套用，可以繼續回答或補充需求。": "This request hasn't been applied yet. You can keep answering or add more details.",
   "正在整理分析重點…": "Summarizing the analysis…",
   "正在對照原圖，整理這版的變化…": "Comparing with the original to describe what changed…",
+  "正在對照第 {from} 版，整理這版的變化…": "Comparing with version {from} to describe what changed…",
   "{only}：只動你寫到的地方，其他保持原樣。{full}：照你的需求修改，光線、人像、構圖也一起調整。": "{only}: changes only what you described and leaves the rest as is. {full}: makes your changes and also improves the lighting, people and composition.",
   "{label}：": "{label}: ",
   "{full}：照你的需求修改，光線、人像、構圖也一起調整。": " {full}: makes your changes and also improves the lighting, people and composition.",

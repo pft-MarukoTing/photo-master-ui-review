@@ -50,6 +50,7 @@ from backend.services.account import (
     get_history,
     get_history_entry,
     normalize_username,
+    set_version_note,
 )
 from backend.services.compatibility import get_min_compatible_version
 from backend.services.put_job import download_bytes, enqueue, get_session_id, lost_job_error
@@ -3498,16 +3499,18 @@ def _valid_brief(brief):
     return brief if ok else None
 
 
-def _note_images(photo, job_id):
-    """(original, result) as small data URLs for the note under a finished
+def _note_images(photo, job_id, source=None):
+    """(before, result) as small data URLs for the note under a finished
     version, or (None, None) when either cannot be had -- the note then only
-    says what the version set out to do. The first run stands for a
-    multi-run version."""
+    says what the version set out to do. Before is the original, or for a
+    continuation the result it was made from (`source`). The first run stands
+    for a multi-run version."""
     try:
         res0 = (get_job_info(job_id, keyToGet=["0_res0"]) or {}).get("0_res0") or {}
         runs = res0.get("runs")
         keys = (runs[0].get("cusKeys") if runs else res0.get("cusKeys")) or []
-        src = (photo.get("src_keys") or [None])[0]
+        src = (_result_key(source["job_id"], source["run"]) if source
+               else (photo.get("src_keys") or [None])[0])
         if not keys or not src:
             return None, None
         before, before_error = download_bytes(src, job_id)
@@ -3546,16 +3549,17 @@ def _submit_note(user, session_id, photo, pending):
     original and the result side by side; the job id, or None -- the result
     card then speaks for itself."""
     analysis, error = _load_analysis(_analysis_job_id(photo))
-    if error:
+    continuation = pending.get("continuation")
+    if error and not continuation:
         return None
     job_id = pending["render_job"]
     previous_plan, earlier_notes = _earlier_versions(user, session_id, photo["photo_id"], pending.get("based_on"))
     with timed("note_images", photo=photo["photo_id"], job=job_id):
-        before, after = _note_images(photo, job_id)
+        before, after = _note_images(photo, job_id, continuation and continuation["source_result"])
     try:
         return chat_queue.submit({"stage": chat_jobs.STAGE_NOTE, "analysis": analysis, "plan": pending["plan"],
                                   "previous_plan": previous_plan, "earlier_notes": earlier_notes,
-                                  "before": before, "after": after})
+                                  "before": before, "after": after, "continuation": continuation})
     except Exception:
         current_app.logger.exception("chat render note failed")
         return None
@@ -3593,6 +3597,11 @@ def _advance_texts(user, session_id, photo):
             text = answer.strip() if isinstance(answer, str) else ""
             if text:
                 store.update_card(user, session_id, note["message_id"], {"note": text})
+                # Kept with the version too, for 面板模式.
+                try:
+                    set_version_note(user, photo["case_id"], note["version_id"], text)
+                except Exception:
+                    current_app.logger.exception("chat render note history failed")
     if fields:
         photo.update(fields)
         store.update_photo_state(user, session_id, photo["photo_id"], fields)
@@ -3778,14 +3787,18 @@ def _advance_rendering(user, session_id, photo, statuses):
                 and draft["revision"] == sent.get("revision"):
             photo["continuation_draft"] = None
     messages = [store.make_message("assistant", card=card)]
-    # The note compares a version with the original under its recipe, which a
-    # continuation does not have: it gets none for now.
-    if (card["type"] == "render_done" and card.get("base") != VERSION_BASE
-            and card.get("plan", {}).get("detailed_explanation")):
+    if card["type"] == "render_done" and card.get("plan", {}).get("detailed_explanation"):
         # The card goes up now; _advance_texts adds the note to it once written.
         photo["pending_note"] = {"version_id": pending["action_id"], "message_id": messages[0]["id"],
                                  "render_job": succeeded[0], "based_on": pending.get("based_on"),
                                  "plan": card["plan"]}
+        if pending.get("base") == VERSION_BASE:
+            # Compared with the result it was made from, under the request it
+            # was sent rather than a recipe.
+            sent = pending.get("draft") or {}
+            photo["pending_note"]["continuation"] = {
+                "source_result": pending["source_result"], "request": sent.get("text") or "",
+                "style_options": sent.get("style_options") or {}}
     store.save_photo_state(user, session_id, photo)
     # A 長寬比 changed while rendering is re-planned now.
     _reframe_if_needed(user, session_id, photo)

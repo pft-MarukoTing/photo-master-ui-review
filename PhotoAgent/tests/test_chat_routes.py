@@ -1032,7 +1032,7 @@ class ChatRoutesTest(unittest.TestCase):
 
         self.jobs[render["job_ids"][0]]["status"] = "success"
         with patch.object(chat.chat_assistant, "call_render_note", model), \
-                patch.object(chat, "_note_images", lambda photo, job_id: ("data:before", "data:after")):
+                patch.object(chat, "_note_images", lambda photo, job_id, source=None: ("data:before", "data:after")):
             card = self.status(sid)["new_messages"][0]["card"]
             self.assertEqual(card["type"], "render_done")
             self.assertNotIn("note", card)
@@ -1229,6 +1229,45 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertIsNone(state["continuation_draft"])
         # The photo's own plan is untouched.
         self.assertEqual(state["plan"]["user_prompt"], "warmer")
+
+    def test_with_detailed_explanation_a_continuation_is_noted_against_its_source(self):
+        sid = self.new_session()
+        self.client.patch(self.url(sid, "/plan"), json={"user": USER, "plan": {"detailed_explanation": True}})
+        photo = self.ready_photo(sid)
+        with patch.object(chat.chat_assistant, "call_render_note", lambda context, images=(): {"note": "first"}):
+            source = self.finished_version(sid, photo)
+            self.status(sid)
+        seen, sources = [], []
+
+        def model(context, images=()):
+            seen.append((context, images))
+            return {"note": "杯子拿掉了，桌面乾淨多了。"}
+
+        def note_images(photo, job_id, source=None):
+            sources.append(source)
+            return "data:before", "data:after"
+
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True), \
+                patch.object(chat.chat_assistant, "call_continuation", lambda context: {"needs_original": False, "restore": ""}), \
+                patch.object(chat.chat_assistant, "call_render_note", model), \
+                patch.object(chat, "_note_images", note_images), \
+                patch.object(chat, "set_version_note") as kept:
+            self.save_draft(sid, photo, source, "remove the cup", style_options={"lighting": "gold"})
+            render = self.render_from(sid, photo, source).get_json()["renders"][0]
+            self.jobs[render["job_ids"][0]]["status"] = "success"
+            self.status(sid)
+            self.status(sid)
+        card = self.cards(sid, "render_done")[-1]
+        self.assertEqual(card["note"], "杯子拿掉了，桌面乾淨多了。")
+        # Before is the version it was made from, not the original.
+        self.assertEqual(sources, [source])
+        context, images = seen[0]
+        self.assertIn('REQUEST: "remove the cup"', context)
+        self.assertIn("金色", context)
+        self.assertIn("EARLIER NOTES:\n- first", context)
+        self.assertEqual(images[0][0], "BEFORE (the version this one was made from):")
+        # Kept with the version too, for 面板模式.
+        kept.assert_called_once_with(USER, photo["case_id"], render["action_id"], "杯子拿掉了，桌面乾淨多了。")
 
     def test_a_continuation_can_be_styles_alone(self):
         sid = self.new_session()
