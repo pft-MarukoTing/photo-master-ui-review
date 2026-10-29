@@ -3319,7 +3319,7 @@ def _review_history(history):
             raise _RequestError(f"history text must be a string of at most {MESSAGE_TEXT_MAX_LEN} characters")
         from photo_agent.clarification_choices import is_literal_choice
         if not isinstance(options, list) or not all(isinstance(o, str) and (
-                len(o) <= PROMPT_REVIEW_LABEL_MAX_LEN or
+                len(o) <= agent_config.CHAT_OPTION_MAX_LEN or
                 is_literal_choice(o) and len(o) <= MESSAGE_TEXT_MAX_LEN) for o in options):
             raise _RequestError("history options must be a list of short strings")
         # Preserve original characters for follow-up text-overlay completion.

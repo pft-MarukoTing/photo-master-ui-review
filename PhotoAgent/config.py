@@ -24,6 +24,9 @@ ENABLE_CHAT_BODY_SIDE_CLARIFICATION = False
 # Continue dialogue only after chat_ask contract validation and repair fail.
 # Off preserves the existing terminal failure/retry behavior.
 ENABLE_CHAT_PATCH_CONTINUE = True
+# Maximum characters per ordinary Chat option, shared with history validation.
+# Options exceeding this bound are dropped, never truncated.
+CHAT_OPTION_MAX_LEN = 200
 # Optional extra visual pass for Chat requests. Enable during rollout to
 # clarify absent/uncertain edit targets; no extra call when disabled or empty.
 ENABLE_CHAT_REQUEST_FEASIBILITY = False

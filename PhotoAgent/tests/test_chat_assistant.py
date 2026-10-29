@@ -101,7 +101,7 @@ class AskTest(unittest.TestCase):
         self.assertFalse(ask(model_says("好", lines=True))["lines"])
 
     def test_a_question_back_keeps_its_answers(self):
-        result = ask(model_says("想調整哪個部分呢？", options=["笑容", "笑容", "視線", "x" * 40]))
+        result = ask(model_says("想調整哪個部分呢？", options=["笑容", "笑容", "視線", "x" * (chat_assistant.config.CHAT_OPTION_MAX_LEN + 1)]))
         self.assertEqual(result["options"], ["笑容", "視線"])
 
     def test_the_screen_reaches_the_model(self):

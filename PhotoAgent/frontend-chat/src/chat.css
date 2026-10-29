@@ -424,6 +424,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 }
 @media (prefers-reduced-motion:reduce){.home-start-btn,.home-start-btn::after{animation:none}}
 .chat-choices{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
+.chat-choices>.chat-chip{max-width:100%;min-width:0;overflow-wrap:anywhere}
 /* The forward actions and the utility actions are different kinds of thing,
    so they are two groups with a wider gutter between them rather than four
    evenly spaced pills. Wrapping keeps each group intact. Order is the order
