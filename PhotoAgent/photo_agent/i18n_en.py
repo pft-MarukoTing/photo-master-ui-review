@@ -211,8 +211,8 @@ TEXT = {
     "需求影像確認目前未啟用；可以先取消這筆需求。": "Checking requests against the photo is currently off. You can cancel this request for now.",
     "需求確認已過時，請重新整理。": "This request check is out of date. Please refresh the page.",
     "需求確認結果已過時，請重新分析。": "This request check is out of date. Please reanalyze the photo.",
-    "正在照新比例重新構圖，好了就可以接著調整或美化。":
-        "Reframing for the new ratio. Once it's done, you can keep adjusting or start retouching.",
+    "正在照新比例規劃構圖，好了就可以接著調整或美化。":
+        "Planning the framing for the new ratio. Once it's done, you can keep adjusting or start retouching.",
     "好，馬上幫你一鍵美化。": "OK, starting One-Tap Retouch now.",
     "好，我先幫你分析這張照片。": "OK, I'll analyze this photo first.",
     "不好意思，這個我幫不上忙。想怎麼修這張照片，再跟我說說看喔！":

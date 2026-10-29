@@ -6966,7 +6966,7 @@ export function SessionView(props: {
         return (
           <AssistantMsg>
             <p class="chat-text">
-              {t("已{by}重新構圖。", { by: reframeBy(c.aspect_ratio) })}
+              {t("已{by}規劃好新構圖，下次美化時會套用到照片上。", { by: reframeBy(c.aspect_ratio) })}
               {idx === messages.length - 1 && !isBusy(photo)
                 ? editing
                   ? cats.length
