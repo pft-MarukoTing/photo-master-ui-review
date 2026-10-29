@@ -387,6 +387,32 @@ window.PhotoAgentApi = (() => {
     return data.job_id;
   }
 
+  // 接著這張調整: edit one finished version's output with only this round's
+  // request and styles (backend services/continuation, shared with chat).
+  // Same {job_id} as continueJob, fetched the same way.
+  async function continueVersionJob({ caseId, sourceResult, userPrompt, styleOptions, imageQuality, imageModel, user, actionId, analysisJobId }) {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/continue-version`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        case_id: caseId,
+        source_result: sourceResult,
+        user_prompt: userPrompt || "",
+        style_options: styleOptions || {},
+        image_quality: imageQuality,
+        image_model: imageModel || "gpt-image-2",
+        user: user || "",
+        action_id: actionId || "",
+        analysis_job_id: analysisJobId || ""
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || tr("送出後續處理失敗：HTTP {status}", { status: response.status }));
+    }
+    return data.job_id;
+  }
+
   // continueJob's sibling for an imported result folder: same stage="finish"
   // job, but the photo rides along with the request because there is no
   // earlier job holding it.
@@ -823,6 +849,7 @@ window.PhotoAgentApi = (() => {
     analyzeExistingJob,
     getAnalyzeResult,
     continueJob,
+    continueVersionJob,
     rerunJob,
     reframeJob,
     analyzeAipoc,

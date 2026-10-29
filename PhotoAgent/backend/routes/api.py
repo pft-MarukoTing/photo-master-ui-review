@@ -10,13 +10,14 @@ from PIL import Image as PILImage
 from werkzeug.utils import safe_join
 
 from aiserver_utils.queue import get_job_info
+import config as agent_config
 from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, detect_face_boxes, ensure_jpeg_bytes, sniff_image_mime, HISTORY_THUMBNAIL_MAX_SIDE, RESULT_PREVIEW_MAX_SIDE
 from photo_agent import capabilities, i18n
 from photo_agent.param_validation import normalize_advanced_options, validate_photo_agent_request
 from photo_agent.selections import apply_selections, validate_selections
 from pipeline import analyze_stage, reframe_stage
-from backend.services import chat_session
+from backend.services import chat_session, continuation as continuation_svc
 from backend.services.account import attach_case_analysis, create_account, clear_history, delete_history_entry, delete_version, get_history, get_history_entry, get_history_entry_for_job, HISTORY_MAX_LEN, normalize_username, record_history
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
@@ -1323,6 +1324,70 @@ def continue_job(job_id):
     action_id = body.get("action_id") or new_job_id
     _record_history_safely(body.get("user"), new_job_id, "local", engine_params["srcKeys"][0], action_id, params=params)
     return jsonify({"job_id": new_job_id}), 202
+
+
+@api_bp.post("/continue-version")
+def continue_version():
+    """面板模式's 接著這張調整: edit one finished version's output (source_result,
+    checked against the case's history) with this round's request only --
+    user_prompt and style_options -- the way chat's /render base "version"
+    does (services/continuation). Only the technical choices (image_model,
+    image_quality, output_scale) come from the body; the recipe is already in
+    the source image. Recorded under the case like any other version, with
+    based_on and source_result, so either mode reads it the same way.
+
+    analysis_job_id is the case's analysis when it has one: the version
+    carries a skipped-analysis stub, and attaching the analysis keeps the
+    case reading as analyzed, as chat does."""
+    if not agent_config.ENABLE_CHAT_RENDER_FROM_VERSION:
+        return jsonify({"error": "Not found"}), 404
+    body = request.get_json(silent=True) or {}
+    user, case_id = body.get("user"), body.get("case_id")
+    if not user or not isinstance(case_id, str) or not case_id:
+        return jsonify({"error": "user and case_id are required"}), 400
+    user = normalize_username(user)
+    source = continuation_svc.source_result_ref(body.get("source_result"))
+    text = body.get("user_prompt") or ""
+    if not isinstance(text, str):
+        return jsonify({"error": "user_prompt must be a string"}), 400
+    text = text.strip()
+    styles = body.get("style_options") or {}
+    error = validate_selections({"options": styles})
+    if error:
+        return jsonify({"error": error.replace("selections.options", "style_options")}), 400
+    styles = {k: v for k, v in styles.items() if v not in (None, *capabilities.STYLE_UNSET_VALUES)}
+    if not text and not styles:
+        return jsonify({"error": "user_prompt or style_options is required"}), 400
+
+    form = {k: body[k] for k in ("image_model", "image_quality", "output_scale") if k in body}
+    params, error = _parse_and_validate_params(continuation_svc.continuation_form(form, text))
+    if error:
+        return jsonify({"error": error}), 400
+    resolved = continuation_svc.resolve_source_result(user, case_id, source)
+    params["stage"] = "finish"
+    params["analysis"] = continuation_svc.continuation_analysis(text, styles, params["image_model"])
+
+    engine_params = get_engine_params_template()
+    # A continuation that needs the original carries it second; the worker
+    # edits the first and hands the second to the editor as a reference.
+    engine_params["srcKeys"] = [resolved["key"]] + ([case_id] if "_continuation_original" in params["analysis"] else [])
+    engine_params["acts"][0]["params"] = params
+    new_job_id = enqueue(engine_params, src_content=None)
+    action_id = body.get("action_id") or new_job_id
+    _record_history_safely(user, new_job_id, "local", case_id, action_id, params=params,
+                           extra={"base": "version", "source_result": source}, based_on=source["version_id"])
+    analysis_job_id = body.get("analysis_job_id")
+    if isinstance(analysis_job_id, str) and analysis_job_id:
+        try:
+            attach_case_analysis(user, case_id, analysis_job_id)
+        except Exception:
+            current_app.logger.warning("attach_case_analysis failed for %s", new_job_id, exc_info=True)
+    return jsonify({"job_id": new_job_id}), 202
+
+
+@api_bp.errorhandler(continuation_svc.ContinuationError)
+def _continuation_error(exc):
+    return jsonify({"error": exc.message}), exc.status
 
 
 @api_bp.post("/rerun")

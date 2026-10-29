@@ -31,26 +31,45 @@ export interface Handoff {
   // 分析裡每個長寬比已經排好的構圖（_composition_by_ratio）。接手的那邊換到
   // 同一個長寬比時直接沿用，不重新規劃構圖。
   compositions?: Record<string, any>;
+  // 正在接著某一版調整、還沒按美化：那一版（成品歷程裡的 version_id、job、
+  // run）和這一輪打的字、挑的風格（只放不是預設的）。接手的那邊打開同一版、
+  // 一樣是接著調整的樣子。
+  continuation?: HandoffContinuation;
 }
 
-export function writeHandoff(caseId: string, plan: Plan, caps: Capabilities, analysis?: Analysis) {
+export interface HandoffContinuation {
+  version_id: string;
+  job_id: string;
+  run: number;
+  text: string;
+  style_options: Record<string, string>;
+}
+
+// unsent 是 plan 裡還沒美化的欄位（unsentPlanKeys），null 是全部都算。其他
+// 欄位不帶：那是某一版美化時用的設定，面板模式上那一版自己就有，帶過去反而
+// 蓋掉它。
+export function writeHandoff(caseId: string, plan: Plan, caps: Capabilities, analysis: Analysis | undefined,
+  unsent: string[] | null, continuation?: HandoffContinuation) {
+  const has = (k: string) => !unsent || unsent.includes(k);
   const option = caps.render.options.find((o) => o.id === plan.render_option);
   const items = analysis ? recipeItems(analysis) : [];
   const h: Handoff = {
     case_id: caseId,
     at: Date.now(),
-    image_model: option?.image_model,
-    image_quality: option?.quality,
-    aspect_ratio: plan.aspect_ratio,
-    run_count: plan.run_count,
-    advanced_options: plan.advanced_options,
-    style_options: plan.style_options,
-    face_issue_overrides: plan.face_issue_overrides,
-    body_reshape_enabled: plan.body_reshape_enabled,
-    user_prompt: plan.user_prompt,
-    overwrite_prompt: plan.overwrite_prompt,
-    recipe: items.length ? Object.fromEntries(items.map((t, i) => [t, (plan.recipe_checked || [])[i] !== false])) : undefined,
+    image_model: has("render_option") ? option?.image_model : undefined,
+    image_quality: has("render_option") ? option?.quality : undefined,
+    aspect_ratio: has("aspect_ratio") ? plan.aspect_ratio : undefined,
+    run_count: has("run_count") ? plan.run_count : undefined,
+    advanced_options: has("advanced_options") ? plan.advanced_options : undefined,
+    style_options: has("style_options") ? plan.style_options : undefined,
+    face_issue_overrides: has("face_issue_overrides") ? plan.face_issue_overrides : undefined,
+    body_reshape_enabled: has("body_reshape_enabled") ? plan.body_reshape_enabled : undefined,
+    user_prompt: has("user_prompt") ? plan.user_prompt : undefined,
+    overwrite_prompt: has("overwrite_prompt") ? plan.overwrite_prompt : undefined,
+    recipe: items.length && has("recipe_checked")
+      ? Object.fromEntries(items.map((t, i) => [t, (plan.recipe_checked || [])[i] !== false])) : undefined,
     compositions: analysis?._composition_by_ratio,
+    continuation,
   };
   try {
     sessionStorage.setItem(KEY, JSON.stringify(h));

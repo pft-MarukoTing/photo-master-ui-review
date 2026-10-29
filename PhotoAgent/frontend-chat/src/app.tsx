@@ -52,7 +52,7 @@ import type { PreviewClause, PreviewReplyEvent, PreviewWish, PreviewConversation
 import { submissionPreviewEvents } from "./preview-conversation";
 import { Icon } from "./icons";
 import { CASE_PREFIX, rowId, ConfirmModal, Gallery, Header, HistoryDrawer, HomeIntro, type GallerySelection, type GalleryTab } from "./home";
-import { handoffPatch, takeHandoff, writeHandoff } from "./handoff";
+import { handoffPatch, takeHandoff, writeHandoff, type HandoffContinuation } from "./handoff";
 import { resolveUser } from "./identity";
 import { captureUploadPage, type ReportPage } from "./report-page";
 import { ResultsCanvas, SplitGrip, StepIndicator, VersionViewer, stepState, versionJob } from "./results";
@@ -924,6 +924,8 @@ export function App() {
   // 照片的分析，連同它是哪支 job 的：重新構圖後換一支，就再抓一次；抓到之前
   // 先沿用舊的，面板才不會收起來又打開。
   const [analyses, setAnalyses] = useState<Record<string, { job: string; analysis: Analysis }>>({});
+  // 從面板模式帶過來、正在接著調整的那一版（applyHandoff），交給那張照片的 SessionView。
+  const [handedCont, setHandedCont] = useState<(HandoffContinuation & { photo_id: string }) | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   // session 裡正在看哪張；null 就照 activePhoto 挑。
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -1296,11 +1298,15 @@ export function App() {
     const c = capsRef.current;
     const p = h && c && s.photos.find((x) => x.case_id === caseId);
     if (!h || !c || !p || isBusy(p)) return s;
+    // 那邊正在接著某一版調整：這張照片打開時接著同一版（SessionView 的 resume）。
+    setHandedCont(h.continuation && c.features?.render_from_version ? { photo_id: p.photo_id, ...h.continuation } : null);
     try {
       // 分析只有對修圖建議的勾選才用得到；抓到了就留給這頁，不用再抓一次。
       const r = h.recipe ? await api.analysis(s.session_id, p.photo_id).catch(() => null) : null;
       const analysis = r?.status === "success" ? (r.result?.analysis as Analysis) : null;
       const patch = handoffPatch(h, p.plan, c, analysis);
+      // 只帶了接著調整（那邊沒有改到照片的設定）：plan 不用動。
+      if (!Object.keys(patch).length && !h.compositions) return s;
       // 引擎在一般帳號可能不給改，被擋就不帶這項，其他照樣帶。
       // 構圖帶著那邊排好的過來：長寬比在那邊規劃過，就沿用，不重新規劃一次。
       await api.patchPhotoPlan(s.session_id, p.photo_id, patch, undefined, h.compositions).catch(() => {
@@ -3316,9 +3322,12 @@ export function App() {
   );
 
   // Right before leaving for 面板模式 by the conversation's 對話｜面板 switch:
-  // hands this photo's adjustments over.
-  const toOldUi = () => {
-    if (caps && photo?.case_id) writeHandoff(photo.case_id, photo.plan, caps, analyses[photo.photo_id]?.analysis);
+  // hands this photo's adjustments over, and the 接著這張調整 in progress.
+  const toOldUi = (continuation?: HandoffContinuation) => {
+    if (!caps || !photo?.case_id) return;
+    const own = (session?.messages || []).filter((m) => cardAbout(m.card, photo.photo_id));
+    writeHandoff(photo.case_id, photo.plan, caps, analyses[photo.photo_id]?.analysis, unsentPlanKeys(own, photo.plan),
+      continuation);
   };
   // 首頁、上傳頁還沒有對話，回報改記當下頁面上的樣子（report-page.ts）。
   const reportPage = phase === "home"
@@ -4145,6 +4154,9 @@ export function App() {
             onAnalyze={analyzePhoto}
             onOpenStyle={openStyle}
             panelMode={{ href: urls.oldUi(photo.case_id), busy: isBusy(photo), onLeave: toOldUi }}
+            onPanelLeave={toOldUi}
+            resume={handedCont?.photo_id === photo.photo_id ? handedCont : null}
+            onResumed={() => setHandedCont(null)}
             onResolve={resolveProposal}
           />
         </main>
@@ -5636,6 +5648,30 @@ function snapshotOf(plan: Plan): Dict {
   return canonical(out) as Dict;
 }
 
+// 切到面板模式時，plan 裡還沒美化的欄位：開著的、或按返回留著的那一輪，跟它
+// 開始時比動到的；還沒美化過就全部都算（null）。都美化過了就沒有——其他的是
+// 某一版美化時用的設定，面板模式上那一版自己就有。判定跟 SessionView 的
+// adjusting / parkedPlan 一樣。
+function unsentPlanKeys(messages: { card?: Dict | null }[], plan: Plan): string[] | null {
+  const lastIndex = (test: (card: Dict) => boolean) => {
+    for (let i = messages.length - 1; i >= 0; i--) if (test(messages[i].card || {})) return i;
+    return -1;
+  };
+  const lastRender = lastIndex((c) => /^render_/.test(c.type || ""));
+  if (lastRender < 0) return null;
+  const lastAdjust = lastIndex((c) => c.type === "adjust_opened");
+  const lastCancel = lastIndex((c) => c.type === "adjust_cancelled");
+  const lastPlanRender = lastIndex((c) => /^render_/.test(c.type || "") && c.base !== "version");
+  const roundOpen = lastAdjust > lastRender && lastAdjust > lastCancel;
+  const parked = !roundOpen && lastCancel > lastAdjust && lastAdjust > lastPlanRender;
+  const start: Dict | undefined = roundOpen || parked ? messages[lastAdjust].card?.plan : undefined;
+  if (!start) return [];
+  const was = snapshotOf(start as Plan);
+  const now = snapshotOf(plan);
+  return [...new Set([...Object.keys(was), ...Object.keys(now)])]
+    .filter((k) => JSON.stringify(was[k]) !== JSON.stringify(now[k]));
+}
+
 export function SessionView(props: {
   onConfirmPeople: (indices: number[], scope?: "features" | "all", selectedWish?: string, editScope?: "visible_hair" | "cancel", selection?: "listed" | "outside_preview", text?: string) => Promise<boolean | "new_message">;
   caps: Capabilities;
@@ -5667,6 +5703,11 @@ export function SessionView(props: {
   onOpenStyle: () => Promise<boolean>;
   // 回報的唯讀檢視沒有「對話｜面板」可切。
   panelMode?: PanelMode;
+  // 切到面板模式前呼叫（取代 panelMode.onLeave），帶上正在接著調整的那一版。
+  onPanelLeave?: (continuation?: HandoffContinuation) => void;
+  // 從面板模式帶過來的接著調整：打開這張照片時接著那一版，打的字、風格照帶。
+  resume?: HandoffContinuation | null;
+  onResumed?: () => void;
   // 管理者從回報打開的唯讀檢視：不給輸入，呼叫端同時把 busy 設成 true，讓按鈕都停用。
   // reportAt（秒）是回報當下：時間軸在那之後的第一則前面標出來。同一批裡不是被回報的
   // 那張就不給，不畫標記。
@@ -5843,6 +5884,27 @@ export function SessionView(props: {
       setContReviewing(false);
     }
   }, [!!continuing]);
+  // 切到面板模式時，接著調整的這一版跟收下的需求、風格一起帶過去（還在跟 AI
+  // 來回的那幾句不帶）。
+  const panelMode: PanelMode | undefined = props.panelMode && {
+    ...props.panelMode,
+    onLeave: () => (props.onPanelLeave || props.panelMode!.onLeave)(continuing ? {
+      version_id: continuing.version_id, job_id: versionJob(continuing), run: 1,
+      text: contPromptRef.current.trim(), style_options: contStyles,
+    } : undefined),
+  };
+  // 從面板模式帶過來的：版本列出來了就接著那一版。那一版不在這段對話裡就算了。
+  useEffect(() => {
+    const r = props.resume;
+    if (!r) return;
+    const v = versions.find((x) => x.version_id === r.version_id);
+    if (!v) return;
+    props.onResumed?.();
+    if (v.version_id !== current?.version_id) props.onSelectVersion(v);
+    setContinuing(v);
+    setContPrompt(r.text || "");
+    setContStyles(r.style_options || {});
+  }, [props.resume, versions.length]);
   // 接著調整到一半點了別的版本：改成以那一版為底，打到一半的字留著。
   useEffect(() => {
     if (current) setContinuing((was) => (was && was.version_id !== current.version_id ? current : was));
@@ -7231,10 +7293,10 @@ export function SessionView(props: {
               <div class="results-analysis-slot" id="results-analysis-slot">
                 <SplitGrip />
                 {/* 手機上對話那張不放標頭，「對話｜面板」縮小放在把手那排右邊；桌機收起來，用標頭上那顆。 */}
-                {props.panelMode && <ModeSwitch mode={props.panelMode} class="sheet-mode-switch" />}
+                {panelMode && <ModeSwitch mode={panelMode} class="sheet-mode-switch" />}
                 <ChatPanel
                   sub={sub}
-                  panelMode={props.panelMode}
+                  panelMode={panelMode}
                   toBottom={toBottom}
                   toStart={lastDone}
                   settling={props.analysisPending}

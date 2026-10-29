@@ -27,6 +27,7 @@
     analyzeExistingJob,
     getAnalyzeResult,
     continueJob,
+    continueVersionJob,
     rerunJob,
     reframeJob,
     analyzeAipoc,
@@ -193,7 +194,15 @@
     // before the loading overlay goes up so the prompt isn't sitting on it.
     const from = currentRunList[currentRunIndex];
     const to = currentRunList[idx];
-    if (to.versionId && to.versionId !== from?.versionId && !(await confirmDropReview(DROP_REVIEW_FOR_VERSION))) return;
+    // 接著這張調整 is on one image, so any switch ends it -- asked only when
+    // there is a request to lose.
+    const continuing = !!activeContinuation();
+    if (continuing) {
+      if (!isEmptyContinuationRequest(pendingContinuationRequest())
+        && !(await showConfirmModal(tr("還沒送出的「接著這張調整」會取消。確定要切換嗎？"),
+          { confirmLabel: tr("繼續"), cancelLabel: tr("留在這裡"), danger: false }))) return;
+      panelContinuation = null;
+    } else if (to.versionId && to.versionId !== from?.versionId && !(await confirmDropReview(DROP_REVIEW_FOR_VERSION))) return;
     // Any real switch (tile or arrow) leaves the 原圖 pick -- the run it
     // lands on renders on its After side (renderResult -> setCompareView).
     clearVersionStripOriginPick();
@@ -203,6 +212,13 @@
     if (els.versionStrip) els.versionStrip.classList.add("is-busy");
     try {
       await currentRunOnSelect(idx);
+      // Another image of the same version keeps singleFlowState and so the
+      // panel as it was: still dressed for 接著這張調整 until repainted.
+      if (continuing && to.versionId === from?.versionId
+        && els.resultsCanvasRow?.classList.contains("showing-analysis")) {
+        openInlineAnalysisForCurrentContext(true);
+      }
+      syncVersionStripCurrent();
     } finally {
       hideSwitchLoading();
       if (els.versionStrip) els.versionStrip.classList.remove("is-busy");
@@ -297,6 +313,16 @@
   // Adjustments carried over from the chat page for the case #case= opened,
   // applied once that case's review controls are on screen (applyPendingModeHandoff).
   let pendingModeHandoff = null;
+  // ENABLE_CHAT_RENDER_FROM_VERSION (/api/config's renderFromVersion): offers
+  // 接著這張調整 in 美化紀錄.
+  let renderFromVersionEnabled = false;
+  // 接著這張調整 on the revise panel: the next 美化 edits this one version's
+  // output with the request alone. Lives as long as the singleFlowState it
+  // was entered on (owner) -- another version or case replaces that and so
+  // ends it. { owner, source: {version_id, job_id, run}, versionNumber,
+  // thumbUrl, prefill: {text, style_options} } -- prefill is what the panel
+  // opens with: a chat handoff's request, or what was typed before 取消.
+  let panelContinuation = null;
   // The review controls as this case first showed them, to tell whether
   // leaving the page would throw away edits not yet sent with 美化
   // (isReviewDirty). Tied to the singleFlowState it was taken for; dropped
@@ -1027,6 +1053,8 @@
       if (typeof cfg.minCompatibleVersion === "number") {
         minCompatibleVersion = cfg.minCompatibleVersion;
       }
+      renderFromVersionEnabled = cfg.renderFromVersion === true;
+      syncVersionStripCurrent();
     });
   } else {
     getUiConfig().then((cfg) => {
@@ -1042,6 +1070,8 @@
       if (typeof cfg.minCompatibleVersion === "number") {
         minCompatibleVersion = cfg.minCompatibleVersion;
       }
+      renderFromVersionEnabled = cfg.renderFromVersion === true;
+      syncVersionStripCurrent();
       if (!cfg.debugUi && cfg.aipocDefault && els.processingPathSelect) {
         // Non-debug deployment started with `--aipoc`: the selector stays
         // hidden, but its value still drives the default processing path.
@@ -1175,6 +1205,7 @@
   }
 
   function isReviewDirty() {
+    if (activeContinuation()) return !isEmptyContinuationRequest(pendingContinuationRequest());
     if (!reviewBaseline || reviewBaseline.owner !== singleFlowState) return false;
     const review = readReviewState();
     return !!review && JSON.stringify(review) !== reviewBaseline.key;
@@ -1190,14 +1221,38 @@
   const DROP_REVIEW_FOR_PHOTO = tr("這張照片還沒美化的調整會清掉。確定要打開另一張嗎？");
   const DROP_REVIEW_FOR_VERSION = tr("還沒美化的調整會換成這一版的設定。確定要切換嗎？");
 
+  // The review fields changed since its baseline: what the version on screen
+  // was made with is no edit, and handed over it would overwrite the chat
+  // page's plan with one version's settings.
+  function readUnsentReview() {
+    const review = readReviewState();
+    if (!review || !reviewBaseline || reviewBaseline.owner !== singleFlowState) return review;
+    const base = JSON.parse(reviewBaseline.key);
+    return Object.fromEntries(Object.entries(review)
+      .filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(base[k])));
+  }
+
   // True when the edits were handed over and the chat page will pick them up.
   // A handoff from the chat page this one never got to apply goes back as it
   // came: handing back this page's own controls would undo what was done there.
   // compositions is the analysis's _composition_by_ratio, so a ratio already
   // planned here is adopted there, not planned again.
   function writeModeHandoff(caseKey) {
+    // 接著這張調整 goes over as itself: the chat page carries on from the
+    // same version, with the request so far.
+    const cont = caseKey ? activeContinuation() : null;
+    if (cont) {
+      const { text, style_options } = pendingContinuationRequest() || {};
+      try {
+        sessionStorage.setItem(MODE_HANDOFF_KEY, JSON.stringify({
+          case_id: caseKey, at: Date.now(), continuation: { ...cont.source, text, style_options } }));
+        return true;
+      } catch {
+        return false;
+      }
+    }
     const unapplied = caseKey && pendingModeHandoff?.case_id === caseKey ? pendingModeHandoff : null;
-    const review = unapplied || (caseKey ? readReviewState() : null);
+    const review = unapplied || (caseKey ? readUnsentReview() : null);
     if (!review) return false;
     const compositions = unapplied ? unapplied.compositions : singleFlowState.analysis._composition_by_ratio;
     try {
@@ -1231,6 +1286,18 @@
     const handoff = pendingModeHandoff;
     if (!handoff || handoff.case_id !== currentCaseHistoryImageKey || currentDetailBatchRecord()) return;
     pendingModeHandoff = null;
+
+    // The chat page was carrying on from a version: so does this panel,
+    // reopened on that version once the caller is done building this one.
+    if (handoff.continuation) {
+      const c = handoff.continuation;
+      const runs = singleRuns || [];
+      const run = runs.find((r) => r.versionId === c.version_id && r.jobId === c.job_id && r.sourceRun === c.run)
+        || runs.find((r) => r.versionId === c.version_id);
+      const prefill = { text: c.text || "", style_options: c.style_options || {} };
+      if (run) Promise.resolve().then(() => enterPanelContinuation(run, prefill));
+      return;
+    }
 
     const model = findModelQualityOptionByPair(handoff.image_model, handoff.image_quality);
     if (model && model.model === handoff.image_model && model.quality === handoff.image_quality) {
@@ -1774,7 +1841,8 @@
     // 幫我分析 runs ahead of a 美化, so only beside one -- and only while the
     // case still has nothing but 「只照需求改」's stub analysis.
     if (els.apSkipAnalyzeBtn) {
-      els.apSkipAnalyzeBtn.hidden = !(runVisible && singleFlowState?.analysis?._skipped_analysis);
+      els.apSkipAnalyzeBtn.hidden = !(runVisible && singleFlowState?.analysis?._skipped_analysis)
+        || !!activeContinuation();
     }
     const dirty = !!apCaseSettingsBaseline && apCaseSettingsBaseline !== snapshotApCaseSettings();
     if (els.apCaseSettingsDirty) els.apCaseSettingsDirty.hidden = !dirty;
@@ -2576,7 +2644,7 @@
     setCurrentCaseAnalysisVersion(analysis);
     lastSingleSelections = { ...(lastSingleSelections || {}), userPrompt, overwritePrompt: false };
     renderAnalysisPreview({ analysis, preset: singleFlowState.preset, expanded: true,
-      requestOnly: isContinuationRun(singleRuns[singleMirrorIndex]) });
+      requestOnly: isContinuationRun(singleRuns?.[singleMirrorIndex]) });
     applyAdvancedOptionsOption(recordAdvancedOptions(singleFlowState.advancedOptions, analysis), "ap");
     if (els.promptInput) els.promptInput.value = userPrompt;
     if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = false;
@@ -2595,8 +2663,95 @@
     return Boolean(run?.result?.analysis?._continuation) && run.versionNumber != null;
   }
 
+  function activeContinuation() {
+    return panelContinuation && panelContinuation.owner === singleFlowState ? panelContinuation : null;
+  }
+
+  // What 接著這張調整 sends: the 補充指令 text, and only the styles moved off
+  // their default (one left out reads as default on the backend).
+  function continuationRequestFromDom() {
+    const { options } = readStyleSelectionsFromDom();
+    return {
+      text: els.promptInput ? els.promptInput.value.trim() : "",
+      style_options: Object.fromEntries(Object.entries(options).filter(([, v]) => v && v !== "default")),
+    };
+  }
+
+  function isEmptyContinuationRequest(request) {
+    return !request || (!request.text && !Object.keys(request.style_options || {}).length);
+  }
+
+  // The panel open: what is in it; closed by 取消: what was kept from it.
+  function pendingContinuationRequest() {
+    const cont = activeContinuation();
+    if (!cont) return null;
+    const panelShowing = !!els.resultsCanvasRow?.classList.contains("showing-analysis");
+    return panelShowing ? continuationRequestFromDom() : cont.prefill;
+  }
+
+  function canContinueFromRun(run) {
+    return renderFromVersionEnabled && !currentDetailBatchRecord() && !!run?.versionId && isSelectableRun(run);
+  }
+
+  // Puts the revise panel into 接著這張調整 on `run`, stepping to it first
+  // when it is not the one on screen (a chat handoff can name any version).
+  async function enterPanelContinuation(run, prefill = null) {
+    if (!singleRuns || !canContinueFromRun(run)) return;
+    if (!activeContinuation()
+      && !(await confirmDropReview(tr("還沒美化的調整會清掉。確定要接著這張調整嗎？")))) return;
+    const idx = singleRuns.indexOf(run);
+    if (idx < 0) return;
+    if (idx !== singleMirrorIndex) {
+      await selectRunAt(idx);
+      if (singleRuns[singleMirrorIndex] !== run || run.status !== "done") return;
+    }
+    panelContinuation = {
+      owner: singleFlowState,
+      source: { version_id: run.versionId, job_id: run.jobId, run: run.sourceRun },
+      versionNumber: run.versionNumber,
+      thumbUrl: resultThumbnailUrl(run.jobId, { run: run.sourceRun }),
+      prefill: prefill || { text: "", style_options: {} },
+    };
+    clearVersionStripOriginPick();
+    syncVersionStripCurrent();
+    openInlineAnalysisForCurrentContext(true);
+  }
+
+  function exitPanelContinuation() {
+    if (!activeContinuation()) return;
+    panelContinuation = null;
+    syncVersionStripCurrent();
+    openInlineAnalysisForCurrentContext(true);
+  }
+
+  if (els.apSkipHintExit) els.apSkipHintExit.addEventListener("click", exitPanelContinuation);
+  if (els.versionStripMode) {
+    els.versionStripMode.addEventListener("click", async (event) => {
+      const opt = event.target.closest(".version-strip-mode-opt");
+      if (!opt || opt.getAttribute("aria-pressed") === "true") return;
+      if (opt.dataset.mode === "continue") await enterPanelContinuation(singleRuns?.[singleMirrorIndex]);
+      else exitPanelContinuation();
+      // Either side can be turned down (confirmDropReview): show what holds.
+      syncVersionStripCurrent();
+    });
+  }
+
   function paintSkipHint() {
-    const run = singleRuns[singleMirrorIndex];
+    const cont = activeContinuation();
+    if (els.apSkipHintThumb) {
+      els.apSkipHintThumb.hidden = !cont;
+      if (cont) els.apSkipHintThumb.src = cont.thumbUrl;
+    }
+    if (els.apSkipHintExit) els.apSkipHintExit.hidden = !cont;
+    if (cont) {
+      const n = cont.versionNumber;
+      if (els.apSkipHintTitle) els.apSkipHintTitle.textContent = tr("調整第 {n} 版", { n });
+      if (els.apSkipHintText) {
+        els.apSkipHintText.textContent = tr("以第 {n} 版為底，只改你在下方寫的地方或挑的風格，其他保持原樣。", { n });
+      }
+      return;
+    }
+    const run = singleRuns?.[singleMirrorIndex];
     const continuation = isContinuationRun(run);
     if (els.apSkipHintTitle) {
       els.apSkipHintTitle.textContent = !continuation ? tr("這張照片沒有做分析")
@@ -4031,6 +4186,8 @@
   // allowing the run (no block) if no snapshot was captured, rather than
   // blocking blind.
   function inlineReviseHasNoChanges() {
+    // 接著這張調整 edits only what is asked: nothing asked, nothing to do.
+    if (activeContinuation()) return isEmptyContinuationRequest(continuationRequestFromDom());
     if (!inlineReviseSnapshot) return false;
     const { options, recipeChecked } = readStyleSelectionsFromDom();
     const prompt = els.promptInput ? els.promptInput.value.trim() : "";
@@ -5882,6 +6039,57 @@
   // re-adjustment run (called from backToProcessFromResults) -- reads
   // singleFlowState (set once by analyze) plus whatever the user currently
   // has checked/typed in the analysis-preview DOM.
+  // 接著這張調整's 美化: one continue-version job on the chosen version, then
+  // the case's versions re-read so the new one lands in 美化紀錄 like any
+  // other. Runs inside backToProcessFromResults, whose finally reveals the
+  // photo again and whose catch reports a failure -- the mode stays on then,
+  // holding the request, so reopening the panel tries again from it.
+  async function finishPanelContinuation(isCurrent) {
+    const cont = activeContinuation();
+    const request = continuationRequestFromDom();
+    cont.prefill = request;
+    const { imageModel, imageQuality } = singleFlowState;
+    markCurrentCaseModified();
+    setAnalysisPreviewDisabled(true);
+    procVisual.classList.remove("done");
+    setProcTitle(tr("AI 正在美化"));
+    setFlowStage("editing");
+    startProcSubRotation(() => editSubMessages({ tipsOnly: true }));
+
+    const jobId = await continueVersionJob({
+      caseId: currentCaseHistoryImageKey,
+      sourceResult: cont.source,
+      userPrompt: request.text,
+      styleOptions: request.style_options,
+      imageQuality,
+      imageModel,
+      user: getCurrentUser(),
+      actionId: generateActionId(),
+      analysisJobId: historyCaseAnalysisJobId,
+    });
+    await pollJobStatus(jobId, { path: "local", timeoutMs: editJobTimeoutMs({ aiPhotoEditing: true, runQa: false }) });
+    const { image_url: imageUrl, result } = await getJobResult(jobId, { path: "local" });
+    if (!isCurrent()) return;
+    if (panelContinuation === cont) panelContinuation = null;
+    // Untagged, so refreshVersionsAfterEdit rebuilds the case's version list
+    // around it and lands on it.
+    singleRuns = [{ run: 1, jobId, sourceRun: 1, status: "done", imageUrl, result, timings: [], error: null }];
+    singleMirrorIndex = 0;
+    try {
+      await refreshVersionsAfterEdit();
+    } catch (error) {
+      console.warn("Could not re-read the case's versions", error);
+    }
+    if (!isCurrent()) return;
+    const run = singleRuns[singleMirrorIndex];
+    if (run?.versionId) {
+      await loadContinuationBase(singleRuns, run);
+      if (!isCurrent()) return;
+      applyHistoryVersionContext(run, null);
+    }
+    await showSingleResult({ forceReopen: true });
+  }
+
   async function finishSingleFlow() {
     // Snapshot of historyViewToken as of when THIS revise started -- if it's
     // changed by the time (part of) this job's result comes back, the user
@@ -5893,6 +6101,7 @@
     // job started from."
     const myHistoryToken = historyViewToken;
     const isCurrent = () => historyViewToken === myHistoryToken;
+    if (activeContinuation()) return finishPanelContinuation(isCurrent);
     // This is the single choke point every "Run"/revise click submits
     // through, regardless of which history-view path set singleFlowState
     // (viewAnalyzeHistoryRecord already hints earlier for its own path, but
@@ -6443,14 +6652,26 @@
     const readOnly = !isCompatible(singleFlowState.analysis);
     if (readOnly) markHistoryCaseArchived();
     setAnalysisPreviewDisabled(readOnly);
+    const continuing = readOnly ? null : activeContinuation();
     renderAnalysisPreview({ analysis: singleFlowState.analysis, preset: singleFlowState.preset, expanded: true,
-      requestOnly: isContinuationRun(singleRuns[singleMirrorIndex]) });
+      requestOnly: !!continuing || isContinuationRun(singleRuns?.[singleMirrorIndex]) });
     paintSkipHint();
     // Paint this record's global 人像修正設定 independently before restoring any
     // per-person choices. Pose below changes only the latter.
     applyAdvancedOptionsOption(
       recordAdvancedOptions(singleFlowState.advancedOptions, singleFlowState.analysis), "ap");
-    if (lastSingleSelections) {
+    if (continuing) {
+      // Only this round's request: the version already carries everything
+      // it was made with, so nothing of it is put back here.
+      const { text = "", style_options: style = {} } = continuing.prefill || {};
+      if (els.promptInput) els.promptInput.value = text;
+      if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = false;
+      applyStyleSelections({ options: Object.fromEntries(
+        ["pose", "angle", "lighting", "size"].map((k) => [k, style[k] || "default"])), recipeChecked: null });
+      if (els.apAnalysisShellDesc) {
+        els.apAnalysisShellDesc.textContent = tr("只改你要求的地方，其他保持第 {n} 版的樣子。", { n: continuing.versionNumber });
+      }
+    } else if (lastSingleSelections) {
       if (els.promptInput) els.promptInput.value = lastSingleSelections.userPrompt || "";
       if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!lastSingleSelections.overwritePrompt;
       applyFaceIssueOverrides(lastSingleSelections.faceIssueOverrides);
@@ -6481,10 +6702,13 @@
     markReviewBaseline();
     // After the snapshot: what the chat page changed counts as a change here
     // too, so 美化 is not blocked as if nothing had been touched.
-    applyPendingModeHandoff();
+    if (!continuing) applyPendingModeHandoff();
     updateInlineAnalysisContinueBtnState();
 
-    const action = await waitForInlineAnalysisAction();
+    const action = await waitForInlineAnalysisAction(undefined, () => (
+      continuing && activeContinuation() === continuing
+        && isEmptyContinuationRequest(continuationRequestFromDom())
+        ? tr("先寫下想調整的地方，或挑一個風格。") : null));
     if (action !== "cancel") reviewBaseline = null; // sent with this 美化
     // Closing straight into #canvas-loading (below) rather than back onto
     // the photo -- skip .results-canvas-row's panel-close animation (styles.
@@ -6493,6 +6717,12 @@
     // animation; removed again (finally block below) once canvas-loading is
     // actually showing, so a later, normal panel toggle still animates.
     if (action !== "cancel" && els.resultsCanvasRow) els.resultsCanvasRow.classList.add("no-transition");
+    if (action === "cancel" && continuing) {
+      // Still 接著這張調整 next time the panel opens, with what was typed.
+      continuing.prefill = continuationRequestFromDom();
+      closeInlineAnalysisPanel();
+      return;
+    }
     closeInlineAnalysisPanel();
     if (action === "cancel") {
       // Preserve unsent local review edits for the next time the panel is
@@ -10269,6 +10499,36 @@
     return params;
   }
 
+  // The version a 接著這張調整 chain started from, past any continuations in
+  // between -- the one whose analysis the case actually has when it was
+  // analyzed up front (one analyzed later via 幫我分析 is historyCaseAnalysis
+  // instead). Null when that version is gone.
+  function continuationBaseRun(run, runs = singleRuns) {
+    const seen = new Set([run.versionNumber]);
+    let source = run;
+    for (let from = run.versionFrom; source.versionParams?.source_result && from != null && !seen.has(from);) {
+      seen.add(from);
+      source = (runs || []).find((r) => r.versionNumber === from);
+      if (!source) return null;
+      from = source.versionFrom;
+    }
+    return source !== run && !source.versionParams?.source_result ? source : null;
+  }
+
+  // Older versions are fetched on arrival only, so that version's result
+  // has to be fetched before applyHistoryVersionContext can read it.
+  async function loadContinuationBase(runs, run) {
+    const base = run?.versionParams?.source_result ? continuationBaseRun(run, runs) : null;
+    if (base?.status === "unloaded") await loadHistoryRun(runs, base);
+  }
+
+  // {analysis, jobId} of that version, or null when it ran 只照需求改 itself.
+  function continuationBaseAnalysis(run) {
+    const base = continuationBaseRun(run);
+    const analysis = base?.status === "done" ? base.result?.analysis : null;
+    return analysis && !analysis._skipped_analysis ? { analysis, jobId: base.jobId } : null;
+  }
+
   function applyHistoryVersionContext(run, fallbackParams) {
     const params = run.versionParams || fallbackParams || {};
     // params.* is absent (rather than falsy-but-present) only for an entry
@@ -10278,22 +10538,31 @@
     // only when an AI edit actually ran, see pipeline.py's finish_stage) is a
     // more accurate fallback than a blind default for that one specifically.
     const extraInfo = run.result["extra-info"] || {};
-    const attached = run.result.analysis?._skipped_analysis ? historyCaseAnalysis : null;
-    // A continuation's own request and ratio are that one round's (the chat's
-    // 接著調整 text, at "original"), no choice of the user's for the photo:
-    // taken as one, the chat page -- handed them on a mode switch -- or the
-    // next 美化 would act on them, and arriving from the chat page they read
-    // as unsent edits. The photo's own are the version it was made from.
     const continuation = isContinuationRun(run);
+    // A continuation's own analysis is a stub: the case's is either the one
+    // analyzed later, or the one the version it was made from came with.
+    const caseAnalysis = historyCaseAnalysis
+      ? { analysis: historyCaseAnalysis, jobId: historyCaseAnalysisJobId }
+      : continuation ? continuationBaseAnalysis(run) : null;
+    const attached = run.result.analysis?._skipped_analysis ? caseAnalysis?.analysis || null : null;
+    // A continuation's request reads like any version's: the 接著調整 text it
+    // was made with, as if from the original. Its ratio ("original") and
+    // 只照需求改 are how a continuation renders, no choice of the user's for
+    // the photo: those are the version it was made from.
     const caseParams = continuation ? continuationSourceParams(run) : params;
     // Analyzed since: the next 美化 works off the full analysis, not just
     // the 個人化需求 the version was made with.
     const { analysis: restoredAnalysis, selections } = restoreReviseSelections(
-      attached || run.result.analysis, caseParams.user_prompt, caseParams.overwrite_prompt && !attached);
+      attached || run.result.analysis, params.user_prompt, caseParams.overwrite_prompt && !attached);
+    // Its styles too are the ones it was made with, kept on its own stub only.
+    if (continuation && attached) {
+      const own = run.result.analysis.style_options || {};
+      selections.options = Object.fromEntries(
+        ["pose", "angle", "lighting", "size"].map((k) => [k, own[k] || "default"]));
+    }
     singleFlowState = {
       analysis: restoredAnalysis,
-      analyzeJobId: attached && run.result.analysis._continuation && historyCaseAnalysisJobId
-        ? historyCaseAnalysisJobId : run.jobId,
+      analyzeJobId: attached && continuation && caseAnalysis.jobId ? caseAnalysis.jobId : run.jobId,
       presetKey: params.preset || "natural",
       preset: presets[params.preset] || presets.natural,
       imageQuality: params.image_quality || extraInfo.image_quality || "medium",
@@ -10381,6 +10650,11 @@
     // without ever re-pointing the page at them.
     const runs = await fetchAllHistoryRuns(job, { allVersions: job.path === "local" });
     const attachedAnalysis = job.path === "local" ? await fetchAttachedCaseAnalysis(job, runs) : null;
+    // Opens on the newest version (see below); a continuation reads its
+    // case analysis off the version its chain started from.
+    if (job.path === "local" && !attachedAnalysis && runs.length) {
+      await loadContinuationBase(runs, runs[runs.length - 1]);
+    }
     // Superseded while the runs were loading -- don't hide (or render into)
     // a screen that now belongs to something else.
     if (historyViewToken !== myToken) return false;
@@ -11881,6 +12155,14 @@
     return !!runs && runs.length > 0 && versionStripPendingRuns === runs;
   }
 
+  // The run switcher / 美化紀錄 has something to show: more than one image,
+  // the pending tile, or -- as on the chat page -- a history case's versions,
+  // even just the one (it is also where 接著這張調整 starts).
+  function hasRunSwitcherContent(runs) {
+    return !!runs && (runs.length > 1 || hasPendingAnalysisTile(runs)
+      || runs.some((r) => r.versionTotal));
+  }
+
   // Not a button: there is no image to land on yet. It is the version the
   // next 美化 produces from the analysis now in the panel -- the original
   // under a dashed accent frame, the way an empty slot waiting to be filled
@@ -11992,7 +12274,7 @@
   function renderVersionStrip(runs, currentIdx, originThumbUrl) {
     if (!els.versionStrip || !els.versionStripTrack) return;
     const pending = hasPendingAnalysisTile(runs);
-    if (!runs || (runs.length <= 1 && !pending) || !runs.some((r) => r.versionTotal)) {
+    if (!hasRunSwitcherContent(runs) || !runs.some((r) => r.versionTotal)) {
       hideVersionStrip();
       return;
     }
@@ -12121,6 +12403,22 @@
     const currentIdx = versionStripCurrentIdx;
     if (!runs || !els.versionStripTrack) return;
     const current = runs[currentIdx];
+    if (els.versionStripMode) {
+      // For the version on screen only; 接著這張調整 is picked while it is
+      // the one being adjusted.
+      const cont = activeContinuation();
+      const show = !versionStripOriginPicked && runs === singleRuns && canContinueFromRun(current);
+      els.versionStripMode.hidden = !show;
+      if (show) {
+        const continuing = !!cont && cont.source.version_id === current.versionId
+          && cont.source.job_id === current.jobId && cont.source.run === current.sourceRun;
+        for (const opt of els.versionStripMode.querySelectorAll(".version-strip-mode-opt")) {
+          opt.setAttribute("aria-pressed", String((opt.dataset.mode === "continue") === continuing));
+        }
+        els.versionStripMode.querySelector('[data-mode="continue"]').title =
+          tr("以第 {n} 版為底，只改你接下來說的地方", { n: current.versionNumber });
+      }
+    }
     if (els.versionStripCount) {
       els.versionStripCount.textContent = versionStripOriginPicked
         ? tr("原圖")
@@ -12433,12 +12731,12 @@
   }
 
   // Prev/next arrows + "N / total" label for one image's N edit results.
-  // Hidden unless there's more than one run. Shared by the batch detail view
+  // Hidden unless hasRunSwitcherContent. Shared by the batch detail view
   // and the single-image results view; `onSelectDone(idx)` decides what
   // re-pointing to that run means for the caller (batch re-renders via
   // syncRecordMirror+showBatchDoneMain, single via showSingleResult).
   function updateRunSwitcher(runs, currentIdx, onSelectDone, { originThumbUrl } = {}) {
-    if (runs.length <= 1 && !hasPendingAnalysisTile(runs)) {
+    if (!hasRunSwitcherContent(runs)) {
       resetRunSwitcher();
       return;
     }
@@ -12549,7 +12847,7 @@
   // a different version has to re-point the whole page at it.
   function renderSingleRunSwitcher() {
     const runs = singleRuns || [];
-    if (runs.length <= 1 && !hasPendingAnalysisTile(runs)) {
+    if (!hasRunSwitcherContent(runs)) {
       resetRunSwitcher();
       return;
     }
@@ -12568,6 +12866,7 @@
         showNoticeModal(run.error || tr("無法取得這一版的結果。"));
         return;
       }
+      await loadContinuationBase(runs, run);
       singleMirrorIndex = idx;
       // Crossing into a different version makes the settings button, the
       // revise panel and singleFlowState describe THAT version. Stepping

@@ -25,11 +25,11 @@ def _import_backend():
     with patch.dict(sys.modules, stubs):
         from backend import app as app_module
         from backend.routes import api, chat
-        from backend.services import account, chat_session, put_job
-    return app_module, api, chat, chat_session, account, put_job
+        from backend.services import account, chat_session, continuation, put_job
+    return app_module, api, chat, chat_session, account, put_job, continuation
 
 
-app_module, api, chat, chat_session, account, put_job = _import_backend()
+app_module, api, chat, chat_session, account, put_job, continuation = _import_backend()
 
 
 # The analysis fields the panel builds its face tabs from.
@@ -175,6 +175,7 @@ class ChatRoutesTest(unittest.TestCase):
             patch.object(chat_session, "_client", lambda: self.redis),
             patch.object(chat, "enqueue", enqueue),
             patch.object(chat, "get_job_info", get_job_info),
+            patch.object(continuation, "get_job_info", get_job_info),
             patch.object(chat, "get_session_id", lambda: next(self.next_job)),
             patch.object(chat, "download_bytes", lambda key, job_id: (json.dumps(self.analysis).encode(), None)),
             # Tests swap self.analysis under the same keys; the cache has its own test.
@@ -190,6 +191,7 @@ class ChatRoutesTest(unittest.TestCase):
             patch.object(chat, "get_history", lambda user, limit=50, offset=0: sorted(
                 self.cases.values(), key=lambda e: e["ts"], reverse=True)[offset:offset + limit]),
             patch.object(chat, "get_history_entry", lambda user, case_id, include_versions=True: self.cases.get(case_id)),
+            patch.object(continuation, "get_history_entry", lambda user, case_id, include_versions=True: self.cases.get(case_id)),
             patch.object(api, "get_current_compatibility_version", lambda: 5),
             # 詳細解說 is on by default: no test reaches a real model for the
             # opening or the render note unless it patches one in itself.
@@ -1317,6 +1319,71 @@ class ChatRoutesTest(unittest.TestCase):
             self.save_draft(sid, photo, source, "remove the cup")
             self.assertEqual(self.render_from(sid, photo, source).status_code, 202)
         attach.assert_called_once_with(USER, photo["case_id"], photo["analyze_job_id"])
+
+    def continue_version(self, photo, source, **extra):
+        """面板模式's 接著這張調整 on the same case, outside any session."""
+        with patch.object(api, "enqueue", self.enqueued_by_api):
+            return self.client.post("/api/photo-agent/continue-version", json={
+                "user": USER, "case_id": photo["case_id"], "source_result": source, **extra})
+
+    def enqueued_by_api(self, engine_params, src_content=None):
+        job_id = next(self.next_job)
+        self.enqueued.append((job_id, json.loads(json.dumps(engine_params))))
+        self.jobs[job_id] = {"status": "processing", "error": None}
+        return job_id
+
+    def test_the_panel_continues_a_version_as_chat_does(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        self.history.clear()
+        with patch.object(api.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True), \
+                patch.object(chat.chat_assistant, "call_continuation", lambda context: {"needs_original": False, "restore": ""}), \
+                patch.object(api, "attach_case_analysis") as attach:
+            res = self.continue_version(photo, source, user_prompt="  remove the cup  ",
+                                        style_options={"lighting": "gold", "angle": "default"},
+                                        image_quality="high", action_id="act1",
+                                        analysis_job_id=photo["analyze_job_id"])
+        self.assertEqual(res.status_code, 202, res.get_json())
+        job_id = res.get_json()["job_id"]
+        (engine_params,) = [p for j, p in self.enqueued if j == job_id]
+        self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json"])
+        params = engine_params["acts"][0]["params"]
+        self.assertEqual((params["user_prompt"], params["overwrite_prompt"], params["aspect_ratio"], params["image_quality"]),
+                         ("remove the cup", True, "original", "high"))
+        self.assertTrue(params["analysis"]["_continuation"])
+        self.assertEqual(params["analysis"]["style_options"], {"lighting": "gold"})
+        (recorded,) = self.history
+        self.assertEqual((recorded["case_id"], recorded["version_id"], recorded["based_on"]),
+                         (photo["case_id"], "act1", source["version_id"]))
+        self.assertEqual((recorded["params"]["base"], recorded["params"]["source_result"]), ("version", source))
+        attach.assert_called_once_with(USER, photo["case_id"], photo["analyze_job_id"])
+
+    def test_the_panel_sends_the_original_when_the_request_wants_something_back(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        with patch.object(api.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True), \
+                patch.object(chat.chat_assistant, "call_continuation", lambda context: {"needs_original": True, "restore": "the mouth"}):
+            job_id = self.continue_version(photo, source, user_prompt="嘴巴不要動到").get_json()["job_id"]
+        (engine_params,) = [p for j, p in self.enqueued if j == job_id]
+        self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json", photo["case_id"]])
+
+    def test_the_panel_cannot_continue_a_version_that_is_not_the_cases(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        with patch.object(api.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True):
+            self.assertEqual(self.continue_version(photo, {**source, "version_id": "nope"},
+                                                   user_prompt="x").status_code, 404)
+            self.jobs[source["job_id"]]["status"] = "processing"
+            self.assertEqual(self.continue_version(photo, source, user_prompt="x").status_code, 409)
+            self.jobs[source["job_id"]]["status"] = "success"
+            self.assertEqual(self.continue_version(photo, source, user_prompt=" ",
+                                                   style_options={"lighting": "default"}).status_code, 400)
+            self.assertEqual(self.continue_version(photo, {"version_id": 1}, user_prompt="x").status_code, 400)
+        with patch.object(api.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", False):
+            self.assertEqual(self.continue_version(photo, source, user_prompt="x").status_code, 404)
 
     def continuation_job(self, sid, photo, source, text):
         self.save_draft(sid, photo, source, text)

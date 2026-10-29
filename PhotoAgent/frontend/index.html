@@ -814,6 +814,35 @@
       outline-offset: 2px;
     }
     .ap-skip-analyze-btn:disabled { opacity: .55; cursor: progress; }
+    /* 接著這張調整's #ap-skip-hint: the version it starts from, small beside
+       the title, and the × that leaves it, in the card's top-right corner. */
+    .ap-skip-hint-thumb {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .ap-skip-hint-thumb[hidden], .ap-skip-hint-exit[hidden] { display: none; }
+    .ap-skip-hint-exit {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--text-2);
+      cursor: pointer;
+    }
+    .ap-skip-hint-exit:hover { background: rgba(var(--on-surface-rgb),.08); color: var(--text); }
+    .ap-skip-hint-exit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     /* The collapsed side panel stacks 美化 into a 44px letter column, which
        a second label can't share; 幫我分析 comes back with the panel. */
     body.side-panel-layout #results-analysis-slot:has(#ap-analysis-shell:not([open])) .ap-skip-analyze-btn {
@@ -5521,8 +5550,13 @@
                 <div class="ap-photo-summary ap-skip-hint" id="ap-skip-hint" hidden>
                   <span class="ap-photo-summary-label">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L4 11l6.8-2.2L12 2z" fill="currentColor"/></svg>
+                    <!-- While 接著這張調整: the version being adjusted, and a way out of it. -->
+                    <img id="ap-skip-hint-thumb" class="ap-skip-hint-thumb" alt="" hidden>
                     <span id="ap-skip-hint-title">這張照片沒有做分析</span>
                   </span>
+                  <button type="button" id="ap-skip-hint-exit" class="ap-skip-hint-exit" title="不調整這版了" aria-label="不調整這版了" hidden>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  </button>
                   <p class="ap-photo-summary-text" id="ap-skip-hint-text">這個版本只依照個人化需求修圖，沒有分析整張照片，所以沒有 AI 的修圖建議。可以直接在下方修改個人化需求；想要 AI 給建議的話，請按「美化」左邊的「幫我分析」。</p>
                 </div>
                 <div class="ap-photo-summary" id="ap-photo-summary">
@@ -6128,17 +6162,25 @@
               <div class="version-strip-head">
                 <span class="version-strip-title">美化紀錄</span>
                 <span id="version-strip-count" class="version-strip-count"></span>
-                <!-- Pinned to the far right of the head, away from the title and the
-                     version count, because it is a standing fact about how the whole
-                     strip works rather than a status belonging to any one version. -->
-                <span class="version-strip-note">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/>
-                    <path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                    <circle cx="12" cy="7.8" r="1.1" fill="currentColor"/>
-                  </svg>
-                  每張美化結果皆由原圖重新產生
-                </span>
+                <!-- Right end of the head: how the next 美化 starts (selector), and
+                     under it the standing note on how the strip's results are made.
+                     接著這張調整 opens the revise panel request-only on the version on
+                     screen (enterPanelContinuation, app.js); 從原圖美化 leaves it.
+                     Hidden on the 原圖 tile and wherever continuing isn't offered. -->
+                <div class="version-strip-side">
+                  <div id="version-strip-mode" class="version-strip-mode" role="group" aria-label="美化方式" hidden>
+                    <button type="button" class="version-strip-mode-opt" data-mode="original" aria-pressed="true" title="從原圖重新產生，不沿用這張的結果">從原圖美化</button>
+                    <button type="button" class="version-strip-mode-opt" data-mode="continue" aria-pressed="false">接著這張調整</button>
+                  </div>
+                  <span class="version-strip-note">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/>
+                      <path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                      <circle cx="12" cy="7.8" r="1.1" fill="currentColor"/>
+                    </svg>
+                    除了「接著這張調整」，每張美化結果皆由原圖重新產生
+                  </span>
+                </div>
                 <!-- Mobile-only (@media max-width: 560px, styles.css): hover has no
                      meaning on touch, so .version-tile-preview disables itself at
                      that width -- this button is the touch replacement, opening

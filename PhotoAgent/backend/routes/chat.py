@@ -39,7 +39,7 @@ from flask import Blueprint, Response, current_app, jsonify, request
 
 from aiserver_utils.queue import get_job_info
 from backend.routes.api import _apply_review_selections, _parse_and_validate_params, _record_history_safely
-from backend.services import chat_queue, chat_session as store, preview_conversation_store as conversation_store
+from backend.services import chat_queue, chat_session as store, continuation as continuation_svc, preview_conversation_store as conversation_store
 from backend.services.timing import job_spans, timed, timeline
 from photo_agent import preview_conversation as conversation_domain
 from backend.services.account import (
@@ -60,7 +60,6 @@ from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, image_to_data_url
 from prompts import COMPOSITION_STATE_KEYS
 from photo_agent import capabilities, chat_assistant, chat_jobs, i18n
-from compatibility_version import CURRENT_COMPATIBILITY_VERSION
 import config as agent_config
 from photo_agent.preview_context import (
     MAX_UPLOAD_BYTES, PREVIEW_CONTEXT_FIELD, source_sha256, preview_versions, validate_preview_binding, validate_preview_context,
@@ -112,6 +111,7 @@ class _RequestError(Exception):
 
 
 @chat_bp.errorhandler(_RequestError)
+@chat_bp.errorhandler(continuation_svc.ContinuationError)
 def _request_error(exc):
     return jsonify({"error": exc.message}), exc.status
 
@@ -2057,7 +2057,7 @@ def _prepare_render(photo, *, defer_unconfirmed=False):
 
 def _start_render(user, session_id, photo, prepared, base, source=None, draft=None):
     """Queue one photo's render jobs and mark it rendering. `source` (a
-    _resolve_source_result) edits that version's output instead of the
+    continuation_svc.resolve_source_result) edits that version's output instead of the
     original, with `draft` the continuation request it was sent with; the
     case stays the photo's own either way."""
     job_ids = [get_session_id() for _ in range(prepared["run_count"])]
@@ -2102,54 +2102,8 @@ def _start_render(user, session_id, photo, prepared, base, source=None, draft=No
 
 
 # --- 接著這張調整 ------------------------------------------------------------
-# A continuation edits one finished version's output with this round's request
-# only. It never re-applies the original recipe (brighten, smoothing, eye fixes,
-# person removal, styles, framing): those are already in the source image.
-
-def _source_result_ref(value):
-    """{version_id, job_id, run} from a request body, or a 400."""
-    if not isinstance(value, dict):
-        raise _RequestError("source_result must be an object with version_id, job_id and run")
-    version_id, job_id, run = value.get("version_id"), value.get("job_id"), value.get("run")
-    if not (isinstance(version_id, str) and version_id and isinstance(job_id, str) and job_id
-            and type(run) is int and run >= 1):
-        raise _RequestError("source_result must be an object with version_id, job_id and run")
-    return {"version_id": version_id, "job_id": job_id, "run": run}
-
-
-def _same_source(a, b):
-    return bool(a and b) and all(a.get(k) == b.get(k) for k in ("version_id", "job_id", "run"))
-
-
-def _result_key(job_id, run):
-    """The output image key of one run of a finished job, or None. A finish job
-    (one chat run) keeps it in cusKeys; a multi-run full job under runs."""
-    res0 = (get_job_info(job_id, keyToGet=["0_res0"]) or {}).get("0_res0") or {}
-    runs = res0.get("runs")
-    if runs:
-        keys = (runs[run - 1] or {}).get("cusKeys") if run <= len(runs) else None
-    else:
-        keys = res0.get("cusKeys") if run == 1 else None
-    return (keys or [None])[0]
-
-
-def _resolve_source_result(user, photo, source):
-    """The chosen version's output, checked against this photo's own history:
-    {version_id, job_id, run, key}. Never falls back to the original or to
-    another version -- a source that does not check out is an error."""
-    entry = get_history_entry(user, photo["case_id"]) or {}
-    version = next((v for v in entry.get("versions") or [] if v["version_id"] == source["version_id"]), None)
-    if (version is None or version.get("kind") == "analyze"
-            or not any(r["job_id"] == source["job_id"] and r["run"] == source["run"] for r in version["results"])):
-        raise _RequestError("source_not_found", 404)
-    status = _job_status(source["job_id"], {})
-    if status["status"] != "success":
-        raise _RequestError("source_not_finished", 409)
-    key = _result_key(source["job_id"], source["run"])
-    if not key:
-        raise _RequestError("source_not_finished", 409)
-    return {**source, "key": key}
-
+# The source checks and the request-only stub live in services/continuation,
+# shared with 面板模式's /continue-version (imported as continuation_svc).
 
 @chat_bp.put("/sessions/<session_id>/photos/<photo_id>/continuation-draft")
 def save_continuation_draft(session_id, photo_id):
@@ -2163,7 +2117,7 @@ def save_continuation_draft(session_id, photo_id):
     body = _body()
     user = _user(body.get("user"))
     photo = _photo(_session(user, session_id), photo_id)
-    source = _source_result_ref(body.get("source_result"))
+    source = continuation_svc.source_result_ref(body.get("source_result"))
     text, revision = body.get("text"), body.get("revision", 0)
     if not isinstance(text, str) or len(text) > USER_PROMPT_MAX_LEN:
         raise _RequestError(f"text must be a string of at most {USER_PROMPT_MAX_LEN} characters")
@@ -2174,9 +2128,9 @@ def save_continuation_draft(session_id, photo_id):
     if error:
         raise _RequestError(error.replace("selections.options", "style_options"))
     styles = {k: v for k, v in styles.items() if v not in (None, *capabilities.STYLE_UNSET_VALUES)}
-    _resolve_source_result(user, photo, source)
+    continuation_svc.resolve_source_result(user, photo["case_id"], source)
     draft = photo.get("continuation_draft")
-    current = draft["revision"] if draft and _same_source(draft["source_result"], source) else 0
+    current = draft["revision"] if draft and continuation_svc.same_source(draft["source_result"], source) else 0
     if revision != current:
         return jsonify({"error": "draft_changed", "draft": draft}), 409
     text = text.strip()
@@ -2190,50 +2144,19 @@ def _prepare_continuation(photo, draft):
     """_prepare_render for 接著這張調整: the plan's technical choices (model,
     quality, output size, run count) with the draft's text as the whole
     request, plus the styles picked for this round. No recipe, selections,
-    preset polish, body reshape, crop or ratio change, and no eye-repair pass:
-    the analysis is a skipped-analysis stub marked _continuation, which
-    edit_prompt reads as request-only."""
+    preset polish, body reshape, crop or ratio change, and no eye-repair pass."""
     plan = photo["plan"]
-    form = build_render_form(plan, "finish")
-    form.update({"user_prompt": draft["text"], "overwrite_prompt": True, "aspect_ratio": "original",
-                 "single_pass_edit": True,
-                 "advanced_options": {o.key: False for o in capabilities.ADVANCED_OPTIONS if not o.choices}})
-    form.pop("literal_texts", None)
+    form = continuation_svc.continuation_form(build_render_form(plan, "finish"), draft["text"])
     params, error = _parse_and_validate_params(form, chat_body_side_clarification=False)
     if error:
         raise _RequestError(error)
     params["stage"] = "finish"
-    analysis = {"_skipped_analysis": True, "_continuation": True, "_aspect_ratio_pref_at_analysis": "original",
-                "prompts": {}, "timings": {}, "usage": {}, "compatibility_version": CURRENT_COMPATIBILITY_VERSION}
-    styles = draft.get("style_options") or {}
-    if styles:
-        analysis["style_options"] = dict(styles)
-    reference_key = None
-    original = _continuation_original(draft["text"], params["image_model"]) if draft["text"] else None
-    if original is not None:
-        analysis["_continuation_original"] = original
-        reference_key = photo["src_keys"][0]
+    analysis = continuation_svc.continuation_analysis(draft["text"], draft.get("style_options"), params["image_model"])
+    reference_key = photo["src_keys"][0] if "_continuation_original" in analysis else None
     run_limit = capabilities.MAX_RUN_COUNT if _debug() else capabilities.GENERAL_MAX_RUN_COUNT
     return {"params": {**params, "analysis": analysis}, "selections": {},
             "run_count": min(plan["run_count"], run_limit), "deferred_confirmation": False,
             "reference_key": reference_key}
-
-
-def _continuation_original(text, image_model):
-    """{"restore": ...} when this continuation's editor also gets the original
-    photo, else None. Only the request decides: a new change on the version
-    goes alone, so the editor is not pulled back toward the original; a
-    request that wants something as it was gets the original beside it. Only
-    the OpenAI editor takes a second image. A failed read sends the original
-    -- the editor is told it is a reference only, so that costs little."""
-    if capabilities.image_model(image_model).provider != "openai":
-        return None
-    try:
-        read = chat_assistant.read_continuation(text)
-    except Exception as exc:
-        current_app.logger.warning("Continuation request read failed, sending the original: %s", exc)
-        read = {"needs_original": True, "restore": ""}
-    return {"restore": read["restore"]} if read["needs_original"] else None
 
 
 def _render_from_version(user, session_id, session, body):
@@ -2243,17 +2166,17 @@ def _render_from_version(user, session_id, session, body):
     if not (isinstance(photo_ids, list) and len(photo_ids) == 1 and isinstance(photo_ids[0], str)):
         raise _RequestError("base \"version\" renders exactly one photo")
     photo = _photo(session, photo_ids[0])
-    source = _source_result_ref(body.get("source_result"))
+    source = continuation_svc.source_result_ref(body.get("source_result"))
     if photo["status"] != "ready":
         raise _RequestError(f"photo {photo['photo_id']} is {photo['status']}, not ready to render", 409)
     draft = photo.get("continuation_draft")
-    if not draft or not _same_source(draft["source_result"], source) \
+    if not draft or not continuation_svc.same_source(draft["source_result"], source) \
             or not (draft["text"] or draft.get("style_options")):
         raise _RequestError("draft_missing", 409)
     revision = body.get("draft_revision")
     if revision is not None and revision != draft["revision"]:
         return jsonify({"error": "draft_changed", "draft": draft}), 409
-    resolved = _resolve_source_result(user, photo, source)
+    resolved = continuation_svc.resolve_source_result(user, photo["case_id"], source)
     prepared = _prepare_continuation(photo, draft)
     rendered = _start_render(user, session_id, photo, prepared, VERSION_BASE,
                              source=resolved, draft=copy.deepcopy(draft))
@@ -3509,7 +3432,7 @@ def _note_images(photo, job_id, source=None):
         res0 = (get_job_info(job_id, keyToGet=["0_res0"]) or {}).get("0_res0") or {}
         runs = res0.get("runs")
         keys = (runs[0].get("cusKeys") if runs else res0.get("cusKeys")) or []
-        src = (_result_key(source["job_id"], source["run"]) if source
+        src = (continuation_svc.result_key(source["job_id"], source["run"]) if source
                else (photo.get("src_keys") or [None])[0])
         if not keys or not src:
             return None, None
@@ -3783,7 +3706,7 @@ def _advance_rendering(user, session_id, photo, statuses):
         # Done with the request it was sent; kept after a failure for a retry,
         # and one typed since it went out stays either way.
         draft, sent = photo.get("continuation_draft"), pending.get("draft") or {}
-        if draft and _same_source(draft["source_result"], sent.get("source_result")) \
+        if draft and continuation_svc.same_source(draft["source_result"], sent.get("source_result")) \
                 and draft["revision"] == sent.get("revision"):
             photo["continuation_draft"] = None
     messages = [store.make_message("assistant", card=card)]

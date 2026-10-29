@@ -68,6 +68,8 @@ def config():
         # Internal server-side feature switch mirrored to the UI.  The
         # backend remains authoritative; this only gates the read-only preview.
         "enableBodyReshape": bool(getattr(photoagent_config, "ENABLE_BODY_RESHAPE", True)),
+        # Shows the panel's 接著這張調整 button; /continue-version checks it too.
+        "renderFromVersion": bool(getattr(photoagent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", False)),
         # Lets the debug-mode version display (app.js) show a case's own
         # compatibility_version next to what this deployment is running now,
         # and lets finishSingleFlow gate a resumed case client-side (in
