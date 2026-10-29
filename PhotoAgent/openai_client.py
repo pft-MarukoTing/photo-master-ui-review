@@ -749,12 +749,14 @@ def _adopt_early_skill_passes(skill, analysis, future, ctx):
     return adopted
 
 
-def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL, *, precomputed_preview=None, analysis_user_requests=None, photo_facts=None):
+def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL, *, precomputed_preview=None, analysis_user_requests=None, photo_facts=None, after_call_a=None):
     """The analysis flow for every analysis model. Call A does overall photo
     direction and subject identification; each analysis skill the router
     selects from that result then runs its own passes (see
     photo_agent.analysis_skills), and every other skill fills its fields with
     the not-applicable shape.
+
+    after_call_a: called with Call A's result before the analysis skills run, to start work that needs only it.
     """
     preview = create_preview_bytes(image_bytes)
     data_url = image_to_data_url(preview, "image/jpeg")
@@ -825,6 +827,8 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
         overall_analysis["_subject_preview_comparison"] = compare_subject_preview(
             precomputed_preview["subject_preview"], overall_analysis)
     logger.info("Stage 2.1 preview_reused=%s fixed_roster=%s", precomputed_preview is not None, roster is not None)
+    if after_call_a is not None:
+        after_call_a(overall_analysis)
 
     analysis = overall_analysis
     usages = list(overall_usages)
@@ -897,9 +901,10 @@ def reframe_composition(image_bytes: bytes, analysis: dict, aspect_ratio: str = 
     return reframe, usage, f"{before_photo}\n\n[photo]\n\n{after_photo}"
 
 
-def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL, *, precomputed_preview=None, analysis_user_requests=None, photo_facts=None):
+def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL, *, precomputed_preview=None, analysis_user_requests=None, photo_facts=None, after_call_a=None):
     return _analyze_photo_two_pass(image_bytes, aspect_ratio, advanced_options, analysis_model,
                                    precomputed_preview=precomputed_preview, photo_facts=photo_facts,
+                                   after_call_a=after_call_a,
                                    **({"analysis_user_requests": analysis_user_requests} if analysis_user_requests else {}))
 
 

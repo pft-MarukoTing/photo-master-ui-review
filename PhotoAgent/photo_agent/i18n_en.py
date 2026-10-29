@@ -313,6 +313,21 @@ TEXT = {
     "指定人物的預覽與此照片不符，請重新指定。": "The selected person's preview doesn't match this photo. Please choose again.",
     "指定的人物未完成身份確認，請重新指定或清除該需求。": "The selected person hasn't been confirmed. Please choose again or clear the request.",
     "指定的人物未納入本次分析，請重新確認需求。": "The selected person isn't part of this analysis. Please confirm the request again.",
+    # Findings cards on the review screen (photo_agent/findings.py); 閉眼 reuses the entry above.
+    "讓{who}自然睜開眼睛": "Open the eyes of {who} naturally",
+    "讓{who}看向鏡頭": "Have {who} look at the camera",
+    "整理{who}的亂髮": "Tidy the messy hair of {who}",
+    "人物": "the person",
+    "所有人物": "everyone",
+    "{n} 位人物": "{n} people",
+    "這位人物": "this person",
+    "眼睛沒有看向鏡頭": "Eyes Not Looking at the Camera",
+    "頭髮凌亂": "Messy Hair",
+    "偵測到有人物{problems}。": "Detected: {problems}.",
+    "人物的表情、眼神與頭髮都很自然。": "Expressions, eyes, and hair all look natural.",
+    "偵測到有人物在畫面邊緣被廣角拉寬。": "Detected a face stretched by the wide-angle lens near the frame edge.",
+    "建議風格：": "Suggested Style: ",
+    "重新構圖：": "Reframe: ",
     # The lens-correction review item (analysis_skills/portrait/decisions.py)
     "修正廣角造成的邊緣人臉變形": "Correct wide-angle stretch on faces near the frame edge",
 }
