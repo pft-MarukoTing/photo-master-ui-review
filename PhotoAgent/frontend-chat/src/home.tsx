@@ -211,26 +211,29 @@ function ChangelogModal(props: { onClose: () => void }) {
   );
 }
 
-// 面板模式 #confirm-modal 的版型：一句話、兩個選項。Esc 跟點背景都算留下。
+// 面板模式 #confirm-modal 的版型：一句話、兩個選項。Esc 跟點背景都算留下；
+// 兩個選項都會往下走的，給 onDismiss，關掉就是兩個都不選。
 export function ConfirmModal(props: {
   message: string;
   confirmLabel: string;
   // 沒給就只有一顆確認鍵（像刪不掉時的那句提醒）。
   cancelLabel?: string;
   onAnswer: (ok: boolean) => void;
+  onDismiss?: () => void;
 }) {
   const { onAnswer } = props;
+  const dismiss = props.onDismiss || (() => onAnswer(false));
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onAnswer(false);
+      if (e.key === "Escape") dismiss();
     };
     addEventListener("keydown", esc);
     return () => removeEventListener("keydown", esc);
-  }, [onAnswer]);
+  }, [dismiss]);
 
   return createPortal(
     <div class="error-modal" id="chat-confirm-modal">
-      <div class="error-modal-backdrop" onClick={() => onAnswer(false)} />
+      <div class="error-modal-backdrop" onClick={dismiss} />
       <div class="error-modal-box" role="alertdialog" aria-modal="true" aria-labelledby="chat-confirm-title" aria-describedby="chat-confirm-msg">
         <div class="error-modal-hdr">
           <span id="chat-confirm-title" class="notice-modal-title">

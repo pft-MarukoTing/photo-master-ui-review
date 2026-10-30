@@ -840,4 +840,7 @@ export const EN: Record<string, string> = {
   "想改的地方可以一句一句打在下面，我會先幫你看過、記下來；也可以按「風格」換光線、角度這類效果。都好了再按「美化」。": "Type what you'd like changed below, one thing at a time, and I'll check each one and note it down. You can also tap “Style” to change things like lighting or angle. Tap “Retouch” when you're ready.",
   "還沒有要改的地方": "Nothing to change yet",
   "已選風格：{v}": "Styles picked: {v}",
+  "輸入框裡的「{v1}」還沒送出，要加進需求一起{v2}嗎？": "You haven't sent “{v1}” yet. Add it to your request before you {v2}?",
+  "加進需求": "Add to Request",
+  "不用，直接開始": "No, Just Start",
 };

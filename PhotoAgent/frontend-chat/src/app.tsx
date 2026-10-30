@@ -854,6 +854,7 @@ export function App() {
     confirmLabel?: string;
     cancelLabel?: string;
     answer: (ok: boolean) => void;
+    dismiss?: () => void;
   } | null>(null);
   // 刪除前的那一問（notice：刪不掉時只有「確定」的那句）。
   const [deleteAsk, setDeleteAsk] = useState<{ message: string; notice?: boolean; done: (ok: boolean) => void } | null>(null);
@@ -2915,6 +2916,29 @@ export function App() {
     setNotes([...notes, { order: nextDisplayOrder(), replyOrder: nextDisplayOrder(), text, wish: preWhoAsk.wish ?? preWhoAsk.text, persons, selectionSource: "user_selection", reply: WHO_ANSWERED_REPLY, kept: true }]);
   }
 
+  // 按分析／一鍵美化時輸入框裡還有沒送出的字：先問要不要加進需求，不然它會跟著上傳頁
+  // 一起消失，使用者還以為有套用。要加就照送出那樣讓 AI 看過，收下了接著開始（一鍵美化
+  // 一樣先問怎麼套用），AI 回問或沒收下就停在對話裡；不加就照原本的需求開始。
+  // 關掉這一問就兩個都不做，字留在輸入框。
+  function startWithDraft(mode: "analyze" | "render") {
+    const text = preDraft.current.trim();
+    if (!text) return startSession(mode);
+    const shown = text.length > 20 ? `${text.slice(0, 20)}…` : text;
+    setLeaveAsk({
+      message: t("輸入框裡的「{v1}」還沒送出，要加進需求一起{v2}嗎？", { v1: shown, v2: mode === "render" ? t("美化") : t("分析") }),
+      confirmLabel: t("加進需求"),
+      cancelLabel: t("不用，直接開始"),
+      answer: async (add) => {
+        setLeaveAsk(null);
+        if (!add) return startSession(mode);
+        preDraft.current = "";
+        const next = await reviewNote(text, preDisplayPeople.length ? prePointed : [], notes);
+        if (next) startSession(mode, laterNote(next), next);
+      },
+      dismiss: () => setLeaveAsk(null),
+    });
+  }
+
   // `later` 是要帶進 session、照片好了再回答的那句；沒給就看最後一句是不是。
   // `log` 是到這一刻為止的對話：打字要求開始的那句剛收下，還沒進 state。
   // `overwrite` 是一鍵美化前問到的答案：true 只照個人化需求改，false 整體美化
@@ -3407,6 +3431,7 @@ export function App() {
       confirmLabel={leaveAsk.confirmLabel || t("繼續")}
       cancelLabel={leaveAsk.cancelLabel || t("留在這裡")}
       onAnswer={leaveAsk.answer}
+      onDismiss={leaveAsk.dismiss}
     />
   );
   const askEl = deleteAsk && (
@@ -3571,7 +3596,7 @@ export function App() {
             text: t("好，調整下面的設定，完成後選擇要分析還是一鍵美化。"), showPeople: false }]);
           setStep("settings");
         }}
-        onStart={startSession}
+        onStart={startWithDraft}
         renderAsk={renderAsk && { overwrite: renderAsk.overwrite }}
         onRenderMode={(overwrite) => renderAsk && startSession("render", renderAsk.later, renderAsk.log, overwrite)}
         onAnswer={(text) => void reviewNote(text, [], notes, false)}
@@ -5846,6 +5871,10 @@ export function SessionView(props: {
   // Who the composer is pointed at, and the option fields to flash.
   const [pointed, setPointed] = useState<number[]>([]);
   const [composerKey, setComposerKey] = useState(0);
+  // 輸入框裡打了還沒送出的字；按美化時要先問要不要用（draftAsk），送了就清掉框（clearKey）。
+  const typed = useRef("");
+  const [clearKey, setClearKey] = useState(0);
+  const [draftAsk, setDraftAsk] = useState<{ text: string; go: () => void } | null>(null);
   const [hot, setHot] = useState<Partial<Record<Category, Hot>>>({});
   // 再美化一次, or 美化 in a round with nothing changed, asks first; any new
   // message or change drops the question.
@@ -5949,8 +5978,45 @@ export function SessionView(props: {
   // -- 只照需求改的那輪除外：那輪能改的風格、設定，只照需求改也照樣套用。
   const renderRound = (label: string, icon: string) => {
     if (promptChanged) return setAskMode({ label, icon });
-    props.onRender(label, icon, photo.plan.overwrite_prompt && !promptOnlyRound ? { overwrite_prompt: false } : undefined);
+    render(label, icon, photo.plan.overwrite_prompt && !promptOnlyRound ? { overwrite_prompt: false } : undefined);
   };
+  // 按美化時框裡還有沒送出的字：先問要不要用，不然它不會進這一版，使用者還以為有套用。
+  // 要用就照送出那樣交出去，AI 直接套用了就接著美化；要使用者確認（提案要按套用、
+  // 反問、問是哪一位）就停在它的回覆。不用就照現在的設定美化。
+  function withDraft(go: () => void) {
+    const text = typed.current.trim();
+    if (!text || props.readOnly) return go();
+    setDraftAsk({ text, go });
+  }
+  function render(label: string, icon: string, patch?: Plan) {
+    withDraft(() => props.onRender(label, icon, patch));
+  }
+  // 送出那則的回覆來了才知道要不要接著美化；記著送出前有幾則。
+  const afterDraft = useRef<number | null>(null);
+  function sendDraft(text: string) {
+    typed.current = "";
+    setClearKey((k) => k + 1);
+    // 剛才那張「要直接再美化嗎」這類的問題已經回答了，不收掉的話會壓在回覆下面。
+    setConfirmRerun(false);
+    setAskMode(null);
+    if (continuing && props.onContinue) return void reviewCont(text, true);
+    afterDraft.current = messages.length;
+    // 底下的鍵是剛收掉的那張卡的，AI 照著寫「按下面的『照原設定再美化』」就指錯了。
+    // 直接套用的話這邊會自己接著美化，不用指鍵；要確認的話回覆自帶選項。
+    void send(text, pointed, { ...screen, bar: [] }).then((ok) => { if (!ok) afterDraft.current = null; });
+  }
+  useEffect(() => {
+    const from = afterDraft.current;
+    if (from == null || busy || props.pendingAsk || messages.length <= from) return;
+    afterDraft.current = null;
+    const added = messages.slice(from).map((m) => m.card);
+    // AI 自己開始美化了（「幫我美化」），不用再按一次。
+    if (added.some((c) => c?.type === "render_requested" || c?.type === "render_failed")) return;
+    const reply = [...added].reverse().find((c) => c?.type === "llm_reply");
+    if (!reply?.proposal?.direct || reply.options?.length || reply.question_kind || pendingPerson) return;
+    // 直接套用後美化過的照片會開一輪調整，照那一輪的「美化」走。
+    renderRound(startLabel, "spark");
+  });
 
   // 上傳頁面選了「只照需求改」：真的沒有分析，只量了尺寸，美化直接照需求修。
   // 說要分析時（「幫我分析」）才補跑，結果落在 adjust_opened via check 那張卡。
@@ -6197,7 +6263,8 @@ export function SessionView(props: {
   // 頭像已經排在 AI 那句底下可以直接點時，輸入框上面那排就先收起來，免得兩處都能選。
   const facesInline =
     !props.pendingAsk && (asksWho(lastCard) || (lastCard?.type === "llm_reply" && lastCard.question_kind === "person" && !lastCard.proposal && (lastCard.options || []).some((o: string) => !!faceOption(o))));
-  async function reviewCont(line: string) {
+  // go：框裡沒送出的字被要求一起美化，AI 收下了就直接開始。
+  async function reviewCont(line: string, go = false) {
     const gen = contGen.current;
     const before = contTurnsRef.current;
     const prompt = contPromptRef.current;
@@ -6219,12 +6286,13 @@ export function SessionView(props: {
       setContPrompt(next);
       turn = { text: line, reply: r.reply || (r.accepted ? t("好，這句記下來了，按「美化」時一起套用。") : ""),
         ...(r.ask ? { options: r.options || [] } : {}) };
-      start = r.start === "render";
+      start = r.start === "render" || (go && r.accepted && !r.ask);
     } catch {
       if (gen !== contGen.current) return;
       // 問不到就先收下，美化前還能在框裡改。
       setContPrompt([contPromptRef.current, line].filter(Boolean).join(t("；")));
       turn = { text: line, reply: t("好，這句先記下來，按「美化」時一起套用。") };
+      start = go;
     } finally {
       if (gen === contGen.current) setContReviewing(false);
     }
@@ -6246,7 +6314,7 @@ export function SessionView(props: {
     if (ok) setContinuing(null);
   }
 
-  async function send(text: string, si: number[]) {
+  async function send(text: string, si: number[], scr: Screen = screen) {
     if (pendingPerson?.kind === "edit_description" || pendingPerson?.kind === "action" || pendingPerson?.kind === "visual") {
       const answer = await props.onConfirmPeople([], undefined, undefined, undefined, undefined, text);
       if (answer !== "new_message") return answer;
@@ -6261,7 +6329,7 @@ export function SessionView(props: {
       await choose(pendingProposal, "apply");
       return true;
     }
-    return props.onAsk(text || (si.length > 1 ? t("這幾位") : t("這位")), si, screen, askFaces(si),
+    return props.onAsk(text || (si.length > 1 ? t("這幾位") : t("這位")), si, scr, askFaces(si),
       lastCard?.question_kind && !(caps.features?.body_side_clarification === false && lastCard.clarification_subtype === "body_side_reference") ? messages[messages.length - 1].id : undefined,
       caps.features?.body_side_clarification !== false && lastCard?.clarification_subtype === "body_side_reference" ? sideChoice(lastCard.side_question, text) : undefined);
   }
@@ -6538,7 +6606,7 @@ export function SessionView(props: {
             onClick={() => { setContinuing(current); setPointed([]); setComposerKey((k) => k + 1); }} />
         )}
         <Chip label={t("再美化")} icon="redo" kind="primary" disabled={busy}
-          onClick={() => (parkedNote ? props.onRender("再美化", "redo") : setConfirmRerun(true))} />
+          onClick={() => (parkedNote ? render("再美化", "redo") : setConfirmRerun(true))} />
       </>
     );
     bar = [...(offerAnalyze ? ["看美化項目", "幫我分析"] : ["看美化項目"]), ...(props.onContinue ? ["接著這張調整"] : []), "再美化"];
@@ -6546,7 +6614,7 @@ export function SessionView(props: {
     actionChips = (
       <>
         <Chip label={t("看美化項目")} icon="pencil" badge={parkedNote} disabled={busy || !ready} onClick={enterAdjust} />
-        <Chip label={t("再試一次")} icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再試一次", "redo")} />
+        <Chip label={t("再試一次")} icon="redo" kind="primary" disabled={busy} onClick={() => render("再試一次", "redo")} />
       </>
     );
     bar = ["看美化項目", "再試一次"];
@@ -7193,14 +7261,14 @@ export function SessionView(props: {
             label={ONLY_PROMPT_LABEL}
             icon={askMode.icon}
             disabled={busy}
-            onClick={() => props.onRender(ONLY_PROMPT_LABEL, askMode.icon, { overwrite_prompt: true })}
+            onClick={() => render(ONLY_PROMPT_LABEL, askMode.icon, { overwrite_prompt: true })}
           />
           <Chip
             label={WITH_ANALYSIS_LABEL}
             icon={askMode.icon}
             kind="primary"
             disabled={busy}
-            onClick={() => props.onRender(WITH_ANALYSIS_LABEL, askMode.icon, { overwrite_prompt: false })}
+            onClick={() => render(WITH_ANALYSIS_LABEL, askMode.icon, { overwrite_prompt: false })}
           />
         </div>
       </AssistantMsg>
@@ -7212,7 +7280,7 @@ export function SessionView(props: {
         <p class="chat-text">{t("這一輪還沒改任何設定，美化會用和上一版相同的設定重新產生，結果可能差不多。要直接美化，還是繼續看美化項目？")}</p>
         <div class="chat-choices">
           <Chip label={t("繼續看")} icon="pencil" disabled={busy} onClick={() => setConfirmRerun(false)} />
-          <Chip label={t("照原設定美化")} icon="spark" kind="primary" disabled={busy} onClick={() => props.onRender("美化", "spark")} />
+          <Chip label={t("照原設定美化")} icon="spark" kind="primary" disabled={busy} onClick={() => render("美化", "spark")} />
         </div>
       </AssistantMsg>
     );
@@ -7223,7 +7291,7 @@ export function SessionView(props: {
         <p class="chat-text">{t("設定和上一版一樣，再美化一次會用相同的設定重新產生，結果可能和上一版差不多。要直接再美化，還是先看美化項目？")}</p>
         <div class="chat-choices">
           <Chip label={t("先看美化項目")} icon="pencil" disabled={busy} onClick={enterAdjust} />
-          <Chip label={t("照原設定再美化")} icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再美化", "redo")} />
+          <Chip label={t("照原設定再美化")} icon="redo" kind="primary" disabled={busy} onClick={() => render("再美化", "redo")} />
         </div>
       </AssistantMsg>
     );
@@ -7273,6 +7341,16 @@ export function SessionView(props: {
 
   return (
     <>
+      {draftAsk && (
+        <ConfirmModal
+          message={t("輸入框裡的「{v1}」還沒送出，要加進需求一起{v2}嗎？", {
+            v1: draftAsk.text.length > 20 ? `${draftAsk.text.slice(0, 20)}…` : draftAsk.text, v2: t("美化") })}
+          confirmLabel={t("加進需求")}
+          cancelLabel={t("不用，直接開始")}
+          onAnswer={(add) => { const { text, go } = draftAsk; setDraftAsk(null); return add ? sendDraft(text) : go(); }}
+          onDismiss={() => setDraftAsk(null)}
+        />
+      )}
       <StepIndicator step={stepN} state={stepHow} />
       <section id="results-section" class="section visible">
         <div class={`container results-body showing-analysis${props.sidebar ? " batch-mode" : ""}`} id="results-body">
@@ -7335,6 +7413,8 @@ export function SessionView(props: {
                         onPoint={setPointed}
                         sendPicked={whoAsked}
                         focusKey={composerKey}
+                        onText={(v) => (typed.current = v)}
+                        clearKey={clearKey}
                       />
                     </>
                   )}
@@ -7394,7 +7474,7 @@ export function SessionView(props: {
                           badge={contStyled ? t("已選風格：{v}", { v: pickedStyles(styleAnalysis, caps, { style_options: contStyles }).join(t("、")) }) : undefined}
                           disabled={busy} onClick={() => setContStyleOpen((o) => !o)} />
                         {(!!contPrompt.trim() || contStyled) && (
-                          <Chip label={t("美化")} icon="wand" kind="primary" disabled={busy} onClick={() => void continueNow()} />
+                          <Chip label={t("美化")} icon="wand" kind="primary" disabled={busy} onClick={() => withDraft(() => void continueNow())} />
                         )}
                       </div>
                     </AssistantMsg>
