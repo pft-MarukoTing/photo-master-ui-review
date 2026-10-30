@@ -670,6 +670,31 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertNotIn("plan", new[0]["card"])
         self.assertEqual(self.status(sid)["session"]["photos"][0]["active_version"]["version_id"], "x2")
 
+    def test_a_custom_mode_continuation_keeps_its_source(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        a = photo["analyze_job_id"]
+        source = {"version_id": "x1", "job_id": "x1", "run": 1}
+        self.jobs["x1"] = {"status": "success", "error": None}
+        self.jobs["x2"] = {"status": "success", "error": None}
+        entry = self.case(photo["case_id"], [(a, "analyze", [a]), ("x1", "edit", ["x1"]), ("x2", "edit", ["x2"])])
+        entry["versions"][2]["params"] = {"base": "version", "source_result": source, "user_prompt": "再亮一點"}
+        cards = {c["version_id"]: c for c in self.cards(sid, "render_done")}
+        self.assertNotIn("base", cards["x1"])
+        self.assertEqual((cards["x2"]["base"], cards["x2"]["source_result"], cards["x2"]["prompt"]),
+                         ("version", source, "再亮一點"))
+
+        # One still running carries it to the card the status poll posts.
+        self.jobs["x3"] = {"status": "processing", "error": None}
+        entry = self.case(photo["case_id"], [(a, "analyze", [a]), ("x1", "edit", ["x1"]), ("x2", "edit", ["x2"]),
+                                             ("x3", "edit", ["x3"])])
+        entry["versions"][3]["params"] = {"base": "version", "source_result": source, "user_prompt": "背景虛化"}
+        self.client.get(self.url(sid), query_string={"user": USER})
+        self.jobs["x3"]["status"] = "success"
+        card = self.status(sid)["new_messages"][0]["card"]
+        self.assertEqual((card["version_id"], card["base"], card["source_result"], card["prompt"]),
+                         ("x3", "version", source, "背景虛化"))
+
     def test_session_tile_is_failed_only_when_nothing_survived(self):
         sid = self.new_session()
         first, second = self.add_photos(sid, 2)

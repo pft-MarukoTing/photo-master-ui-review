@@ -533,6 +533,16 @@ def session_from_case():
     return jsonify({"session_id": session_id, "created": True}), 201
 
 
+def _panel_continuation(version):
+    """The fields a chat continuation's render_done card carries, for a
+    面板模式 version made from another result, so the page shows it as
+    由第 N 版調整 too. Empty for one made from the original."""
+    params = version.get("params") or {}
+    if params.get("base") != VERSION_BASE or not isinstance(params.get("source_result"), dict):
+        return {}
+    return {"base": VERSION_BASE, "source_result": params["source_result"], "prompt": params.get("user_prompt")}
+
+
 def _sync_from_history(user, session_id, session):
     """Post the versions a session's photos got outside it as render_done
     cards, so the chat page lists them like its own -- edits made in
@@ -561,7 +571,8 @@ def _sync_from_history(user, session_id, session):
                     continue  # a job that has expired out of Redis never finishes
                 photo["status"] = "rendering"
                 photo["pending_render"] = {"action_id": version_id, "job_ids": list(version["runs"]),
-                                           "based_on": version.get("based_on"), "base": "custom", "plan": None}
+                                           "based_on": version.get("based_on"), "base": "custom", "plan": None,
+                                           "panel_continuation": _panel_continuation(version)}
                 changed = True
                 break
             # A one-shot case's first version is also the photo's analyze
@@ -577,7 +588,7 @@ def _sync_from_history(user, session_id, session):
             messages.append(store.make_message("assistant", card={
                 "type": "render_done", "photo_id": photo["photo_id"], "version_id": version_id,
                 "job_ids": succeeded, "failed_job_ids": [j for j in version["runs"] if j not in succeeded],
-                "via": "custom"}))
+                "via": "custom", **_panel_continuation(version)}))
         if _adopt_case_analysis(photo, entry, statuses):
             changed = True
             # Usually long finished by the time the chat opens: land it now,
@@ -3684,7 +3695,7 @@ def _advance_rendering(user, session_id, photo, statuses):
         photo["active_version"] = store.active_version(pending["action_id"], succeeded[0])
         card = {"type": "render_done", "photo_id": photo["photo_id"], "version_id": pending["action_id"],
                 "job_ids": succeeded, "failed_job_ids": [j for j in pending["job_ids"] if j not in succeeded],
-                "via": "custom"}
+                "via": "custom", **(pending.get("panel_continuation") or {})}
     elif succeeded:
         photo["active_version"] = store.active_version(pending["action_id"], succeeded[0])
         plan = pending.get("plan") or photo["plan"]
