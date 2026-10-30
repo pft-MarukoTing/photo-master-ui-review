@@ -220,7 +220,7 @@ window.PHOTOAGENT_CATALOGS.en = {
   "不調整這版了": "Stop adjusting this version",
   "以第 {n} 版為底，只改你在下方寫的地方或挑的風格，其他保持原樣。": "Starts from version {n} and changes only what you write or pick below; everything else stays as it is.",
   "先寫下想調整的地方，或挑一個風格。": "Write what you'd like to change, or pick a style first.",
-  "還沒美化的調整會清掉。確定要接著這張調整嗎？": "Your unretouched changes will be cleared. Adjust this one anyway?",
+  "個人化需求和風格會帶過去，其他還沒美化的調整會清掉。確定要接著這張調整嗎？": "Your request and styles come along; other unretouched changes will be cleared. Adjust this one anyway?",
   "還沒送出的「接著這張調整」會取消。確定要切換嗎？": "Your unsent “Adjust This One” will be cancelled. Switch anyway?",
   "只改你要求的地方，其他保持第 {n} 版的樣子。": "Changes only what you ask; the rest stays as in version {n}.",
   "依你的需求調整：「{request}」": "Adjusted as you asked: “{request}”",

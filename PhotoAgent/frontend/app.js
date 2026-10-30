@@ -323,6 +323,10 @@
   // thumbUrl, prefill: {text, style_options} } -- prefill is what the panel
   // opens with: a chat handoff's request, or what was typed before 取消.
   let panelContinuation = null;
+  // The request a 從原圖美化 switch left behind: it stays the 個人化需求 there,
+  // and switching back to 接著這張調整 on the same version picks it up again.
+  // { owner, versionId, prefill, applied }.
+  let panelContinuationStash = null;
   // The review controls as this case first showed them, to tell whether
   // leaving the page would throw away edits not yet sent with 美化
   // (isReviewDirty). Tied to the singleFlowState it was taken for; dropped
@@ -2697,14 +2701,27 @@
   // when it is not the one on screen (a chat handoff can name any version).
   async function enterPanelContinuation(run, prefill = null) {
     if (!singleRuns || !canContinueFromRun(run)) return;
-    if (!activeContinuation()
-      && !(await confirmDropReview(tr("還沒美化的調整會清掉。確定要接著這張調整嗎？")))) return;
+    // From 從原圖美化: the unsent 個人化需求 and styles come along as the
+    // request, and the model/ratio stay on singleFlowState, so only the
+    // other unsent edits are lost and asked about.
+    let carried = null;
+    if (!activeContinuation() && isReviewDirty()) {
+      const { user_prompt: text = "", style_options: style = {}, overwrite_prompt: _o,
+        image_model: _m, image_quality: _q, aspect_ratio: _r, ...lost } = readUnsentReview() || {};
+      carried = { text, style_options: Object.fromEntries(Object.entries(style).filter(([, v]) => v && v !== "default")) };
+      if (Object.keys(lost).length && !(await showConfirmModal(tr("個人化需求和風格會帶過去，其他還沒美化的調整會清掉。確定要接著這張調整嗎？"),
+        { confirmLabel: tr("繼續"), cancelLabel: tr("留在這裡"), danger: false }))) return;
+    }
     const idx = singleRuns.indexOf(run);
     if (idx < 0) return;
     if (idx !== singleMirrorIndex) {
       await selectRunAt(idx);
       if (singleRuns[singleMirrorIndex] !== run || run.status !== "done") return;
     }
+    const stash = panelContinuationStash;
+    panelContinuationStash = null;
+    if (!prefill && !isEmptyContinuationRequest(carried)) prefill = carried;
+    if (!prefill && stash?.owner === singleFlowState && stash.versionId === run.versionId) prefill = stash.prefill;
     panelContinuation = {
       owner: singleFlowState,
       source: { version_id: run.versionId, job_id: run.jobId, run: run.sourceRun },
@@ -2718,10 +2735,25 @@
   }
 
   function exitPanelContinuation() {
-    if (!activeContinuation()) return;
+    const cont = activeContinuation();
+    if (!cont) return;
+    const request = pendingContinuationRequest();
+    panelContinuationStash = isEmptyContinuationRequest(request) ? null
+      : { owner: singleFlowState, versionId: cont.source.version_id, prefill: request };
     panelContinuation = null;
     syncVersionStripCurrent();
     openInlineAnalysisForCurrentContext(true);
+  }
+
+  // Like the chat, one request across both modes: what 接著這張調整 had is put
+  // in 從原圖美化 as unsent edits, once (a reopen after 取消 keeps its own).
+  function applyContinuationStash() {
+    const stash = panelContinuationStash;
+    if (!stash || stash.owner !== singleFlowState || stash.applied) return;
+    stash.applied = true;
+    const { text, style_options: style } = stash.prefill;
+    if (text && els.promptInput) els.promptInput.value = text;
+    if (Object.keys(style).length) applyStyleSelections({ options: { ...readStyleSelectionsFromDom().options, ...style } });
   }
 
   if (els.apSkipHintExit) els.apSkipHintExit.addEventListener("click", exitPanelContinuation);
@@ -6705,14 +6737,20 @@
     markReviewBaseline();
     // After the snapshot: what the chat page changed counts as a change here
     // too, so 美化 is not blocked as if nothing had been touched.
-    if (!continuing) applyPendingModeHandoff();
+    if (!continuing) {
+      applyPendingModeHandoff();
+      applyContinuationStash();
+    }
     updateInlineAnalysisContinueBtnState();
 
     const action = await waitForInlineAnalysisAction(undefined, () => (
       continuing && activeContinuation() === continuing
         && isEmptyContinuationRequest(continuationRequestFromDom())
         ? tr("先寫下想調整的地方，或挑一個風格。") : null));
-    if (action !== "cancel") reviewBaseline = null; // sent with this 美化
+    if (action !== "cancel") {
+      reviewBaseline = null; // sent with this 美化
+      panelContinuationStash = null;
+    }
     // Closing straight into #canvas-loading (below) rather than back onto
     // the photo -- skip .results-canvas-row's panel-close animation (styles.
     // css) here, since there's no photo on screen for it to slide/grow
