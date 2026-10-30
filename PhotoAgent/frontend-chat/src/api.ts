@@ -248,8 +248,9 @@ export const api = {
   // rebuilt from history. 409 when the chat page cannot open it at all.
   fromCase: (caseId: string) =>
     request<{ session_id: string; created: boolean }>(`${CHAT}/sessions/from-case`, json("POST", { case_id: caseId })),
-  postMessage: (id: string, card: Dict, text = "") =>
-    request<Message>(`${sid(id)}/messages`, json("POST", { role: "user", card, ...(text ? { text } : {}) })),
+  // keepalive: posted right before leaving the page, so the request outlives it.
+  postMessage: (id: string, card: Dict, text = "", keepalive = false) =>
+    request<Message>(`${sid(id)}/messages`, { ...json("POST", { role: "user", card, ...(text ? { text } : {}) }), keepalive }),
   // Several at once, in order: the upload page's conversation, carried into the session it starts.
   postMessages: (id: string, messages: { role: "user" | "assistant"; text?: string; card: Dict }[], signal?: AbortSignal) =>
     request<{ messages: Message[] }>(`${sid(id)}/messages`, { ...json("POST", { messages }), signal }),

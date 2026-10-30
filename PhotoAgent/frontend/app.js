@@ -1244,9 +1244,13 @@
   function writeModeHandoff(caseKey) {
     // 接著這張調整 goes over as itself: the chat page carries on from the
     // same version, with the request so far.
+    // With nothing written yet it is not an edit: the chat page opens on the
+    // finished version, not carrying on.
     const cont = caseKey ? activeContinuation() : null;
     if (cont) {
-      const { text, style_options } = pendingContinuationRequest() || {};
+      const request = pendingContinuationRequest();
+      if (isEmptyContinuationRequest(request)) return false;
+      const { text, style_options } = request;
       try {
         sessionStorage.setItem(MODE_HANDOFF_KEY, JSON.stringify({
           case_id: caseKey, at: Date.now(), continuation: { ...cont.source, text, style_options } }));
@@ -1257,7 +1261,7 @@
     }
     const unapplied = caseKey && pendingModeHandoff?.case_id === caseKey ? pendingModeHandoff : null;
     const review = unapplied || (caseKey ? readUnsentReview() : null);
-    if (!review) return false;
+    if (!review || !Object.keys(review).length) return false;
     const compositions = unapplied ? unapplied.compositions : singleFlowState.analysis._composition_by_ratio;
     try {
       sessionStorage.setItem(MODE_HANDOFF_KEY, JSON.stringify({ ...review, case_id: caseKey, at: Date.now(), compositions }));

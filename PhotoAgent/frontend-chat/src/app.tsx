@@ -5915,12 +5915,22 @@ export function SessionView(props: {
   }, [!!continuing]);
   // 切到面板模式時，接著調整的這一版跟收下的需求、風格一起帶過去（還在跟 AI
   // 來回的那幾句不帶）。
+  // 什麼都還沒改（看了美化項目沒動、接著調整還沒寫需求）就不算在調整：這一輪
+  // 收起來、接著調整也不帶，兩邊都回到美化完的樣子，離開時也不用問。
   const panelMode: PanelMode | undefined = props.panelMode && {
     ...props.panelMode,
-    onLeave: () => (props.onPanelLeave || props.panelMode!.onLeave)(continuing ? {
-      version_id: continuing.version_id, job_id: versionJob(continuing), run: 1,
-      text: contPromptRef.current.trim(), style_options: contStyles,
-    } : undefined),
+    onLeave: () => {
+      if (roundOpen && unchanged) {
+        api.postMessage(props.session.session_id, { type: "adjust_cancelled", photo_id: photo.photo_id, kept: [], auto: true }, "", true)
+          .catch(() => {});
+      }
+      const text = contPromptRef.current.trim();
+      const handOn = !!continuing && (!!text || contStyled);
+      (props.onPanelLeave || props.panelMode!.onLeave)(handOn ? {
+        version_id: continuing!.version_id, job_id: versionJob(continuing!), run: 1,
+        text, style_options: contStyles,
+      } : undefined);
+    },
   };
   // 從面板模式帶過來的：版本列出來了就接著那一版。那一版不在這段對話裡就算了。
   useEffect(() => {
@@ -6949,6 +6959,8 @@ export function SessionView(props: {
         );
       }
       case "adjust_cancelled":
+        // 切到面板時收起的、什麼都沒改的那一輪：不是使用者按的返回。
+        if (m.card?.auto) return null;
         return (
           <>
             <UserMsg meta={clockLabel(m.created_at)}>
