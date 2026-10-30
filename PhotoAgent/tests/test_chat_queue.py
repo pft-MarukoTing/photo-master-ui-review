@@ -4,6 +4,10 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
+# Loaded before the patch.dict below: leaving it drops every module imported
+# inside, and cv2, a C extension, breaks when imported a second time.
+import image_tools  # noqa: F401
+
 
 def _import_chat_queue():
     """chat_queue imports aiserver_utils' Redis/queue/S3 clients at module
