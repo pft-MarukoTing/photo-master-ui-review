@@ -186,12 +186,13 @@ export const api = {
   // 項撤回（「帽子拿掉」→「帽子留著」），照 `merged` 改完就好，這句不進清單。
   // `batch`：從好幾張的總覽打的（張數、這批的「分析／美化」鍵名稱、照片清單在哪），
   // AI 就講「這幾張」、只講某一張的話請人去那張改；單張的上傳頁不帶。
-  // `continuation`：「接著這張調整」打的，AI 只指向「美化」，不提分析、不改比例設定。
+  // `continuation`：「接續某一版修改」打的，帶那一版的 N；AI 只指向「接續第 N 版美化」，
+  // 不提分析、不改比例設定。
   promptReview: (text: string, prompt: string, history: ReviewTurn[], people: string[],
     sections: { who: string; text: string }[] = [],
     batch?: { photos: number; unrendered: number; analyze: string; render: string; where: string },
     sideContext?: { source_sha256: string; analysis_model: string; previous_token?: string }, sideAnswer?: SideAnswer,
-    continuation = false) =>
+    continuation: number | false = false) =>
     request<{
       accepted: boolean;
       clarification_subtype?: "body_side_reference";

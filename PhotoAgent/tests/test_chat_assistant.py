@@ -645,18 +645,23 @@ class ReviewLineTest(unittest.TestCase):
         result = chat_assistant.review_line(line, "", model=lambda c: seen.append(c) or answer, batch=batch)
         return result, seen[0]
 
-    def continuation_review(self, answer, line="臉再亮一點"):
+    def continuation_review(self, answer, line="臉再亮一點", continuation=True):
         seen = []
-        result = chat_assistant.review_line(line, "", model=lambda c: seen.append(c) or answer, continuation=True)
+        result = chat_assistant.review_line(line, "", model=lambda c: seen.append(c) or answer, continuation=continuation)
         return result, seen[0]
 
-    # 「接著這張調整」：只有「美化」鍵，收下後指向它，不提分析／一鍵美化。
+    # 「接續某一版修改」：只有「接續第 N 版美化」一個鍵，收下後指向它，不提分析／一鍵美化。
     def test_a_continuation_keep_points_at_the_one_button(self):
         keep = {"verdict": "keep", "reply": "好，這個我記下來了。", "line": "", "options": []}
-        result, context = self.continuation_review(keep)
+        result, context = self.continuation_review(keep, continuation=4)
         self.assertIn("CONTINUATION:", context)
+        self.assertIn("「接續第 4 版美化」", context)
         self.assertTrue(result["kept"])
-        self.assertEqual(result["reply"], "好，這個我記下來了。" + chat_assistant.CONTINUATION_NEXT)
+        self.assertEqual(result["reply"], "好，這個我記下來了。" + chat_assistant.CONTINUATION_NEXT.format(label="接續第 4 版美化"))
+        # 舊的頁面不說是哪一版，鍵就叫「美化」。
+        result, context = self.continuation_review(keep)
+        self.assertIn("「美化」", context)
+        self.assertEqual(result["reply"], "好，這個我記下來了。" + chat_assistant.CONTINUATION_NEXT.format(label="美化"))
 
     # 沒有分析可以按：模型照樣提議或要開始分析，也只當回答，不給開始的鍵。
     def test_a_continuation_never_offers_or_starts_analysis(self):

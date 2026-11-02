@@ -3173,8 +3173,11 @@ def prompt_review():
                        and len(x["text"]) <= USER_PROMPT_MAX_LEN for x in sections)):
         raise _RequestError(f"sections must be a list of at most {PROMPT_REVIEW_SECTIONS_MAX} {{who, text}} strings")
     batch = _review_batch(body.get("batch"))
-    # 「接著這張調整」：在已經美化好的版本上再改，只有「美化」鍵，比例和設定照舊。
-    continuation = body.get("continuation") is True
+    # 「接續某一版修改」：在已經美化好的版本上再改，只有「接續第 N 版美化」一個鍵，
+    # 比例和設定照舊。新的頁面送版本號，舊的送 true（鍵就叫「美化」）。
+    continuation = body.get("continuation")
+    if not (continuation is True or (type(continuation) is int and 0 < continuation <= 999)):
+        continuation = False
     side_out=_side_upload_review(body,text)
     if side_out is not None:return jsonify(side_out)
     try:
@@ -3183,7 +3186,7 @@ def prompt_review():
             "sections": [{"who": x["who"], "text": x["text"]} for x in sections],
             "history": history, "people": [p.strip() for p in people],
             **({"batch": batch} if batch else {}),
-            **({"continuation": True} if continuation else {}),
+            **({"continuation": continuation} if continuation else {}),
             "deadline": time.time() + chat_assistant.TIMEOUT_SECONDS}, wait_seconds=PROMPT_REVIEW_WAIT_SECONDS)
     except Exception:
         current_app.logger.exception("chat prompt review failed")

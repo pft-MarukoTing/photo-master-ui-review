@@ -5879,20 +5879,29 @@ export function SessionView(props: {
   // 再美化一次, or 美化 in a round with nothing changed, asks first; any new
   // message or change drops the question.
   const [confirmRerun, setConfirmRerun] = useState(false);
-  // 按了「接著這張調整」：之後打的字是要在這一版上改的地方，按「美化」才產生。
+  // 輸入框上方換成某一版（或 AI 帶進來）：之後打的字是要在這一版上改的地方，按「接續第 N 版美化」
+  // 才產生。底是哪一版只看這裡，左邊點了別的版本也不跟著換；要換底用輸入框上面那顆。
   const [continuing, setContinuing] = useState<Version | null>(null);
-  useEffect(() => setContinuing(null), [photo.photo_id]);
+  // 接續某一版美化出來的那版，底自動換成它、留在接續模式；記著這次是從哪一版、照什麼
+  // 改的，「再美化」就照一樣的再產生一版。following：已經送出、新的一版還沒出來。
+  const [followed, setFollowed] = useState<ContRun & { version_id: string } | null>(null);
+  const following = useRef<ContRun & { count: number; seen: boolean } | null>(null);
+  useEffect(() => {
+    setContinuing(null);
+    setFollowed(null);
+    following.current = null;
+  }, [photo.photo_id]);
   // 美化過之後，個人化需求是累積下來的，看起來像在某一版上接著改；其實一般的
   // 「美化」是從原圖重做、每條都套。能接續某版的話，在需求旁邊把這件事講出來。
   const fromOriginal = props.onContinue && !continuing && versions.length > 0
-    ? t("按「美化」會從原圖重新做一版，這裡每一條都會套用。")
+    ? t("按「從原圖美化」會從原圖重新做一版，這裡每一條都會套用。")
     : "";
   // 這一輪另外挑的風格，跟打的字一起送；只屬於這一輪，不寫進照片的設定。
   const [contStyles, setContStyles] = useState<Record<string, string>>({});
   const [contStyleOpen, setContStyleOpen] = useState(false);
   const contStyled = Object.keys(contStyles).length > 0;
   // 打的每一句先給 AI 看過（跟上傳頁的個人化需求一樣），收下的累積在 contPrompt，
-  // 可以直接改字；按「美化」才連同風格一起送出。
+  // 可以直接改字；按「接續第 N 版美化」才連同風格一起送出。
   const [contTurns, setContTurnsState] = useState<ContTurn[]>([]);
   const contTurnsRef = useRef<ContTurn[]>([]);
   const setContTurns = (turns: ContTurn[]) => {
@@ -5950,7 +5959,7 @@ export function SessionView(props: {
     setContStyles(r.style_options || {});
   }, [props.resume, versions.length]);
   // AI 回「從第 N 版接著改」：切到那一版、打開「調整第 N 版」，要改的地方先放進去，
-  // 按「美化」才產生。只認打開這串對話之後才來的那則，同一則只接一次。
+  // 按「接續第 N 版美化」才產生。只認打開這串對話之後才來的那則，同一則只接一次。
   // （adjusting、leaveAdjust 在後面才宣告；effect 在整個 render 跑完才執行，拿得到。）
   const continuedFrom = useRef<string | null>(null);
   const closeRound = useRef(false);
@@ -5979,10 +5988,35 @@ export function SessionView(props: {
     closeRound.current = false;
     if (adjusting) props.onPost({ type: "adjust_cancelled", kept: dirtyCats, auto: true });
   }, [busy, adjusting]);
-  // 接著調整到一半點了別的版本：改成以那一版為底，打到一半的字留著。
-  useEffect(() => {
-    if (current) setContinuing((was) => (was && was.version_id !== current.version_id ? current : was));
-  }, [current?.version_id]);
+  // 輸入框上方那顆換底，美化過就一直在，預設是原圖。換到某一版就接著那版改，左邊也
+  // 切過去：原本在接續的，打好的需求、風格都留著；原本開著一般調整的，那一輪收起來
+  // （跟 AI 說要接著改一樣），這輪加進個人化需求的那幾段帶過去當要改的地方。換回原圖就
+  // 不接續了，打好的需求寫進個人化需求（已經在裡面的不重複寫）、挑的風格寫進照片的
+  // 風格，開一輪一般的調整，用「從原圖美化」產生。
+  function continueFrom(v: Version | null) {
+    if (v) {
+      if (v.version_id !== current?.version_id) props.onSelectVersion(v);
+      if (!continuing) {
+        if (adjusting) closeRound.current = true;
+        setPointed([]);
+        setContTurns([]);
+        setContPrompt(addedPrompt);
+      }
+      setContinuing(v);
+      setComposerKey((k) => k + 1);
+      return;
+    }
+    const parts = (x: string) => x.split(/[；;\n]/).map((y) => y.trim()).filter(Boolean);
+    const have = new Set(parts(promptNow || ""));
+    const text = parts(contPromptRef.current).filter((x) => !have.has(x)).join("；");
+    const patch: Plan = {
+      ...(text ? { user_prompt: promptNow ? `${promptNow}\n${text}` : text } : {}),
+      ...(contStyled ? { style_options: contStyles } : {}),
+    };
+    setContinuing(null);
+    void props.onPost({ type: "adjust_opened", plan: parkedPlan || snapshotOf(photo.plan) },
+      Object.keys(patch).length ? patch : undefined);
+  }
   // 這一輪寫了（或改了）個人化需求，美化前先問：只照需求改，還是順便整張美化。
   // 記著按的是哪顆美化，問完照那顆的字送出去。
   const [askMode, setAskMode] = useState<{ label: string; icon: string } | null>(null);
@@ -6011,11 +6045,13 @@ export function SessionView(props: {
   }, [pid, messages.length, messages[messages.length - 1]?.card?.category, unchanged]);
   const promptNow = (photo.plan.user_prompt || "").trim();
   // 「照建議直接美化」只在什麼都還沒動時這樣叫：寫了需求、打開過項目、對話裡套用過
-  // 改動，按下去就不只是照建議了，鍵和話裡都改說「美化」。
+  // 改動，按下去就不只是照建議了，鍵和話裡都改說「美化」。已經有版本、又能接續某一版
+  // 的話，叫「從原圖美化」，跟「接續第 N 版美化」分得出來。
   const tookChange = messages
     .slice(readyIdx + 1)
     .some((m) => !!m.card?.proposal?.direct || (m.card?.type === "proposal_resolved" && m.card?.choice === "apply"));
-  const startLabel = fresh && !adjusting && !lastOpened && !promptNow && !tookChange ? "照建議直接美化" : "美化";
+  const startLabel = fresh && !adjusting && !lastOpened && !promptNow && !tookChange ? "照建議直接美化"
+    : versions.length > 0 && props.onContinue ? "從原圖美化" : "美化";
   const promptChanged =
     !!promptNow && (fresh || (adjusting && String(roundPlan?.user_prompt || "").trim() !== promptNow));
   // 美化（第一輪、調整後）都走這裡。需求是這一輪新寫的就先問；沒動需求、
@@ -6321,28 +6357,29 @@ export function SessionView(props: {
     setContReviewing(true);
     let turn: ContTurn;
     let start = false;
+    const n = continuing!.ordinal;
     try {
       const r = await api.promptReview(line, prompt, history, [], prompt ? [{ who: "", text: prompt }] : [],
-        undefined, undefined, undefined, true);
+        undefined, undefined, undefined, n);
       if (gen !== contGen.current) return;
       // 跟前面衝突的，模型把前面那段改寫過；撤回的那句本身不進清單。
       let next = (r.accepted ? r.merged?.find((m) => m.section === 0)?.text : undefined) ?? contPromptRef.current;
       if (r.accepted && !r.withdrawn) next = [next, r.line || line].filter(Boolean).join(t("；"));
       setContPrompt(next);
-      turn = { text: line, reply: r.reply || (r.accepted ? t("好，這句記下來了，按「美化」時一起套用。") : ""),
+      turn = { text: line, reply: r.reply || (r.accepted ? t("好，這句記下來了，按「接續第 {n} 版美化」時一起套用。", { n }) : ""),
         ...(r.ask ? { options: r.options || [] } : {}) };
       start = r.start === "render" || (go && r.accepted && !r.ask);
     } catch {
       if (gen !== contGen.current) return;
       // 問不到就先收下，美化前還能在框裡改。
       setContPrompt([contPromptRef.current, line].filter(Boolean).join(t("；")));
-      turn = { text: line, reply: t("好，這句先記下來，按「美化」時一起套用。") };
+      turn = { text: line, reply: t("好，這句先記下來，按「接續第 {n} 版美化」時一起套用。", { n }) };
       start = go;
     } finally {
       if (gen === contGen.current) setContReviewing(false);
     }
     setContTurns([...before, turn]);
-    // 「幫我美化」就是按「美化」。
+    // 「幫我美化」就是按「接續第 N 版美化」。
     if (start) void continueNow();
   }
 
@@ -6355,9 +6392,34 @@ export function SessionView(props: {
     }
     const text = contPromptRef.current.trim();
     if (!text && !contStyled) return;
-    const ok = await props.onContinue(continuing, text, contStyles);
-    if (ok) setContinuing(null);
+    await continueRun({ from: continuing, text, styles: contStyles });
   }
+
+  async function continueRun(r: ContRun) {
+    const count = versions.length;
+    const ok = await props.onContinue!(r.from, r.text, r.styles);
+    if (!ok) return;
+    following.current = { ...r, count, seen: false };
+    setContinuing(null);
+  }
+  // 新的一版出來就切過去接著改；沒成功（回到 ready 卻沒有新的一版）就算了，留在原圖。
+  useEffect(() => {
+    const f = following.current;
+    if (!f) return;
+    if (photo.status !== "ready") {
+      f.seen = true;
+      if (photo.status === "failed") following.current = null;
+      return;
+    }
+    if (versions.length > f.count) {
+      following.current = null;
+      const v = versions[versions.length - 1];
+      if (v.version_id !== current?.version_id) props.onSelectVersion(v);
+      setFollowed({ from: f.from, text: f.text, styles: f.styles, version_id: v.version_id });
+      setContinuing(v);
+      setComposerKey((k) => k + 1);
+    } else if (f.seen) following.current = null;
+  }, [photo.status, versions.length]);
 
   async function send(text: string, si: number[], scr: Screen = screen) {
     if (pendingPerson?.kind === "edit_description" || pendingPerson?.kind === "action" || pendingPerson?.kind === "visual") {
@@ -6644,19 +6706,16 @@ export function SessionView(props: {
   } else if (photo.status !== "ready") {
     // 分析中、美化中：處理中那張卡已經講了接下來做什麼，不擺按不下去的鍵。
   } else if (versions.length && current) {
+    // 要接著某一版改，在輸入框上方把底從原圖換成那一版，這裡不另外放鍵。
     actionChips = (
       <>
         <Chip label={t("看美化項目")} icon="pencil" badge={parkedNote} disabled={busy || !ready} onClick={enterAdjust} />
         {analyzeChip}
-        {props.onContinue && (
-          <Chip label={t("接著這張調整")} icon="tune" disabled={busy} title={t("以第 {n} 版為底，只改你接下來說的地方", { n: current.ordinal })}
-            onClick={() => { setContinuing(current); setPointed([]); setComposerKey((k) => k + 1); }} />
-        )}
         <Chip label={t("再美化")} icon="redo" kind="primary" disabled={busy}
           onClick={() => (parkedNote ? render("再美化", "redo") : setConfirmRerun(true))} />
       </>
     );
-    bar = [...(offerAnalyze ? ["看美化項目", "幫我分析"] : ["看美化項目"]), ...(props.onContinue ? ["接著這張調整"] : []), "再美化"];
+    bar = [...(offerAnalyze ? ["看美化項目", "幫我分析"] : ["看美化項目"]), "再美化"];
   } else if (lastOutcome?.card?.type === "render_failed") {
     actionChips = (
       <>
@@ -7364,12 +7423,15 @@ export function SessionView(props: {
     const before = new Set(parts(roundPlan.user_prompt));
     return parts(photo.plan.user_prompt).filter((x) => !before.has(x)).join("；");
   })();
+  // 輸入框上方：美化過就有換底那顆（預設原圖）；人不只一個時有點人的那排。
+  const baseShown = !!props.onContinue && versions.length > 0 && photo.status === "ready";
+  const facesShown = !pendingPerson && !facesInline && pickable.length > 1;
   const screen: Screen = {
     bar: busy || props.pendingAsk || photo.status !== "ready" ? [] : bar,
     topics: editing ? cats.map((c) => CATEGORIES[c].label) : [],
     pending: [...(adjusting ? dirtyCats : parkedCats).map(c => CATEGORIES[c].label), ...(pendingPerson ? [pendingPerson.text] : [])],
     panels: panels.map((c) => CATEGORIES[c].label),
-    // 有幾版、現在看的是第幾版：只有能「接著這張調整」時才給，AI 才會提從某一版接著改。
+    // 有幾版、現在看的是第幾版：只有能接續某一版時才給，AI 才會提從某一版接著改。
     ...(props.onContinue && versions.length ? { versions: versions.length, shown: current?.ordinal ?? versions.length } : {}),
     ...(props.onContinue && versions.length && addedPrompt ? { added: addedPrompt } : {}),
   };
@@ -7450,17 +7512,16 @@ export function SessionView(props: {
                         faces={
                           continuing ? (
                             <>
-                            <span class="chat-composer-who chat-continue-from">
-                              <img class="chat-continue-shot" src={urls.resultThumb(versionJob(continuing))} alt="" />
-                              {t("調整第 {n} 版", { n: continuing.ordinal })}
-                              <button type="button" class="chat-composer-who-x" title={t("不調整這版了")} aria-label={t("不調整這版了")}
-                                onClick={() => setContinuing(null)}>
-                                <Icon name="x" size={12} />
-                              </button>
-                            </span>
+                            <ContinueBase versions={versions} from={continuing} original={thumb} disabled={busy || contReviewing}
+                              onPick={continueFrom} onClose={() => setContinuing(null)} />
                             {parkedNote && <span class="chat-continue-note">{t("美化項目的改動這次不會用到，會先留著")}</span>}
                             </>
-                          ) : !pendingPerson && !facesInline && pickable.length > 1 && <FacePicker people={pickable} pointed={pointed} onPoint={setPointed} />
+                          ) : (baseShown || facesShown) && (
+                            <>
+                            {baseShown && <ContinueBase versions={versions} from={null} original={thumb} disabled={busy} onPick={continueFrom} />}
+                            {facesShown && <FacePicker people={pickable} pointed={pointed} onPoint={setPointed} />}
+                            </>
+                          )
                         }
                       />
                       <Composer
@@ -7501,14 +7562,22 @@ export function SessionView(props: {
                     </Fragment>
                   ))}
                   {continuing && contReviewing && <AssistantMsg>{typing}</AssistantMsg>}
-                  {/* 按了「美化」到動畫出來之間 busy 也要留著這張卡：收掉的話最後一則會變成上面那句
-                      「按下面的「美化」就會開始」，像又講了一次。 */}
+                  {/* 按了「接續第 N 版美化」到動畫出來之間 busy 也要留著這張卡：收掉的話最後一則會變成
+                      上面那句「按下面的「接續第 N 版美化」就會開始」，像又講了一次。 */}
                   {continuing && !contReviewing && (
                     <AssistantMsg>
-                      {/* AI 剛說完「從第 N 版接著改」的話，該怎麼做它已經講了，不再說一次。 */}
-                      {!contTurns.length && continuedFrom.current !== messages[endIdx]?.id && (
-                        <p class="chat-text">{t("想改的地方可以一句一句打在下面，我會先幫你看過、記下來；也可以按「風格」換光線、角度這類效果。都好了再按「美化」。")}</p>
-                      )}
+                      {/* 切到哪一版，一開始都講。AI 剛說完「從第 N 版接著改」的話，該怎麼做它已經
+                          講了，後面那段不再說一次。 */}
+                      {!contTurns.length && (followed?.version_id === continuing.version_id ? (
+                        <p class="chat-text">
+                          {t("第 {n} 版好了，接下來從這一版接著改。想改的地方可以告訴我，也可以按下方的「風格」調整；照一樣的需求再來一版，按「再美化」；想看原圖的美化項目，在輸入框上方換回「原圖」。", { n: continuing.ordinal })}
+                        </p>
+                      ) : (
+                        <p class="chat-text">
+                          {t("已切到第 {n} 版，接下來從這一版接著改。", { n: continuing.ordinal })}
+                          {continuedFrom.current !== messages[endIdx]?.id && t("想改的地方可以一句一句打在下面，我會先幫你看過、記下來；也可以按「風格」換光線、角度這類效果。都好了再按「接續第 {n} 版美化」。", { n: continuing.ordinal })}
+                        </p>
+                      ))}
                       {(!!contPrompt || contTurns.length > 0) && (
                         <div class="chat-card chat-notes">
                           <span class="chat-meta">{t("個人化需求")}</span>
@@ -7535,8 +7604,13 @@ export function SessionView(props: {
                         <Chip label={t("風格")} icon="wand" kind={contStyleOpen ? "picked" : undefined}
                           badge={contStyled ? t("已選風格：{v}", { v: pickedStyles(styleAnalysis, caps, { style_options: contStyles }).join(t("、")) }) : undefined}
                           disabled={busy} onClick={() => setContStyleOpen((o) => !o)} />
+                        {followed?.version_id === continuing.version_id && (
+                          <Chip label={t("再美化")} icon="redo" kind={contPrompt.trim() || contStyled ? undefined : "primary"} disabled={busy}
+                            onClick={() => void continueRun(followed)} />
+                        )}
                         {(!!contPrompt.trim() || contStyled) && (
-                          <Chip label={t("美化")} icon="wand" kind="primary" disabled={busy} onClick={() => withDraft(() => void continueNow())} />
+                          <Chip label={t("接續第 {n} 版美化", { n: continuing.ordinal })} icon="wand" kind="primary" disabled={busy}
+                            onClick={() => withDraft(() => void continueNow())} />
                         )}
                       </div>
                     </AssistantMsg>
@@ -7652,8 +7726,82 @@ function AnswerList(props: {
   );
 }
 
-// 「接著這張調整」打的一句和 AI 的回覆；`options` 是 AI 追問時給的選項。
+// 接續某一版時打的一句和 AI 的回覆；`options` 是 AI 追問時給的選項。
 type ContTurn = { text: string; reply?: string; options?: string[] };
+// 一次接續美化：從哪一版、照什麼需求和風格。
+type ContRun = { from: Version; text: string; styles: Record<string, string> };
+
+// 輸入框上方「從原圖調整／調整第 N 版」那顆：點了掀開選單換底，原圖或任一版。
+// 藥丸本身會把太長的字截掉（overflow:hidden），選單得掛在外面那層，不然會被切掉。
+// 原圖是預設，沒有叉叉；接著某一版時才有，按了就不接續、打好的也不留。
+function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
+  versions: Version[];
+  from: Version | null;
+  original: string;
+  disabled?: boolean;
+  onPick: (v: Version | null) => void;
+  onClose?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLSpanElement>(null);
+  // 點到別處、按 Esc 就收，跟美化項目裡的程度選單一樣。
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+  const pick = (v: Version | null) => {
+    setOpen(false);
+    if ((v?.version_id ?? null) !== (from?.version_id ?? null)) onPick(v);
+  };
+  return (
+    <span class="chat-continue-base" ref={wrap}>
+      <span class="chat-composer-who chat-continue-from">
+        <button type="button" class="chat-continue-pick" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
+          title={t("換一張當底")} onClick={() => setOpen((o) => !o)}>
+          <img class="chat-continue-shot" src={from ? urls.resultThumb(versionJob(from)) : original} alt="" />
+          {from ? t("調整第 {n} 版", { n: from.ordinal }) : t("從原圖調整")}
+          <span class={`chat-opt-caret${open ? " is-open" : ""}`} />
+        </button>
+        {from && onClose && (
+          <button type="button" class="chat-composer-who-x" title={t("不調整這版了")} aria-label={t("不調整這版了")} onClick={onClose}>
+            <Icon name="x" size={12} />
+          </button>
+        )}
+      </span>
+      {open && (
+        <div class="chat-opt-menu is-up chat-continue-menu" role="menu">
+          <button type="button" role="menuitemradio" aria-checked={!from} class={!from ? "is-picked" : undefined} onClick={() => pick(null)}>
+            <span class="chat-opt-menu-tick">{!from && <Icon name="check" size={14} />}</span>
+            <img class="chat-continue-shot" src={original} alt="" />
+            {t("原圖")}
+          </button>
+          {versions.map((v) => {
+            const on = v.version_id === from?.version_id;
+            return (
+              <button type="button" role="menuitemradio" aria-checked={on} class={on ? "is-picked" : undefined} onClick={() => pick(v)}>
+                <span class="chat-opt-menu-tick">{on && <Icon name="check" size={14} />}</span>
+                <img class="chat-continue-shot" src={urls.resultThumb(versionJob(v))} alt="" />
+                {t("第 {n} 版", { n: v.ordinal })}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </span>
+  );
+}
 
 export function AskBubble({ text, faces, meta }: { text: string; faces?: FaceRef[]; meta?: string }) {
   return (

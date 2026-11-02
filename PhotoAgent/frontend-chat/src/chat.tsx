@@ -807,7 +807,7 @@ export function ResultCard({ job, ordinal, from, failed, next, continuable, note
   from?: number;
   failed: number;
   next?: boolean;
-  // 有「接著這張調整」可以按。
+  // 能在輸入框上方換成某一版接著改。
   continuable?: boolean;
   note?: string;
   noting?: boolean;
@@ -879,7 +879,7 @@ export function ResultCard({ job, ordinal, from, failed, next, continuable, note
           <span class="chat-result-hint-narrow">{t("上方照片可以跟原圖比，點右上的版本也能切換。")}</span>
         </p>}
         {next && !noting && <p class="chat-text">{continuable
-          ? t("想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」；想在這版上再改一點，按「接著這張調整」。也可以直接打字跟我說。")
+          ? t("想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」；想接續某一版修改，在輸入框上方把「原圖」換成那一版。也可以直接打字跟我說。")
           : t("想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。")}</p>}
       </figcaption>
     </figure>

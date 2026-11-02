@@ -28,6 +28,7 @@ LABELS = {
     "美化": "Retouch",
     "再美化": "Retouch Again",
     "照建議直接美化": "Retouch as Suggested",
+    "從原圖美化": "Retouch from Original",
     "看美化項目": "Review Edits",
     "幫我分析": "Analyze for Me",
     "再試一次": "Try Again",
@@ -148,8 +149,8 @@ TEXT = {
         "I couldn't match that to any available setting, but you can change it directly in the panels.",
     "這些已經在目前的設定裡了。": "That's already in the current settings.",
     "想照這樣重新產生一版，可以按「再美化」。": "To make a new version with these settings, tap “Retouch Again”.",
-    "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的個人化需求了，沒問題就按「美化」；想換光線、角度這類效果，可以先按「風格」。": "OK, I've switched to version {n} so we can build on it. The change is in “My Requests” below; tap “Retouch” when it looks right. For effects like lighting or angle, tap “Style” first.",
-    "好，已經切到第 {n} 版，接著在這版上改。想改哪裡直接打在下面，我會先幫你看過、記下來；想換光線、角度這類效果，可以按「風格」。都好了再按「美化」。": "OK, I've switched to version {n} so we can build on it. Type what to change below and I'll check and note it; for effects like lighting or angle, tap “Style”. Tap “Retouch” when you're done.",
+    "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的個人化需求了，沒問題就按「接續第 {n} 版美化」；想換光線、角度這類效果，可以先按「風格」。": "OK, I've switched to version {n} so we can build on it. The change is in “My Requests” below; tap “Retouch from Version {n}” when it looks right. For effects like lighting or angle, tap “Style” first.",
+    "好，已經切到第 {n} 版，接著在這版上改。想改哪裡直接打在下面，我會先幫你看過、記下來；想換光線、角度這類效果，可以按「風格」。都好了再按「接續第 {n} 版美化」。": "OK, I've switched to version {n} so we can build on it. Type what to change below and I'll check and note it; for effects like lighting or angle, tap “Style”. Tap “Retouch from Version {n}” when you're done.",
     "長寬比也幫你換成「{ratio}」了，在「設定」裡隨時可以改。":
         "I've also set the aspect ratio to “{ratio}”. You can change it anytime in “Settings”.",
     "目前沒有 {asked} 這個比例，最接近的是「{nearest}」，要換成這個嗎？":
@@ -273,7 +274,8 @@ TEXT = {
     "或": " or ",
     "還有其他想改的地方嗎？沒有的話，可以按下面的{buttons}。": "Anything else you'd like to change? If not, tap {buttons} below.",
     "還有其他想改的地方嗎？": "Anything else you'd like to change?",
-    "還有其他想改的地方嗎？沒有的話，按下面的「美化」就會開始。": "Anything else you'd like to change? If not, tap “Retouch” below to start.",
+    "還有其他想改的地方嗎？沒有的話，按下面的「{label}」就會開始。": "Anything else you'd like to change? If not, tap “{label}” below to start.",
+    "接續第 {n} 版美化": "Retouch from Version {n}",
     "（總覽：好幾張照片，這裡不指定人物）": "(Overview: several photos, no specific person)",
     "我的照片": "My Photos",
     "要修改或調整其他項目，可以點下面的美化項目，或按「{label}」我就開始。": "To change this or adjust other items, tap an item below, or tap “{label}” to start.",

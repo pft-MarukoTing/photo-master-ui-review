@@ -85,10 +85,10 @@ OPEN_PANELS = {"人像": "face", "畫面": "recipe", "風格": "style", "個人�
 UNMAPPED_REPLY = "這個調整我沒辦法對應到可設定的項目，可以直接在面板上修改。"
 ALREADY_SET_REPLY = "這些已經在目前的設定裡了。"
 ALREADY_SET_REDO = "想照這樣重新產生一版，可以按「再美化」。"
-# 回覆把人帶進「接著這張調整」（continue_from）：頁面切到那一版、打開「調整第 N 版」，
-# 要改的地方（continue_request）先放進去，按「美化」才產生。
-CONTINUE_REPLY = "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的個人化需求了，沒問題就按「美化」；想換光線、角度這類效果，可以先按「風格」。"
-CONTINUE_ASK_REPLY = "好，已經切到第 {n} 版，接著在這版上改。想改哪裡直接打在下面，我會先幫你看過、記下來；想換光線、角度這類效果，可以按「風格」。都好了再按「美化」。"
+# 回覆把人帶進「接續某一版修改」（continue_from）：頁面切到那一版、打開「調整第 N 版」，
+# 要改的地方（continue_request）先放進去，按「接續第 N 版美化」才產生。
+CONTINUE_REPLY = "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的個人化需求了，沒問題就按「接續第 {n} 版美化」；想換光線、角度這類效果，可以先按「風格」。"
+CONTINUE_ASK_REPLY = "好，已經切到第 {n} 版，接著在這版上改。想改哪裡直接打在下面，我會先幫你看過、記下來；想換光線、角度這類效果，可以按「風格」。都好了再按「接續第 {n} 版美化」。"
 
 
 # The prompts here are written for Chinese replies; i18n turns them to the
@@ -165,7 +165,7 @@ The user must always know what to press next. SCREEN lists what is on screen rig
 - Name only buttons listed in SCREEN, at most three. If SCREEN is empty, the photo is busy and there is nothing to press: name no button and do not mention buttons at all (never 「沒有可按的按鈕」); just invite the user to tell you what to change.
 - options: only when your reply asks a question, give two to four short answers to it, a few words each, written as the user's own reply (the people to choose from, the parts or choices you asked about: 「笑容」、「視線」、「髮色」, or the copy lines you offered). Keep descriptions brief and clear. Tapping one sends it as if typed. In every other case options is [] -- the buttons on SCREEN are the next step. A question that only offers a button on SCREEN (「要不要打開「設定」看看？」) also gets [] -- that button, shown under your reply, is the answer; a typed option cannot press it. Never write an option that stands for a button, or for a change you cannot make in PATCH: 美化引擎 and the number of images are changed only in 「設定」.
 - lines: true only when options are words for the photo you wrote (titles, headlines, captions, copy); false for every other kind of answer.
-- continue_from / continue_request: only when SCREEN has "versions". 「接著這張調整」 makes the next version from one finished version's own output, changing only what is asked -- the one way to build on an earlier version. When the user wants to redo, adjust or start again from a given version (「以第一版為基準」「從第一版重新做」「在第二版上改」), or picks such an option, set continue_from to that version's number (1 to SCREEN versions; 「這一版」 is SCREEN shown) and continue_request to what they want changed on it as one plain end-state sentence (「把畫面裡的電線全部去掉」), or "" when they have not said yet. SCREEN "added" is what this round added to 個人化需求 that no version has yet (e.g. they just said 「把車子移掉」 and now say 「接續第四版調整」): that is what they want on that version, so leave continue_request "" and the code carries it over, unless they now ask for something else. The page switches to that version and opens it for them; the code writes the reply. Action "none", patch_json "", options [], open "". A wish to just see or go back to a version (「回到第一版」) is not this: say they can switch to it in 「美化紀錄」. Without "versions" in SCREEN, never offer building on a version's output: every version starts from the original. Otherwise continue_from 0 and continue_request "".
+- continue_from / continue_request: only when SCREEN has "versions". Building on version N (its base is picked above the input box; rendered with 「接續第 N 版美化」) makes the next version from one finished version's own output, changing only what is asked -- the one way to build on an earlier version. When the user wants to redo, adjust or start again from a given version (「以第一版為基準」「從第一版重新做」「在第二版上改」), or picks such an option, set continue_from to that version's number (1 to SCREEN versions; 「這一版」 is SCREEN shown) and continue_request to what they want changed on it as one plain end-state sentence (「把畫面裡的電線全部去掉」), or "" when they have not said yet. SCREEN "added" is what this round added to 個人化需求 that no version has yet (e.g. they just said 「把車子移掉」 and now say 「接續第四版調整」): that is what they want on that version, so leave continue_request "" and the code carries it over, unless they now ask for something else. The page switches to that version and opens it for them; the code writes the reply. Action "none", patch_json "", options [], open "". A wish to just see or go back to a version (「回到第一版」) is not this: say they can switch to it in 「美化紀錄」. Without "versions" in SCREEN, never offer building on a version's output: every version starts from the original. Otherwise continue_from 0 and continue_request "".
 - your_pick: true when patch_json holds a choice you made for the user rather than what they said -- they asked you to decide (a colour, a line, a place, a style) or left it open and you filled it in; false when the change is what they asked for in their own words, or there is no patch.
 
 PEOPLE
@@ -478,7 +478,7 @@ Write in Traditional Chinese (Taiwan), plain everyday words, two or three short 
 - If the framing changed -- a new aspect ratio, a 重新構圖 item in RECIPE, or AFTER simply covering a different part of the scene than BEFORE -- say how, and what it does for the photo, as one of those changes (see COMPOSITION).
 - On a first version, one place worth a closer look in the comparison, named precisely. On a later version, only when THIS ROUND made something new to look at; otherwise leave it out.
 - If something PLAN asks for is not visible in AFTER, or something went wrong -- a face that no longer looks like the person, a smeared or warped detail, an unnatural edge, a colour cast, people who look pasted into a changed scene (no shadow on the ground, or lit unlike their new surroundings), or one of the framing problems under COMPOSITION -- do not describe the flaw; turn it into one offer of the end result it would bring (see Offers). Offer at most one such step, for the most visible problem. Word any next step as the end result in the photo, never 「再…一點」: every version starts from the original.
-- If EARLIER NOTES already offered a step for that problem and THIS ROUND tried it, the same step did not work: never offer it again. A 再美化 version starts from the original photo, so 「再…一點」 cannot build on this one that way. Offer a different route instead -- a different 比例 or 取景範圍, the change stated as an exact end state (「要不要直接改成 4:5，讓紅椅完全出框？」), or, when SCREEN has "versions", 接著這張調整 on this version (continue_from).
+- If EARLIER NOTES already offered a step for that problem and THIS ROUND tried it, the same step did not work: never offer it again. A 再美化 version starts from the original photo, so 「再…一點」 cannot build on this one that way. Offer a different route instead -- a different 比例 or 取景範圍, the change stated as an exact end state (「要不要直接改成 4:5，讓紅椅完全出框？」), or, when SCREEN has "versions", 從這一版接續修改 (continue_from).
 
 COMPOSITION
 Name the framing the way a photographer would, but only with a term that AFTER actually shows, and say in the same breath what it does for the viewer. One term per note at most; never force one. Use only the terms below, in exactly these words, and never coin another (for 景別, only 特寫、半身、全身、環境人像).
@@ -1254,8 +1254,9 @@ def _next_step(screen, edit=False):
     button below, and to the topics under the reply while adjusting. "" when
     SCREEN has no render button to point at. `edit`: the change got no card,
     so the topics are also where to change it back."""
-    # 這句跟在剛做的改動後面，回話底下那顆一定已經是「美化」：美化過之後套用會
-    # 開新一輪，第一輪動過任何東西也就不再是「照建議直接美化」。
+    # 這句跟在剛做的改動後面，回話底下那顆一定已經是「美化」（有版本可接續時叫
+    # 「從原圖美化」，照傳來的字念）：美化過之後套用會開新一輪，第一輪動過任何
+    # 東西也就不再是「照建議直接美化」。
     # 「看美化項目」字面有美化，但它是回頭看項目，不是開始美化。
     bar = [b for b in (screen or {}).get("bar") or [] if "美化" in b and "項目" not in b]
     if not bar:
@@ -1745,23 +1746,33 @@ def _batch_text(batch):
     ])
 
 
-# 「接著這張調整」：在已經美化好的某一版上再改。底下只有「美化」一個鍵，
-# 比例和人像修正都沿用那一版，沒有分析可以按。
+# 「接續某一版修改」：在已經美化好的某一版上再改。底下只有「接續第 N 版美化」
+# 一個鍵，比例和人像修正都沿用那一版，沒有分析可以按。
 CONTINUATION_TEXT = "\n".join([
     "The user is adjusting one version of the photo that is already rendered, not the upload page. The lines they keep"
-    " are applied together on top of that version when they press 「美化」, the only button here.",
-    "- Never offer or mention 分析, 幫我分析 or 一鍵美化; the button is 「美化」. Never use verdict \"offer\" or \"analyze\".",
+    " are applied together on top of that version when they press 「{button}」, the only button here.",
+    "- Never offer or mention 分析, 幫我分析 or 一鍵美化; the button is 「{button}」. Never use verdict \"offer\" or \"analyze\".",
     "- The aspect ratio and 人像修正 switches stay as that version had them: never use verdict \"setting\"; a line"
     " about the ratio or a switch is kept as a wish like any other.",
 ])
-CONTINUATION_NEXT = "還有其他想改的地方嗎？沒有的話，按下面的「美化」就會開始。"
+CONTINUATION_BUTTON = "接續第 {n} 版美化"
+CONTINUATION_NEXT = "還有其他想改的地方嗎？沒有的話，按下面的「{label}」就會開始。"
+
+
+def continuation_button(continuation):
+    """The one button under a continuation, as the user sees it: it names the
+    version it builds on when the page said which (`continuation` is then
+    that version's number), else the plain 「美化」 older pages had."""
+    if type(continuation) is int and continuation > 0:
+        return i18n.tr(CONTINUATION_BUTTON, n=continuation)
+    return i18n.label("美化")
 
 
 def _kept_next(batch, continuation=False):
     """KEPT_NEXT for the overview: which photos the line goes to, then the
     batch's own buttons, which sit right under the reply."""
     if continuation:
-        return i18n.tr(CONTINUATION_NEXT)
+        return i18n.tr(CONTINUATION_NEXT, label=continuation_button(continuation))
     if not batch:
         return i18n.tr(KEPT_NEXT)
     photos, unrendered = batch.get("photos") or 0, batch.get("unrendered") or 0
@@ -2097,7 +2108,8 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     offered 分析 once every photo is analyzed.
 
     `continuation` is set when the line adjusts a version already rendered
-    (「接著這張調整」): the only button is 「美化」, so nothing offers or
+    (「接續某一版修改」), as that version's number when the page sends it: the
+    only button is 「接續第 N 版美化」, so nothing offers or
     starts 分析, and the ratio and switches stay as that version had them --
     a line about them is kept like any other wish."""
     from photo_agent import side_reference
@@ -2151,7 +2163,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         LITERAL_CHOICE_INSTRUCTION,
     ]) + ("\n\n" + i18n.pattern("review_note") if i18n.pattern("review_note") else "")) + CACHE_BREAK + "\n\n".join([
         *(["BATCH OVERVIEW:\n" + _batch_text(batch)] if batch else []),
-        *(["CONTINUATION:\n" + CONTINUATION_TEXT] if continuation else []),
+        *(["CONTINUATION:\n" + CONTINUATION_TEXT.format(button=continuation_button(continuation))] if continuation else []),
         "PEOPLE IN PHOTO:\n" + ("\n".join(people) if people else i18n.tr("（總覽：好幾張照片，這裡不指定人物）") if batch else i18n.tr("（沒有偵測到人臉）")),
         f"LINES SO FAR:\n{_sections_text(sections) or i18n.tr('（還沒有）')}",
         answer_instruction(selected_context),

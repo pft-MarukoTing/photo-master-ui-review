@@ -2047,3 +2047,16 @@ button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
 /* 接著這張調整時，美化項目還有沒美化的改動：一行小字講它們這次不會用到。 */
 .chat-continue-note{min-width:0;font-size:var(--chat-fs-sm);color:var(--n54);text-wrap:pretty}
 .chat-continue-shot{width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0}
+/* 藥丸本身就是換底的鍵：點縮圖和「調整第 N 版」掀開選單，叉叉還是取消。選單往上
+   浮在對話上面、靠左對齊藥丸；版本多了自己捲，不把對話整個蓋掉。 */
+.chat-continue-base{position:relative;display:inline-flex;min-width:0}
+.chat-continue-pick{display:inline-flex;align-items:center;gap:var(--sp-1);min-width:0;padding:0 var(--sp-1) 0 0;
+  border:0;border-radius:999px;background:none;font:inherit;color:inherit;cursor:pointer}
+.chat-continue-pick .chat-opt-caret{margin-left:2px;flex-shrink:0}
+.chat-continue-pick:disabled{cursor:default}
+.chat-continue-pick:disabled .chat-opt-caret{opacity:.45}
+.chat-continue-pick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chat-continue-menu{left:0;right:auto;max-height:min(320px,50vh);overflow-y:auto}
+/* 換底跟指定對象是兩件事，同一條上用一道短直線隔開；左右各留一樣的空（footbar 的
+   gap 在左，picker 自己的 gap 加一點在右）。 */
+.chat-continue-base+.chat-face-picker::before{content:"";flex-shrink:0;width:1px;height:20px;margin-right:var(--sp-1);background:var(--border)}
