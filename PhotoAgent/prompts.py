@@ -591,7 +591,7 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   "photo_summary": "一句話描述照片內容與整體觀感。",
   "subject_category": "人物 / 食物 / 產品 / 風景 / 建築 / 寵物 / 其他",
   "scene_category": "室內 / 戶外 / 街拍 / 商業 / 旅行 / 日常 / 其他",
-  "main_subject": "主要主體是誰或什麼：拍攝者取景要呈現的對象，不是避不開、剛好入鏡的物件。",
+  "main_subject": "主要主體是誰或什麼：拍攝者取景要呈現的對象，不是避不開、剛好入鏡的物件（如橫越畫面的電線）。",
   "scene_type": "更具體的場景類型。",
   "aesthetic_diagnosis": "說明照片目前不夠精緻的原因。",
   "detected_issues": ["2 到 6 個具體問題。"],
@@ -852,11 +852,11 @@ _SCREENSHOT_FACT = (
     "is not part of the picture."
 )
 
-_MAIN_SUBJECT_LINE = '  "main_subject": "主要主體是誰或什麼：拍攝者取景要呈現的對象，不是避不開、剛好入鏡的物件。",'
+_MAIN_SUBJECT_LINE = '  "main_subject": "主要主體是誰或什麼：拍攝者取景要呈現的對象，不是避不開、剛好入鏡的物件（如橫越畫面的電線）。",'
 # With photo_summary already written by Call 0, main_subject is the first field Call A writes and absorbs the scene.
 _MAIN_SUBJECT_LINE_AFTER_CALL0 = (
     '  "main_subject": "主要主體是誰或什麼：拍攝者取景要呈現的對象本身，寫成一個短語，不描述場景或氛圍'
-    '（整張照片的描述已在 photo_summary）；不是避不開、剛好入鏡的物件。",'
+    '（整張照片的描述已在 photo_summary）；不是避不開、剛好入鏡的物件（如橫越畫面的電線）。",'
 )
 
 
