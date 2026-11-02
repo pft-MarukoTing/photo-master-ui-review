@@ -1204,13 +1204,11 @@
   function isReviewDirty() {
     const cont = activeContinuation();
     if (cont) {
-      // On its default base the panel shows what the version was made with
-      // (ensurePanelBase), so only a change from that is unsent.
-      const madeWith = panelBase?.owner === singleFlowState && panelBase.defaultRun
-        && isContinuationSource(cont, panelBase.defaultRun) ? madeWithRequest(panelBase.defaultRun) : null;
-      const request = pendingContinuationRequest();
-      return madeWith ? continuationRequestKey(request) !== continuationRequestKey(madeWith)
-        : !isEmptyContinuationRequest(request);
+      // Unsent is a request other than the one the base version was made
+      // with, whichever base is picked: another version's request carried
+      // onto it counts, even when the base's own was not empty.
+      const base = singleRuns?.find((run) => isContinuationSource(cont, run));
+      return continuationRequestKey(pendingContinuationRequest()) !== continuationRequestKey(madeWithRequest(base));
     }
     if (!reviewBaseline || reviewBaseline.owner !== singleFlowState) return false;
     const review = readReviewState();
