@@ -1433,7 +1433,8 @@
        an earlier version had one here (matching #analysis-preview's solid
        layer) to stop sticky content bleeding through underneath it, but
        that read as a stray extra box behind the Run pill, so it was
-       dropped in favor of a plain border-top divider instead. padding-top:
+       dropped. No border-top divider either: the line above the 設定/美化
+       buttons read as one more rule than the panel needed. padding-top:
        0 to match -- 16px of top padding only made sense stacked against
        that same background box. */
     .ap-actions-row {
@@ -1445,7 +1446,6 @@
       gap: 10px;
       margin-top: 6px;
       padding-top: 0;
-      border-top: 1px solid var(--border);
       position: sticky;
       bottom: 0;
       z-index: 2;
