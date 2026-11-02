@@ -63,7 +63,8 @@ RESPONSE_SCHEMA = {
     "schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["reply", "action", "patch_json", "options", "lines", "your_pick", "open"],
+        "required": ["reply", "action", "patch_json", "options", "lines", "your_pick", "open",
+                     "continue_from", "continue_request"],
         "properties": {
             "reply": {"type": "string"},
             "action": {"type": "string", "enum": ["none", "render", "close"]},
@@ -72,6 +73,8 @@ RESPONSE_SCHEMA = {
             "lines": {"type": "boolean"},
             "your_pick": {"type": "boolean"},
             "open": {"type": "string", "enum": ["", "人像", "畫面", "風格", "個人化需求", "設定"]},
+            "continue_from": {"type": "integer"},
+            "continue_request": {"type": "string"},
         },
     },
 }
@@ -80,7 +83,12 @@ RESPONSE_SCHEMA = {
 OPEN_PANELS = {"人像": "face", "畫面": "recipe", "風格": "style", "個人化需求": "prompt", "設定": "settings"}
 
 UNMAPPED_REPLY = "這個調整我沒辦法對應到可設定的項目，可以直接在面板上修改。"
-ALREADY_SET_REPLY = "目前的設定已經是這樣了，不需要再調整。"
+ALREADY_SET_REPLY = "這些已經在目前的設定裡了。"
+ALREADY_SET_REDO = "想照這樣重新產生一版，可以按「再美化」。"
+# 回覆把人帶進「接著這張調整」（continue_from）：頁面切到那一版、打開「調整第 N 版」，
+# 要改的地方（continue_request）先放進去，按「美化」才產生。
+CONTINUE_REPLY = "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的個人化需求了，沒問題就按「美化」；想換光線、角度這類效果，可以先按「風格」。"
+CONTINUE_ASK_REPLY = "好，已經切到第 {n} 版，接著在這版上改。想改哪裡直接打在下面，我會先幫你看過、記下來；想換光線、角度這類效果，可以按「風格」。都好了再按「美化」。"
 
 
 # The prompts here are written for Chinese replies; i18n turns them to the
@@ -142,7 +150,7 @@ REPLY
 - When the user asks you to choose for them (「什麼顏色好？」「哪一句比較好？」「字要放哪裡？」), pick one from what the photo shows and say why in the same sentence (「深棕色最好，跟木頭書架同色系，放在牆上也不搶臉」), and propose it in patch_json; the user confirms it on the card, so word it as a suggestion.
 - A proposal the user turned down ([turned down the proposal above] in CONVERSATION) stays turned down: do not suggest it again, or the same choice in other words, unless they bring it up themselves. When they later ask for a suggestion, pick something else.
 - When the user says something the retouch did looks wrong -- fake, overdone, unnatural, too strong -- move that setting back toward the original: switch the fix off, or pick a weaker level or a milder wording. Never answer it with a different change of the same strength or stronger.
-- Every version is made from the original photo, never from the last version, so a relative wish (「多一點」「少一點」「再亮一點」「留多一點」) means nothing to the editor on its own. Write it as the end result you want in the photo, in the terms of what it is about -- framing, light, colour, a part of a person -- e.g. 「取景左側放寬，讓他的手肘完整入鏡」 rather than 「手肘留多一點」. Use what CONVERSATION and the last [version done] note say to tell what it refers to.
+- A version made with 美化 or 再美化 is made from the original photo, never from the last version, so a relative wish (「多一點」「少一點」「再亮一點」「留多一點」) means nothing to the editor on its own. Write it as the end result you want in the photo, in the terms of what it is about -- framing, light, colour, a part of a person -- e.g. 「取景左側放寬，讓他的手肘完整入鏡」 rather than 「手肘留多一點」. Use what CONVERSATION and the last [version done] note say to tell what it refers to.
 - For a specific change, propose the plan change in patch_json. Describe only the new change as a suggestion (「可以幫你…，確認後套用」), never as already applied. The card shows the full plan; do not repeat all previous wishes in the reply or render yet.
 - For adding exact printed text, write a self-contained user_prompt naming the literal content and set literal_texts to the exact strings to print. Preserve their characters, digits, case and punctuation. Keep existing still-active literal_texts; remove a string when its text request is withdrawn or becomes a ratio instead. These strings are printed content, not aspect ratio settings. Do not invent unrelated captions.
 - For a plain request to fix, improve, or retouch with no specific change (e.g. 「幫我修好」、「美化一下」), use action "render" and patch_json "". This is the only case for "render": a message that names any result, look, use or style (「做成雜誌封面」「復古一點」) never starts a render on its own -- the user presses the button once they see the change. If PLAN already has exactly what they name, say it is already in the settings and point at the bar button on SCREEN, action "none".
@@ -157,6 +165,7 @@ The user must always know what to press next. SCREEN lists what is on screen rig
 - Name only buttons listed in SCREEN, at most three. If SCREEN is empty, the photo is busy and there is nothing to press: name no button and do not mention buttons at all (never 「沒有可按的按鈕」); just invite the user to tell you what to change.
 - options: only when your reply asks a question, give two to four short answers to it, a few words each, written as the user's own reply (the people to choose from, the parts or choices you asked about: 「笑容」、「視線」、「髮色」, or the copy lines you offered). Keep descriptions brief and clear. Tapping one sends it as if typed. In every other case options is [] -- the buttons on SCREEN are the next step. A question that only offers a button on SCREEN (「要不要打開「設定」看看？」) also gets [] -- that button, shown under your reply, is the answer; a typed option cannot press it. Never write an option that stands for a button, or for a change you cannot make in PATCH: 美化引擎 and the number of images are changed only in 「設定」.
 - lines: true only when options are words for the photo you wrote (titles, headlines, captions, copy); false for every other kind of answer.
+- continue_from / continue_request: only when SCREEN has "versions". 「接著這張調整」 makes the next version from one finished version's own output, changing only what is asked -- the one way to build on an earlier version. When the user wants to redo, adjust or start again from a given version (「以第一版為基準」「從第一版重新做」「在第二版上改」), or picks such an option, set continue_from to that version's number (1 to SCREEN versions; 「這一版」 is SCREEN shown) and continue_request to what they want changed on it as one plain end-state sentence (「把畫面裡的電線全部去掉」), or "" when they have not said yet. SCREEN "added" is what this round added to 個人化需求 that no version has yet (e.g. they just said 「把車子移掉」 and now say 「接續第四版調整」): that is what they want on that version, so leave continue_request "" and the code carries it over, unless they now ask for something else. The page switches to that version and opens it for them; the code writes the reply. Action "none", patch_json "", options [], open "". A wish to just see or go back to a version (「回到第一版」) is not this: say they can switch to it in 「美化紀錄」. Without "versions" in SCREEN, never offer building on a version's output: every version starts from the original. Otherwise continue_from 0 and continue_request "".
 - your_pick: true when patch_json holds a choice you made for the user rather than what they said -- they asked you to decide (a colour, a line, a place, a style) or left it open and you filled it in; false when the change is what they asked for in their own words, or there is no patch.
 
 PEOPLE
@@ -469,7 +478,7 @@ Write in Traditional Chinese (Taiwan), plain everyday words, two or three short 
 - If the framing changed -- a new aspect ratio, a 重新構圖 item in RECIPE, or AFTER simply covering a different part of the scene than BEFORE -- say how, and what it does for the photo, as one of those changes (see COMPOSITION).
 - On a first version, one place worth a closer look in the comparison, named precisely. On a later version, only when THIS ROUND made something new to look at; otherwise leave it out.
 - If something PLAN asks for is not visible in AFTER, or something went wrong -- a face that no longer looks like the person, a smeared or warped detail, an unnatural edge, a colour cast, people who look pasted into a changed scene (no shadow on the ground, or lit unlike their new surroundings), or one of the framing problems under COMPOSITION -- do not describe the flaw; turn it into one offer of the end result it would bring (see Offers). Offer at most one such step, for the most visible problem. Word any next step as the end result in the photo, never 「再…一點」: every version starts from the original.
-- If EARLIER NOTES already offered a step for that problem and THIS ROUND tried it, the same step did not work: never offer it again. Every version starts from the original photo, so 「再…一點」 cannot build on this one. Offer a different route instead -- a different 比例 or 取景範圍, or the change stated as an exact end state (「要不要直接改成 4:5，讓紅椅完全出框？」).
+- If EARLIER NOTES already offered a step for that problem and THIS ROUND tried it, the same step did not work: never offer it again. A 再美化 version starts from the original photo, so 「再…一點」 cannot build on this one that way. Offer a different route instead -- a different 比例 or 取景範圍, the change stated as an exact end state (「要不要直接改成 4:5，讓紅椅完全出框？」), or, when SCREEN has "versions", 接著這張調整 on this version (continue_from).
 
 COMPOSITION
 Name the framing the way a photographer would, but only with a term that AFTER actually shows, and say in the same breath what it does for the viewer. One term per note at most; never force one. Use only the terms below, in exactly these words, and never coin another (for 景別, only 特寫、半身、全身、環境人像).
@@ -1178,6 +1187,32 @@ def _applied_reply(changes, screen, wishes=()):
     return _cat(said, _next_step(screen, edit=not (only and only["field"] == "user_prompt")))
 
 
+def _continue_from(result, screen):
+    """{version, request} when the reply takes the user into 接著這張調整 on a
+    version the page has: SCREEN carries "versions" only when the page can.
+    No request said: what this round added to 個人化需求 (SCREEN "added") is
+    what the user meant to change, so it goes along rather than being left
+    behind in the next 美化 from the original."""
+    n = result.get("continue_from")
+    count = (screen or {}).get("versions")
+    if type(n) is not int or type(count) is not int or not 1 <= n <= count:
+        return None
+    request = result.get("continue_request")
+    request = request.strip() if isinstance(request, str) else ""
+    return {"version": n, "request": request or (screen or {}).get("added") or ""}
+
+
+def _already_set_reply(screen):
+    """What to say when the change asked for is already in the settings. The
+    user still wants something done (often the same thing again, done better),
+    so it points at the button that makes a new version, never 「不需要」."""
+    bar = (screen or {}).get("bar") or []
+    if "再美化" in bar:
+        return _cat(i18n.tr(ALREADY_SET_REPLY), i18n.tr(ALREADY_SET_REDO))
+    # 調整中：底下那顆是「美化」或「照建議直接美化」，一樣指過去。
+    return _cat(i18n.tr(ALREADY_SET_REPLY), _next_step(screen))
+
+
 def _echo_max():
     # 英文一個字母比一個中文字短，念回來的長度上限跟著放寬。
     return APPLIED_WISH_MAX_LEN * i18n.fmt("echo_scale")
@@ -1297,7 +1332,7 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     reply = reply.strip()
     if wanted and proposal is None:
         # The reply offers a change the user would get no card for.
-        reply = i18n.tr(ALREADY_SET_REPLY if patch else UNMAPPED_REPLY)
+        reply = _already_set_reply(navigation_screen) if patch else i18n.tr(UNMAPPED_REPLY)
     # Every change goes in as it stands: whatever it touched can be changed
     # back from 「修改」 or the topic buttons, so the card never waits for 套用.
     # What the AI chose for the user (「什麼顏色好？」) keeps the model's reason in
@@ -1316,6 +1351,12 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
             reply = _applied_reply(changes, navigation_screen, _grouped_wishes(added + [(head, new) for head, _, new in revised]))
     # A change goes through its card first, even when the model also said render.
     render = result.get("action") == "render" and not wanted
+    cont = None if wanted or render or result.get("action") == "close" else _continue_from(result, screen)
+    if cont:
+        # 頁面切到那一版、打開「調整第 N 版」；回覆由這裡寫，跟頁面上看到的一致。
+        reply = i18n.tr(CONTINUE_REPLY if cont["request"] else CONTINUE_ASK_REPLY).format(n=cont["version"])
+        return {"reply": reply, "render": False, "proposal": None, "options": [], "close": False, "lines": False,
+                "open": "", "continue": cont, **({"request_validated": True} if result.get("request_validated") else {})}
     options = [] if proposal or render else _options(result.get("options"))
     close = result.get("action") == "close" and not wanted
     options = [] if close else options

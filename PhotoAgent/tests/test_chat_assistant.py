@@ -186,12 +186,50 @@ class AskTest(unittest.TestCase):
         self.assertEqual([c["field"] for c in proposal["changes"]],
                          ["style_options.lighting", "face_issue_overrides.0:gaze_issue"])
 
+    def test_continue_from_takes_the_user_into_that_version(self):
+        # 「以第一版為基準」：頁面切到第 1 版接著改，要改的地方先放進去；回覆由程式寫。
+        screen = {"bar": ["看美化項目", "接著這張調整", "再美化"], "topics": [], "versions": 3, "shown": 3}
+        says = lambda n, request="": lambda c: {"reply": "好的", "action": "none", "patch_json": "", "options": ["好"],
+                                                "continue_from": n, "continue_request": request, "open": ""}
+        history = [{"role": "user", "text": "以第一版為基準，把電線全部去掉"}]
+        result = chat_assistant.ask(analysis(), default_plan(), "ready", history,
+                                    model=says(1, " 把畫面裡的電線全部去掉 "), screen=screen)
+        self.assertEqual(result["continue"], {"version": 1, "request": "把畫面裡的電線全部去掉"})
+        self.assertEqual(result["reply"], chat_assistant.CONTINUE_REPLY.format(n=1))
+        self.assertEqual((result["options"], result["open"], result["render"], result["proposal"]), ([], "", False, None))
+        asked = chat_assistant.ask(analysis(), default_plan(), "ready", history, model=says(2), screen=screen)
+        self.assertEqual(asked["continue"], {"version": 2, "request": ""})
+        self.assertEqual(asked["reply"], chat_assistant.CONTINUE_ASK_REPLY.format(n=2))
+        # 沒說要改什麼，但這一輪剛加了需求（「把車子移掉」再說「接續第四版調整」）：帶過去。
+        carried = chat_assistant.ask(analysis(), default_plan(), "ready", history, model=says(2),
+                                     screen={**screen, "added": "移除畫面中央偏右的銀色停放汽車"})
+        self.assertEqual(carried["continue"], {"version": 2, "request": "移除畫面中央偏右的銀色停放汽車"})
+        self.assertEqual(carried["reply"], chat_assistant.CONTINUE_REPLY.format(n=2))
+        # 沒有這一版、頁面不能接著改（screen 沒有 versions）、或 0：照一般回覆走。
+        for n, page in ((4, screen), (1, {"bar": ["再美化"], "topics": []}), (0, screen), (True, screen)):
+            plain = chat_assistant.ask(analysis(), default_plan(), "ready", history, model=says(n), screen=page)
+            self.assertNotIn("continue", plain)
+            self.assertEqual(plain["reply"], "好的")
+        # 同時有要改的設定時，設定先走卡片。
+        both = chat_assistant.ask(analysis(), default_plan(), "ready", history, screen=screen,
+                                  model=lambda c: {**says(1)(c), "patch_json": json.dumps({"style_options": {"lighting": "soft"}})})
+        self.assertNotIn("continue", both)
+        self.assertIsNotNone(both["proposal"])
+
     def test_a_patch_that_changes_nothing_is_no_proposal(self):
         plan = default_plan()
         plan["style_options"] = {"lighting": "soft"}
         result = ask(model_says("可以改成柔光，確認後套用", patch={"style_options": {"lighting": "soft"}}), plan=plan)
         self.assertIsNone(result["proposal"])
         self.assertEqual(result["reply"], chat_assistant.ALREADY_SET_REPLY)
+        # After a render the same request again means "do it again": point at
+        # 再美化 instead of saying nothing needs doing.
+        redo = chat_assistant.ask(analysis(), plan, "ready", [{"role": "user", "text": "改成柔光"}],
+                                  model=model_says("可以改成柔光，確認後套用", patch={"style_options": {"lighting": "soft"}}),
+                                  screen={"bar": ["看美化項目", "再美化"], "topics": []})
+        self.assertIsNone(redo["proposal"])
+        self.assertIn("「再美化」", redo["reply"])
+        self.assertNotIn("不需要", redo["reply"])
         self.assertIsNone(ask(model_says(patch=None))["proposal"])
         broken = lambda context: {"reply": "x", "action": "none", "patch_json": "{not json"}
         self.assertIsNone(ask(broken)["proposal"])

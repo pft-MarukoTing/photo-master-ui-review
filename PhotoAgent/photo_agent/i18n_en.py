@@ -146,7 +146,10 @@ TEXT = {
     "按下面的「{label}」我就開始。": "Tap “{label}” below to start.",
     "這個調整我沒辦法對應到可設定的項目，可以直接在面板上修改。":
         "I couldn't match that to any available setting, but you can change it directly in the panels.",
-    "目前的設定已經是這樣了，不需要再調整。": "That's already the current setting, so no change is needed.",
+    "這些已經在目前的設定裡了。": "That's already in the current settings.",
+    "想照這樣重新產生一版，可以按「再美化」。": "To make a new version with these settings, tap “Retouch Again”.",
+    "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的個人化需求了，沒問題就按「美化」；想換光線、角度這類效果，可以先按「風格」。": "OK, I've switched to version {n} so we can build on it. The change is in “My Requests” below; tap “Retouch” when it looks right. For effects like lighting or angle, tap “Style” first.",
+    "好，已經切到第 {n} 版，接著在這版上改。想改哪裡直接打在下面，我會先幫你看過、記下來；想換光線、角度這類效果，可以按「風格」。都好了再按「美化」。": "OK, I've switched to version {n} so we can build on it. Type what to change below and I'll check and note it; for effects like lighting or angle, tap “Style”. Tap “Retouch” when you're done.",
     "長寬比也幫你換成「{ratio}」了，在「設定」裡隨時可以改。":
         "I've also set the aspect ratio to “{ratio}”. You can change it anytime in “Settings”.",
     "目前沒有 {asked} 這個比例，最接近的是「{nearest}」，要換成這個嗎？":

@@ -5882,6 +5882,11 @@ export function SessionView(props: {
   // 按了「接著這張調整」：之後打的字是要在這一版上改的地方，按「美化」才產生。
   const [continuing, setContinuing] = useState<Version | null>(null);
   useEffect(() => setContinuing(null), [photo.photo_id]);
+  // 美化過之後，個人化需求是累積下來的，看起來像在某一版上接著改；其實一般的
+  // 「美化」是從原圖重做、每條都套。能接續某版的話，在需求旁邊把這件事講出來。
+  const fromOriginal = props.onContinue && !continuing && versions.length > 0
+    ? t("按「美化」會從原圖重新做一版，這裡每一條都會套用。")
+    : "";
   // 這一輪另外挑的風格，跟打的字一起送；只屬於這一輪，不寫進照片的設定。
   const [contStyles, setContStyles] = useState<Record<string, string>>({});
   const [contStyleOpen, setContStyleOpen] = useState(false);
@@ -5944,6 +5949,36 @@ export function SessionView(props: {
     setContPrompt(r.text || "");
     setContStyles(r.style_options || {});
   }, [props.resume, versions.length]);
+  // AI 回「從第 N 版接著改」：切到那一版、打開「調整第 N 版」，要改的地方先放進去，
+  // 按「美化」才產生。只認打開這串對話之後才來的那則，同一則只接一次。
+  // （adjusting、leaveAdjust 在後面才宣告；effect 在整個 render 跑完才執行，拿得到。）
+  const continuedFrom = useRef<string | null>(null);
+  const closeRound = useRef(false);
+  useEffect(() => {
+    const m = messages[messages.length - 1];
+    const cont = m?.card?.type === "llm_reply" ? (m.card.continue as { version?: number; request?: string } | undefined) : undefined;
+    if (!m || !cont || !props.onContinue || m.created_at <= openedAt.current!.at || continuedFrom.current === m.id) return;
+    const v = versions.find((x) => x.ordinal === cont.version);
+    if (!v) return;
+    continuedFrom.current = m.id;
+    // 還開著調整的那一輪要收起來，見下一個 effect。
+    closeRound.current = true;
+    if (v.version_id !== current?.version_id) props.onSelectVersion(v);
+    setContinuing(v);
+    setPointed([]);
+    setComposerKey((k) => k + 1);
+    setContTurns([]);
+    setContPrompt(cont.request || "");
+  }, [messages[messages.length - 1]?.id, versions.length]);
+  // 還開著調整的那一輪先收起來（跟「返回」一樣，改的都先留著）：接著改只照這裡寫
+  // 的字，那一輪的個人化需求、項目留在畫面上會像是也要一起套上去。AI 的回覆是在
+  // 問的那一下還沒結束時進來的，那時 busy、送不出去，等它結束再送。auto：不是使用
+  // 者按的返回，不畫那顆。
+  useEffect(() => {
+    if (!closeRound.current || busy) return;
+    closeRound.current = false;
+    if (adjusting) props.onPost({ type: "adjust_cancelled", kept: dirtyCats, auto: true });
+  }, [busy, adjusting]);
   // 接著調整到一半點了別的版本：改成以那一版為底，打到一半的字留著。
   useEffect(() => {
     if (current) setContinuing((was) => (was && was.version_id !== current.version_id ? current : was));
@@ -6398,6 +6433,7 @@ export function SessionView(props: {
               c.proposal.id === lastProposalId && idx > lastRender ? photo.plan?.user_prompt || "" : promptWhenLeft(idx)
             }
             onQuietPrompt={props.onQuietPrompt}
+            note={fromOriginal}
           />
         )}
         {/* 直接套用的卡後面沒有使用者的那一下，引導就接在同一則話裡。 */}
@@ -6496,7 +6532,8 @@ export function SessionView(props: {
             );
           }
           if (navigation && idx === guideAt) return firstGuide();
-          return navigation && open && editing && cats.length > 0 ? <div class="chat-choices">{catChips()}</div> : null;
+          // 「從第 N 版接著改」的那句：下面接的是調整第 N 版的卡，原本那一輪的項目不放。
+          return navigation && open && editing && cats.length > 0 && !c.continue ? <div class="chat-choices">{catChips()}</div> : null;
         })()}
       </>
     );
@@ -6792,6 +6829,7 @@ export function SessionView(props: {
                     onPatch={(p) => props.onPatch(p)}
                     onQuietPrompt={props.onQuietPrompt}
                   />
+                  {cat === "prompt" && !!fromOriginal && <p class="chat-note">{fromOriginal}</p>}
                   {!atEnd ? null : fresh && !offGuide.has(idx) ? (
                     idx === lastStepIdx && guideTail({ except: cat })
                   ) : fresh ? (
@@ -7318,11 +7356,22 @@ export function SessionView(props: {
       : photo.plan.overwrite_prompt && promptNow
         ? ["prompt", "settings"]
         : [...baseCats, "settings"];
+  // 這一輪才加進個人化需求、還沒有哪一版做過的那幾段：說要從某一版接著改時，就是
+  // 要帶過去改的（AI 沒另外說要改什麼的話，後端拿它當要改的地方）。
+  const addedPrompt = (() => {
+    if (!adjusting || !roundPlan) return "";
+    const parts = (text?: string) => (text || "").split(/[；;\n]/).map((x) => x.trim()).filter(Boolean);
+    const before = new Set(parts(roundPlan.user_prompt));
+    return parts(photo.plan.user_prompt).filter((x) => !before.has(x)).join("；");
+  })();
   const screen: Screen = {
     bar: busy || props.pendingAsk || photo.status !== "ready" ? [] : bar,
     topics: editing ? cats.map((c) => CATEGORIES[c].label) : [],
     pending: [...(adjusting ? dirtyCats : parkedCats).map(c => CATEGORIES[c].label), ...(pendingPerson ? [pendingPerson.text] : [])],
     panels: panels.map((c) => CATEGORIES[c].label),
+    // 有幾版、現在看的是第幾版：只有能「接著這張調整」時才給，AI 才會提從某一版接著改。
+    ...(props.onContinue && versions.length ? { versions: versions.length, shown: current?.ordinal ?? versions.length } : {}),
+    ...(props.onContinue && versions.length && addedPrompt ? { added: addedPrompt } : {}),
   };
 
   // 照片一好（分析完；一鍵美化的話是美化完）就回答那句問題，一句只問一次；後端也只回答一次。
@@ -7456,7 +7505,8 @@ export function SessionView(props: {
                       「按下面的「美化」就會開始」，像又講了一次。 */}
                   {continuing && !contReviewing && (
                     <AssistantMsg>
-                      {!contTurns.length && (
+                      {/* AI 剛說完「從第 N 版接著改」的話，該怎麼做它已經講了，不再說一次。 */}
+                      {!contTurns.length && continuedFrom.current !== messages[endIdx]?.id && (
                         <p class="chat-text">{t("想改的地方可以一句一句打在下面，我會先幫你看過、記下來；也可以按「風格」換光線、角度這類效果。都好了再按「美化」。")}</p>
                       )}
                       {(!!contPrompt || contTurns.length > 0) && (

@@ -123,14 +123,14 @@ def validate(result,plan,history,validate_completion,options,debug=False):
     if kind=='none':
         if 'user_prompt' in patch or 'literal_texts' in patch:
             raise ContractError('request_kind_required','request.kind','Use edit with complete aligned semantics when changing user_prompt.')
-        if selected.get('selected_option') and not patch and result.get('action','none')=='none' and not result.get('open'):
+        if selected.get('selected_option') and not patch and result.get('action','none')=='none' and not result.get('open') and not result.get('continue_from'):
             raise ContractError('selected_answer_not_completed','request.kind','The user selected an answer. Return a complete edit or a focused clarification naming missing_information, not a bare acknowledgement.')
         return result
     if kind=='clarify':
         if selected.get('selected_option') and req.get('question_kind')!='person' and not (isinstance(req.get('missing_information'),str) and req['missing_information'].strip()):
             raise ContractError('missing_clarification_detail','request.missing_information','The user already chose an outcome. Complete the edit or name the specific essential missing user fact; malformed fields are not missing intent.')
-        if patch or result.get('action','none')!='none' or result.get('open'):
-            raise ContractError('clarification_has_side_effects','patch_json/action/open','A clarification cannot apply changes or execute commands.')
+        if patch or result.get('action','none')!='none' or result.get('open') or result.get('continue_from'):
+            raise ContractError('clarification_has_side_effects','patch_json/action/open/continue_from','A clarification cannot apply changes or execute commands.')
         if req.get('question_kind') not in ('person','meaning','content'):
             raise ContractError('invalid_question_kind','request.question_kind','Explicitly distinguish person, meaning and content.')
         original=selected.get('original') if selected.get('selected_option') else next((m.get('text') or '' for m in reversed(history) if m.get('role')=='user'),'')

@@ -82,6 +82,7 @@ MESSAGE_TEXT_MAX_LEN = 4000
 # The most messages one post can append (the upload page sends its whole conversation at once).
 MESSAGES_POST_MAX = 100
 SCREEN_LABELS_MAX = 8
+SCREEN_VERSIONS_MAX = 1000
 TERMINAL_STATUSES = ("success", "error")
 _FACE_WISH_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chat-face-wishes")
 # Render bases: the original photo, or (ENABLE_CHAT_RENDER_FROM_VERSION) one
@@ -2497,7 +2498,10 @@ def _end_round(user, session_id, photo, history):
 def _screen(raw):
     """The buttons the page shows right now, {bar, topics, pending, panels},
     each a few short labels; pending names what this round changed and has not
-    rendered, panels the panels a reply may open (left out by older pages)."""
+    rendered, panels the panels a reply may open (left out by older pages).
+    versions and shown -- how many versions the photo has and which one is on
+    screen -- and added -- what this round added to 個人化需求 that no version
+    has yet -- come only from a page that can 接著這張調整 (ENABLE_CHAT_RENDER_FROM_VERSION)."""
     raw = raw if raw is not None else {}
     if not isinstance(raw, dict):
         raise _RequestError("screen must be an object")
@@ -2510,6 +2514,20 @@ def _screen(raw):
                 isinstance(x, str) and 0 < len(x) <= PROMPT_REVIEW_LABEL_MAX_LEN for x in labels):
             raise _RequestError(f"screen.{key} must be a list of at most {SCREEN_LABELS_MAX} short labels")
         out[key] = labels
+    for key in ("versions", "shown"):
+        if key not in raw:
+            continue
+        n = raw[key]
+        if type(n) is not int or not 0 <= n <= SCREEN_VERSIONS_MAX:
+            raise _RequestError(f"screen.{key} must be a whole number from 0 to {SCREEN_VERSIONS_MAX}")
+        if agent_config.ENABLE_CHAT_RENDER_FROM_VERSION:
+            out[key] = n
+    if "added" in raw:
+        added = raw["added"]
+        if not isinstance(added, str) or len(added) > USER_PROMPT_MAX_LEN:
+            raise _RequestError(f"screen.added must be text of at most {USER_PROMPT_MAX_LEN} characters")
+        if agent_config.ENABLE_CHAT_RENDER_FROM_VERSION and added.strip():
+            out["added"] = added.strip()
     return out
 
 
@@ -3013,7 +3031,8 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
             **({"question_kind": answer["question_kind"], "answer_mode": answer.get("answer_mode"),
                 "clarification": answer.get("clarification")} if answer.get("question_kind") else {}),
             **({"lines": True} if answer.get("lines") else {}),
-            **({"close": True} if answer.get("close") else {}), **tag}))
+            **({"close": True} if answer.get("close") else {}),
+            **({"continue": answer["continue"]} if answer.get("continue") else {}), **tag}))
     if proposal and proposal.get("direct"):
         messages += _apply_directly(user, session_id, photo, messages[-1])
     if answer.get("open") and photo["status"] == "ready" and analysis:

@@ -1892,6 +1892,29 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(messages[3]["card"]["category"], "style")
         self.assertIn('"panels":["畫面","風格","設定"]', seen[0])
 
+    def test_continue_from_reaches_the_page_only_when_it_can_continue(self):
+        # 「以第一版為基準」：llm_reply 帶 continue，前端切到第 1 版、打開「調整第 1 版」。
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        answer = {"reply": "好的", "action": "none", "patch_json": "", "options": [],
+                  "continue_from": 1, "continue_request": "把電線全部去掉"}
+        screen = {"bar": ["看美化項目", "接著這張調整", "再美化"], "topics": [], "versions": 2, "shown": 2}
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True):
+            res, seen = self.ask(sid, photo, "以第一版為基準，把電線全部去掉", answer, screen=screen)
+        card = res.get_json()["messages"][-1]["card"]
+        self.assertEqual(card["continue"], {"version": 1, "request": "把電線全部去掉"})
+        self.assertIn('"versions":2', seen[0])
+        # 沒說要改什麼：這一輪剛加進個人化需求的那段帶過去。
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True):
+            res, seen = self.ask(sid, photo, "接續第二版調整", {**answer, "continue_from": 2, "continue_request": ""},
+                                 screen={**screen, "added": " 移除銀色汽車 "})
+        self.assertEqual(res.get_json()["messages"][-1]["card"]["continue"], {"version": 2, "request": "移除銀色汽車"})
+        # 功能沒開：版本數不給 AI，也就不會有 continue。
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", False):
+            res, seen = self.ask(sid, photo, "以第一版為基準，把電線全部去掉", answer, screen=screen)
+        self.assertNotIn("continue", res.get_json()["messages"][-1]["card"])
+        self.assertNotIn('"versions":2', seen[0])
+
     def test_a_picked_option_is_applied_without_asking(self):
         sid = self.new_session()
         photo = self.ready_photo(sid)
@@ -2078,7 +2101,10 @@ class ChatRoutesTest(unittest.TestCase):
         answer = {"reply": "x", "action": "none", "patch_json": ""}
         self.assertEqual(self.ask(sid, photo, "  ", answer)[0].status_code, 400)
         self.assertEqual(self.ask(sid, {"photo_id": "nope"}, "hi", answer)[0].status_code, 404)
-        for bad in ("調整", {"bar": "調整"}, {"topics": ["x" * 41]}, {"bar": ["a"] * 9}):
+        for bad in ("調整", {"bar": "調整"}, {"topics": ["x" * 41]}, {"bar": ["a"] * 9},
+                    {"bar": [], "topics": [], "versions": -1}, {"bar": [], "topics": [], "shown": "2"},
+                    {"bar": [], "topics": [], "versions": True}, {"bar": [], "topics": [], "added": ["x"]},
+                    {"bar": [], "topics": [], "added": "x" * 2001}):
             with self.subTest(screen=bad):
                 self.assertEqual(self.ask(sid, photo, "hi", answer, screen=bad)[0].status_code, 400)
         failed = self.add_photos(sid)[0]

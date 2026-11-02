@@ -1558,6 +1558,8 @@ export function ProposalCard(props: {
   // 跟面板同一條路（存下來再請 AI 整理）。沒給就照舊打開面板。
   prompt?: string;
   onQuietPrompt?: (text: string) => Promise<unknown>;
+  // 就地改的框底下補一句說明（例如按「美化」會從哪裡做起）。
+  note?: string;
 }) {
   const { proposal, resolved } = props;
   const live = resolved == null;
@@ -1673,7 +1675,7 @@ export function ProposalCard(props: {
           ))}
         </div>
       ) : noted ? (
-        inline ? null : editable && (
+        inline ? props.note ? <p class="chat-note">{props.note}</p> : null : editable && (
           <div class="chat-choices">
             {/* 跟個人化需求面板裡那顆「修改」同一個樣子。 */}
             <button

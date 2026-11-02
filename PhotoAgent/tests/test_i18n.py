@@ -199,7 +199,7 @@ class CatalogTest(unittest.TestCase):
         for text in (chat_assistant.KEPT_REPLY, chat_assistant.KEPT_NEXT, chat_assistant.OFFER_REPLY,
                      chat_assistant.CLARIFY_REPLY, chat_assistant.MERGED_NOTE, chat_assistant.WITHDRAWN_REPLY,
                      chat_assistant.UNASSIGNED, chat_assistant.ANALYZE_NUDGE, chat_assistant.UNMAPPED_REPLY,
-                     chat_assistant.ALREADY_SET_REPLY, chat_assistant.RATIO_ASK_AI,
+                     chat_assistant.ALREADY_SET_REPLY, chat_assistant.ALREADY_SET_REDO, chat_assistant.CONTINUE_REPLY, chat_assistant.CONTINUE_ASK_REPLY, chat_assistant.RATIO_ASK_AI,
                      chat_assistant.RATIO_ASK_AI_REPLY, chat_assistant.RATIO_ASK_AI_REPLY_REST,
                      *chat_assistant.REVIEW_RATIOS.values()):
             self.assertIn(text, i18n_en.TEXT)
