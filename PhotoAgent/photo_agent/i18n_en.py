@@ -174,7 +174,7 @@ TEXT = {
     "第 {n} 版": "Version {n}",
     "（正在調整）": "(being adjusted)",
     "原圖": "Original photo",
-    "好，改回從原圖調整，剛剛記下的需求都留著。想再加什麼直接打在下面，好了就按「再美化」。": "OK, switching back to the original photo. Everything noted so far is kept. Type anything else below, and tap “Retouch Again” when you're ready.",
+    "好，改回從原圖美化，剛剛記下的需求都留著。想再加什麼直接打在下面，好了就按「再美化」。": "OK, switching back to the original photo. Everything noted so far is kept. Type anything else below, and tap “Retouch Again” when you're ready.",
 
     # --- backend/routes/chat.py ---
     "人物初步辨識完成。": "Finished detecting the people in the photo.",

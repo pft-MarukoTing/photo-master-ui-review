@@ -2045,7 +2045,7 @@ button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
 /* 接著這張調整時，美化項目還有沒美化的改動：一行小字講它們這次不會用到。 */
 .chat-continue-note{min-width:0;font-size:var(--chat-fs-sm);color:var(--n54);text-wrap:pretty}
 .chat-continue-shot{width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0}
-/* 藥丸本身就是換底的鍵：點縮圖和「調整第 N 版」掀開選單，叉叉還是取消。選單往上
+/* 藥丸本身就是換底的鍵：點縮圖和「美化第 N 版」掀開選單，叉叉還是取消。選單往上
    浮在對話上面、靠左對齊藥丸；版本多了自己捲，不把對話整個蓋掉。 */
 .chat-continue-base{position:relative;display:inline-flex;min-width:0}
 .chat-continue-pick{display:inline-flex;align-items:center;gap:var(--sp-1);min-width:0;padding:0 var(--sp-1) 0 0;

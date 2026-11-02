@@ -814,35 +814,6 @@
       outline-offset: 2px;
     }
     .ap-skip-analyze-btn:disabled { opacity: .55; cursor: progress; }
-    /* 接著這張調整's #ap-skip-hint: the version it starts from, small beside
-       the title, and the × that leaves it, in the card's top-right corner. */
-    .ap-skip-hint-thumb {
-      width: 28px;
-      height: 28px;
-      flex-shrink: 0;
-      object-fit: cover;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-    }
-    .ap-skip-hint-thumb[hidden], .ap-skip-hint-exit[hidden] { display: none; }
-    .ap-skip-hint-exit {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 26px;
-      height: 26px;
-      padding: 0;
-      border: 0;
-      border-radius: 50%;
-      background: transparent;
-      color: var(--text-2);
-      cursor: pointer;
-    }
-    .ap-skip-hint-exit:hover { background: rgba(var(--on-surface-rgb),.08); color: var(--text); }
-    .ap-skip-hint-exit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     /* The collapsed side panel stacks 美化 into a 44px letter column, which
        a second label can't share; 幫我分析 comes back with the panel. */
     body.side-panel-layout #results-analysis-slot:has(#ap-analysis-shell:not([open])) .ap-skip-analyze-btn {
@@ -1139,10 +1110,14 @@
        that width's left edge, and the chevron row needs the full width for
        justify-content:center to center against the card, not just against
        the title text above it. */
+    /* A grid so #ap-continue-base can sit at the right of the title and
+       description, which keep column 1. */
     .ap-analysis-shell-summary {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 6px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      column-gap: 12px;
+      row-gap: 6px;
     }
     /* The outer analysis shell is informational and stays open; its summary
        has no collapse affordance. */
@@ -1449,6 +1424,137 @@
       position: sticky;
       bottom: 0;
       z-index: 2;
+    }
+
+    /* #ap-continue-base -- where the next 美化 starts, at the right end of the
+       shell's title block. The chat's pill above its composer
+       (.chat-continue-from, frontend-chat chat.css) in this page's tokens: a
+       pale accent token with the base's thumbnail, opening a menu of 原圖 and
+       every version, downward and right-aligned under it, scrolling on its
+       own once there are many versions. */
+    .ap-continue-base {
+      position: relative;
+      display: inline-flex;
+      min-width: 0;
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: default;
+    }
+    .ap-continue-base[hidden] { display: none; }
+    .ap-continue-pick {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      max-width: 100%;
+      height: 32px;
+      padding: 0 12px 0 4px;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(var(--accent-rgb),.10);
+      color: var(--accent);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .ap-continue-pick:hover:not(:disabled),
+    .ap-continue-pick[aria-expanded="true"] { background: rgba(var(--accent-rgb),.16); }
+    .ap-continue-pick:disabled { cursor: default; opacity: .55; }
+    .ap-continue-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .ap-continue-label { overflow: hidden; text-overflow: ellipsis; }
+    /* The × splits the pill in two, same tone, a hairline between: one
+       token naming the base, with a way back to its default. */
+    .ap-continue-exit {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 32px;
+      padding: 0 2px 0 0;
+      border: 0;
+      border-left: 1px solid rgba(var(--accent-rgb),.18);
+      border-radius: 0 999px 999px 0;
+      background: rgba(var(--accent-rgb),.10);
+      color: var(--accent);
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .ap-continue-exit:hover { background: rgba(var(--accent-rgb),.16); }
+    .ap-continue-exit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .ap-continue-exit[hidden] { display: none; }
+    .ap-continue-base:has(.ap-continue-exit:not([hidden])) .ap-continue-pick {
+      border-radius: 999px 0 0 999px;
+      padding-right: 10px;
+    }
+    .ap-continue-shot {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    .ap-continue-caret {
+      width: 6px;
+      height: 6px;
+      margin-left: 2px;
+      flex-shrink: 0;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: translateY(-2px) rotate(45deg);
+      transition: transform .15s;
+    }
+    .ap-continue-pick[aria-expanded="true"] .ap-continue-caret { transform: translateY(1px) rotate(-135deg); }
+    .ap-continue-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 0;
+      z-index: 20;
+      min-width: 160px;
+      max-height: min(320px, 50vh);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+      box-shadow: 0 14px 32px rgba(0,0,0,.16), 0 2px 6px rgba(0,0,0,.06);
+      animation: ap-continue-menu-in .14s ease-out;
+    }
+    .ap-continue-menu[hidden] { display: none; }
+    .ap-continue-menu button {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 8px;
+      background: none;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      white-space: nowrap;
+      text-align: left;
+      cursor: pointer;
+    }
+    .ap-continue-menu button:hover,
+    .ap-continue-menu button:focus-visible { background: rgba(var(--accent-rgb),.08); color: var(--accent); outline: none; }
+    .ap-continue-menu button.is-picked { color: var(--accent); font-weight: 600; }
+    /* The tick's slot stays put, so unticked rows don't shift left. */
+    .ap-continue-tick { display: inline-flex; width: 14px; flex-shrink: 0; color: var(--accent); }
+    .ap-continue-sub { margin-left: auto; padding-left: 8px; font-size: 11px; font-weight: 400; color: var(--text-2); }
+    @keyframes ap-continue-menu-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) {
+      .ap-continue-menu { animation: none; }
+      .ap-continue-caret { transition: none; }
     }
 
     .ap-options-toggle > summary {
@@ -5557,13 +5663,8 @@
                 <div class="ap-photo-summary ap-skip-hint" id="ap-skip-hint" hidden>
                   <span class="ap-photo-summary-label">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L4 11l6.8-2.2L12 2z" fill="currentColor"/></svg>
-                    <!-- While 接著這張調整: the version being adjusted, and a way out of it. -->
-                    <img id="ap-skip-hint-thumb" class="ap-skip-hint-thumb" alt="" hidden>
                     <span id="ap-skip-hint-title">這張照片沒有做分析</span>
                   </span>
-                  <button type="button" id="ap-skip-hint-exit" class="ap-skip-hint-exit" title="不調整這版了" aria-label="不調整這版了" hidden>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                  </button>
                   <p class="ap-photo-summary-text" id="ap-skip-hint-text">這個版本只依照個人化需求修圖，沒有分析整張照片，所以沒有 AI 的修圖建議。可以直接在下方修改個人化需求；想要 AI 給建議的話，請按「美化」左邊的「幫我分析」。</p>
                 </div>
                 <div class="ap-photo-summary" id="ap-photo-summary">
@@ -5629,6 +5730,24 @@
                         <span id="ap-analysis-shell-title-text">分析與調整</span>
                       </span>
                       <span class="ap-analysis-shell-desc" id="ap-analysis-shell-desc">這是 AI 分析後提供的建議，你可依此在這裡進一步調整設定</span>
+                    </div>
+                    <!-- Where the next 美化 starts, like the chat's pill above its
+                         composer: 原圖, or any version to adjust (接著這張調整).
+                         syncApContinueBase (app.js) owns its `hidden`, label and menu;
+                         it shows only while 美化 is offered. Clicks in it don't
+                         toggle the <details> (app.js). -->
+                    <div id="ap-continue-base" class="ap-continue-base" hidden>
+                      <button type="button" id="ap-continue-pick" class="ap-continue-pick" aria-haspopup="menu" aria-expanded="false" title="換一張當底">
+                        <img id="ap-continue-shot" class="ap-continue-shot" alt="">
+                        <span id="ap-continue-label" class="ap-continue-label">從原圖美化</span>
+                        <span class="ap-continue-caret" aria-hidden="true"></span>
+                      </button>
+                      <!-- 不調整了, as the 美化紀錄 tile's × does, joined onto the
+                           pill while 調整中. syncApContinueExit owns its `hidden`. -->
+                      <button type="button" id="ap-continue-exit" class="ap-continue-exit" title="不調整了" aria-label="不調整了" hidden>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+                      </button>
+                      <div id="ap-continue-menu" class="ap-continue-menu" role="menu" hidden></div>
                     </div>
                   </summary>
                   <div class="ap-analysis-shell-body">
@@ -6174,25 +6293,17 @@
               <div class="version-strip-head">
                 <span class="version-strip-title">美化紀錄</span>
                 <span id="version-strip-count" class="version-strip-count"></span>
-                <!-- Right end of the head: how the next 美化 starts (selector), and
-                     under it the standing note on how the strip's results are made.
-                     接著這張調整 opens the revise panel request-only on the version on
-                     screen (enterPanelContinuation, app.js); 從原圖美化 leaves it.
-                     Hidden on the 原圖 tile and wherever continuing isn't offered. -->
-                <div class="version-strip-side">
-                  <div id="version-strip-mode" class="version-strip-mode" role="group" aria-label="美化方式" hidden>
-                    <button type="button" class="version-strip-mode-opt" data-mode="original" aria-pressed="true" title="從原圖重新產生，不沿用這張的結果">從原圖美化</button>
-                    <button type="button" class="version-strip-mode-opt" data-mode="continue" aria-pressed="false">接著這張調整</button>
-                  </div>
-                  <span class="version-strip-note">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/>
-                      <path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                      <circle cx="12" cy="7.8" r="1.1" fill="currentColor"/>
-                    </svg>
-                    除了「接著這張調整」，每張美化結果皆由原圖重新產生
-                  </span>
-                </div>
+                <!-- How the strip's results are made; worded by syncVersionStripNote
+                     (app.js) like the chat's, since some may be 接著這張調整 versions.
+                     Which one the next 美化 starts from is #ap-continue-base's job. -->
+                <span class="version-strip-note">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/>
+                    <path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    <circle cx="12" cy="7.8" r="1.1" fill="currentColor"/>
+                  </svg>
+                  <span id="version-strip-note-text">每張美化結果皆由原圖重新產生</span>
+                </span>
                 <!-- Mobile-only (@media max-width: 560px, styles.css): hover has no
                      meaning on touch, so .version-tile-preview disables itself at
                      that width -- this button is the touch replacement, opening

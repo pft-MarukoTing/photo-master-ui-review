@@ -1893,7 +1893,7 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertIn('"panels":["畫面","風格","設定"]', seen[0])
 
     def test_continue_from_reaches_the_page_only_when_it_can_continue(self):
-        # 「以第一版為基準」：llm_reply 帶 continue，前端切到第 1 版、打開「調整第 1 版」。
+        # 「以第一版為基準」：llm_reply 帶 continue，前端切到第 1 版、打開「美化第 1 版」。
         sid = self.new_session()
         photo = self.ready_photo(sid)
         answer = {"reply": "好的", "action": "none", "patch_json": "", "options": [],

@@ -1055,9 +1055,14 @@ export function App() {
       }
       let s = await api.getSession(id);
       if (!s.photos.length) throw new Error(t("這個對話沒有照片"));
-      if (caseId) s = await applyHandoff(s, caseId);
+      let handedVersion: string | null = null;
+      if (caseId) {
+        const handed = await applyHandoff(s, caseId);
+        s = handed.session;
+        handedVersion = handed.version_id || null;
+      }
       setSession(s);
-      setSelected(null);
+      setSelected(handedVersion);
       setPhase("session");
       setSessionHash(id);
       setHopTrigger(true);
@@ -1130,22 +1135,37 @@ export function App() {
     }
   }
 
-  // 從面板模式切過來時，把那邊還沒美化的調整寫進這張照片的 plan（handoff.ts）。
+  // 從面板模式切過來時，把那邊還沒美化的調整寫進這張照片的 plan（handoff.ts），
+  // 連同那邊畫面上那一版（showing_version_id，舊的交接只有 version_id；打開時選它，
+  // 接著調整的那一版由 handedCont 帶）。那邊收起了調整中（idle）：
+  // 這邊還開著或留著的那一輪也收起來，plan 改回它開始時的樣子，跟那邊一樣。
   // 帶不過去就算了，照片照樣打開，用的是這邊原本的 plan。
-  async function applyHandoff(s: Session, caseId: string): Promise<Session> {
+  async function applyHandoff(s: Session, caseId: string): Promise<{ session: Session; version_id?: string }> {
     const h = takeHandoff(caseId);
     const c = capsRef.current;
     const p = h && c && s.photos.find((x) => x.case_id === caseId);
-    if (!h || !c || !p || isBusy(p)) return s;
+    if (!h || !c || !p || isBusy(p)) return { session: s };
+    const version_id = h.showing_version_id || h.version_id;
     // 那邊正在接著某一版調整：這張照片打開時接著同一版（SessionView 的 resume）。
     setHandedCont(h.continuation && c.features?.render_from_version ? { photo_id: p.photo_id, ...h.continuation } : null);
     try {
+      if (h.idle) {
+        const own = (s.messages || []).filter((m) => cardAbout(m.card, p.photo_id));
+        const round = unsentRound(own);
+        const keys = unsentPlanKeys(own, p.plan) || [];
+        if (!round || (!round.open && !keys.length)) return { session: s, version_id };
+        if (round.open) {
+          await api.postMessage(s.session_id, { type: "adjust_cancelled", photo_id: p.photo_id, kept: [], auto: true }, "", true);
+        }
+        if (keys.length) await api.patchPhotoPlan(s.session_id, p.photo_id, revertPlanPatch(round.start, p.plan, keys));
+        return { session: await api.getSession(s.session_id), version_id };
+      }
       // 分析只有對修圖建議的勾選才用得到；抓到了就留給這頁，不用再抓一次。
       const r = h.recipe ? await api.analysis(s.session_id, p.photo_id).catch(() => null) : null;
       const analysis = r?.status === "success" ? (r.result?.analysis as Analysis) : null;
       const patch = handoffPatch(h, p.plan, c, analysis);
       // 只帶了接著調整（那邊沒有改到照片的設定）：plan 不用動。
-      if (!Object.keys(patch).length && !h.compositions) return s;
+      if (!Object.keys(patch).length && !h.compositions) return { session: s, version_id };
       // 引擎在一般帳號可能不給改，被擋就不帶這項，其他照樣帶。
       // 構圖帶著那邊排好的過來：長寬比在那邊規劃過，就沿用，不重新規劃一次。
       await api.patchPhotoPlan(s.session_id, p.photo_id, patch, undefined, h.compositions).catch(() => {
@@ -1157,9 +1177,9 @@ export function App() {
       const q = next.photos.find((x) => x.photo_id === p.photo_id);
       if (analysis && q && analysisJob(q) === analysisJob(p))
         setAnalyses((a) => ({ ...a, [p.photo_id]: { job: analysisJob(p), analysis } }));
-      return next;
+      return { session: next, version_id };
     } catch {
-      return s;
+      return { session: s, version_id };
     }
   }
 
@@ -3094,11 +3114,12 @@ export function App() {
 
   // Right before leaving for 面板模式 by the conversation's 對話｜面板 switch:
   // hands this photo's adjustments over, and the 接著這張調整 in progress.
-  const toOldUi = (continuation?: HandoffContinuation) => {
+  // versionId：畫面上正在看的那一版，面板模式打開同一版。
+  const toOldUi = (continuation?: HandoffContinuation, versionId?: string) => {
     if (!caps || !photo?.case_id) return;
     const own = (session?.messages || []).filter((m) => cardAbout(m.card, photo.photo_id));
     writeHandoff(photo.case_id, photo.plan, caps, analyses[photo.photo_id]?.analysis, unsentPlanKeys(own, photo.plan),
-      continuation);
+      continuation, versionId);
   };
   // 首頁、上傳頁還沒有對話，回報改記當下頁面上的樣子（report-page.ts）。
   const reportPage = phase === "home"
@@ -5335,11 +5356,10 @@ function snapshotOf(plan: Plan): Dict {
   return canonical(out) as Dict;
 }
 
-// 切到面板模式時，plan 裡還沒美化的欄位：開著的、或按返回留著的那一輪，跟它
-// 開始時比動到的；還沒美化過就全部都算（null）。都美化過了就沒有——其他的是
-// 某一版美化時用的設定，面板模式上那一版自己就有。判定跟 SessionView 的
-// adjusting / parkedPlan 一樣。
-function unsentPlanKeys(messages: { card?: Dict | null }[], plan: Plan): string[] | null {
+// 還沒美化的那一輪：開著的、或按返回留著的。它開始時的 plan，和是不是還開著；
+// 還沒美化過是 null，都美化過了是 undefined。判定跟 SessionView 的 adjusting /
+// parkedPlan 一樣。
+function unsentRound(messages: { card?: Dict | null }[]): { start: Dict; open: boolean } | null | undefined {
   const lastIndex = (test: (card: Dict) => boolean) => {
     for (let i = messages.length - 1; i >= 0; i--) if (test(messages[i].card || {})) return i;
     return -1;
@@ -5352,11 +5372,40 @@ function unsentPlanKeys(messages: { card?: Dict | null }[], plan: Plan): string[
   const roundOpen = lastAdjust > lastRender && lastAdjust > lastCancel;
   const parked = !roundOpen && lastCancel > lastAdjust && lastAdjust > lastPlanRender;
   const start: Dict | undefined = roundOpen || parked ? messages[lastAdjust].card?.plan : undefined;
-  if (!start) return [];
-  const was = snapshotOf(start as Plan);
+  return start ? { start, open: roundOpen } : undefined;
+}
+
+// 切到面板模式時，plan 裡還沒美化的欄位：那一輪（unsentRound）開始時比動到的；
+// 還沒美化過就全部都算（null）。都美化過了就沒有——其他的是某一版美化時用的
+// 設定，面板模式上那一版自己就有。
+function unsentPlanKeys(messages: { card?: Dict | null }[], plan: Plan): string[] | null {
+  const round = unsentRound(messages);
+  if (round === null) return null;
+  if (!round) return [];
+  const was = snapshotOf(round.start as Plan);
   const now = snapshotOf(plan);
   return [...new Set([...Object.keys(was), ...Object.keys(now)])]
     .filter((k) => JSON.stringify(was[k]) !== JSON.stringify(now[k]));
+}
+
+// 逐鍵合併的欄位（後端 apply_plan_patch）：開始時沒有的鍵要明確送 null 才清得掉。
+const MERGED_PLAN_KEYS = ["style_options", "advanced_options", "face_issue_overrides"];
+
+// 把 plan 裡這些還沒美化的欄位改回那一輪開始時的樣子。
+function revertPlanPatch(start: Dict, plan: Plan, keys: string[]): Plan {
+  const patch: Dict = {};
+  for (const k of keys) {
+    const was = start[k];
+    if (MERGED_PLAN_KEYS.includes(k)) {
+      const cleared = Object.keys((plan as Dict)[k] || {}).map((x) => [x, null]);
+      patch[k] = { ...Object.fromEntries(cleared), ...(was || {}) };
+    } else if (k === "overwrite_prompt") {
+      patch[k] = !!was;
+    } else if (was !== undefined) {
+      patch[k] = was;
+    }
+  }
+  return patch as Plan;
 }
 
 export function SessionView(props: {
@@ -5389,8 +5438,9 @@ export function SessionView(props: {
   onOpenStyle: () => Promise<boolean>;
   // 回報的唯讀檢視沒有「對話｜面板」可切。
   panelMode?: PanelMode;
-  // 切到面板模式前呼叫（取代 panelMode.onLeave），帶上正在接著調整的那一版。
-  onPanelLeave?: (continuation?: HandoffContinuation) => void;
+  // 切到面板模式前呼叫（取代 panelMode.onLeave），帶上正在接著調整的那一版、
+  // 畫面上正在看的那一版。
+  onPanelLeave?: (continuation?: HandoffContinuation, versionId?: string) => void;
   // 從面板模式帶過來的接著調整：打開這張照片時接著那一版，打的字、風格照帶。
   resume?: HandoffContinuation | null;
   onResumed?: () => void;
@@ -5598,10 +5648,12 @@ export function SessionView(props: {
       }
       const text = contPromptRef.current.trim();
       const handOn = !!continuing && (!!text || contStyled);
-      (props.onPanelLeave || props.panelMode!.onLeave)(handOn ? {
+      const handed = handOn ? {
         version_id: continuing!.version_id, job_id: versionJob(continuing!), run: 1,
         text, style_options: contStyles,
-      } : undefined);
+      } : undefined;
+      if (props.onPanelLeave) props.onPanelLeave(handed, current?.version_id);
+      else props.panelMode!.onLeave();
     },
   };
   // 從面板模式帶過來的：版本列出來了就接著那一版。那一版不在這段對話裡就算了。
@@ -5616,7 +5668,7 @@ export function SessionView(props: {
     setContPrompt(r.text || "");
     setContStyles(r.style_options || {});
   }, [props.resume, versions.length]);
-  // AI 回「從第 N 版接著改」：切到那一版、打開「調整第 N 版」，要改的地方先放進去，
+  // AI 回「從第 N 版接著改」：切到那一版、打開「美化第 N 版」，要改的地方先放進去，
   // 按「接續第 N 版美化」才產生。只認打開這串對話之後才來的那則，同一則只接一次。
   // （adjusting、leaveAdjust 在後面才宣告；effect 在整個 render 跑完才執行，拿得到。）
   const continuedFrom = useRef<string | null>(null);
@@ -6255,7 +6307,7 @@ export function SessionView(props: {
             );
           }
           if (navigation && idx === guideAt) return firstGuide();
-          // 「從第 N 版接著改」的那句：下面接的是調整第 N 版的卡，原本那一輪的項目不放。
+          // 「從第 N 版接著改」的那句：下面接的是美化第 N 版的卡，原本那一輪的項目不放。
           return navigation && open && editing && cats.length > 0 && !c.continue ? <div class="chat-choices">{catChips()}</div> : null;
         })()}
       </>
@@ -6753,7 +6805,7 @@ export function SessionView(props: {
           return (
             <AskBubble text={[c.prompt, ...pickedStyles(styleAnalysis, caps, { style_options: c.style_options || {} })]
               .filter(Boolean).join(t("、"))}
-              meta={[from ? t("調整第 {n} 版", { n: from.ordinal }) : t("接著調整"), clockLabel(m.created_at)].join(" · ")} />
+              meta={[from ? t("美化第 {n} 版", { n: from.ordinal }) : t("接著調整"), clockLabel(m.created_at)].join(" · ")} />
           );
         }
         const meta = renderMeta(caps, photo.plan);
@@ -7369,7 +7421,7 @@ type ContTurn = { text: string; reply?: string; ask?: boolean; options?: string[
 // 一次接續美化：從哪一版、照什麼需求和風格。
 type ContRun = { from: Version; text: string; styles: Record<string, string> };
 
-// 輸入框上方「從原圖調整／調整第 N 版」那顆：點了掀開選單換底，原圖或任一版。
+// 輸入框上方「從原圖美化／美化第 N 版」那顆：點了掀開選單換底，原圖或任一版。
 // 藥丸本身會把太長的字截掉（overflow:hidden），選單得掛在外面那層，不然會被切掉。
 // 原圖是預設，沒有叉叉；接著某一版時才有，按了就不接續、打好的也不留。
 function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
@@ -7409,7 +7461,7 @@ function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
         <button type="button" class="chat-continue-pick" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
           title={t("換一張當底")} onClick={() => setOpen((o) => !o)}>
           <img class="chat-continue-shot" src={from ? urls.resultThumb(versionJob(from)) : original} alt="" />
-          {from ? t("調整第 {n} 版", { n: from.ordinal }) : t("從原圖調整")}
+          {from ? t("美化第 {n} 版", { n: from.ordinal }) : t("從原圖美化")}
           <span class={`chat-opt-caret${open ? " is-open" : ""}`} />
         </button>
         {from && onClose && (
