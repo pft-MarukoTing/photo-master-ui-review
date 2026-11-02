@@ -8,6 +8,7 @@ import requests
 from aiserver_utils.aescipher import AESCipher
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
 from image_tools import get_image_dimensions, ensure_png_bytes
+from photo_agent import i18n
 from photo_agent.providers.http import checked_json, retry_transient
 from photo_agent.providers.image_edit import EditGeometry, run_image_edit
 
@@ -152,7 +153,7 @@ def edit_photo(
         data = _post_generate_content(model, _generate_content_payload(prompt_text, png_bytes, geometry.request["imageConfig"]))
         b64 = _extract_inline_image(data)
         if not b64:
-            raise RuntimeError("Gemini 回應沒有包含圖片資料。")
+            raise RuntimeError(i18n.tr("Gemini 回應沒有包含圖片資料。"))
         return b64, {"model": model, "usage": data.get("usageMetadata")}
 
     return run_image_edit(
@@ -205,7 +206,7 @@ def edit_eye_repair_pass(image_bytes: bytes, prompt: str, quality: str = "low", 
     data = _post_generate_content(model, payload)
     b64 = _extract_inline_image(data)
     if not b64:
-        raise RuntimeError("Gemini 回應沒有包含圖片資料。")
+        raise RuntimeError(i18n.tr("Gemini 回應沒有包含圖片資料。"))
     return base64.b64decode(b64), prompt_text, {"model": model, "usage": data.get("usageMetadata")}
 
 

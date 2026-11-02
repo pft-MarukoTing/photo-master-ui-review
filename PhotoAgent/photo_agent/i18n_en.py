@@ -214,6 +214,15 @@ TEXT = {
     "本機模式只做簡易裁切與色彩增強，未執行 AI 輸出 QA。": "Local mode only applies a basic crop and color enhancement; the AI quality check wasn't run.",
     "若要檢查生成式修圖品質，請開啟 AI 修圖。": "Turn on AI Retouch to check the quality of generated edits.",
 
+    # --- openai_client / gemini_client: failures shown on the failed job ---
+    "AI 回應沒有包含有效 JSON。": "The AI's reply wasn't valid JSON.",
+    "人物身份交接不完整，已保留 2.0 清單並停止後續分析；請重試。":
+        "The people found in the preview couldn't all be matched, so the analysis stopped. Please try again.",
+    "人物清單交接未通過驗證，已停止後續人物分析。": "The list of people didn't pass its check, so the portrait analysis stopped.",
+    "人物細節分析改變了固定身份清單，已停止後續處理。": "The portrait analysis changed the list of people, so processing stopped.",
+    "OpenAI 回應沒有包含圖片資料。": "OpenAI's reply didn't include an image.",
+    "Gemini 回應沒有包含圖片資料。": "Gemini's reply didn't include an image.",
+
     # --- image_tools: the reframing item in 畫面 (after its 「重新構圖：」 prefix) ---
     "維持原圖比例，{detail}": "keep the original ratio. {detail}",
     "調整為{ratio}，{detail}": "change to {ratio}. {detail}",

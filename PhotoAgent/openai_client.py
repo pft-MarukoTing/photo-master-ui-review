@@ -41,6 +41,7 @@ from prompts import (
     expand_subject_boxes_to_contain_faces,
     style_option_entries,
 )
+from photo_agent import i18n
 from photo_agent.capabilities import ANALYSIS_MODEL_REASONING_EFFORT
 from photo_agent.providers.http import api_error, checked_json, error_message, retry_transient, safe_json
 from photo_agent.providers.image_edit import EditGeometry, run_image_edit
@@ -169,7 +170,7 @@ def _parse_json_from_text(text: str) -> dict:
                 except Exception as e:
                     last_error = e
 
-    raise ValueError("AI 回應沒有包含有效 JSON。") from last_error
+    raise ValueError(i18n.tr("AI 回應沒有包含有效 JSON。")) from last_error
 
 
 def _responses_payload(model: str, content: list, text_format: dict = None, reasoning_effort: str = None) -> dict:
@@ -563,7 +564,7 @@ def _analyze_overall_fixed(content, analysis_model, context, *, photo_facts=None
             overall, bindings = ab_preview.restore_fixed_details(context, {**initial, **repair})
         except Exception as repair_error:
             diagnostics.update(handoff_status='rejected', repair_error_type=type(repair_error).__name__)
-            failure = SubjectRosterError('人物身份交接不完整，已保留 2.0 清單並停止後續分析；請重試。')
+            failure = SubjectRosterError(i18n.tr('人物身份交接不完整，已保留 2.0 清單並停止後續分析；請重試。'))
             failure.subject_roster_diagnostics = diagnostics
             failure.overall_usages = usages
             raise failure from repair_error
@@ -692,7 +693,7 @@ def _analyze_overall_with_roster(content, analysis_model, roster=None, *, previe
             diagnostics.update(handoff_status="rejected", repair_error_type=type(repair_error).__name__)
             if isinstance(repair_error, ValueError) and str(repair_error).startswith("roster_"):
                 diagnostics["repair_validation_error"] = str(repair_error)
-            failure = SubjectRosterError("人物清單交接未通過驗證，已停止後續人物分析。")
+            failure = SubjectRosterError(i18n.tr("人物清單交接未通過驗證，已停止後續人物分析。"))
             failure.subject_roster_diagnostics = diagnostics
             failure.overall_usages = usages
             raise failure from repair_error
@@ -844,7 +845,7 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
             expected = [p['preview_person_id'] for p in fixed_context['preview_people']]
             actual = [s.get('preview_person_id') for s in analysis.get('subjects', [])]
             if actual[:len(expected)] != expected or any(pid is not None for pid in actual[len(expected):]):
-                raise SubjectRosterError('人物細節分析改變了固定身份清單，已停止後續處理。')
+                raise SubjectRosterError(i18n.tr('人物細節分析改變了固定身份清單，已停止後續處理。'))
 
     if requests:
         analysis['_analysis_user_requests'] = requests
@@ -965,7 +966,7 @@ def edit_photo(
                                 extra_jpegs=reference_jpegs)
         b64 = (data.get("data") or [{}])[0].get("b64_json")
         if not b64:
-            raise RuntimeError("OpenAI 回應沒有包含圖片資料。")
+            raise RuntimeError(i18n.tr("OpenAI 回應沒有包含圖片資料。"))
         return b64, {"model": model, "usage": data.get("usage")}
 
     return run_image_edit(
@@ -1017,7 +1018,7 @@ def edit_eye_repair_pass(image_bytes: bytes, prompt: str, quality: str = "low", 
     data = _post_image_edit(model, prompt_text, quality, size_param, jpeg_bytes)
     b64 = (data.get("data") or [{}])[0].get("b64_json")
     if not b64:
-        raise RuntimeError("OpenAI 回應沒有包含圖片資料。")
+        raise RuntimeError(i18n.tr("OpenAI 回應沒有包含圖片資料。"))
     return base64.b64decode(b64), prompt_text, {"model": model, "usage": data.get("usage")}
 
 
