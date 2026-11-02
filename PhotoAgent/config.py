@@ -18,9 +18,6 @@ ENABLE_CHAT_SUBJECT_PREVIEW = True
 # Off keeps Stage 2.0/avatars, and uses chat_review plus the legacy geometry
 # handoff for requests; no chat_preview_conversation call is made by this flow.
 ENABLE_CHAT_PREVIEW_INTRODUCTION = False
-# Chat only: require confirmation of subject-relative versus image-relative body sides.
-# Off preserves left/right wording as an ordinary edit; person selection still applies.
-ENABLE_CHAT_BODY_SIDE_CLARIFICATION = False
 # Continue dialogue only after chat_ask contract validation and repair fail.
 # Off preserves the existing terminal failure/retry behavior.
 ENABLE_CHAT_PATCH_CONTINUE = True

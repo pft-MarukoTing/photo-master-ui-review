@@ -93,9 +93,6 @@ def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio
     """
     user_instruction = framed_analysis.get("user_instruction") or {}
     user_direction = user_instruction.get("normalized_user_direction") or ""
-    from photo_agent.side_reference import editor_instruction as side_instruction
-    side_contract = (side_instruction(user_instruction.get('original_user_direction') or user_direction)
-                     if user_instruction.get('chat_body_side_clarification', True) else '')
     continuation_styles = (build_style_override_block(framed_analysis, alongside_request=bool(user_direction.strip()))
                            if framed_analysis.get("_continuation") else "")
     if framed_analysis.get("_continuation") and (user_direction.strip() or continuation_styles):
@@ -108,13 +105,13 @@ def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio
         original = framed_analysis.get("_continuation_original")
         if original is not None:
             prompt_text += "\n\n" + build_continuation_original_block((original.get("restore") or "").strip())
-        return prompt_text + editor_instruction(framed_analysis) + side_contract, None, "continuation"
+        return prompt_text + editor_instruction(framed_analysis), None, "continuation"
     if overwrites_prompt(user_instruction):
         style_block = build_style_override_block(framed_analysis, alongside_request=True)
         prompt_text = "\n\n".join(filter(None, (
             user_direction.strip(), style_block,
             build_overwrite_baseline_block(preset_key) if config.ENABLE_OVERWRITE_BASELINE_RETOUCH else "")))
-        return prompt_text + editor_instruction(framed_analysis) + side_contract, None, "overwrite"
+        return prompt_text + editor_instruction(framed_analysis), None, "overwrite"
 
     branch = branch_named(framed_analysis.get("analysis_branch"))
     if branch is not None:
@@ -129,4 +126,4 @@ def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio
         raw_crop_instruction=sections["crop_instruction"],
         raw_style_instruction=sections["style_instruction"],
     )
-    return prompt_text + editor_instruction(framed_analysis) + side_contract, resolution_metadata, "resolved_compact"
+    return prompt_text + editor_instruction(framed_analysis), resolution_metadata, "resolved_compact"

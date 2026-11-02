@@ -44,8 +44,7 @@ def _record_history_safely(user, job_id, path, image_key, action_id, params=None
             key: (params or {}).get(key)
             for key in ("preset", "image_quality", "image_model", "analysis_model", "aspect_ratio", "output_scale", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count", "advanced_options", "single_pass_edit", "stage")
         }
-        for key in ('side_reference','literal_texts'):
-            if key in (params or {}):history_params[key]=params[key]
+        if 'literal_texts' in (params or {}):history_params['literal_texts']=params['literal_texts']
         if path == "local":
             history_params["compatibility_version"] = _history_compatibility_version(params)
         history_params.update(extra or {})
@@ -108,7 +107,7 @@ def _skipped_without_prompt(analysis, params):
         params["overwrite_prompt"] and (params.get("user_prompt") or "").strip())
 
 
-def _parse_and_validate_params(form, *, chat_body_side_clarification=True):
+def _parse_and_validate_params(form):
     """Returns (params, None) or (None, error_message).
 
     `form` may be a werkzeug form (multipart routes) or a plain dict (JSON
@@ -164,10 +163,6 @@ def _parse_and_validate_params(form, *, chat_body_side_clarification=True):
         params["run_count"] = int(form.get("run_count", 1))
     except (TypeError, ValueError):
         params["run_count"] = None
-
-    # Server-only Chat policy; never read this switch from a public form.
-    if chat_body_side_clarification is False:
-        params["chat_body_side_clarification"] = False
 
     # Fast sync validation via the same validator the worker runs later,
     # so bad params 400 immediately instead of erroring after being queued.

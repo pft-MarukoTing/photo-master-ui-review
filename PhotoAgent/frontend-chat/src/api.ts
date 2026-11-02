@@ -1,6 +1,5 @@
 import { lang } from "./i18n";
 import type { Capabilities, Dict, Message, Plan, Session, SessionSummary, SourceResult } from "./types";
-import type { SideAnswer, SideQuestion } from "./side-reference";
 import type { ReportPage } from "./report-page";
 
 // The chat page is served at <BASE>/chat/, next to the old UI at <BASE>/.
@@ -111,11 +110,6 @@ const PREVIEW_CONVERSATION_TIMEOUT_MS = 65000;
 const sid = (id: string) => `${CHAT}/sessions/${encodeURIComponent(id)}`;
 
 export const api = {
-  bodySideSourceHash(file: Blob, filename: string) {
-    const form = new FormData();
-    form.append("user", currentUser); form.append("image", file, filename);
-    return request<{ source_sha256: string }>(`${CHAT}/side-reference/source`, { method: "POST", body: form, signal: AbortSignal.timeout(30000) });
-  },
   createPreview(file: Blob, filename: string, analysisModel: string): Promise<import("./subject-preview").PreviewStatus> {
     const form = new FormData();
     form.append("user", currentUser);
@@ -192,13 +186,9 @@ export const api = {
   promptReview: (text: string, prompt: string, history: ReviewTurn[], people: string[],
     sections: { who: string; text: string }[] = [],
     batch?: { photos: number; unrendered: number; analyze: string; render: string; where: string },
-    sideContext?: { source_sha256: string; analysis_model: string; previous_token?: string }, sideAnswer?: SideAnswer,
     continuation: number | false = false, versions = 0) =>
     request<{
       accepted: boolean;
-      clarification_subtype?: "body_side_reference";
-      side_question?: SideQuestion;
-      side_reference_token?: string;
       literal_texts?: string[];
       reply: string;
       verbatim?: boolean;
@@ -225,8 +215,7 @@ export const api = {
     }>(
       `${CHAT}/prompt-review`,
       { ...json("POST", { text, prompt, history, people, sections,
-        ...(batch ? {batch} : {}), ...(sideContext ? {side_context:sideContext} : {}),
-        ...(sideAnswer ? {side_answer:sideAnswer} : {}), ...(continuation ? {continuation} : {}),
+        ...(batch ? {batch} : {}), ...(continuation ? {continuation} : {}),
         ...(continuation && versions ? {versions} : {}) }), signal: AbortSignal.timeout(65000) },
     ),
 
@@ -266,12 +255,11 @@ export const api = {
   getSession: (id: string, messagesLimit = 500, signal?: AbortSignal) =>
     request<Session>(`${sid(id)}${q({ messages_limit: messagesLimit })}`, { signal }),
   status: (id: string) => request<Dict>(`${sid(id)}/status${q()}`),
-  uploadPhoto: (id: string, file: Blob, filename: string, preview?: { preview_job_id: string; source_sha256: string; conversation_token?: string; conversation_wishes_digest?: string }, wishes?: import("./preview-conversation").PreviewWish[], opts: { signal?: AbortSignal; clientKey?: string; sideToken?: string } = {}) => {
+  uploadPhoto: (id: string, file: Blob, filename: string, preview?: { preview_job_id: string; source_sha256: string; conversation_token?: string; conversation_wishes_digest?: string }, wishes?: import("./preview-conversation").PreviewWish[], opts: { signal?: AbortSignal; clientKey?: string } = {}) => {
     const form = new FormData();
     form.set("user", currentUser);
     // 同 createSession：已經傳上去的回 200 帶那張；同一把還在傳的回 409 upload_in_progress。
     if (opts.clientKey) form.set("client_key", opts.clientKey);
-    if (opts.sideToken) form.set("side_reference_token", opts.sideToken);
     form.append("image", file, filename);
     if (preview) {
       form.append("preview_job_id", preview.preview_job_id);
@@ -317,12 +305,11 @@ export const api = {
   // screen: the buttons the user can press right now, so the reply can point at them.
   // faces: a photo with no analysis has no subjects to index, so the taps go
   // as the local detector's boxes and where each stands, as on the upload page.
-  ask: (id: string, photoId: string, text: string, subjectIndices: number[] = [], screen?: Screen, faces?: AskFace[], answerTo?: string, sideAnswer?: SideAnswer) =>
+  ask: (id: string, photoId: string, text: string, subjectIndices: number[] = [], screen?: Screen, faces?: AskFace[], answerTo?: string) =>
     request<{ messages: Message[] }>(
       `${sid(id)}/photos/${encodeURIComponent(photoId)}/ask`,
       { ...json("POST", { text, ...(subjectIndices.length ? { subject_indices: subjectIndices } : {}),
-        ...(faces?.length ? { faces } : {}), ...(screen ? { screen } : {}), ...(answerTo ? { answer_to: answerTo } : {}),
-        ...(sideAnswer || {}) }),
+        ...(faces?.length ? { faces } : {}), ...(screen ? { screen } : {}), ...(answerTo ? { answer_to: answerTo } : {}) }),
         signal: AbortSignal.timeout(65000) },
     ),
   // Answers a question that was posted as a waiting ask, once the photo is analyzed.

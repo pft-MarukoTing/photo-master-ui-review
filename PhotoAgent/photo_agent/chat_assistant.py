@@ -34,7 +34,7 @@ from photo_agent.chat_plan import apply_plan_patch
 
 logger = logging.getLogger(__name__)
 
-# A Chat policy, not a change to the shared editor/API side-reference contract.
+# Left/right is kept as the user wrote it; the chat never asks whose left it means.
 SIDE_CHAT_RULE = ("Do not ask subject-relative versus image-relative left/right. "
     "Preserve body-side wording as an ordinary edit without inventing a confirmed reference frame. "
     "Still ask which person when needed.\n")
@@ -1283,22 +1283,11 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     True when the options are words for the photo to pick from. `screen` is
     {bar, topics}, the button labels the page shows right now."""
     from photo_agent import session_request
-    from photo_agent import side_reference
-    latest=next((m for m in reversed(history) if m.get('role')=='user'),{})
-    card=latest.get('card') or {}
-    people=[s for s in (analysis or {}).get('subjects',[]) if s.get('is_person',True)]
-    side=side_reference.inspect(latest.get('text') or '',dict(people_count=len(people),
-        selected_person_ids=card.get('subject_indices') or card.get('faces') or []))
-    if config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION and side['decision']=='clarify_side':
-        q=side_reference.question(side,'body-side')
-        return dict(reply=q['text'],render=False,proposal=None,options=[c['label'] for c in q['choices']],
-            close=False,lines=False,open='',question_kind='content',answer_mode='choices',
-            clarification_subtype='body_side_reference',side_question=q,side_reference=side)
     embedded_answer = _is_embedded_answer(history)
     navigation_screen = None if embedded_answer else screen
     context = build_context(analysis, plan, status, history, debug=debug, screen=screen)
     marker = "CONVERSATION (oldest first, the last line is the message to answer):\n"
-    context = context.replace(marker, ("" if config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION else SIDE_CHAT_RULE) + session_request.INSTRUCTION + LITERAL_CHOICE_INSTRUCTION + "\nPENDING CLARIFICATION: "
+    context = context.replace(marker, SIDE_CHAT_RULE + session_request.INSTRUCTION + LITERAL_CHOICE_INSTRUCTION + "\nPENDING CLARIFICATION: "
         + _dump(session_request.pending(history)) + "\n" + marker, 1)
     end = min(deadline, time.time() + TIMEOUT_SECONDS) if deadline is not None else time.time() + TIMEOUT_SECONDS
     def run_model(text):
@@ -2134,15 +2123,6 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     back with `continue_from`, that version's number or "original" for the
     original photo, for the page to switch to, keeping the lines already
     listed."""
-    from photo_agent import side_reference
-    picked,_ = _split_people(line,people)
-    side=side_reference.inspect(line,dict(people_count=len(people),selected_person_ids=picked))
-    if config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION and side['decision']=='clarify_side':
-        q=side_reference.question(side,'body-side')
-        return dict(kept=False,start='',ask=True,offer=False,later=False,reply=q['text'],line='',
-            persons=[],options=[c['label'] for c in q['choices']],aspect_ratio='',merged=[],withdrawn=False,
-            question_kind='content',answer_mode='choices',clarification_subtype='body_side_reference',
-            side_question=q,side_reference=side)
     chip = _chip_start(line)
     if chip:
         return {"kept": False, "start": chip, "ask": False, "offer": False, "later": False,
@@ -2152,8 +2132,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         [{"who": "", "text": prompt.strip()}] if prompt.strip() else [])
     # The tap carries the people the question was about; the option itself does not.
     def run_rest(context):
-        if not config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION:
-            context = SIDE_CHAT_RULE + context
+        context = SIDE_CHAT_RULE + context
         timeout = min(TIMEOUT_SECONDS, deadline - time.time()) if deadline is not None else None
         if timeout is not None and timeout <= 0:
             raise TimeoutError('review_deadline_exceeded')
@@ -2204,8 +2183,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         if remaining <= 0:
             raise TimeoutError('review_deadline_exceeded')
         review_calls += 1
-        if not config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION:
-            text = SIDE_CHAT_RULE + text
+        text = SIDE_CHAT_RULE + text
         return model(text) if model is not None else call_review(
             text, timeout=remaining, schema=CONTINUATION_REVIEW_SCHEMA if switchable else None)
 

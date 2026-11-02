@@ -164,10 +164,6 @@ class PhotoAgentJobProcessor:
         self.logger.info(task_id, f'[{EFFECT_NAME}] Metadata: {build_job_metadata(task_info)}')
 
         stage = params.get("stage", "full")
-        if stage in ('full','finish') and params.get('chat_body_side_clarification', True):
-            from photo_agent.side_reference import guard
-            guard(params.get('user_prompt') or '',params.get('side_reference') or (params.get('analysis') or {}).get('_body_side_reference'))
-
         try:
             src_paths = self.download_sources(task_id, request["src_keys"], session_dir)
             image_path = src_paths[0]
@@ -267,8 +263,6 @@ class PhotoAgentJobProcessor:
                     json.dump(analysis, f, ensure_ascii=False, indent=2)
 
                 analysis_key = derive_analysis_key(request["dst_key"])
-                if params.get('side_reference'):
-                    analysis['_body_side_reference']=params['side_reference']
                 self.logger.info(task_id, f'[{EFFECT_NAME}] {stage}_stage done, uploading artifact')
                 self.upload_artifacts(task_id, [analysis_path], [analysis_key])
 
@@ -289,9 +283,7 @@ class PhotoAgentJobProcessor:
                     **({'reference_image_bytes': reference_image_bytes} if reference_image_bytes else {}),
                     analysis=params["analysis"],
                     user_prompt=params["user_prompt"],
-                    **({'chat_body_side_clarification': params['chat_body_side_clarification']} if 'chat_body_side_clarification' in params else {}),
                     **({'literal_texts': params['literal_texts']} if 'literal_texts' in params else {}),
-                    **({'side_reference': params['side_reference']} if 'side_reference' in params else {}),
                     preset_key=params["preset"],
                     quality=params["image_quality"],
                     ai_photo_editing=params["ai_photo_editing"],
@@ -357,7 +349,6 @@ class PhotoAgentJobProcessor:
                     image_bytes=image_bytes,
                     analysis=analysis,
                     user_prompt=params["user_prompt"],
-                    **({'chat_body_side_clarification': params['chat_body_side_clarification']} if 'chat_body_side_clarification' in params else {}),
                     preset_key=params["preset"],
                     quality=params["image_quality"],
                     ai_photo_editing=params["ai_photo_editing"],

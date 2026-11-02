@@ -31,7 +31,6 @@ export interface Plan {
   run_count?: number;
   user_prompt?: string;
   literal_texts?: string[];
-  side_reference_token?: string | null;
   overwrite_prompt?: boolean;
   // 設定 → 詳細解說: how the assistant's replies sound.
   detailed_explanation?: boolean;
@@ -156,7 +155,7 @@ export interface Choice {
 }
 
 export interface Capabilities {
-  features?: { body_side_clarification?: boolean; subject_preview?: boolean; preview_introduction?: boolean; subject_preview_format_version?: number; low_confidence_candidates?: boolean; render_from_version?: boolean };
+  features?: { subject_preview?: boolean; preview_introduction?: boolean; subject_preview_format_version?: number; low_confidence_candidates?: boolean; render_from_version?: boolean };
   render: {
     analysis_models: { id: string; label: string }[];
     aspect_ratios: Choice[];

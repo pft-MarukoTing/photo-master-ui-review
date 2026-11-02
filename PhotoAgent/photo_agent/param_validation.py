@@ -207,17 +207,6 @@ def _validate_params(params: dict) -> dict:
     normalized["output_scale"] = output_scale
 
     normalized["user_prompt"] = optional_text(normalized.get("user_prompt"), "user_prompt")
-    if normalized.get('side_reference') is not None:
-        from photo_agent.side_reference import validate_state
-        try:normalized['side_reference']=validate_state(normalized['side_reference'])
-        except (ValueError,TypeError,KeyError) as exc:raise RuntimeError('invalid_side_state',RESULT_INVALID_PARAMETER) from exc
-    if 'chat_body_side_clarification' in normalized and type(normalized['chat_body_side_clarification']) is not bool:
-        raise RuntimeError('invalid_chat_side_policy', RESULT_INVALID_PARAMETER)
-    if stage in ('full','finish') and normalized.get('chat_body_side_clarification', True):
-        from photo_agent.side_reference import guard
-        saved_analysis=normalized.get('analysis') if isinstance(normalized.get('analysis'),dict) else {}
-        try:guard(normalized['user_prompt'] or '',normalized.get('side_reference') or saved_analysis.get('_body_side_reference'))
-        except ValueError as exc:raise RuntimeError(str(exc), RESULT_INVALID_PARAMETER) from exc
     if 'literal_texts' in normalized:
         from photo_agent.text_overlay import validate_texts
         try:

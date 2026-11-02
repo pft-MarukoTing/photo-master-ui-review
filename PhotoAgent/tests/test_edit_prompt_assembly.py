@@ -134,7 +134,7 @@ class AssembleEditPrompt(unittest.TestCase):
             with patch.dict(pipeline.EDIT_PHOTO_BY_MODEL, {"gpt-image-2": editor}):
                 pipeline.finish_stage(edited, dict(stub), "Like before.", "natural", "medium",
                                       aspect_ratio="original", overwrite_prompt=True, single_pass_edit=True,
-                                      run_qa=False, chat_body_side_clarification=False,
+                                      run_qa=False,
                                       reference_image_bytes=original)
         self.assertEqual(seen["images"], (edited, original))
         self.assertTrue(seen["old"])  # an editor without a second image still runs
@@ -153,7 +153,7 @@ class AssembleEditPrompt(unittest.TestCase):
         with patch.dict(pipeline.EDIT_PHOTO_BY_MODEL, {"gpt-image-2": fake_edit}):
             pipeline.finish_stage(_image_bytes(), stub, "Remove the cup.", "natural", "medium",
                                   aspect_ratio="original", overwrite_prompt=True, single_pass_edit=True,
-                                  run_qa=False, chat_body_side_clarification=False)
+                                  run_qa=False)
         prompt, _, strategy = _assemble(seen["analysis"])
         self.assertEqual(strategy, "continuation")
         self.assertTrue(prompt.startswith("Remove the cup.\n\n"))
@@ -172,7 +172,7 @@ class AssembleEditPrompt(unittest.TestCase):
         with patch.dict(pipeline.EDIT_PHOTO_BY_MODEL, {"gpt-image-2": fake_edit}):
             pipeline.finish_stage(_image_bytes(), stub, "", "natural", "medium",
                                   aspect_ratio="original", overwrite_prompt=True, single_pass_edit=True,
-                                  run_qa=False, chat_body_side_clarification=False)
+                                  run_qa=False)
         prompt, _, strategy = _assemble(seen["analysis"])
         self.assertEqual(strategy, "continuation")
         self.assertIn("- Lighting:", prompt)

@@ -387,13 +387,6 @@ def update_photo_state(user, session_id, photo_id, fields):
     _write(user, session_id, {f"photo:{photo_id}": {**json.loads(raw), **fields}})
 
 
-def save_photo_snapshot(user, session_id, photo):
-    """Commit a plan and its side-reference metadata in one Redis HSET."""
-    state = {k: v for k, v in photo.items() if k != "plan"}
-    _write(user, session_id, {f"photo:{photo['photo_id']}": state,
-                            f"photo:{photo['photo_id']}:plan": photo['plan']})
-
-
 def add_photos(user, session_id, meta, photos):
     """Append new photos (state dicts) to the session. `meta` is the session
     as loaded; its photo_order is extended here."""

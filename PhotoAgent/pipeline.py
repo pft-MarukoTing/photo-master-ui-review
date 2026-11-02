@@ -523,8 +523,6 @@ def finish_stage(
     single_pass_edit: bool = True,
     review: dict = None,
     literal_texts: list = None,
-    side_reference: dict = None,
-    chat_body_side_clarification: bool = True,
     output_scale: str = capabilities.DEFAULT_OUTPUT_SCALE,
     reference_image_bytes: bytes = None,
 ) -> dict:
@@ -563,10 +561,6 @@ def finish_stage(
                                      # actually ran (see pre_edit_image_b64 below)
     }
     """
-    from photo_agent.side_reference import guard as guard_body_sides, validate_state as validate_body_sides
-    side_state=side_reference if side_reference is not None else analysis.get('_body_side_reference')
-    body_sides = (guard_body_sides(user_prompt or '',validate_body_sides(side_state) if side_state is not None else None)
-                  if chat_body_side_clarification else {'side_references': []})
     from photo_agent.chat_analysis import blocking
     unresolved_requests = blocking(analysis)
     if unresolved_requests:
@@ -591,11 +585,6 @@ def finish_stage(
         overwrite_prompt=overwrite_prompt, analysis_model=analysis_model,
     )
     user_instruction = review["user_instruction"]
-    if not chat_body_side_clarification:
-        user_instruction = {**(user_instruction or {}), "chat_body_side_clarification": False}
-    if body_sides['side_references']:
-        user_instruction={**(user_instruction or {}),'normalized_user_direction':user_prompt,
-            'body_side_reference':body_sides}
     if literal_texts is not None:
         from photo_agent.text_overlay import validate_texts
         user_instruction = {**(user_instruction or {}),
