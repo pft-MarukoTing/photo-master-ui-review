@@ -171,6 +171,10 @@ TEXT = {
     "未指定對象": "No specific person",
     "（沒有偵測到人臉）": "(no faces detected)",
     "（還沒有）": "(none yet)",
+    "第 {n} 版": "Version {n}",
+    "（正在調整）": "(being adjusted)",
+    "原圖": "Original photo",
+    "好，改回從原圖調整，剛剛記下的需求都留著。想再加什麼直接打在下面，好了就按「再美化」。": "OK, switching back to the original photo. Everything noted so far is kept. Type anything else below, and tap “Retouch Again” when you're ready.",
 
     # --- backend/routes/chat.py ---
     "不在已辨識的人物清單中": "Not Among the People Detected",

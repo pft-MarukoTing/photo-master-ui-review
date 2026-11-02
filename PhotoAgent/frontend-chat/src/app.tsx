@@ -3193,12 +3193,19 @@ export function App() {
     });
   }
 
-  function patchFromChat(patch: Plan) {
+  // turns：接續時的對話，改回原圖結束接續時留進時間軸（那段對話本來只在頁面上）。
+  function patchFromChat(patch: Plan, turns: { text: string; reply?: string }[] = []) {
     if (!session || !photo) return Promise.resolve(false);
     const id = session.session_id;
     const pid = photo.photo_id;
     return run(async () => {
-      await api.patchPhotoPlan(id, pid, patch);
+      if (Object.keys(patch).length) await api.patchPhotoPlan(id, pid, patch);
+      // 一次最多送 100 則（MESSAGES_POST_MAX），一句兩則。
+      const carried = turns.slice(-50).flatMap((x) => [
+        { role: "user" as const, text: x.text, card: { type: "ask", photo_id: pid } },
+        ...(x.reply ? [{ role: "assistant" as const, card: { type: "llm_reply", photo_id: pid, text: x.reply } }] : []),
+      ]);
+      if (carried.length) await api.postMessages(id, carried);
       setSession(await api.getSession(id));
     });
   }
@@ -5721,7 +5728,7 @@ export function SessionView(props: {
   // faces 只在沒有分析時用：指的人是本地偵測的框和位置，取代 subjectIndices 送出。
   onAsk: (text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string, sideAnswer?: SideAnswer) => Promise<boolean>;
   onAnswerWaiting: (messageId: string, screen: Screen) => void;
-  onPatch: (patch: Plan) => Promise<boolean>;
+  onPatch: (patch: Plan, turns?: { text: string; reply?: string }[]) => Promise<boolean>;
   onQuietPrompt: (text: string) => Promise<unknown>;
   onPost: (card: Dict, patch?: Plan, merge?: boolean) => Promise<boolean>;
   onAnalyze: () => Promise<boolean>;
@@ -6013,9 +6020,12 @@ export function SessionView(props: {
       ...(text ? { user_prompt: promptNow ? `${promptNow}\n${text}` : text } : {}),
       ...(contStyled ? { style_options: contStyles } : {}),
     };
+    // 改回原圖就是回到一般的樣子（換底那顆預設就是原圖）：需求、風格寫進去，
+    // 不開「看美化項目」那一輪；接續裡打的字跟 AI 的回答留在對話裡。
+    const turns = contTurnsRef.current.map(({ text, reply }) => ({ text, reply }));
     setContinuing(null);
-    void props.onPost({ type: "adjust_opened", plan: parkedPlan || snapshotOf(photo.plan) },
-      Object.keys(patch).length ? patch : undefined);
+    setContTurns([]);
+    if (Object.keys(patch).length || turns.length) void props.onPatch(patch, turns);
   }
   // 這一輪寫了（或改了）個人化需求，美化前先問：只照需求改，還是順便整張美化。
   // 記著按的是哪顆美化，問完照那顆的字送出去。
@@ -6357,18 +6367,24 @@ export function SessionView(props: {
     setContReviewing(true);
     let turn: ContTurn;
     let start = false;
+    // undefined：不換底；null：改回原圖。
+    let base: Version | null | undefined;
     const n = continuing!.ordinal;
     try {
       const r = await api.promptReview(line, prompt, history, [], prompt ? [{ who: "", text: prompt }] : [],
-        undefined, undefined, undefined, n);
+        undefined, undefined, undefined, n, versions.length);
       if (gen !== contGen.current) return;
       // 跟前面衝突的，模型把前面那段改寫過；撤回的那句本身不進清單。
       let next = (r.accepted ? r.merged?.find((m) => m.section === 0)?.text : undefined) ?? contPromptRef.current;
       if (r.accepted && !r.withdrawn) next = [next, r.line || line].filter(Boolean).join(t("；"));
       setContPrompt(next);
       turn = { text: line, reply: r.reply || (r.accepted ? t("好，這句記下來了，按「接續第 {n} 版美化」時一起套用。", { n }) : ""),
-        ...(r.ask ? { options: r.options || [] } : {}) };
+        ...(r.ask ? { ask: true, options: r.options || [] } : {}) };
       start = r.start === "render" || (go && r.accepted && !r.ask);
+      // 「從第二版調」：換到那一版接著改，記下的需求、挑的風格都留著。「改成基於原圖」：
+      // 結束接續、從原圖開一輪調整，記下的需求一樣帶過去。
+      base = r.continue_from === "original" ? null
+        : versions.find((v) => v.ordinal === r.continue_from);
     } catch {
       if (gen !== contGen.current) return;
       // 問不到就先收下，美化前還能在框裡改。
@@ -6379,8 +6395,9 @@ export function SessionView(props: {
       if (gen === contGen.current) setContReviewing(false);
     }
     setContTurns([...before, turn]);
+    if (base !== undefined) continueFrom(base);
     // 「幫我美化」就是按「接續第 N 版美化」。
-    if (start) void continueNow();
+    else if (start) void continueNow();
   }
 
   async function continueNow() {
@@ -7550,12 +7567,10 @@ export function SessionView(props: {
                       {x.reply && (
                         <AssistantMsg>
                           <p class="chat-text">{x.reply}</p>
-                          {!!x.options?.length && i === contTurns.length - 1 && (
-                            <div class="chat-choices">
-                              {x.options.map((o) => (
-                                <Chip key={o} label={o} disabled={busy || contReviewing} onClick={() => void reviewCont(o)} />
-                              ))}
-                            </div>
+                          {!!x.options?.length && (
+                            <AnswerList options={x.options} open={i === contTurns.length - 1}
+                              picked={i === contTurns.length - 1 ? null : contTurns[i + 1]?.text ?? null}
+                              busy={busy || contReviewing} onPick={(o) => void reviewCont(o)} />
                           )}
                         </AssistantMsg>
                       )}
@@ -7564,7 +7579,8 @@ export function SessionView(props: {
                   {continuing && contReviewing && <AssistantMsg>{typing}</AssistantMsg>}
                   {/* 按了「接續第 N 版美化」到動畫出來之間 busy 也要留著這張卡：收掉的話最後一則會變成
                       上面那句「按下面的「接續第 N 版美化」就會開始」，像又講了一次。 */}
-                  {continuing && !contReviewing && (
+                  {/* AI 還在問的時候整張先收起來，只留問題跟選項：答完才回來，裡面的需求都還在。 */}
+                  {continuing && !contReviewing && !contTurns[contTurns.length - 1]?.ask && (
                     <AssistantMsg>
                       {/* 切到哪一版，一開始都講。AI 剛說完「從第 N 版接著改」的話，該怎麼做它已經
                           講了，後面那段不再說一次。 */}
@@ -7727,7 +7743,8 @@ function AnswerList(props: {
 }
 
 // 接續某一版時打的一句和 AI 的回覆；`options` 是 AI 追問時給的選項。
-type ContTurn = { text: string; reply?: string; options?: string[] };
+// ask：AI 這句在問、還沒回答。
+type ContTurn = { text: string; reply?: string; ask?: boolean; options?: string[] };
 // 一次接續美化：從哪一版、照什麼需求和風格。
 type ContRun = { from: Version; text: string; styles: Record<string, string> };
 

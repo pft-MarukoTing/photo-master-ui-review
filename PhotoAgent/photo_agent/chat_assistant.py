@@ -89,6 +89,7 @@ ALREADY_SET_REDO = "想照這樣重新產生一版，可以按「再美化」。
 # 要改的地方（continue_request）先放進去，按「接續第 N 版美化」才產生。
 CONTINUE_REPLY = "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的個人化需求了，沒問題就按「接續第 {n} 版美化」；想換光線、角度這類效果，可以先按「風格」。"
 CONTINUE_ASK_REPLY = "好，已經切到第 {n} 版，接著在這版上改。想改哪裡直接打在下面，我會先幫你看過、記下來；想換光線、角度這類效果，可以按「風格」。都好了再按「接續第 {n} 版美化」。"
+CONTINUE_ORIGINAL_REPLY = "好，改回從原圖調整，剛剛記下的需求都留著。想再加什麼直接打在下面，好了就按「再美化」。"
 
 
 # The prompts here are written for Chinese replies; i18n turns them to the
@@ -1694,9 +1695,9 @@ def _ratio_answer(line, history):
             "reply": _cat(i18n.tr(KEPT_REPLY), _settings_note(ratio), i18n.tr(KEPT_NEXT))}
 
 
-def call_review(context, *, timeout=None):
+def call_review(context, *, timeout=None, schema=None):
     """{verdict, reply, line, options} from the model, or raises."""
-    return _call(context, REVIEW_SCHEMA, timeout=timeout)
+    return _call(context, schema or REVIEW_SCHEMA, timeout=timeout)
 
 
 # 只認「我記下來了」這個意思的幾種說法——範圍窄是刻意的：這是在抓模型自打嘴巴，
@@ -1755,6 +1756,23 @@ CONTINUATION_TEXT = "\n".join([
     "- The aspect ratio and 人像修正 switches stay as that version had them: never use verdict \"setting\"; a line"
     " about the ratio or a switch is kept as a wish like any other.",
 ])
+# 接續時換底：「從第二版調」「改成基於原圖」是要換一個底接著改，不是要改的地方。只有
+# 接續才多這一欄，上傳頁的 schema 不變。
+CONTINUATION_SWITCH_TEXT = "\n".join([
+    "- VERSIONS lists what the user can build on: 原圖 (the original photo) and each version. When NEW LINE asks to"
+    " build on a different one instead (「從第二版調」「改用第 2 版」「在第一版上改」「回到第三版」), set"
+    " \"continue_from\" to that version's number as digits (\"2\"); for the original (「從原圖調」「改成基於原圖」"
+    "「回到原圖重來」), set it to \"original\". The page switches to it and keeps every line already listed. Do not ask"
+    " whether they mean it, and do not ask which version when they name the original; what they name is the answer."
+    " If NEW LINE also asks for a change, use verdict \"keep\" with only that change in \"line\"; otherwise use"
+    " verdict \"answer\". Ask (verdict \"clarify\") only when you cannot tell which one.",
+    "- Otherwise \"continue_from\" is \"\", including when NEW LINE names the version already being adjusted.",
+])
+CONTINUATION_REVIEW_SCHEMA = {**REVIEW_SCHEMA, "name": "chat_continuation_review", "schema": {
+    **REVIEW_SCHEMA["schema"],
+    "required": [*REVIEW_SCHEMA["schema"]["required"], "continue_from"],
+    "properties": {**REVIEW_SCHEMA["schema"]["properties"], "continue_from": {"type": "string"}},
+}}
 CONTINUATION_BUTTON = "接續第 {n} 版美化"
 CONTINUATION_NEXT = "還有其他想改的地方嗎？沒有的話，按下面的「{label}」就會開始。"
 
@@ -2066,7 +2084,7 @@ def _completion_question(result=None):
 
 
 def review_line(line, prompt, history=(), people=(), *, sections=(), model=None, deadline=None, batch=None,
-                continuation=False):
+                continuation=False, versions=0):
     """{kept, start, ask, offer, later, reply, line, persons, options, aspect_ratio, merged} for one line typed on the upload page.
 
     `prompt` is the list as it stands -- the same string the page shows and
@@ -2111,7 +2129,11 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     (「接續某一版修改」), as that version's number when the page sends it: the
     only button is 「接續第 N 版美化」, so nothing offers or
     starts 分析, and the ratio and switches stay as that version had them --
-    a line about them is kept like any other wish."""
+    a line about them is kept like any other wish. `versions` is how many
+    versions there are then: a line asking to build on another of them comes
+    back with `continue_from`, that version's number or "original" for the
+    original photo, for the page to switch to, keeping the lines already
+    listed."""
     from photo_agent import side_reference
     picked,_ = _split_people(line,people)
     side=side_reference.inspect(line,dict(people_count=len(people),selected_person_ids=picked))
@@ -2154,6 +2176,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
                  and not history[-1].get("offer"))
     after_offer = bool(history) and history[-1]["role"] == "assistant" and bool(history[-1].get("offer"))
     selected_context=answer_context(history,line)
+    switchable = type(continuation) is int and type(versions) is int and 1 <= versions <= 999
     context = _localized("\n\n".join([
         REVIEW_INSTRUCTION,
         TOOL_GUIDE,
@@ -2163,7 +2186,10 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         LITERAL_CHOICE_INSTRUCTION,
     ]) + ("\n\n" + i18n.pattern("review_note") if i18n.pattern("review_note") else "")) + CACHE_BREAK + "\n\n".join([
         *(["BATCH OVERVIEW:\n" + _batch_text(batch)] if batch else []),
-        *(["CONTINUATION:\n" + CONTINUATION_TEXT.format(button=continuation_button(continuation))] if continuation else []),
+        *(["CONTINUATION:\n" + CONTINUATION_TEXT.format(button=continuation_button(continuation))
+           + ("\n" + CONTINUATION_SWITCH_TEXT if switchable else "")] if continuation else []),
+        *(["VERSIONS:\n" + "\n".join([i18n.tr("原圖"), *(i18n.tr("第 {n} 版", n=n) + (i18n.tr("（正在調整）") if n == continuation else "")
+                                                         for n in range(1, versions + 1))])] if switchable else []),
         "PEOPLE IN PHOTO:\n" + ("\n".join(people) if people else i18n.tr("（總覽：好幾張照片，這裡不指定人物）") if batch else i18n.tr("（沒有偵測到人臉）")),
         f"LINES SO FAR:\n{_sections_text(sections) or i18n.tr('（還沒有）')}",
         answer_instruction(selected_context),
@@ -2180,7 +2206,8 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         review_calls += 1
         if not config.ENABLE_CHAT_BODY_SIDE_CLARIFICATION:
             text = SIDE_CHAT_RULE + text
-        return model(text) if model is not None else call_review(text, timeout=remaining)
+        return model(text) if model is not None else call_review(
+            text, timeout=remaining, schema=CONTINUATION_REVIEW_SCHEMA if switchable else None)
 
     def complete_question_choices(answer):
         # Choice completion is presentation-only: never accept an edit, change
@@ -2322,6 +2349,12 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     elif continuation and verdict in ("offer", "analyze"):
         # 沒有分析可以按：要分析、問要不要開始的，都只是回答。
         verdict = "answer"
+    target = (result.get("continue_from") or "").strip() if switchable and isinstance(result.get("continue_from"), str) else ""
+    switch = ("original" if target == "original" else int(target)
+              if target.isascii() and target.isdigit() and 1 <= int(target) <= versions and int(target) != continuation else 0)
+    if switch and (verdict == "clarify" or (verdict == "keep" and not (result.get("line") or "").strip())):
+        # 說了哪一版就是答案，不再問；只說換底、沒有要改的地方，這句不進清單。
+        verdict, reply = "answer", ""
     start = verdict if verdict in ("render", "analyze") else ""
     # Avoid repeating target questions, but never turn an explicitly incomplete
     # action into an executable wish just because the user already answered once.
@@ -2421,6 +2454,11 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         reply = _cat(reply or i18n.tr(KEPT_REPLY), replaced, _settings_note(ratio, switches), _kept_next(batch, continuation))
     elif ratio or switches or replaced:
         reply = _cat(replaced, _settings_note(ratio, switches), reply)
+    if switch == "original" and not ask:
+        reply = i18n.tr(CONTINUE_ORIGINAL_REPLY)
+    elif switch and not ask:
+        # 跟一般對話說「從第 N 版接著改」同一句：已經有要改的地方就請人按鍵，沒有就請人打。
+        reply = i18n.tr(CONTINUE_REPLY if kept or sections else CONTINUE_ASK_REPLY).format(n=switch)
     if redo:
         # 每張都美化過了，鍵叫「全部再美化」：AI 自己寫的「一鍵美化」也照鍵名改。
         reply = reply.replace(i18n.label("一鍵美化"), i18n.label("再美化"))
@@ -2447,4 +2485,5 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         "advanced_options": switches,
         "merged": merged,
         "withdrawn": withdrawn,
+        **({"continue_from": switch} if switch and not ask else {}),
     })

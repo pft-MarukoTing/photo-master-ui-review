@@ -3178,6 +3178,10 @@ def prompt_review():
     continuation = body.get("continuation")
     if not (continuation is True or (type(continuation) is int and 0 < continuation <= 999)):
         continuation = False
+    # 一共幾版：「從第二版調」這類換底的話，AI 才知道有哪幾版可以換。
+    versions = body.get("versions")
+    if not (type(continuation) is int and type(versions) is int and continuation <= versions <= 999):
+        versions = 0
     side_out=_side_upload_review(body,text)
     if side_out is not None:return jsonify(side_out)
     try:
@@ -3187,6 +3191,7 @@ def prompt_review():
             "history": history, "people": [p.strip() for p in people],
             **({"batch": batch} if batch else {}),
             **({"continuation": continuation} if continuation else {}),
+            **({"versions": versions} if versions else {}),
             "deadline": time.time() + chat_assistant.TIMEOUT_SECONDS}, wait_seconds=PROMPT_REVIEW_WAIT_SECONDS)
     except Exception:
         current_app.logger.exception("chat prompt review failed")
@@ -3234,6 +3239,9 @@ def prompt_review():
         # starts until they say so -- the options say it for them.
         out["offer"] = True
         out["options"] = answer["options"]
+    if answer.get("continue_from"):
+        # 「從第二版調」：頁面切到那一版接著改，已經記下的需求都留著。
+        out["continue_from"] = answer["continue_from"]
     # A pending answer may accompany a clarification or plain reply too.
     # Preserve the contract independently of the buttons rendered for this turn.
     if answer.get("later") and not accepted and not answer["start"] and not continuation:

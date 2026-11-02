@@ -645,9 +645,10 @@ class ReviewLineTest(unittest.TestCase):
         result = chat_assistant.review_line(line, "", model=lambda c: seen.append(c) or answer, batch=batch)
         return result, seen[0]
 
-    def continuation_review(self, answer, line="臉再亮一點", continuation=True):
+    def continuation_review(self, answer, line="臉再亮一點", continuation=True, versions=0, prompt=""):
         seen = []
-        result = chat_assistant.review_line(line, "", model=lambda c: seen.append(c) or answer, continuation=continuation)
+        result = chat_assistant.review_line(line, prompt, model=lambda c: seen.append(c) or answer,
+                                            continuation=continuation, versions=versions)
         return result, seen[0]
 
     # 「接續某一版修改」：只有「接續第 N 版美化」一個鍵，收下後指向它，不提分析／一鍵美化。
@@ -680,6 +681,48 @@ class ReviewLineTest(unittest.TestCase):
         result, _ = self.continuation_review(answer, line="做成 9:16")
         self.assertTrue(result["kept"])
         self.assertEqual((result["aspect_ratio"], result["advanced_options"]), ("", {}))
+
+    # 「從第二版調」是換底，不是要改的地方：說了哪一版就切過去，不再問、不進清單。
+    def test_a_continuation_switches_to_the_version_named(self):
+        asked = {"verdict": "clarify", "reply": "你是要改用第 2 版，還是繼續調整第 4 版？", "line": "",
+                 "options": ["改用第 2 版", "繼續調整第 4 版"], "continue_from": "2"}
+        result, context = self.continuation_review(asked, line="從第二版調", continuation=4, versions=4,
+                                                   prompt="口罩換成白色")
+        self.assertIn("VERSIONS:", context)
+        self.assertIn("第 4 版（正在調整）", context)
+        self.assertIn("原圖", context.split("VERSIONS:")[1])
+        self.assertEqual((result["continue_from"], result["ask"], result["kept"], result["options"]),
+                         (2, False, False, []))
+        self.assertEqual(result["reply"], chat_assistant.CONTINUE_REPLY.format(n=2))
+        # 還沒有要改的地方：請人打。
+        result, _ = self.continuation_review({**asked, "verdict": "answer"}, line="從第二版調", continuation=4, versions=4)
+        self.assertEqual(result["reply"], chat_assistant.CONTINUE_ASK_REPLY.format(n=2))
+        # 換底順便說了要改的：那句照常收下。
+        keep = {"verdict": "keep", "reply": "", "line": "口罩換成白色", "options": [], "continue_from": "2"}
+        result, _ = self.continuation_review(keep, line="從第二版調，口罩換成白色", continuation=4, versions=4)
+        self.assertEqual((result["continue_from"], result["kept"], result["line"]), (2, True, "口罩換成白色"))
+
+    def test_a_continuation_ignores_a_version_it_cannot_switch_to(self):
+        for target in ("", "0", "4", "5", "第2版", 2):
+            result, _ = self.continuation_review({"verdict": "answer", "reply": "好。", "line": "", "options": [],
+                                                  "continue_from": target}, continuation=4, versions=4)
+            self.assertNotIn("continue_from", result)
+        # 頁面沒說一共幾版：不提換底，也不認。
+        result, context = self.continuation_review({"verdict": "answer", "reply": "好。", "line": "", "options": [],
+                                                    "continue_from": "2"}, continuation=4)
+        self.assertNotIn("VERSIONS:", context)
+        self.assertNotIn("continue_from", result)
+
+    # 「改成基於原圖」：原圖也是一個底，說了就換，不再問要從哪一版開始。只有一版時也能換回原圖。
+    def test_a_continuation_switches_back_to_the_original(self):
+        asked = {"verdict": "clarify", "reply": "「基於原圖」要選哪一版開始調整？", "line": "",
+                 "options": ["第1版", "第2版"], "continue_from": "original"}
+        for versions in (1, 4):
+            result, context = self.continuation_review(asked, line="想要改成基於原圖", continuation=1, versions=versions)
+            self.assertIn("「改成基於原圖」", context)
+            self.assertEqual((result["continue_from"], result["ask"], result["kept"], result["options"]),
+                             ("original", False, False, []))
+            self.assertEqual(result["reply"], chat_assistant.CONTINUE_ORIGINAL_REPLY)
 
     def test_the_overview_tells_the_model_it_speaks_for_a_batch(self):
         _, context = self.batch_review({"verdict": "drop", "reply": "好。", "line": "", "options": []})

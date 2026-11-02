@@ -187,12 +187,13 @@ export const api = {
   // `batch`：從好幾張的總覽打的（張數、這批的「分析／美化」鍵名稱、照片清單在哪），
   // AI 就講「這幾張」、只講某一張的話請人去那張改；單張的上傳頁不帶。
   // `continuation`：「接續某一版修改」打的，帶那一版的 N；AI 只指向「接續第 N 版美化」，
-  // 不提分析、不改比例設定。
+  // 不提分析、不改比例設定。`versions` 是一共幾版：說「從第二版調」「改成基於原圖」這類
+  // 換底的話，回 `continue_from`（版號，或原圖 "original"），頁面就切到那裡接著改。
   promptReview: (text: string, prompt: string, history: ReviewTurn[], people: string[],
     sections: { who: string; text: string }[] = [],
     batch?: { photos: number; unrendered: number; analyze: string; render: string; where: string },
     sideContext?: { source_sha256: string; analysis_model: string; previous_token?: string }, sideAnswer?: SideAnswer,
-    continuation: number | false = false) =>
+    continuation: number | false = false, versions = 0) =>
     request<{
       accepted: boolean;
       clarification_subtype?: "body_side_reference";
@@ -220,11 +221,13 @@ export const api = {
       advanced_options?: { [key: string]: boolean };
       merged?: { section: number; text: string }[];
       withdrawn?: boolean;
+      continue_from?: number | "original";
     }>(
       `${CHAT}/prompt-review`,
       { ...json("POST", { text, prompt, history, people, sections,
         ...(batch ? {batch} : {}), ...(sideContext ? {side_context:sideContext} : {}),
-        ...(sideAnswer ? {side_answer:sideAnswer} : {}), ...(continuation ? {continuation} : {}) }), signal: AbortSignal.timeout(65000) },
+        ...(sideAnswer ? {side_answer:sideAnswer} : {}), ...(continuation ? {continuation} : {}),
+        ...(continuation && versions ? {versions} : {}) }), signal: AbortSignal.timeout(65000) },
     ),
 
   // batchId：多張上傳的同一批，最近照片會把它們合成一格。
