@@ -498,7 +498,8 @@ def _panel_continuation(version):
     params = version.get("params") or {}
     if params.get("base") != VERSION_BASE or not isinstance(params.get("source_result"), dict):
         return {}
-    return {"base": VERSION_BASE, "source_result": params["source_result"], "prompt": params.get("user_prompt")}
+    return {"base": VERSION_BASE, "source_result": params["source_result"], "prompt": params.get("user_prompt"),
+            "style_options": (params.get("analysis") or {}).get("style_options") or {}}
 
 
 def _sync_from_history(user, session_id, session):
@@ -2556,8 +2557,10 @@ def _advance_rendering(user, session_id, photo, statuses):
                 # Kept so the next version's note can tell what changed.
                 "plan": plan}
         if pending.get("base") == VERSION_BASE:
+            # With the styles too, so 再美化 on it can send the same request again.
             card.update({"base": VERSION_BASE, "source_result": pending["source_result"],
-                         "prompt": (pending.get("draft") or {}).get("text")})
+                         "prompt": (pending.get("draft") or {}).get("text"),
+                         "style_options": (pending.get("draft") or {}).get("style_options") or {}})
     else:
         failed = next((j for j in jobs.values() if j["error"]), {})
         photo["error"] = failed.get("error") or "render failed"

@@ -35,6 +35,9 @@ export interface Handoff {
   // run）和這一輪打的字、挑的風格（只放不是預設的）。接手的那邊打開同一版、
   // 一樣是接著調整的樣子。
   continuation?: HandoffContinuation;
+  // 沒有還沒美化的調整（idle），底卻不是原圖：那邊接著哪一版。接手的這邊一樣
+  // 接著那一版、什麼都還沒打，跟剛美化完一樣。沒有就是原圖。
+  base?: { version_id: string; job_id: string; run: number };
   // 接手的那邊要打開哪一版（成品歷程裡的 version_id）：接著調整時是調整的那一版，
   // 不然是畫面上那一版。
   version_id?: string;
@@ -58,8 +61,11 @@ export interface HandoffContinuation {
 // 欄位不帶：那是某一版美化時用的設定，面板模式上那一版自己就有，帶過去反而
 // 蓋掉它。
 export function writeHandoff(caseId: string, plan: Plan, caps: Capabilities, analysis: Analysis | undefined,
-  unsent: string[] | null, continuation?: HandoffContinuation, versionId?: string) {
+  unsent: string[] | null, continuation?: HandoffContinuation, versionId?: string, base?: Handoff["base"]) {
   const has = (k: string) => !unsent || unsent.includes(k);
+  const idle = !continuation && !!unsent && !unsent.length;
+  // 有還沒美化的調整：那些調整是對原圖改的，接著哪一版就不算了，底不帶過去。
+  if (!idle) base = undefined;
   const option = caps.render.options.find((o) => o.id === plan.render_option);
   const items = analysis ? recipeItems(analysis) : [];
   const h: Handoff = {
@@ -79,9 +85,10 @@ export function writeHandoff(caseId: string, plan: Plan, caps: Capabilities, ana
       ? Object.fromEntries(items.map((t, i) => [t, (plan.recipe_checked || [])[i] !== false])) : undefined,
     compositions: analysis?._composition_by_ratio,
     continuation,
-    version_id: continuation?.version_id || versionId,
+    base,
+    version_id: continuation?.version_id || base?.version_id || versionId,
     showing_version_id: versionId,
-    idle: !continuation && !!unsent && !unsent.length,
+    idle,
   };
   try {
     sessionStorage.setItem(KEY, JSON.stringify(h));

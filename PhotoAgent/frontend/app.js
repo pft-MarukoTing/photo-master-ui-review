@@ -1266,11 +1266,11 @@
     };
     // 接著這張調整 goes over as itself: the chat page carries on from the
     // same version, with the request so far.
-    // With nothing written yet it is not an edit: the chat page opens on the
-    // finished version, not carrying on.
+    // With nothing written yet it is not an edit, but the base still goes
+    // over: the chat page carries on from the same version, nothing typed.
     const cont = activeContinuation();
     if (cont) {
-      if (!isReviewDirty()) return write({ idle: true });
+      if (!isReviewDirty()) return write({ idle: true, base: cont.source });
       const { text, style_options } = pendingContinuationRequest();
       return write({ continuation: { ...cont.source, text, style_options } });
     }
@@ -2686,8 +2686,8 @@
   // like the chat names it (第 N 版完成・由第 M 版調整) and summed up by the
   // chat's note on it, or failing that by the request it was made with.
   // Even once the case has been analyzed, such a version keeps its
-  // request-only panel (renderAnalysisPreview's requestOnly): its note in
-  // place of 照片總覽, no 人像檢查/畫面建議.
+  // request-only panel (renderAnalysisPreview's requestOnly) while it is the
+  // base: its note in place of 照片總覽, no 人像檢查/畫面建議.
   function isContinuationRun(run) {
     return Boolean(run?.result?.analysis?._continuation) && run.versionNumber != null;
   }
@@ -2727,6 +2727,14 @@
     const handoff = pendingModeHandoff?.case_id === currentCaseHistoryImageKey && !currentDetailBatchRecord()
       ? pendingModeHandoff : null;
     if (handoff?.idle) pendingModeHandoff = null;
+    // Nothing unsent, but the chat page was on a version as its base: so is
+    // this panel, with nothing typed -- the request it was made with if that
+    // is this version's default base, as when it is opened here.
+    const b = handoff?.idle ? handoff.base : null;
+    if (b && run && canContinueFromRun(run) && run.versionId === b.version_id) {
+      panelContinuation = continuationOn(run, run === defaultRun ? madeWithRequest(run) : null);
+      return;
+    }
     if (!handoff || handoff.idle) {
       panelContinuation = defaultRun ? continuationOn(defaultRun, madeWithRequest(defaultRun)) : null;
       return;
@@ -6884,8 +6892,12 @@
     setAnalysisPreviewDisabled(readOnly);
     if (!readOnly) ensurePanelBase();
     const continuing = readOnly ? null : activeContinuation();
+    // On 原圖 off a continuation version: the analysis it traces back to,
+    // in full (人像檢查/畫面建議 too). Without one, request-only as before.
+    const origin = !continuing && singleFlowState.origin?.run === panelRun() ? singleFlowState.origin.selections : null;
+    const selections = origin || lastSingleSelections;
     renderAnalysisPreview({ analysis: singleFlowState.analysis, preset: singleFlowState.preset, expanded: true,
-      requestOnly: !!continuing || isContinuationRun(panelRun()) });
+      requestOnly: !!continuing || (!origin && isContinuationRun(panelRun())) });
     paintSkipHint();
     // Paint this record's global 人像修正設定 independently before restoring any
     // per-person choices. Pose below changes only the latter.
@@ -6903,12 +6915,12 @@
       if (els.apAnalysisShellDesc) {
         els.apAnalysisShellDesc.textContent = tr("只改你要求的地方，其他保持第 {n} 版的樣子。", { n: continuing.versionNumber });
       }
-    } else if (lastSingleSelections) {
-      if (els.promptInput) els.promptInput.value = lastSingleSelections.userPrompt || "";
-      if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!lastSingleSelections.overwritePrompt;
-      applyFaceIssueOverrides(lastSingleSelections.faceIssueOverrides);
-      if (typeof lastSingleSelections.bodyReshapeEnabled === "boolean") {
-        setBodyReshapeReviewEnabled(lastSingleSelections.bodyReshapeEnabled);
+    } else if (selections) {
+      if (els.promptInput) els.promptInput.value = selections.userPrompt || "";
+      if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!selections.overwritePrompt;
+      applyFaceIssueOverrides(selections.faceIssueOverrides);
+      if (typeof selections.bodyReshapeEnabled === "boolean") {
+        setBodyReshapeReviewEnabled(selections.bodyReshapeEnabled);
       }
       // The face review cards were already built (renderAnalysisPreview just
       // above) before these overrides existed on faceThumbEntries -- rebuild
@@ -6917,7 +6929,7 @@
       renderFaceReviewCards();
       // Apply Pose last: it is a recommendation over this photo's restored
       // individual values, never an edit to the global 人像修正設定 above.
-      applyStyleSelections(lastSingleSelections);
+      applyStyleSelections(selections);
     }
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = !isDebugUiActive;
     openInlineAnalysisPanel(readOnly);
@@ -10795,6 +10807,14 @@
     // the 個人化需求 the version was made with.
     const { analysis: restoredAnalysis, selections } = restoreReviseSelections(
       attached || run.result.analysis, params.user_prompt, caseParams.overwrite_prompt && !attached);
+    // 從原圖美化 off this version (#ap-continue-base on 原圖): the version
+    // the chain started from's own request and styles, not this one's --
+    // like the chat's plan, which a continuation never touches.
+    const origin = continuation && attached ? {
+      run,
+      selections: { ...selections, options: { ...selections.options },
+        userPrompt: caseParams.user_prompt || "", overwritePrompt: !!caseParams.overwrite_prompt },
+    } : null;
     // Its styles too are the ones it was made with, kept on its own stub only.
     if (continuation && attached) {
       const own = run.result.analysis.style_options || {};
@@ -10818,7 +10838,8 @@
       singlePassEdit: resolvedSinglePassEdit(params.single_pass_edit, extraInfo.single_pass_edit),
       processingPath: "local",
       analyzeTimings: [],
-      useCombinedJob: false
+      useCombinedJob: false,
+      origin
     };
     applySinglePassEditOption(singleFlowState.singlePassEdit);
     lastSingleSelections = selections;
