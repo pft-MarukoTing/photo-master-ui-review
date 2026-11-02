@@ -151,7 +151,9 @@ class ChatRoutesTest(unittest.TestCase):
             for key in ("srcKeys", "dstKeys"):
                 engine_params[key] = [k.replace("{msg_id}", job_id) for k in engine_params[key]]
             self.enqueued.append((job_id, json.loads(json.dumps(engine_params))))
-            self.jobs[job_id] = {"status": "processing", "error": None}
+            self.jobs[job_id] = {"status": "processing", "error": None,
+                                 "acts": json.dumps([{**a, "params": {**a.get("params", {}),
+                                     "lang": chat.i18n.current()}} for a in engine_params["acts"]])}
             return job_id
 
         def get_job_info(job_id, keyToGet=None):
@@ -167,6 +169,7 @@ class ChatRoutesTest(unittest.TestCase):
         self.chat_answers = {}
 
         def submit_chat(params):
+            params = {"lang": chat.i18n.current(), **params}
             job_id = f"chat_{len(self.chat_answers)}_{uuid.uuid4().hex[:6]}"
             try:
                 self.chat_answers[job_id] = chat.chat_jobs.run(json.loads(json.dumps(params)))
@@ -250,6 +253,66 @@ class ChatRoutesTest(unittest.TestCase):
                 patch.object(chat, "_watch_loaded", lambda user, sid, session: seen.append(chat.i18n.current())):
             chat._watch_session(USER, "s1")
         self.assertEqual(seen, ["en"])
+
+    def test_background_text_uses_operation_language_after_a_page_switch(self):
+        for operation_lang, page_lang in (("zh-TW", "en"), ("en", "zh-TW")):
+            with self.subTest(operation_lang=operation_lang):
+                sid = self.client.post("/api/photo-agent/chat/sessions", json={"user": USER},
+                    headers={"X-PhotoAgent-Lang": page_lang}).get_json()["session_id"]
+                photo = self.client.post(self.url(sid, "/photos"),
+                    data={"user": USER, "image": (io.BytesIO(b"img"), "p.jpg")},
+                    headers={"X-PhotoAgent-Lang": operation_lang}).get_json()["photos"][0]
+                self.jobs[photo["analyze_job_id"]]["status"] = "success"
+                seen = []
+                def opening(context):
+                    seen.append(("opening", chat.i18n.current()))
+                    return {"summary": "opening", "issues": []}
+                def note(context, images=()):
+                    seen.append(("note", chat.i18n.current()))
+                    return {"note": "result"}
+                with patch.object(chat.chat_assistant, "call_opening", opening), \
+                        patch.object(chat.chat_assistant, "call_render_note", note), \
+                        patch.object(chat, "_note_images", return_value=("before", "after")):
+                    # Watcher uses the session's opposite language; the job wins.
+                    with self.client.application.app_context():
+                        chat._watch_session(USER, sid)
+                    render = self.client.post(self.url(sid, "/render"),
+                        json={"user": USER, "photo_ids": "all"},
+                        headers={"X-PhotoAgent-Lang": operation_lang}).get_json()["renders"][0]
+                    self.jobs[render["job_ids"][0]]["status"] = "success"
+                    # The poller also uses the opposite language. Its delayed
+                    # note must still inherit the render, not this request.
+                    for _ in range(2):
+                        self.client.get(self.url(sid, "/status"), query_string={"user": USER},
+                            headers={"X-PhotoAgent-Lang": page_lang})
+                self.assertEqual(seen, [("opening", operation_lang), ("note", operation_lang)])
+
+    def test_source_language_job_without_lang_does_not_inherit_english(self):
+        # Production omits lang on Chinese jobs. Both serialized Redis data
+        # and already-decoded records must resolve that omission to Chinese.
+        for acts in ([{"params": {"stage": "finish"}}], '[{"params":{"stage":"finish"}}]'):
+            with self.subTest(acts=acts), chat.i18n.use("en"), \
+                    patch.object(chat, "get_job_info", return_value={"status": "success", "acts": acts}):
+                self.assertEqual(chat._job_status("job", {})["lang"], "zh-TW")
+        with chat.i18n.use("en"), patch.object(chat, "get_job_info", return_value={"status": "success"}):
+            self.assertNotIn("lang", chat._job_status("legacy", {}))
+
+    def test_queued_render_keeps_its_own_language_after_english_analysis(self):
+        sid = self.new_session()
+        photo = self.client.post(self.url(sid, "/photos"),
+            data={"user": USER, "image": (io.BytesIO(b"img"), "p.jpg")},
+            headers={"X-PhotoAgent-Lang": "en"}).get_json()["photos"][0]
+        response = self.client.post(self.url(sid, "/render"),
+            json={"user": USER, "photo_ids": [photo["photo_id"]]}, headers={"X-PhotoAgent-Lang": "zh-TW"})
+        self.assertEqual(response.status_code, 202)
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        with self.client.application.app_context():
+            chat._watch_session(USER, sid)
+        state = chat_session.load_session(USER, sid)["photos"][0]
+        self.assertEqual(state["status"], "rendering")
+        render_job = state["pending_render"]["job_ids"][0]
+        acts = json.loads(self.jobs[render_job]["acts"])
+        self.assertEqual(acts[0]["params"]["lang"], "zh-TW")
 
     def add_photos(self, sid, n=1):
         data = {"user": USER, "image": [(io.BytesIO(b"img"), f"p{i}.jpg") for i in range(n)]}

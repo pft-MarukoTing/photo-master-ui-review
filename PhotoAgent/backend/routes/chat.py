@@ -554,7 +554,8 @@ def _sync_from_history(user, session_id, session):
             job_id = photo["analysis_job_id"]
             job = _job_status(job_id, statuses)
             if job["status"] in TERMINAL_STATUSES and store.claim(user, session_id, job_id):
-                messages.extend(_advance_reanalysis(user, session_id, photo, job))
+                with i18n.use(job.get("lang", i18n.current())):
+                    messages.extend(_advance_reanalysis(user, session_id, photo, job))
         if changed:
             store.save_photo_state(user, session_id, photo)
     store.append_messages(user, session_id, messages)
@@ -1313,6 +1314,13 @@ def _advance_reframing(user, session_id, photo, statuses):
 
 
 def _start_queued_render(user, session_id, photo, queued):
+    # The render may have been requested in a different language from the
+    # analysis/reframe it waited for. Polling must not choose its language.
+    with i18n.use(queued.get("lang", i18n.current())):
+        return _start_queued_render_in_language(user, session_id, photo, queued)
+
+
+def _start_queued_render_in_language(user, session_id, photo, queued):
     """A render asked for while the photo was busy starts now, with its plan
     as it is now -- after the analysis, if it now needs the one its upload
     skipped."""
@@ -1561,7 +1569,7 @@ def render(session_id):
         _start_analysis(user, session_id, photo, "render")
     to_queue += to_analyze
     for photo in to_queue:
-        photo["queued_render"] = {"base": base}
+        photo["queued_render"] = {"base": base, "lang": i18n.current()}
         store.save_photo_state(user, session_id, photo)
     queued = [p["photo_id"] for p in to_queue]
     store.append_messages(user, session_id, [store.make_message(
@@ -1577,7 +1585,7 @@ def _ask_render(user, session_id, photo):
     if photo["status"] == "ready" and _needs_analysis(photo):
         _start_analysis(user, session_id, photo, "render")
     if photo["status"] in ("analyzing", "reframing") and not photo["queued_render"]:
-        photo["queued_render"] = {"base": "original"}
+        photo["queued_render"] = {"base": "original", "lang": i18n.current()}
         store.save_photo_state(user, session_id, photo)
         renders, queued = [], [photo["photo_id"]]
     elif photo["status"] != "ready":
@@ -2159,7 +2167,7 @@ def _review_history(history):
 
 def _job_status(job_id, statuses):
     if job_id not in statuses:
-        info = get_job_info(job_id, keyToGet=["status", "error", "error_message", "ts"]) or {}
+        info = get_job_info(job_id, keyToGet=["status", "error", "error_message", "ts", "acts"]) or {}
         lost = lost_job_error(job_id, info)
         # error is the worker's raw failure text (an OpenAI safety rejection,
         # a timeout's message, ...) and error_code its short code -- the UI
@@ -2169,6 +2177,13 @@ def _job_status(job_id, statuses):
         else:
             statuses[job_id] = {"status": info.get("status"), "error": info.get("error_message") or info.get("error"),
                                 "error_code": info.get("error")}
+        # Work owns its language, including source-language jobs whose params
+        # omit lang. Old/missing job records fall back to the caller's context.
+        acts = info.get("acts")
+        if isinstance(acts, str):
+            acts = json.loads(acts)
+        if acts:
+            statuses[job_id]["lang"] = i18n.normalize((acts[0].get("params") or {}).get("lang"))
     return statuses[job_id]
 
 
@@ -2351,7 +2366,8 @@ def _submit_note(user, session_id, photo, pending):
     try:
         return chat_queue.submit({"stage": chat_jobs.STAGE_NOTE, "analysis": analysis, "plan": pending["plan"],
                                   "previous_plan": previous_plan, "earlier_notes": earlier_notes,
-                                  "before": before, "after": after, "continuation": continuation})
+                                  "before": before, "after": after, "continuation": continuation,
+                                  "lang": pending.get("lang", i18n.current())})
     except Exception:
         current_app.logger.exception("chat render note failed")
         return None
@@ -2561,7 +2577,7 @@ def _advance_rendering(user, session_id, photo, statuses):
         # The card goes up now; _advance_texts adds the note to it once written.
         photo["pending_note"] = {"version_id": pending["action_id"], "message_id": messages[0]["id"],
                                  "render_job": succeeded[0], "based_on": pending.get("based_on"),
-                                 "plan": card["plan"]}
+                                 "plan": card["plan"], "lang": i18n.current()}
         if pending.get("base") == VERSION_BASE:
             # Compared with the result it was made from, under the request it
             # was sent rather than a recipe.
@@ -2627,7 +2643,8 @@ def _watch(app):
 
 def _watch_session(user, session_id):
     session = store.load_session(user, session_id)
-    # No request here to say the language: the session's own, from when it was made.
+    # Fallback for legacy jobs without params. Each recorded operation below
+    # overrides this with its own language, independent of page switches.
     with i18n.use((session or {}).get("lang")):
         _watch_loaded(user, session_id, session)
 
@@ -2654,13 +2671,23 @@ def _advance_photos(user, session_id, session):
     for photo in session["photos"]:
         started, status = time.monotonic(), photo["status"]
         if status == "analyzing":
-            landed = _advance_analyzing(user, session_id, photo, statuses)
+            job_id = _analysis_job_id(photo)
         elif status == "reframing" and photo.get("pending_reframe"):
-            landed = _advance_reframing(user, session_id, photo, statuses)
+            job_id = photo["pending_reframe"]["job_id"]
         elif status == "rendering" and photo["pending_render"]:
-            landed = _advance_rendering(user, session_id, photo, statuses)
+            job_id = photo["pending_render"]["job_ids"][0]
         else:
             continue
+        job = _job_status(job_id, statuses)
+        # Both the watcher and a status poll can land this job. Neither the
+        # session's creation language nor a later page switch changes it.
+        with i18n.use(job.get("lang", i18n.current())):
+            if status == "analyzing":
+                landed = _advance_analyzing(user, session_id, photo, statuses)
+            elif status == "reframing":
+                landed = _advance_reframing(user, session_id, photo, statuses)
+            else:
+                landed = _advance_rendering(user, session_id, photo, statuses)
         if landed:
             # How long the request that noticed it was held up landing it.
             timeline(photo=photo["photo_id"], event=f"advanced_{status}", ms=int((time.monotonic() - started) * 1000),
