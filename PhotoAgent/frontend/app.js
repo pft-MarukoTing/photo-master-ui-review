@@ -12718,6 +12718,9 @@
     if (!runs || !els.versionStripTrack) return;
     const current = runs[currentIdx];
     if (els.versionStripNoteText) {
+      // With versions to continue from, where each came from is the top
+      // card's to say, and the next base #ap-continue-base's.
+      els.versionStripNoteText.parentElement.hidden = renderFromVersionEnabled;
       els.versionStripNoteText.textContent = runs.some((r) => r.versionParams?.source_result || isContinuationRun(r))
         ? tr("有幾版是接著別版調整的，其他皆由原圖重新產生")
         : tr("每張美化結果皆由原圖重新產生");

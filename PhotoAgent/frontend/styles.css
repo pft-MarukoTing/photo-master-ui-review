@@ -2949,6 +2949,10 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   color: rgba(var(--on-surface-rgb),.45);
 }
 .version-strip-note svg { flex: 0 0 auto; }
+/* Hidden while versions can be continued from (syncVersionStripCurrent):
+   the preview button then takes over pushing itself to the far end. */
+.version-strip-note[hidden] { display: none; }
+.version-strip-note[hidden] + .version-strip-preview-btn { margin-left: auto; }
 /* Touch replacement for the hover preview (.version-tile-preview disables
    itself below @media max-width:560px, since hover has no meaning on touch):
    opens #version-strip-preview-modal instead. Hidden by default, same as

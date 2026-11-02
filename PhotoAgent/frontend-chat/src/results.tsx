@@ -593,16 +593,19 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                 <span id="version-strip-count" class="version-strip-count">
                   {originPicked ? t("原圖") : t("第 {v1}／{length} 組", { v1: idx + 1, length: versions.length })}
                 </span>
-                <span class="version-strip-note">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" />
-                    <path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                    <circle cx="12" cy="7.8" r="1.1" fill="currentColor" />
-                  </svg>
-                  {versions.some((v) => v.from)
-                    ? t("有幾版是接著別版調整的，其他皆由原圖重新產生")
-                    : t("每張美化結果皆由原圖重新產生")}
-                </span>
+                {/* 能接著某一版調整時，每一版從哪裡來由完成訊息講，下一次從哪張開始由輸入框上方的選單講，這裡不再講。 */}
+                {!caps.features?.render_from_version && (
+                  <span class="version-strip-note">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" />
+                      <path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                      <circle cx="12" cy="7.8" r="1.1" fill="currentColor" />
+                    </svg>
+                    {versions.some((v) => v.from)
+                      ? t("有幾版是接著別版調整的，其他皆由原圖重新產生")
+                      : t("每張美化結果皆由原圖重新產生")}
+                  </span>
+                )}
               </div>
               <div id="version-strip-track" class="version-strip-track" role="tablist" aria-label={t("這張照片的美化紀錄")}>
                 <div class="version-strip-origin">
