@@ -84,9 +84,6 @@ def run(params, *, wait_seconds=None):
     deadline = None if wait_seconds is None else started + wait_seconds
     job_id = submit(params)
     _current_task_id.set(job_id)
-    preview = params.get('stage') == 'chat_preview_conversation'
-    if preview:
-        logger.info('Preview conversation queued task_id=%s', job_id)
     redis = get_redis_conn()
 
     if deadline is None:
@@ -96,15 +93,13 @@ def run(params, *, wait_seconds=None):
         status = info.get("status")
         if wait_seconds is not None and time.monotonic() >= deadline:
             redis.zrem(CHAT_QUEUE, job_id)
-            raise ChatJobError("preview conversation deadline exceeded")
+            raise ChatJobError(f"chat job {job_id} deadline exceeded")
         if status == "success":
             result = info.get("0_res0")
             if isinstance(result, str):
                 result = json.loads(result)
             timeline(job=job_id, event=f"chat_{params.get('stage')}", wait=round(time.monotonic() - started, 2),
                      **job_spans("chat", job_id))
-            if preview:
-                logger.info('Preview conversation result received task_id=%s elapsed=%.3fs', job_id, time.monotonic() - started)
             return (result or {}).get("answer")
         if status == "error":
             raise ChatJobError(f"chat job {job_id} failed: {info.get('error')}")

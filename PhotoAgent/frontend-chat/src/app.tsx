@@ -44,11 +44,8 @@ import {
 } from "./chat";
 import { facePeople, seedDetectedFaces, useBoxThumbs, useDetectedFaces, useFaceThumbs, type Box } from "./face";
 import { useSubjectPreview } from "./subject-preview";
-import { usePreviewConversation } from "./preview-conversation";
-import { routeReviewQuestion } from "./review-question-owner";
 import { appendNotesHistory, sectionsIdentity, type HistoricalSection } from "./personalized-history";
-import type { PreviewClause, PreviewReplyEvent, PreviewWish, PreviewConversationResult, TargetQuestionSnapshot } from "./preview-conversation";
-import { submissionPreviewEvents } from "./preview-conversation";
+import type { PreviewReplyEvent } from "./pre-chat-events";
 import { Icon } from "./icons";
 import { CASE_PREFIX, rowId, ConfirmModal, Gallery, Header, HistoryDrawer, HomeIntro, type GallerySelection, type GalleryTab } from "./home";
 import { handoffPatch, takeHandoff, writeHandoff, type HandoffContinuation } from "./handoff";
@@ -136,12 +133,6 @@ type Note = {
   replyOrder?: number;
   // Freeze presentation references independently of executable person bindings.
   replyPeople?: FaceRef[];
-  resolvedWish?: string;
-  // 沒點頭像的句子，preview 對完人之後，每一段動作各自落在哪幾位身上（沒有人
-  // 的就是空的）。字是去掉「左邊的女孩」這種指稱的動作本身，誰是誰由頭像表示。
-  placed?: { persons: PrePerson[]; text: string }[];
-  actionPending?: boolean;
-  withdrawalText?: string;
   text: string;
   persons: PrePerson[];
   selectionSource?: "user_selection" | "model_suggestion";
@@ -166,46 +157,6 @@ type Note = {
   wish?: string;
 };
 
-// 句子裡指人的那段拿掉，剩下要做的事：「把左側女孩的頭髮染成金髮」→「把頭髮染成金髮」。
-function clauseAction(c: PreviewClause, persons: PrePerson[]): string {
-  const text = c.display_text || c.text;
-  // For object edits referent may name the object, not its owner. Only the
-  // selected person's label may be replaced by an avatar in that case.
-  const names = [persons.map(p => p.name || p.where).join(t("、")),
-    c.semantic?.target_kind === "object" ? "" : c.referent].filter(Boolean);
-  const referent = names.find(name => text.includes(name));
-  const at = referent ? text.indexOf(referent) : -1;
-  if (at < 0) return text;
-  const before = text.slice(0, at), after = text.slice(at + referent!.length).replace(/^[：:]?的?/, "");
-  // 指稱只抓到好幾位裡的第一位（後面還接著「、右邊那位」），切不乾淨就整句照原樣。
-  if (!after.trim() || /^[、，,和跟與及]/.test(after)) return text;
-  return /^(?:請|麻煩|幫我|請幫我)*把?$/.test(before) ? (before.endsWith("把") ? "把" : "") + after : before + after;
-}
-
-function resolvedNotes(notes: Note[], result: PreviewConversationResult, who: (ids: string[]) => PrePerson[] = () => []): Note[] {
-  return notes.map((note, index) => {
-    const clauses = result.clauses.filter(c => c.request_id === `note-${index}`);
-    const semantic = clauses.length > 0 && clauses.every(c => c.semantic_required);
-    const actionPending = clauses.some(c => !["cancelled", "superseded"].includes(c.status) &&
-      (c.action_status === "incomplete" || c.action_status === "pending" || (semantic &&
-        (c.edit_scope_pending || c.edit_description_pending || ["pending", "ambiguous", "unmatched"].includes(c.status)))));
-    const effective = clauses.filter(c => ["matched", "not_person", "outside_confirmed"].includes(c.status) && c.scope !== "query" && !c.edit_scope_pending && !c.edit_description_pending && c.action_status !== "incomplete" && c.action_status !== "pending");
-    if (actionPending && !effective.length)
-      return note.actionPending && note.resolvedWish === "" ? note : { ...note, resolvedWish: "", actionPending: true };
-    if (!clauses.length || (!semantic && clauses.some(c => c.edit_scope_pending || c.edit_description_pending || ["pending", "ambiguous", "unmatched"].includes(c.status)))) return note;
-    const text = effective.map(c => c.display_text || c.text).join(t("；"));
-    const withdrawalText = text || Array.from(new Set(clauses.map(c => c.cancelled_from?.text || c.display_text).filter(Boolean))).join(t("；")) || note.withdrawalText;
-    const placed = effective.map(c => {
-      const ids = c.display_target_ids?.length ? c.display_target_ids : c.target_ids.length ? c.target_ids : c.protected_ids;
-      const persons = who(ids);
-      return persons.length === ids.length && ids.length ? { persons, text: clauseAction(c, persons) } : { persons: [], text: c.display_text || c.text };
-    });
-    const samePlaced = JSON.stringify(note.placed?.map(x => [x.persons.map(faceRef), x.text])) === JSON.stringify(placed.map(x => [x.persons.map(faceRef), x.text]));
-    if (note.resolvedWish === text && note.withdrawalText === withdrawalText && samePlaced && !!note.actionPending === actionPending) return note;
-    return { ...note, ...(actionPending ? { actionPending: true } : note.actionPending ? { actionPending: false } : {}), resolvedWish: text, withdrawalText, placed };
-  });
-}
-
 // 點頭像回答「哪一位」、直接送出時 AI 回的那句。沒問模型，所以話是這裡寫好的。
 // The whole 最近照片 list: every live session plus every history case (the
 // backend's LISTED_SESSIONS_MAX + HISTORY_MAX_LEN), since 面板模式's 最近照片
@@ -217,34 +168,16 @@ const SESSIONS_FRESH_MS = 5000;
 const WHO_ANSWERED_REPLY = t("好，這個我記下來了。還有其他想改的地方嗎？沒有的話，可以從下面選「分析」或「一鍵美化」喔！");
 
 // What a note asks for, as the list shows it and the prompt carries it.
-const wishText = (n: Note) => n.resolvedWish ?? n.wish ?? n.text;
-function previewWish(n: Note, index: number): PreviewWish {
-  return { wish_id: `note-${index}`, text: n.wish ?? n.text, source_text: n.interpreted ? n.wish ?? n.text : n.text,
-    ...(n.verbatim ? { verbatim: true } : {}),
-    selection_source: n.selectionSource || "none",
-    target_ids: n.selectionSource === "user_selection"
-      ? n.persons.flatMap(p => p.preview_person_id ? [p.preview_person_id] : []) : [] };
-}
-
-// 一段直接指定給某幾位的需求交給 preview：手改或模型重寫過的那一段整段，或一句
-// 指了好幾位、其中有人的段已經改過，剩下那幾位的部分。人照樣指到那幾位，改字也
-// 不會把指定的人弄丟；沒有 preview 的人就把誰寫在字裡。
-function directWish(id: string, persons: PrePerson[], text: string): PreviewWish {
-  const ids = persons.flatMap(p => p.preview_person_id ? [p.preview_person_id] : []);
-  const line = ids.length && ids.length === persons.length ? text : whoPrefix(persons) + text;
-  return { wish_id: id, text: line, source_text: line,
-    selection_source: ids.length ? "user_selection" : "none", target_ids: ids };
-}
-
-const keptNotes = (ns: Note[]) => ns.filter((n) => n.kept !== false && !n.dropped && n.resolvedWish !== "");
+const wishText = (n: Note) => n.wish ?? n.text;
+const keptNotes = (ns: Note[]) => ns.filter((n) => n.kept !== false && !n.dropped);
 // Only a line that is actually in 個人化需求 can be taken out of it: 清除所有需求
 // sweeps the card, and the card never held the lines the AI turned away.
 const dropNotes = (ns: Note[], gone: (n: Note) => boolean) => {
   const batch = ns.reduce((m, n) => (n.dropped ? Math.max(m, n.dropped.batch + 1) : m), 0);
   const order = nextDisplayOrder();
   return ns.map((n) =>
-    n.kept !== false && !n.dropped && n.resolvedWish !== "" && gone(n)
-      ? { ...n, dropped: { after: ns.length, batch, order, text: n.withdrawalText || wishText(n) } } : n,
+    n.kept !== false && !n.dropped && gone(n)
+      ? { ...n, dropped: { after: ns.length, batch, order, text: wishText(n) } } : n,
   );
 };
 
@@ -264,7 +197,7 @@ function conversation(ns: Note[], events: PreviewReplyEvent[] = []): Turn[] {
   for (const [batch, b] of batches) {
     b.left = ns
       .slice(0, b.after)
-      .filter((n) => n.kept !== false && n.resolvedWish !== "" && (!n.dropped || n.dropped.batch > batch)).length;
+      .filter((n) => n.kept !== false && (!n.dropped || n.dropped.batch > batch)).length;
   }
   const ordered = [...batches.entries()].sort((a, b) => a[0] - b[0]).map(([, b]) => b);
   const out: Turn[] = [];
@@ -306,7 +239,7 @@ function withReviewSettings(s: Settings, r: { aspect_ratio?: string; advanced_op
 // 是在對話——上面那句「我記下來了」還在原地，是真的講過的；底下這句接著說現在
 // 不算數了，兩句合起來才是完整的經過。
 function goneReply(turn: { gone: Note[]; left: number }) {
-  const what = t("「{v1}」", { v1: turn.gone[0].dropped?.text || turn.gone[0].withdrawalText || wishText(turn.gone[0]) });
+  const what = t("「{v1}」", { v1: turn.gone[0].dropped?.text || wishText(turn.gone[0]) });
   if (turn.gone.length > 1) return t("好，個人化需求都清掉了，美化時就不另外加了。{back}", { back: "" });
   return turn.left ? t("好，{what}就不做了，其他的照舊。{back}", { what, back: "" }) : t("好，{what}就不做了，目前沒有其他個人化需求。{back}", { what, back: "" });
 }
@@ -351,12 +284,10 @@ type NotePart = { key: string; persons: PrePerson[]; text: string };
 // 一句需求落在哪幾段、各段寫什麼。
 function noteParts(n: Note): NotePart[] {
   const own = n.wish ?? n.text;
-  if (n.placed?.length) return n.placed.flatMap(x => x.persons.length
-    ? x.persons.map(p => ({ key: faceRef(p), persons: [p], text: x.text })) : [{ key: "", persons: [], text: x.text }]);
   if (n.persons.length) return n.persons.map(p => ({ key: faceRef(p), persons: [p], text: own }));
   return [{ key: "", persons: [], text: own }];
 }
-const liveNote = (n: Note) => n.kept !== false && !n.dropped && n.resolvedWish !== "";
+const liveNote = (n: Note) => n.kept !== false && !n.dropped;
 const coveredBy = (edits: PromptEdits, key: string, i: number) => !!edits[key] && i < edits[key].upTo;
 
 function promptSections(ns: Note[], edits: PromptEdits = {}): Section[] {
@@ -485,32 +416,6 @@ function openAsk(ns: Note[]): Note | null {
   return last && "ask" in last && last.ask.asked && !last.ask.askedResolved ? last.ask : null;
 }
 
-// 送給 preview 對話的 wishes。改過的段整段送一次（在那段第一句的位置）；一句有一
-// 部分落在改過的段，就只送其他人的那部分，不然改掉的內容又會從原句跑回來。
-function wishesFor(notes: Note[], segEdits: PromptEdits): PreviewWish[] {
-  const sections = promptSections(notes, segEdits);
-  const editedSent = new Set<string>();
-  return notes.flatMap((n, i) => {
-    const parts = noteParts(n);
-    const out: PreviewWish[] = [];
-    for (const part of parts) {
-      const edit = segEdits[part.key];
-      if (!coveredBy(segEdits, part.key, i) || editedSent.has(part.key)) continue;
-      editedSent.add(part.key);
-      const sec = sections.findIndex(x => x.key === part.key);
-      if (sec >= 0 && edit.text.trim()) out.push(part.key
-        ? directWish(`edited-${i}-${sec}`, part.persons, edit.text.trim())
-        : { wish_id: `edited-${i}-${sec}`, text: edit.text.trim(), source_text: edit.text.trim(), selection_source: "none", target_ids: [] });
-    }
-    const wanted = (n.kept === true || n === openAsk(notes) && n.asked?.kind === "person" && !n.asked.options.length) && !n.dropped && (n.resolvedWish !== "" || n.actionPending);
-    if (!wanted) return out;
-    const rest = parts.filter(x => !coveredBy(segEdits, x.key, i));
-    if (rest.length === parts.length) return [...out, previewWish(n, i)];
-    return [...out, ...rest.map((x, k) => x.key ? directWish(`note-${i}-part-${k}`, x.persons, x.text)
-      : { wish_id: `note-${i}-part-${k}`, text: x.text, source_text: x.text, selection_source: "none" as const, target_ids: [] })];
-  });
-}
-
 // 多張上傳頁上一張照片按下開始之後的進度；done 是已經送進 session 了。
 export type BatchRun = StartProgress & { sessionId?: string; photoId?: string; done?: boolean; error?: string };
 // 多張上傳頁切到別張時，這張還沒開始的對話先收在這裡，切回來照原樣接上。
@@ -525,10 +430,6 @@ type BatchDraft = {
   prePointed: number[];
   renderAsk: RenderAsk | null;
   sourceGeneration: number;
-  presentedGeneration: string | null;
-  events: PreviewReplyEvent[];
-  presentation: string | null;
-  peopleReady: boolean;
 };
 
 // 多張上傳的總覽頁對話，一輪一筆，照發生的順序記：每次上傳／新增／移除的照片、一起送的需求、
@@ -695,10 +596,10 @@ type UploadArgs = Parameters<typeof api.uploadPhoto>;
 
 // 帶著 clientKey 傳一張，回後端加進 session 的那張。重試時上一次的還在傳，就等它傳好拿它那張；
 // 等太久當逾時，交給下一次重試。live() 變成 false 就不等了。
-async function uploadKeyed(id: string, blob: Blob, name: string, preview: UploadArgs[3], wishes: UploadArgs[4],
+async function uploadKeyed(id: string, blob: Blob, name: string, preview: UploadArgs[3],
   clientKey: string, live: () => boolean): Promise<{ photo_id: string; analyze_job_id: string }> {
   try {
-    const up = await api.uploadPhoto(id, blob, name, preview, wishes, { signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS), clientKey });
+    const up = await api.uploadPhoto(id, blob, name, preview, { signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS), clientKey });
     const added = up.photos?.[0];
     if (!added) throw new UploadFailed(up.errors?.[0]?.error || t("上傳失敗"));
     return added as { photo_id: string; analyze_job_id: string };
@@ -717,8 +618,6 @@ async function uploadKeyed(id: string, blob: Blob, name: string, preview: Upload
 
 function errorText(e: unknown): string {
   if (e instanceof ApiError) {
-    if (e.status === 409 && ["unresolved_people", "unresolved_visual_target", "protected_scope"].includes(e.body?.reason))
-      return notice(e.message);
     if (e.body?.error === "photos_not_ready") return t("照片還在處理中，請稍候再試。");
     return e.message;
   }
@@ -727,10 +626,6 @@ function errorText(e: unknown): string {
   if (e instanceof TypeError && /Failed to fetch|NetworkError|Load failed/i.test(e.message))
     return t("連不上伺服器，請確認網路後再試一次。");
   return e instanceof Error ? e.message : String(e);
-}
-
-function canShowTargetQuestion(photo: Photo): boolean {
-  return photo.status === "ready" && !photo.queued_render && !photo.pending_render;
 }
 
 // #session=<id>, or #case=<case_id> from 面板模式 (a history case, which
@@ -987,9 +882,6 @@ export function App() {
   // original local-detector path. Neither creates a formal Chat session yet.
   const preFull = !source ? "" : fullSrc(source);
   const previewEnabled = !!caps?.features?.subject_preview;
-  const previewIntroductionEnabled = previewEnabled && caps?.features?.preview_introduction === true;
-  // Silent preview uses the legacy review/geometry handoff, without the conversation bridge.
-  const previewConversationEnabled = previewIntroductionEnabled;
   const loadSource = async () => {
     if (!source) throw new Error("no source");
     return sourceBlob(source);
@@ -1014,9 +906,8 @@ export function App() {
     setPreAsk(null);
     // A model change keeps same-photo instructions as ordinary geometry;
     // leaving preview temporarily for submission must not clear any notes.
-    setNotes((n) => n.some((x) => x.persons.length || x.placed) ? n.map((x) => ({
+    setNotes((n) => n.some((x) => x.persons.length) ? n.map((x) => ({
       ...x, persons: samePhoto ? x.persons.map(withoutPreviewIdentity) : [],
-      placed: samePhoto ? x.placed?.map((y) => ({ ...y, persons: y.persons.map(withoutPreviewIdentity) })) : undefined,
     })) : n);
     if (!samePhoto) setSegEdits({});
   }, [selectionIdentity]);
@@ -1061,10 +952,7 @@ export function App() {
   const preRefs = (subjectIndices: number[]): PrePerson[] =>
     subjectIndices.flatMap((i) => {
       const p = preFaces.find((q) => q.subjectIndex === i);
-      return p ? [{ name: p.name, thumb: preThumbs[preFaces.indexOf(p)] || "", where: preWhere(p.subjectIndex), box: p.box, thumbnail_box: p.thumbnail_box,
-        ...(previewConversationEnabled && preview.result ? { ...(p.preview_person_id
-          ? { preview_person_id: p.preview_person_id } : { detection_index: p.detection_index }),
-          preview_job_id: preview.result.preview_job_id, source_sha256: preview.result.source_sha256 } : {}) }] : [];
+      return p ? [{ name: p.name, thumb: preThumbs[preFaces.indexOf(p)] || "", where: preWhere(p.subjectIndex), box: p.box, thumbnail_box: p.thumbnail_box }] : [];
     });
 
   const preSections = promptSections(notes, segEdits);
@@ -1074,49 +962,9 @@ export function App() {
     if (phase !== "chat" || !source || preAsk) return;
     setNotesHistory(events => appendNotesHistory(events, historySections, nextDisplayOrder(), conversation(notes).length));
   }, [historySectionsKey, !!preAsk, phase]);
-  const previewWishes = wishesFor(notes, segEdits);
-  const bridge = usePreviewConversation({ identity: previewConversationEnabled && preview.identity ? `${preview.identity}#${sourceGeneration}` : null, preview: preview.result,
-    photoKey: `${selectionIdentity}#${sourceGeneration}`, people: prePickable,
-    model: settings?.analysis_model || "", history: reviewHistory(notes), historyWithEvents: events => reviewHistory(notes, [...events, ...settingsEvents]), wishes: previewWishes,
-    prompt: notesPrompt(notes, segEdits), turns: conversation(notes).length,
-    busy: !!preAsk || busy, blocked: !!openAsk(notes)?.asked?.options.length || !!renderAsk,
-    active: phase === "chat" && !submitting && previewConversationEnabled, introductionEnabled: previewIntroductionEnabled });
-  // Introduction mode waits for prose; silent mode exposes the ready roster directly.
-  // Formal submission never waits for this presentation gate.
-  const previewPresentationKey = preview.identity ? `${preview.identity}#${sourceGeneration}` : null;
-  const currentPresentation = useRef(previewPresentationKey);
-  currentPresentation.current = previewPresentationKey;
-  const [presentedGeneration, setPresentedGeneration] = useState<string | null>(null);
-  const prePeopleReady = previewIntroductionEnabled
-    ? bridge.peoplePublished && !!previewPresentationKey && presentedGeneration === previewPresentationKey
-    : preview.ready && !!preview.result?.reusable;
+  // The ready roster shows as soon as the preview has it.
+  const prePeopleReady = preview.ready && !!preview.result?.reusable;
   const preDisplayPeople = !previewEnabled || prePeopleReady ? prePickable : [];
-  useEffect(() => {
-    const mapped = bridge.result;
-    if (!mapped) return;
-    setNotes(current => {
-      let changed = false;
-      const projected = resolvedNotes(current, mapped, ids => preRefs(ids.flatMap(id => {
-        const p = prePickable.find(q => q.preview_person_id === id);
-        return p ? [p.subjectIndex] : [];
-      })));
-      if (projected.some((n,i) => n !== current[i])) changed = true;
-      const updated = projected.map((n, i) => {
-        const clauses = mapped.clauses.filter(c => c.request_id === `note-${i}`);
-        if (n.asked?.kind === "person" && !n.asked.options.length && !n.askedResolved && clauses.length &&
-            clauses.every(c => (c.status === "matched" || c.status === "not_person") && c.action_status !== "incomplete" && c.action_status !== "pending")) {
-          changed = true;
-          return { ...n, kept: true, askedResolved: true };
-        }
-        return n;
-      });
-      return changed ? updated : current;
-    });
-  }, [bridge.result?.token]);
-  const bridgeQuestion = bridge.result?.question;
-  const [confirmationPointed, setConfirmationPointed] = useState<number[]>([]);
-  useEffect(() => setConfirmationPointed([]), [bridgeQuestion?.question_id, bridge.result?.token]);
-
   // ── Boot ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
@@ -1956,14 +1804,14 @@ export function App() {
     if (!batchKey || !settings) return;
     drafts.current[batchKey] = {
       step, settingsEvents, notesHistory, lastSettingsClick: lastSettingsClick.current, notes, segEdits, settings, prePointed, renderAsk,
-      sourceGeneration, presentedGeneration, events: bridge.events, presentation: previewPresentationKey, peopleReady: prePeopleReady,
+      sourceGeneration,
     };
   }
   function freshDraft(base?: Settings): BatchDraft {
     gen.current = Math.max(gen.current, sourceGeneration) + 1;
     return {
       step: "picked", settingsEvents: [], notesHistory: [], lastSettingsClick: -1, notes: [], segEdits: {}, settings: base || allSettings || settings!,
-      prePointed: [], renderAsk: null, sourceGeneration: gen.current, presentedGeneration: null, events: [], presentation: null, peopleReady: false,
+      prePointed: [], renderAsk: null, sourceGeneration: gen.current,
     };
   }
   // 把一張的草稿放回畫面。
@@ -1982,7 +1830,6 @@ export function App() {
     setPrePointed(d?.prePointed ?? []);
     setRenderAsk(d?.renderAsk ?? null);
     if (d) setSourceGeneration(d.sourceGeneration);
-    setPresentedGeneration(d?.presentedGeneration ?? null);
     setPreAsk(null);
     setPreClear((n) => n + 1);
     preDraft.current = "";
@@ -2013,9 +1860,6 @@ export function App() {
     segEdits: PromptEdits;
     settings: Settings;
     identity: Promise<{ preview_job_id: string; source_sha256: string } | undefined>;
-    mapping: PreviewConversationResult | null;
-    effective?: string;
-    wishes: PreviewWish[];
     events: PreviewReplyEvent[];
     faces?: Box[];
   };
@@ -2042,20 +1886,16 @@ export function App() {
       // 重試時沿用上一次拿到的 session；上一次建了卻沒等到回應的，後端認得 clientKey，回同一個。
       if (!id) id = (await api.createSession(bid, { signal: step(), clientKey })).session_id;
       const previewIdentity = await p.identity;
-      const log = previewEnabled && (!previewConversationEnabled || !previewIdentity)
+      const log = previewEnabled
         ? p.log.map((note) => ({ ...note, persons: note.persons.map(withoutPreviewIdentity) })) : p.log;
       const kept = keptNotes(log);
-      const userPrompt = (previewIdentity && p.effective !== undefined ? p.effective : notesPrompt(log, p.segEdits)).slice(0, PROMPT_MAX);
+      const userPrompt = notesPrompt(log, p.segEdits).slice(0, PROMPT_MAX);
       const promptFaces = promptSections(kept).flatMap(groupFaces).filter((f) => userPrompt.includes(f.ref));
       // 跟單張一樣：照片從 session 的預設起跳，先換成它自己的需求和設定再傳。
       await api.patchPlan(id, { ...p.settings, user_prompt: userPrompt, overwrite_prompt: !!p.overwrite && !!userPrompt,
         literal_texts: noteLiteralTexts(log, userPrompt) }, step());
       const { blob, name } = await sourceBlob(p.source, step());
-      const added = await uploadKeyed(id, blob, name, previewIdentity && {
-        ...previewIdentity, ...(p.mapping ? { conversation_token: p.mapping.token,
-          conversation_wishes_digest: p.mapping.wishes_digest } : {}),
-      }, previewConversationEnabled ? (previewIdentity ? p.wishes : p.wishes.map((w) => ({ ...w, target_ids: [] }))) : undefined,
-      clientKey, live);
+      const added = await uploadKeyed(id, blob, name, previewIdentity, clientKey, live);
       const pid = added.photo_id;
       uploaded = pid;
       say(p.mode === "analyze" ? t("照片傳好了，準備開始分析…") : p.overwrite ? t("照片傳好了，準備開始調整…") : t("照片傳好了，準備開始美化…"));
@@ -2119,8 +1959,7 @@ export function App() {
     return {
       key: batchKey, source, mode, overwrite, later, log, segEdits, settings,
       identity: previewEnabled ? preview.forSubmission() : Promise.resolve(undefined),
-      mapping: bridge.result || bridge.committedResult || null, effective: bridge.result?.effective_prompt, wishes: previewWishes,
-      events: [...submissionPreviewEvents(bridge.events, mode === "render" && overwrite === true && !prePeopleReady, previewPresentationKey), ...settingsEvents],
+      events: [...settingsEvents],
       faces: !previewEnabled && preScan.ready ? preScan.people.map((p) => p.box) : undefined,
     };
   }
@@ -2203,8 +2042,8 @@ export function App() {
       const overwrite = mode === "render" ? d?.renderAsk?.overwrite ?? false : undefined;
       startBatchPhoto({
         key: x.key, source: x.s, mode, overwrite, later: laterNote(ns), log: ns, segEdits: seg, settings: d?.settings || base,
-        identity: Promise.resolve(undefined), mapping: null, wishes: wishesFor(ns, seg),
-        events: d ? [...submissionPreviewEvents(d.events, mode === "render" && overwrite === true && !d.peopleReady, d.presentation), ...d.settingsEvents] : [],
+        identity: Promise.resolve(undefined),
+        events: d ? [...d.settingsEvents] : [],
       });
     }
   }
@@ -2724,41 +2563,6 @@ export function App() {
     base: Note[],
     typed = true,
   ): Promise<Note[] | null> {
-    let actionTried = false;
-    // A short correction such as 改成張開 answers the active action question;
-    // it must not revise another completed wish and leave this one unresolved.
-    if ((bridgeQuestion?.kind === "action" || bridgeQuestion?.kind === "edit_description") && base === notes && !/取消|撤回|不做了|不用了|不要了/.test(text)) {
-      actionTried = true;
-      if (typed) setPreClear(n => n + 1);
-      setPreAsk({ order: nextDisplayOrder(), text, persons: [] });
-      try {
-        if (await bridge.confirm([], text)) return base;
-      } catch (error) {
-        setError(errorText(error));
-        return null;
-      } finally { setPreAsk(null); }
-    }
-    if ((bridge.canRevise || bridge.result) && /不是|取消|撤回|保持原樣|不要|不整理|改成|改為|改看/.test(text)) {
-      setPreAsk({ order: nextDisplayOrder(), text, persons: [] });
-      try {
-        const correction = await bridge.revise(text, preRefs(subjectIndices).flatMap(p => p.preview_person_id ? [p.preview_person_id] : []));
-        if (correction) {
-          if (typed) setPreClear(n => n + 1);
-          return base;
-        }
-      } catch {
-        // 這一步只是在判斷「是不是在改之前那句指定的人」。判斷不出來就當成新的
-        // 一句，照一般流程檢查，不把後端的錯誤代碼丟給使用者。
-      } finally { setPreAsk(null); }
-    }
-    if (!actionTried && bridgeQuestion && bridgeQuestion.kind !== "semantic" && base === notes) {
-      const ids = preRefs(confirmationPointed).flatMap(p => p.preview_person_id ? [p.preview_person_id] : []);
-      if (typed) setPreClear(n => n + 1);
-      setPreAsk({ order: nextDisplayOrder(), text, persons: [] });
-      let handled = false;
-      try { handled = await bridge.confirm(ids, text); } finally { setPreAsk(null); }
-      if (handled) return base;
-    }
     // 回答 AI 的提問時沒再點人，就沿用被問的那句指的人：「想換成什麼顏色？」
     // 「棕色」講的還是同一位。
     const expectedPreview = preview.identity;
@@ -2785,13 +2589,13 @@ export function App() {
     try {
       const reviewed = await api.promptReview(
         noteLine(note),
-        bridge.result?.effective_prompt ?? notesPrompt(base, segEdits),
-        reviewHistory(base, [...bridge.events, ...settingsEvents]),
+        notesPrompt(base, segEdits),
+        reviewHistory(base, settingsEvents),
         preOrder.map((p) => preWhere(p.subjectIndex)),
         sent.map((x) => ({ who: x.key, text: x.text })),
       );
       if (!stillCurrent()) return null;
-      let r = routeReviewQuestion(reviewed, previewConversationEnabled);
+      let r = reviewed;
       if (asking && r.accepted && !r.withdrawn && !r.line && !r.verbatim) {
         r = { ...r, accepted: false, ask: true, options: [],
           reply: t("這項需求還沒整理完整，請再說明想調整的效果。") };
@@ -2803,7 +2607,6 @@ export function App() {
         replyPeople: prePickable.map(p => ({ ...p })),
         // 只是撤回前面那項的一句不進清單：前面那項拿掉，就是照原樣了。
         kept: r.accepted && !r.withdrawn,
-        ...(r.semantic_pending && previewConversationEnabled ? { actionPending: true, resolvedWish: "" } : {}),
         ...(r.ask ? { asked: { options: r.options || [], kind: r.question_kind || "meaning" } } : {}),
         ...(r.offer ? { offered: { options: r.options || [] } } : {}),
         ...(r.later ? { later: true } : {}),
@@ -2811,9 +2614,8 @@ export function App() {
         ...(r.accepted && !r.withdrawn ? { literalTexts: r.literal_texts || r.request_semantics?.flatMap(s => s.literal_text ? [s.literal_text] : []) || [] } : {}),
         ...(r.verbatim ? { verbatim: true, wish: note.text, persons: [], selectionSource: undefined } : {}),
         ...(r.interpreted ? { interpreted: true,
-          // A reviewed scene-wide revision is already complete. Forward that
-          // revised text unchanged even if preview has not arrived. Person or
-          // worn-object edits still need the regular identity bridge.
+          // A reviewed scene-wide revision is already complete: forward that
+          // revised text unchanged.
           verbatim: !!r.request_semantics?.length && r.request_semantics.every(s =>
             (s.target_kind === "image" || s.target_kind === "region" || s.feature === "text_overlay") && !s.owner_required) } : {}),
       };
@@ -2848,7 +2650,7 @@ export function App() {
           reply: t("這項需求還沒整理完整，請再說明想調整的效果。") }]);
         return null;
       }
-      const kept = { ...note, ...completed(), kept: true, ...(preview.identity ? { actionPending: true, resolvedWish: "" } : {}), replyOrder: nextDisplayOrder(),
+      const kept = { ...note, ...completed(), kept: true, replyOrder: nextDisplayOrder(),
         reply: t("好，這些會當成個人化需求，美化時一起套用。"),
         replyPeople: prePickable.map(p => ({ ...p })) };
       setNotes([...base, kept]);
@@ -2903,12 +2705,7 @@ export function App() {
   // 再加上需求。有需求卻還沒問過，就先問，不開始。
   function startSession(mode: "analyze" | "render", later = laterNote(notes), log = notes, overwrite?: boolean) {
     if (!source || !caps || !settings || busy || submissionLock.current) return;
-    if (mode === "render" && bridgeQuestion && bridge.result?.clauses.some(c =>
-        bridgeQuestion.wish_ids.includes(c.wish_id) && c.scope === "protection")) {
-      setError(notice(t("請先確認個人化需求指定的人物，再開始美化。")));
-      return;
-    }
-    if (mode === "render" && overwrite === undefined && (bridge.result?.effective_prompt ?? notesPrompt(log, segEdits)).trim()) {
+    if (mode === "render" && overwrite === undefined && notesPrompt(log, segEdits).trim()) {
       setRenderAsk({ later, log });
       return;
     }
@@ -2926,8 +2723,7 @@ export function App() {
     // 就當沒打過：它沒進過對話，也沒過把關，不該從這裡偷渡進 user_prompt。
     submissionLock.current = true;
     const selectedSource = selectionIdentity;
-    const submittedEvents = [...submissionPreviewEvents(bridge.events,
-      mode === "render" && overwrite === true && !prePeopleReady, previewPresentationKey), ...settingsEvents,
+    const submittedEvents = [...settingsEvents,
       ...appendNotesHistory(notesHistory, historySections, nextDisplayOrder(), conversation(log).length)];
     // Call before leaving preview: this promise contains an already-frozen,
     // nonblocking decision and cannot adopt a result arriving during upload.
@@ -2938,11 +2734,11 @@ export function App() {
     setSubmitting({ sources: [source], mode, since });
     void run(async () => {
       const previewIdentity = await previewDecision;
-      const submissionLog = previewEnabled && (!previewConversationEnabled || !previewIdentity) ? log.map((note) => ({
+      const submissionLog = previewEnabled ? log.map((note) => ({
         ...note, persons: note.persons.map(withoutPreviewIdentity),
       })) : log;
       const kept = keptNotes(submissionLog);
-      const userPrompt = (previewIdentity && bridge.result ? bridge.result.effective_prompt : notesPrompt(submissionLog, segEdits)).slice(0, PROMPT_MAX);
+      const userPrompt = notesPrompt(submissionLog, segEdits).slice(0, PROMPT_MAX);
       // Only the picks the prompt still spells out: one entry per person
       // already names each face once, and PROMPT_MAX can still cut the last
       // entry off.
@@ -2973,12 +2769,7 @@ export function App() {
           }
           const { blob, name } = await sourceBlob(source, step());
           if (!same()) throw changed();
-          const mapping = bridge.result || bridge.committedResult;
-          added = await uploadKeyed(id, blob, name, previewIdentity && {
-            ...previewIdentity, ...(mapping ? { conversation_token: mapping.token,
-              conversation_wishes_digest: mapping.wishes_digest } : {}),
-          }, previewConversationEnabled ? (previewIdentity ? previewWishes : previewWishes.map(w => ({ ...w, target_ids: [] }))) : undefined,
-          clientKey, same);
+          added = await uploadKeyed(id, blob, name, previewIdentity, clientKey, same);
           singleKey.current = null;
           break;
         } catch (e) {
@@ -3427,7 +3218,7 @@ export function App() {
         <>
           <FootBar
             faces={
-              !bridgeQuestion && !preWhoAsk && preDisplayPeople.length > (previewEnabled && !previewConversationEnabled ? 0 : 1) &&
+              !preWhoAsk && preDisplayPeople.length > (previewEnabled ? 0 : 1) &&
                 <FacePicker people={preDisplayPeople} pointed={prePointed} onPoint={setPrePointed} />
             }
           />
@@ -3485,17 +3276,7 @@ export function App() {
       }
     >
       <PreChat
-        previewEvents={[...bridge.events, ...settingsEvents, ...notesHistory]}
-        activeTargetQuestion={bridge.result?.question && bridge.events.some(e => e.questionSnapshot?.token === bridge.result?.token) ? { ...bridge.result.question, token: bridge.result.token, revision: bridge.result.revision } : null}
-        selectedTargetIds={preRefs(confirmationPointed).flatMap(p => p.preview_person_id ? [p.preview_person_id] : [])}
-        onTargetPoint={id => {
-          const person = prePickable.find(p => p.preview_person_id === id);
-          if (person) setConfirmationPointed(old => old.includes(person.subjectIndex) ? old.filter(i => i !== person.subjectIndex) : [...old, person.subjectIndex]);
-        }}
-        onTargetSelection={(...args) => void bridge.confirm(...args).then(() => setConfirmationPointed([])).catch(e => setError(errorText(e)))}
-        onPeoplePresented={generation => {
-          if (generation && currentPresentation.current === generation) setPresentedGeneration(generation);
-        }}
+        previewEvents={[...settingsEvents, ...notesHistory]}
         caps={caps}
         people={prePickable}
         step={step}
@@ -3540,7 +3321,7 @@ export function App() {
           setSegEdits((e) => ({ ...e, ...Object.fromEntries(edits.map((x) => [x.key, { text: x.text, upTo }])) }));
         }}
         onEdit={() => {
-          const interaction = Math.max(0, ...bridge.events.map(e => e.order || 0), ...notes.map(n => Math.max(n.replyOrder || n.order || 0, n.dropped?.order || 0)));
+          const interaction = Math.max(0, ...notes.map(n => Math.max(n.replyOrder || n.order || 0, n.dropped?.order || 0)));
           if (lastSettingsClick.current === interaction) return;
           lastSettingsClick.current = interaction;
           const latest = settingsEvents[settingsEvents.length - 1];
@@ -4112,20 +3893,6 @@ export function App() {
             onSelectVersion={selectVersion}
             onRender={renderPhoto}
             onFile={pickFile}
-            onConfirmPeople={async (indices, protection_scope, selected_wish, edit_scope, target_selection, text) => {
-              let newMessage = false;
-              const ok = await run(async () => {
-                const state = photo.preview_conversation;
-                if (!state?.question) return;
-                const response = await api.confirmPhotoConversation(session.session_id, photo.photo_id, {
-                  revision: state.revision, question_id: state.question.question_id,
-                  wish_ids: state.question.wish_ids, subject_indices: indices, protection_scope, selected_wish, edit_scope, target_selection, text,
-                });
-                if (response.confirmation_handled === false) { newMessage = true; return; }
-                setSession(await api.getSession(session.session_id));
-              });
-              return newMessage ? "new_message" : ok;
-            }}
             onAsk={askPhoto}
             onContinue={caps?.features?.render_from_version ? continuePhoto : undefined}
             onAnswerWaiting={answerWaiting}
@@ -5127,11 +4894,6 @@ function NotesEditor(props: {
 }
 
 function PreChat(props: {
-  activeTargetQuestion?: TargetQuestionSnapshot | null;
-  selectedTargetIds?: string[];
-  onTargetPoint?: (id: string) => void;
-  onTargetSelection?: (ids: string[], text?: string, scope?: "features" | "all", wish?: string, edit?: "visible_hair" | "cancel", selection?: "listed" | "outside_preview") => void;
-  onPeoplePresented?: (generation: string | null | undefined) => void;
   previewEvents?: PreviewReplyEvent[];
   caps: Capabilities;
   // Everyone the detector found, so the AI's words about where someone stands
@@ -5194,40 +4956,9 @@ function PreChat(props: {
   // Compatibility for an existing settings mode without a recorded event.
   const displayEvents = step === "settings" && !events.some(e => e.kind === "settings")
     ? [...events, { id: "settings-current", after: conversation(notes).length, kind: "settings" as const,
-        text: t("好，調整下面的設定，完成後選擇要分析還是一鍵美化。"), showPeople: false }]
+        text: t("好，調整下面的設定，完成後選擇要分析還是一鍵美化。") }]
     : events;
   const log = conversation(pending ? [...notes, pending] : notes, displayEvents);
-  const targetControls = (event: PreviewReplyEvent) => {
-    const q = event.questionSnapshot;
-    if (!q) return null;
-    const active = !q.answered && q.token === props.activeTargetQuestion?.token && q.question_id === props.activeTargetQuestion?.question_id && q.revision === props.activeTargetQuestion?.revision;
-    const disabled = !active || busy;
-    const ids = active ? (props.selectedTargetIds || []) : [];
-    return <div class="chat-target-confirmation" data-question-id={q.question_id}>
-      {q.answered ? <p class="chat-meta">{t("已確認：{answer}", { answer: q.answer ?? "" })}</p> : <div class="chat-choices">
-        {(!q.kind || q.kind === "person") && <>
-          {(event.people || []).map(person => person.preview_person_id && <button type="button"
-            class={`chat-chip chat-target-person${ids.includes(person.preview_person_id) ? " is-picked" : ""}`}
-            disabled={disabled} aria-pressed={ids.includes(person.preview_person_id)} onClick={() => props.onTargetPoint?.(person.preview_person_id!)}>
-            {person.thumb && <img src={person.thumb} alt="" />}<span>{person.name || person.where}</span>
-          </button>)}
-          <Chip label={t("確認這筆需求的對象")} disabled={disabled || !ids.length} onClick={() => props.onTargetSelection?.(ids)} />
-          <Chip label={t("不在已辨識的人物清單中")} disabled={disabled} onClick={() => props.onTargetSelection?.([], "不在已辨識的人物清單中", undefined, undefined, undefined, "outside_preview")} />
-        </>}
-        {q.kind === "semantic" && <>
-          <Chip label={t("重新確認這項需求")} disabled={disabled} onClick={() => props.onTargetSelection?.([], "重新確認這項需求")} />
-          <Chip label={t("分析")} icon="search" disabled={disabled} onClick={() => props.onStart("analyze")} />
-        </>}
-        {q.kind === "wish" && q.wish_options?.map(option => <Chip label={option.text} disabled={disabled}
-          onClick={() => props.onTargetSelection?.([], option.text, undefined, option.wish_id)} />)}
-        {q.kind === "scope" && q.options?.map((label, i) => <Chip label={label} disabled={disabled}
-          onClick={() => props.onTargetSelection?.([], label, i === 0 ? "features" : "all")} />)}
-        {q.kind === "edit_scope" && q.options?.map((label, i) => <Chip label={label} disabled={disabled}
-          onClick={() => props.onTargetSelection?.([], label, undefined, undefined, i === 0 ? "visible_hair" : "cancel")} />)}
-      </div>}
-    </div>;
-  };
-
   const settingsTurns = displayEvents.filter(e => e.kind === "settings");
   const activeSettingsId = settingsTurns[settingsTurns.length - 1]?.id;
   // 過了的那輪不再擺設定卡，用一句話講改了什麼：打開時的設定跟下一輪打開時（最後一輪就是現在的）比。
@@ -5248,7 +4979,7 @@ function PreChat(props: {
   // 要確認的東西跟要按下去的地方是同一處。跟 session 的個人化需求一樣是一整段，
   // 看到的就是送出去的 user_prompt；要刪要改直接改字。
   const kept = props.sections.length > 0;
-  const hasWishes = kept || !!props.activeTargetQuestion;
+  const hasWishes = kept;
   const asking = props.renderAsk;
   // 按下去就算選了：這排定格成紀錄，按的那顆維持選取的樣子；失敗了再解開。
   const went = !asking && starting ? starting.mode : null;
@@ -5309,22 +5040,6 @@ function PreChat(props: {
     </>
   );
 
-  const peopleCard = (people: typeof props.people) => people.length > 0 && (
-    <div class="preview-selection" aria-label={t("已辨識人物")}>
-              <div class="subject-preview" aria-label={t("人物初步辨識")}>
-                <div class="subject-preview-people">
-                  {people.map((person) => (
-                    <div class="subject-preview-person">
-                      <span class="subject-preview-avatar">{person.thumb && <img src={person.thumb} alt="" />}</span>
-                      <span data-chat-typewriter-text>{person.name || person.where}</span>
-                      {person.previewRole === "bystander" && <small class="chat-muted">{t("背景人物")}</small>}
-                      {person.previewRole === "uncertain" && <small class="chat-muted">{t("待確認")}</small>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-    </div>
-  );
   return (
     <>
       {!props.batch && <AssistantMsg>
@@ -5419,17 +5134,8 @@ function PreChat(props: {
             : <AssistantMsg><p class="chat-text">{settingsSaid(turn.previewReply.id, turn.previewReply.settings)}</p></AssistantMsg>}
         </div>;
         if ("previewReply" in turn && turn.previewReply.role === "user") return <AskBubble key={turn.previewReply.id} text={turn.previewReply.text} faces={[]} />;
-        if ("previewReply" in turn) return <AssistantMsg key={turn.previewReply.id} atomic={turn.previewReply.showPeople} animate={turn.previewReply.showPeople}
-          onTypingComplete={turn.previewReply.showPeople ? () => props.onPeoplePresented?.(turn.previewReply.generation) : undefined}>
-          {turn.previewReply.showPeople && turn.previewReply.presentation ? <>
-            <p class="chat-text">{turn.previewReply.presentation.opening}</p>
-            <div data-chat-typewriter-group>{peopleCard(turn.previewReply.people || [])}</div>
-            <p class="chat-text">{turn.previewReply.presentation.closing}</p>
-          </> : <>
-            {turn.previewReply.showPeople && peopleCard(turn.previewReply.people || [])}
-            <p class="chat-text">{turn.previewReply.text}</p>
-          </>}
-          {targetControls(turn.previewReply)}
+        if ("previewReply" in turn) return <AssistantMsg key={turn.previewReply.id}>
+          <p class="chat-text">{turn.previewReply.text}</p>
         </AssistantMsg>;
         if ("gone" in turn)
           return (
@@ -5654,7 +5360,6 @@ function unsentPlanKeys(messages: { card?: Dict | null }[], plan: Plan): string[
 }
 
 export function SessionView(props: {
-  onConfirmPeople: (indices: number[], scope?: "features" | "all", selectedWish?: string, editScope?: "visible_hair" | "cancel", selection?: "listed" | "outside_preview", text?: string) => Promise<boolean | "new_message">;
   caps: Capabilities;
   debugUi: boolean;
   session: Session;
@@ -5701,9 +5406,6 @@ export function SessionView(props: {
   ) => Promise<boolean>;
 }) {
   const { caps, session, photo, analysis, busy } = props;
-  const pendingPerson = photo.preview_conversation?.question;
-  const [confirmationIndices, setConfirmationIndices] = useState<number[]>([]);
-  useEffect(() => setConfirmationIndices([]), [pendingPerson?.question_id]);
   const pid = photo.photo_id;
   const messages = (session.messages || []).filter((m) => cardAbout(m.card, pid));
   // 打開這串對話時最新的那則；之後才有比它新的訊息，才是 AI 這次回的話（打字動畫）。
@@ -6053,7 +5755,7 @@ export function SessionView(props: {
     // AI 自己開始美化了（「幫我美化」），不用再按一次。
     if (added.some((c) => c?.type === "render_requested" || c?.type === "render_failed")) return;
     const reply = [...added].reverse().find((c) => c?.type === "llm_reply");
-    if (!reply?.proposal?.direct || reply.options?.length || reply.question_kind || pendingPerson) return;
+    if (!reply?.proposal?.direct || reply.options?.length || reply.question_kind) return;
     // 直接套用後美化過的照片會開一輪調整，照那一輪的「美化」走。
     renderRound(startLabel, "spark");
   });
@@ -6388,10 +6090,6 @@ export function SessionView(props: {
   }, [photo.status, versions.length]);
 
   async function send(text: string, si: number[], scr: Screen = screen) {
-    if (pendingPerson?.kind === "edit_description" || pendingPerson?.kind === "action" || pendingPerson?.kind === "visual") {
-      const answer = await props.onConfirmPeople([], undefined, undefined, undefined, undefined, text);
-      if (answer !== "new_message") return answer;
-    }
     if (continuing && props.onContinue) {
       const line = text.trim();
       if (!line) return false;
@@ -6705,7 +6403,7 @@ export function SessionView(props: {
     messages[idx]?.card?.type === "render_done" && messages[idx].card?.base !== "version" && idx === lastRender && !adjusting && !holding(idx) && !textPending(idx) &&
     !!photo.plan.overwrite_prompt && (skippedAnalysis || !!analysis) &&
     !messages.slice(idx + 1).some(x => x.card?.type === "check_declined" || x.card?.type === "analysis_brief");
-  const showActionRow = !!actionChips && !holding(endIdx) && !textPending(endIdx) && !busy && !props.pendingAsk && photo.status === "ready" && !askMode && !confirmRerun && !endAsks && !pendingPerson && !offerCheckAt(endIdx) && !continuing;
+  const showActionRow = !!actionChips && !holding(endIdx) && !textPending(endIdx) && !busy && !props.pendingAsk && photo.status === "ready" && !askMode && !confirmRerun && !endAsks && !offerCheckAt(endIdx) && !continuing;
   // 只照需求改完，除了問要不要分析，也給「風格」：只照需求改照樣套得上風格。
   const offerStyle = caps.style_options.length > 0;
   if (!showActionRow) bar = offerCheckAt(endIdx) ? ["好，幫我分析", ...(offerStyle ? [CATEGORIES.style.label] : []), "不用了"] : [];
@@ -6723,26 +6421,6 @@ export function SessionView(props: {
     return quiet ? null : endRow;
   };
 
-  const formalTargetControls = (question: NonNullable<PreviewConversationResult["question"]>, active: boolean) => (
-    <div class="chat-target-confirmation"><div class="chat-choices">
-      {(!question.kind || question.kind === "person") && <>
-        {active && <FacePicker people={pickable} pointed={confirmationIndices} onPoint={setConfirmationIndices} />}
-        <Chip label={t("確認這筆需求的對象")} disabled={!active || busy || !confirmationIndices.length} onClick={() => void props.onConfirmPeople(confirmationIndices)} />
-        <Chip label={t("不在已辨識的人物清單中")} disabled={!active || busy} onClick={() => void props.onConfirmPeople([], undefined, undefined, undefined, "outside_preview")} />
-      </>}
-      {question.kind === "visual" && <>
-        <Chip label={t("重新分析這筆需求")} disabled={!active || busy} onClick={() => void props.onConfirmPeople([], undefined, undefined, undefined, undefined, "重新分析這筆需求")} />
-        <Chip label={t("取消這筆需求")} disabled={!active || busy} onClick={() => void props.onConfirmPeople([], undefined, undefined, undefined, undefined, "取消這筆需求")} />
-      </>}
-      {question.kind === "semantic" && <Chip label={t("重新確認這項需求")} disabled={!active || busy} onClick={() => void props.onConfirmPeople([])} />}
-      {question.kind === "scope" && question.options?.map((label, i) => <Chip label={label} disabled={!active || busy}
-        onClick={() => void props.onConfirmPeople([], i === 0 ? "features" : "all")} />)}
-      {question.kind === "wish" && question.wish_options?.map(option => <Chip label={option.text} disabled={!active || busy}
-        onClick={() => void props.onConfirmPeople([], undefined, option.wish_id)} />)}
-      {question.kind === "edit_scope" && question.options?.map((label, i) => <Chip label={label} disabled={!active || busy}
-        onClick={() => void props.onConfirmPeople([], undefined, undefined, i === 0 ? "visible_hair" : "cancel")} />)}
-    </div></div>
-  );
   // 開始美化那顆鍵上現在寫的字（「美化」或「照建議直接美化」），話裡照著念。
   const goLabel = bar.find((b) => b.includes("美化") && !b.includes("項目")) || "美化";
   const items = messages.map((m, idx) => {
@@ -7216,7 +6894,6 @@ export function SessionView(props: {
         return (
           <AssistantMsg>
             {replyBody(m, idx)}
-            {c.target_question && formalTargetControls(c.target_question, c.target_question.question_id === pendingPerson?.question_id && c.question_revision === photo.preview_conversation?.revision)}
             {endActions(idx)}
           </AssistantMsg>
         );
@@ -7388,11 +7065,11 @@ export function SessionView(props: {
   })();
   // 輸入框上方：美化過就有換底那顆（預設原圖）；人不只一個時有點人的那排。
   const baseShown = !!props.onContinue && versions.length > 0 && photo.status === "ready";
-  const facesShown = !pendingPerson && !facesInline && pickable.length > 1;
+  const facesShown = !facesInline && pickable.length > 1;
   const screen: Screen = {
     bar: busy || props.pendingAsk || photo.status !== "ready" ? [] : bar,
     topics: editing ? cats.map((c) => CATEGORIES[c].label) : [],
-    pending: [...(adjusting ? dirtyCats : parkedCats).map(c => CATEGORIES[c].label), ...(pendingPerson ? [pendingPerson.text] : [])],
+    pending: [...(adjusting ? dirtyCats : parkedCats).map(c => CATEGORIES[c].label)],
     panels: panels.map((c) => CATEGORIES[c].label),
     // 有幾版、現在看的是第幾版：只有能接續某一版時才給，AI 才會提從某一版接著改。
     ...(props.onContinue && versions.length ? { versions: versions.length, shown: current?.ordinal ?? versions.length } : {}),
@@ -7577,8 +7254,6 @@ export function SessionView(props: {
                       </div>
                     </AssistantMsg>
                   )}
-                  {canShowTargetQuestion(photo) && pendingPerson && !messages.some(m => m.card?.target_question?.question_id === pendingPerson.question_id && m.card?.question_revision === photo.preview_conversation?.revision) &&
-                    <AssistantMsg><p class="chat-text">{pendingPerson.text}</p>{formalTargetControls(pendingPerson, true)}</AssistantMsg>}
                   {props.pendingAsk && !(holding(step(messages.length, -1)) && HOSTS.includes(messages[step(messages.length, -1)]?.card?.type || "")) && (
                     <>
                       {props.pendingAsk.text && (

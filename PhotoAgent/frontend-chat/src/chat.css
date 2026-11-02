@@ -1918,8 +1918,6 @@ div.chat-proposal-row{cursor:default}
 /* The roster appears only after its conversational introduction. */
 [data-chat-typewriter-group].is-typewriter-pending { visibility: hidden; }
 
-/* Target confirmation belongs to its immutable dialogue turn. */
-.chat-target-confirmation { margin-top: 12px; }
 .chat-target-person { display: inline-flex; align-items: center; gap: 7px; }
 .chat-target-person { padding-left: var(--sp-1); }
 .chat-target-person img, .chat-target-person .chat-face-blank { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }

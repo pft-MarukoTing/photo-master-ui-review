@@ -120,7 +120,6 @@ export const EN: Record<string, string> = {
   "好，那就先不加個人化需求。": "OK, no requests for now.",
   "這幾位": "These people",
   "這位": "This person",
-  "請先確認個人化需求指定的人物，再開始美化。": "Please confirm who your requests are for before retouching.",
   "照片已更換，請重新選擇分析或一鍵美化。": "The photo has changed. Please choose Analyze or One-Tap Retouch again.",
   "無法載入：{error}": "Couldn't load: {error}",
   "回到首頁": "Back to Home",
@@ -188,14 +187,6 @@ export const EN: Record<string, string> = {
   "目前沒有個人化需求。": "No requests yet.",
   "{level}（目前）": "{level} (current)",
   "已儲存": "Saved",
-  "已確認：{answer}": "Confirmed: {answer}",
-  "確認這筆需求的對象": "Confirm Who This Is For",
-  "不在已辨識的人物清單中": "Not Among the People Detected",
-  "重新確認這項需求": "Review This Request Again",
-  "已辨識人物": "People detected",
-  "人物初步辨識": "People detected (preliminary)",
-  "背景人物": "In the background",
-  "待確認": "Needs confirmation",
   "上傳了這張": "Uploaded this photo",
   "選了這張": "Chose this photo",
   "照片選好了。想怎麼修，直接打在下面的對話框告訴我。": "Photo selected. Tell me how you'd like it retouched in the box below.",
@@ -234,8 +225,6 @@ export const EN: Record<string, string> = {
   "就是{name}": "That's {name}",
   "就是這位": "This person",
   "改了{v1}，還沒美化": "{v1} changed, not yet retouched",
-  "重新分析這筆需求": "Reanalyze This Request",
-  "取消這筆需求": "Cancel This Request",
   "上傳了 {v1} 張照片": "Uploaded {v1} {v1|photo|photos}",
   "分析完成。": "Analysis complete.",
   "已套用，開始新的一輪調整。": "Applied. Starting a new round of edits.",
@@ -495,7 +484,6 @@ export const EN: Record<string, string> = {
   "換長寬比會馬上依新的長寬比重新構圖，畫面建議裡的構圖也會跟著換。":
     "Changing the aspect ratio reframes the photo immediately and updates the framing in the scene suggestions.",
   "這幾項預設會偵測並修正，不想被改到的先關掉。": "These are detected and fixed by default. Turn off any you'd like to leave untouched.",
-  "指定：{v1}": "Selected: {v1}",
 
   // results.tsx
   "上傳": "Upload",
@@ -530,7 +518,6 @@ export const EN: Record<string, string> = {
   "下載{title}": "Download {title}",
   "下載": "Download",
   "拖動調整照片和對話的大小": "Drag to resize the photo and chat",
-  "收到，我先確認這項需求的對象與調整內容。": "Got it. Let me first confirm who this request is for and what to change.",
 
   // settings.tsx
   "詳細解說": "Detailed Explanations",

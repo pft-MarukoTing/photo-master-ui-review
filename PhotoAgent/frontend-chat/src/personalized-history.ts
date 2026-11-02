@@ -1,5 +1,5 @@
 import type { FaceRef } from "./chat";
-import type { PreviewReplyEvent } from "./preview-conversation";
+import type { PreviewReplyEvent } from "./pre-chat-events";
 
 export type HistoricalSection = { key: string; line: string; text: string; persons: FaceRef[] };
 
@@ -16,5 +16,5 @@ export function appendNotesHistory(events: PreviewReplyEvent[], sections: Histor
   if ((!previous && !sections.length) ||
       (previous && sectionsIdentity(previous.sections || []) === sectionsIdentity(sections))) return events;
   return [...events, { id: `notes-${order}`, kind: "notes", order, after, text: "",
-    showPeople: false, sections: JSON.parse(JSON.stringify(sections)) }];
+    sections: JSON.parse(JSON.stringify(sections)) }];
 }

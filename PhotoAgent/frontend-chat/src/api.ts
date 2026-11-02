@@ -105,7 +105,6 @@ function json(method: string, body: Dict): RequestInit {
 }
 
 // Allow the backend Chat wait (45s model + 15s queue allowance) to finish.
-const PREVIEW_CONVERSATION_TIMEOUT_MS = 65000;
 
 const sid = (id: string) => `${CHAT}/sessions/${encodeURIComponent(id)}`;
 
@@ -120,12 +119,6 @@ export const api = {
   previewStatus(jobId: string): Promise<import("./subject-preview").PreviewStatus> {
     return request(`${CHAT}/previews/${encodeURIComponent(jobId)}${q()}`, { signal: AbortSignal.timeout(10000) });
   },
-  previewConversation: (id: string, body: Dict) =>
-    request<import("./preview-conversation").PreviewConversationResult>(`${CHAT}/previews/${encodeURIComponent(id)}/conversation-reply`, { ...json("POST", body), signal: AbortSignal.timeout(PREVIEW_CONVERSATION_TIMEOUT_MS) }),
-  revisePreviewConversation: (id: string, body: Dict) =>
-    request<import("./preview-conversation").PreviewConversationResult & { changed: boolean; revision_mode?: string; affected_request_ids?: string[] }>(`${CHAT}/previews/${encodeURIComponent(id)}/conversation-revise`, { ...json("POST", body), signal: AbortSignal.timeout(PREVIEW_CONVERSATION_TIMEOUT_MS) }),
-  confirmPreviewConversation: (id: string, body: Dict) =>
-    request<import("./preview-conversation").PreviewConversationResult>(`${CHAT}/previews/${encodeURIComponent(id)}/conversation-confirm`, { ...json("POST", body), signal: AbortSignal.timeout(PREVIEW_CONVERSATION_TIMEOUT_MS) }),
   capabilities: () => request<Capabilities>(`${API}/capabilities`),
   config: () => request<Dict>(`${API}/config`).catch(() => ({} as Dict)),
   decryptUserId: (userId: string) =>
@@ -255,7 +248,7 @@ export const api = {
   getSession: (id: string, messagesLimit = 500, signal?: AbortSignal) =>
     request<Session>(`${sid(id)}${q({ messages_limit: messagesLimit })}`, { signal }),
   status: (id: string) => request<Dict>(`${sid(id)}/status${q()}`),
-  uploadPhoto: (id: string, file: Blob, filename: string, preview?: { preview_job_id: string; source_sha256: string; conversation_token?: string; conversation_wishes_digest?: string }, wishes?: import("./preview-conversation").PreviewWish[], opts: { signal?: AbortSignal; clientKey?: string } = {}) => {
+  uploadPhoto: (id: string, file: Blob, filename: string, preview?: { preview_job_id: string; source_sha256: string }, opts: { signal?: AbortSignal; clientKey?: string } = {}) => {
     const form = new FormData();
     form.set("user", currentUser);
     // 同 createSession：已經傳上去的回 200 帶那張；同一把還在傳的回 409 upload_in_progress。
@@ -264,10 +257,7 @@ export const api = {
     if (preview) {
       form.append("preview_job_id", preview.preview_job_id);
       form.append("source_sha256", preview.source_sha256);
-      if (preview.conversation_token) form.append("conversation_token", preview.conversation_token);
-      if (preview.conversation_wishes_digest) form.append("conversation_wishes_digest", preview.conversation_wishes_digest);
     }
-    if (wishes?.length) form.append("conversation_wishes", JSON.stringify(wishes));
     return request<{ photos: Dict[]; errors: Dict[] }>(`${sid(id)}/photos`, { method: "POST", body: form, signal: opts.signal });
   },
   // 一次傳好幾張：同一個請求、同一張 photos_added，跟單張走同一個端點。多張時
@@ -278,8 +268,6 @@ export const api = {
     for (const f of files) form.append("image", f.blob, f.name);
     return request<{ photos: Dict[]; errors: Dict[] }>(`${sid(id)}/photos`, { method: "POST", body: form });
   },
-  confirmPhotoConversation: (id: string, photoId: string, body: Dict) =>
-    request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/conversation-confirm`, { ...json("POST", body), signal: AbortSignal.timeout(PREVIEW_CONVERSATION_TIMEOUT_MS) }),
   // 管理者從回報打開那段對話（唯讀）：照原樣讀對話主人的 session，不推進、不同步。
   // 多張上傳的回報帶回同一批的每個 session，和總覽存下來的對話（沒有就是 null）。
   // 預設是回報當下存下來的那份；live 改讀對話現在的樣子。kept：這筆有沒有存當下那份
@@ -330,7 +318,7 @@ export const api = {
   render: (id: string, photoIds: string[], signal?: AbortSignal) =>
     request<{ renders: Dict[]; queued: string[] }>(
       `${sid(id)}/render`,
-      { ...json("POST", { photo_ids: photoIds, base: "original", defer_unconfirmed: true }), signal },
+      { ...json("POST", { photo_ids: photoIds, base: "original" }), signal },
     ),
   // 接著某一版調整：先存這一輪的需求，再用存下的那份去產生。
   saveContinuationDraft: (id: string, photoId: string, source: SourceResult, text: string,

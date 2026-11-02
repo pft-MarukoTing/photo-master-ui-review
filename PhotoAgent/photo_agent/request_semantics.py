@@ -1,8 +1,7 @@
 """Validated model semantics. IDs/state remain owned by the application.
 
 This module validates evidence and structure, never guesses verbs or cuts person
-names at a keyword. Legacy language rules are isolated in person_request for
-reading old snapshots; current model responses use this contract.
+names at a keyword.
 """
 import copy
 import hashlib

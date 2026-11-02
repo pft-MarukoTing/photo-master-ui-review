@@ -37,9 +37,8 @@ from flask import Blueprint, Response, current_app, jsonify, request
 
 from aiserver_utils.queue import get_job_info
 from backend.routes.api import _apply_review_selections, _parse_and_validate_params, _record_history_safely
-from backend.services import chat_queue, chat_session as store, continuation as continuation_svc, preview_conversation_store as conversation_store
+from backend.services import chat_queue, chat_session as store, continuation as continuation_svc
 from backend.services.timing import job_spans, timed, timeline
-from photo_agent import preview_conversation as conversation_domain
 from backend.services.account import (
     HISTORY_MAX_LEN,
     attach_case_analysis,
@@ -70,7 +69,6 @@ from photo_agent.chat_plan import (
     apply_plan_patch,
     build_render_form,
     build_selections,
-    default_plan,
 )
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/api/photo-agent/chat")
@@ -137,22 +135,6 @@ def _session(user, session_id):
     session = store.load_session(user, session_id) if SESSION_ID_RE.match(session_id) else None
     if session is None:
         raise _RequestError("Session not found", 404)
-    return _migrated(session)
-
-
-def _migrated(session):
-    for photo in session.get('photos',[]):
-        state=photo.get('preview_conversation')
-        if state and state.get('action_schema_version') != conversation_domain.person_request.VERSION:
-            old=state.get('effective_prompt','')
-            updated=conversation_domain.refresh_state(state)
-            photo['preview_conversation']=updated
-            prompt=photo.get('plan',{}).get('user_prompt','')
-            if old and old in prompt:
-                photo['plan']={**photo['plan'],'user_prompt':prompt.replace(old,updated['effective_prompt'],1).strip('；')}
-            # Read-side migration is a derived view. Persist only through the
-            # subsequent owned mutation, never overwrite a concurrent answer
-            # from a GET that loaded an older revision.
     return session
 
 
@@ -639,7 +621,6 @@ def _reported_chat():
         if session_id and not SESSION_ID_RE.match(session_id) or batch_id and not SESSION_ID_RE.match(batch_id):
             raise _RequestError("這筆回報沒有對應的對話", 404)
         chat = {**store.report_chat(owner, session_id, batch_id), "live": True}
-    chat["sessions"] = [_migrated(s) for s in chat["sessions"]]
     if not chat["sessions"]:
         raise _RequestError("這筆回報沒有對應的對話", 404)
     return chat, report
@@ -815,322 +796,6 @@ def _preview_snapshot(info, binding):
     return _preview_artifact(info, binding)
 
 
-def _conversation_snapshot(user, preview_id, body):
-    if not agent_config.ENABLE_CHAT_SUBJECT_PREVIEW:
-        raise _RequestError("Subject preview is disabled", 404)
-    info, binding = _owned_preview(user, preview_id)
-    if body.get('source_sha256') != binding['source_sha256'] or body.get('analysis_model') != binding['analysis_model']:
-        raise _RequestError('Preview conversation source changed', 409)
-    resolved = _preview_snapshot(info, binding)
-    if not resolved or resolved[0].get('format_version') != 3 or resolved[0]['subject_preview']['state'] != 'ready':
-        raise _RequestError('Preview is not ready', 409)
-    return binding, resolved[0]['preview_people']
-
-
-_PREVIEW_SOURCE_ERRORS = frozenset(('semantic_source_not_grounded', 'semantic_target_not_grounded',
-    'semantic_span_not_grounded', 'semantic_identity_outside_target', 'semantic_group_outside_target'))
-
-
-def _resolve_preview_wishes(user, binding, head, clauses, people, history, prompt):
-    """One source-only recovery within the existing request's total wait budget."""
-    if clauses and all(c.get('verbatim') for c in clauses):
-        conversation_store.assert_current(user, binding, head)
-        return conversation_domain.fallback(clauses, people)
-    started = time.monotonic()
-    end = started + chat_queue.WAIT_SECONDS
-    for attempt in range(2):
-        # A new user turn invalidates the old retry before another model call.
-        conversation_store.assert_current(user, binding, head)
-        remaining = chat_queue.WAIT_SECONDS if attempt == 0 else end - time.monotonic()
-        if remaining <= 0:
-            current_app.logger.warning('Preview conversation budget exhausted preview=%s revision=%s elapsed=%.3fs',
-                binding['preview_job_id'], (head or {}).get('revision'), time.monotonic() - started)
-            break
-        try:
-            raw = chat_queue.run({'stage': conversation_domain.STAGE,
-                'people': conversation_domain.roster_text(people), 'wishes': clauses,
-                'history': history if attempt == 0 else [], 'effective_prompt': prompt,
-                'deadline': time.time() + remaining}, wait_seconds=remaining)
-        except Exception as exc:
-            current_app.logger.warning('Preview conversation call failed preview=%s task_id=%s attempt=%s category=call error_type=%s elapsed=%.3fs',
-                binding['preview_job_id'], chat_queue.current_task_id(), attempt + 1,
-                type(exc).__name__, time.monotonic() - started)
-            break
-        try:
-            state = conversation_domain.resolve(clauses, people, raw)
-        except Exception as exc:
-            source_error = isinstance(exc, ValueError) and str(exc) in _PREVIEW_SOURCE_ERRORS
-            current_app.logger.warning('Preview conversation validation failed preview=%s task_id=%s attempt=%s category=%s reason=%s elapsed=%.3fs',
-                binding['preview_job_id'], chat_queue.current_task_id(), attempt + 1,
-                'source_validation' if source_error else 'validation',
-                str(exc) if isinstance(exc, ValueError) else type(exc).__name__, time.monotonic() - started)
-            if source_error and attempt == 0:
-                continue
-            break
-        current_app.logger.info('Preview conversation accepted preview=%s task_id=%s attempt=%s elapsed=%.3fs',
-            binding['preview_job_id'], chat_queue.current_task_id(), attempt + 1, time.monotonic() - started)
-        return state
-    return {**conversation_domain.fallback(clauses, people), 'semantic_parse_failed': True}
-
-
-@chat_bp.post('/previews/<preview_id>/conversation-reply')
-def preview_conversation_reply(preview_id):
-    body = _body()
-    user = _user(body.get('user'))
-    binding, people = _conversation_snapshot(user, preview_id, body)
-    revision = body.get('revision')
-    if type(revision) is not int or revision < 0:
-        raise _RequestError('Invalid conversation revision')
-    try:
-        raw_wishes = body.get('wishes', [])
-        clauses = conversation_domain.wishes(raw_wishes, people, semantic=True)
-        previous = None
-        if body.get('previous_token'):
-            previous = conversation_store.load_previous(user, body['previous_token'], binding)
-            clauses = conversation_domain.retain_bindings(clauses, previous)
-        history = _review_history(body.get('history', []))
-        if sum(len(t['text']) for t in history) > 12000:
-            raise ValueError('history_too_long')
-        prompt = body.get('effective_prompt', '')
-        if not isinstance(prompt, str) or len(prompt) > USER_PROMPT_MAX_LEN:
-            raise ValueError('invalid_effective_prompt')
-        head = conversation_store.begin(user, binding, body.get('generation'), revision,
-            {'wishes': raw_wishes, 'history': history, 'prompt': prompt})
-        if not people and not clauses:
-            state = {'reply': '', 'clauses': []}
-        else:
-            state = _resolve_preview_wishes(user, binding, head, clauses, people, history, prompt)
-        if head:
-            state['head'] = head
-        if previous:
-            state = conversation_domain.retain_questions(state, previous)
-        if not people:
-            conversation_domain.present(state, people)
-        saved = conversation_store.save(user, binding, state, people, revision, conversation_store.digest(raw_wishes), presentation_requested=body.get('presentation_requested') is True)
-    except ValueError as exc:
-        raise _RequestError(str(exc), 409)
-    return jsonify(conversation_store.public(saved))
-
-
-@chat_bp.post('/previews/<preview_id>/conversation-revise')
-def preview_conversation_revise(preview_id):
-    body = _body()
-    user = _user(body.get('user'))
-    binding, people = _conversation_snapshot(user, preview_id, body)
-    text = body.get('text')
-    if not isinstance(text, str) or not text.strip() or len(text) > 1000:
-        raise _RequestError('Invalid correction text')
-    try:
-        selected = body.get('target_ids', [])
-        if not isinstance(selected, list) or any(not isinstance(i,str) or i not in {p['preview_person_id'] for p in people} for i in selected):
-            raise ValueError('invalid_revision_identity')
-        rebasing = 'next_revision' in body
-        if rebasing:
-            state = conversation_store.load_previous(user, body.get('token'), binding)
-            if state.get('head') and state['head']['generation'] != body.get('generation'):
-                raise ValueError('conversation_source_changed')
-            next_revision = body.get('next_revision')
-            if type(next_revision) is not int or next_revision <= state['revision']:
-                raise ValueError('stale_correction')
-            raw_wishes = body['wishes']
-            clauses = conversation_domain.wishes(raw_wishes,people,semantic=True)
-            clauses = conversation_domain.retain_bindings(clauses,state)
-            clauses = conversation_domain.wish_lifecycle.bind_unambiguous(clauses,people)
-            rebased = conversation_domain.fallback(clauses,people)
-            for clause in rebased['clauses']:
-                if clause['status']=='matched' and clause['scope']=='protection' and clause.get('target_ids'):
-                    clause['protected_ids']=clause['target_ids'];clause['target_ids']=[]
-            rebased['revision']=state['revision']
-            # Existing user confirmations/protection scope remain evidence.
-            rebased = conversation_domain.retain_questions(rebased,state)
-            state={**state,**rebased}
-            if any(c.get('semantic_required') and conversation_domain.person_request.semantics(c)['action_status'] == 'pending' for c in state['clauses']):
-                # A concurrent new wish has not been semantically parsed yet.
-                # Resolve it before applying a revision to the older request.
-                state = _retry_request_semantics(state)
-            head=conversation_store.begin(user,binding,body.get('generation'),next_revision,
-                {'wishes':raw_wishes,'text':text,'targets':body.get('target_ids',[])})
-            if head:state['head']=head
-            state['wishes_digest']=conversation_store.digest(raw_wishes)
-        else:
-            state = conversation_store.load(user, body.get('token'), binding)
-            if state['revision'] != body.get('revision'):
-                raise ValueError('stale_correction')
-            next_revision=state['revision']+1
-        updated = conversation_domain.wish_lifecycle.local_revision(state, people, text, selected)
-        if updated is None:
-            raw = chat_queue.run({'stage': conversation_domain.STAGE, 'mode': 'revision',
-                'people': conversation_domain.roster_text(people), 'wishes': state['clauses'],
-                'text': text, 'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
-            updated = conversation_domain.revise(state, people, text, raw, selected)
-        elif updated.get('lifecycle_changes'):
-            updated['reply'] = conversation_domain.wish_lifecycle.change_reply(updated['lifecycle_changes'], conversation_domain.executable(updated,people))
-        if updated is None:
-            if rebasing:
-                state['reply']=''
-                saved=conversation_store.save(user,binding,state,people,next_revision,state['wishes_digest'],previous=state['token'], presentation_requested=body.get('presentation_requested') is True)
-                conversation_store.consume(user,state,saved['token'])
-                return jsonify({'changed':False,**conversation_store.public(saved)})
-            return jsonify({'changed': False})
-        saved = conversation_store.save(user, binding, updated, people, next_revision,
-            state['wishes_digest'], previous=state['token'], presentation_requested=body.get('presentation_requested') is True)
-        conversation_store.consume(user, state, saved['token'])
-        return jsonify({'changed': True, **conversation_store.public(saved),
-            'revision_mode': saved['revision_mode'], 'affected_request_ids': saved['affected_request_ids']})
-    except ValueError as exc:
-        raise _RequestError(str(exc), 409)
-
-
-def _retry_request_semantics(state):
-    """Explicit user retry; never paid/model work during a GET migration."""
-    try:
-        raw = chat_queue.run({'stage': conversation_domain.STAGE,
-            'people': conversation_domain.roster_text(state.get('people', [])),
-            'wishes': state['clauses'], 'history': [],
-            'effective_prompt': state.get('effective_prompt', ''),
-            'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
-        parsed = conversation_domain.resolve(state['clauses'], state.get('people', []), raw)
-    except Exception:
-        parsed = conversation_domain.fallback(state['clauses'], state.get('people', []))
-    return {**state, **parsed}
-
-
-def _confirmed_target_semantics(state, ids):
-    """Only recheck uncertain actions; a target pick cannot supply a new verb."""
-    from photo_agent import request_semantics
-    q = state.get('question') or {}
-    if q.get('kind') not in (None, 'person') or not ids:
-        return {}
-    people = state.get('people', [])
-    if any(pid not in {p['preview_person_id'] for p in people} for pid in ids):
-        raise ValueError('stale_or_invalid_confirmation')
-    replacements = {}
-    for clause in state['clauses']:
-        if clause['wish_id'] not in q.get('wish_ids', []) or not clause.get('semantic_required'):
-            continue
-        value = request_semantics.read(clause)
-        if value and value['complete']:
-            continue
-        replacements[clause['wish_id']] = None
-        if not value:
-            continue
-        try:
-            raw = chat_queue.run({'stage': conversation_domain.STAGE, 'mode': 'target_action',
-                'clause': copy.deepcopy(clause),
-                'selected_people': conversation_domain.roster_text([p for p in people if p['preview_person_id'] in ids]),
-                'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
-            request_semantics.confirm_target_action(copy.deepcopy(clause), raw)
-            replacements[clause['wish_id']] = raw
-        except Exception:
-            # Keep the selected identity; an unavailable interpretation is pending,
-            # not evidence that the user omitted an action.
-            pass
-    return replacements
-
-
-def _semantic_action_answer(state, wish_ids, text):
-    """Interpret a supplement server-side; never accept client semantic fields."""
-    from photo_agent import request_semantics
-    if not isinstance(text, str) or not text.strip() or len(text) > 1000:
-        raise ValueError(i18n.tr('請補充想調整的動作。'))
-    replacements = {}
-    for clause in state['clauses']:
-        if clause['wish_id'] not in wish_ids or not clause.get('semantic_required'):
-            continue
-        if not request_semantics.read(clause):
-            raise ValueError('new_action_message')
-        try:
-            raw = chat_queue.run({'stage': conversation_domain.STAGE, 'mode': 'action',
-                'clause': clause, 'text': text.strip(),
-                'combined_source': request_semantics.evidence(clause) + '；補充：' + text.strip(),
-                'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
-        except Exception as exc:
-            raise ValueError(i18n.tr('這項修改還沒確認完成，請稍後再試一次。')) from exc
-        try:
-            replacements[clause['wish_id']] = request_semantics.apply_answer(clause, text.strip(), raw)
-        except ValueError as exc:
-            if str(exc) == 'new_action_message':
-                raise
-            raise ValueError(i18n.tr('還需要確認這項修改的內容，請再補充想調整的對象或動作。')) from exc
-    return replacements
-
-
-@chat_bp.post('/previews/<preview_id>/conversation-confirm')
-def preview_conversation_confirm(preview_id):
-    body = _body()
-    user = _user(body.get('user'))
-    binding, _ = _conversation_snapshot(user, preview_id, body)
-    try:
-        ids = body.get('target_ids', [])
-        retry_state = conversation_store.load(user, body.get('token'), binding)
-        retry_question = retry_state.get('question') or {}
-        if retry_question.get('kind') == 'semantic':
-            if ids or body.get('target_selection') == 'outside_preview' or retry_question['question_id'] != body.get('question_id') or retry_question['wish_ids'] != body.get('wish_ids') or type(body.get('revision')) is not int or retry_state['revision'] != body['revision']:
-                raise ValueError('stale_or_invalid_confirmation')
-            updated = _retry_request_semantics(retry_state)
-            saved = conversation_store.save(user, binding, updated, retry_state.get('people', []), retry_state['revision'], retry_state['wishes_digest'], previous=retry_state['token'])
-            conversation_store.consume(user, retry_state, saved['token'])
-            return jsonify(conversation_store.public(saved))
-        if body.get('text') and not body.get('edit_scope'):
-            scope_state = conversation_store.load(user, body.get('token'), binding)
-            if (scope_state.get('question') or {}).get('kind') == 'edit_scope':
-                text = body['text']
-                if isinstance(text, str) and re.fullmatch(r'\s*(?:只整理露出的髮絲|先不處理這項需求)[。！!]?\s*', text):
-                    body['edit_scope'] = 'visible_hair' if '露出' in text else 'cancel'
-                else:
-                    return jsonify({**conversation_store.public(scope_state), 'confirmation_handled': False})
-        semantic_answers = None
-        if (body.get('text') and (conversation_store.load(user, body.get('token'), binding).get('question') or {}).get('kind') in ('edit_description', 'action')):
-            body['description_text'] = body['text']
-            action_state = conversation_store.load(user, body.get('token'), binding)
-            q = action_state.get('question')
-            if q['question_id'] != body.get('question_id') or q['wish_ids'] != body.get('wish_ids') or action_state['revision'] != body.get('revision'):
-                raise ValueError('stale_or_invalid_confirmation')
-            semantic_answers = _semantic_action_answer(action_state, q['wish_ids'], body['text'])
-        if not body.get('description_text') and body.get('target_selection', 'listed') == 'listed' and body.get('text') and not ids and not body.get('protection_scope') and not body.get('selected_wish') and not body.get('edit_scope'):
-            state = conversation_store.load(user, body.get('token'), binding)
-            q = state['question']
-            if not q or q['question_id'] != body.get('question_id') or q['wish_ids'] != body.get('wish_ids') or state['revision'] != body.get('revision'):
-                raise ValueError('stale_or_invalid_confirmation')
-            text = body['text']
-            if not isinstance(text, str) or not text.strip() or len(text) > 1000:
-                raise ValueError('invalid_confirmation_text')
-            # Only interpret the answer's referent. Keep the original operation;
-            # a clarification cannot create another wish or release all wishes.
-            source = next(c for c in state['clauses'] if c['wish_id'] == q['wish_ids'][0])
-            clarification = {**source, 'text': text, 'reference_text': text, 'source_text': text,
-                             'status': 'pending', 'target_ids': [], 'protected_ids': []}
-            try:
-                raw = chat_queue.run({'stage': conversation_domain.STAGE, 'mode': 'confirmation',
-                    'people': conversation_domain.roster_text(state['people']), 'wishes': [clarification],
-                    'history': [{'role': 'assistant', 'text': q['text']}, {'role': 'user', 'text': text}],
-                    'effective_prompt': '', 'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
-                if raw.get('confirmation_intent') == 'new_message':
-                    return jsonify({**conversation_store.public(state), 'confirmation_handled': False})
-                if raw.get('confirmation_intent') != 'answer':
-                    raise ValueError('invalid_confirmation_intent')
-                raw = {k: v for k, v in raw.items() if k != 'confirmation_intent'}
-                resolved = conversation_domain.resolve([clarification], state['people'], raw)
-                clause = resolved['clauses'][0]
-                ids = clause['target_ids'] or clause['protected_ids']
-            except Exception:
-                ids = []
-            if not ids:
-                return jsonify(conversation_store.public({**state, 'presentation': None, 'reply': q['text']}))
-        target_state = conversation_store.load(user, body.get('token'), binding)
-        target_q = target_state.get('question') or {}
-        if target_q.get('question_id') != body.get('question_id') or target_q.get('wish_ids') != body.get('wish_ids') or type(body.get('revision')) is not int or target_state['revision'] != body['revision']:
-            raise ValueError('stale_or_invalid_confirmation')
-        target_semantics = _confirmed_target_semantics(target_state, ids) if body.get('target_selection', 'listed') == 'listed' else {}
-        saved = conversation_store.confirm(user, body.get('token'), binding,
-            body.get('question_id'), body.get('wish_ids'), ids, body.get('revision'), body.get('protection_scope'), body.get('selected_wish'), body.get('edit_scope'), presentation_requested=body.get('presentation_requested') is True, target_selection=body.get('target_selection', 'listed'), description_text=body.get('description_text'), semantic_answers=semantic_answers, target_semantics=target_semantics)
-    except ValueError as exc:
-        if str(exc) == 'new_action_message':
-            return jsonify({**conversation_store.public(conversation_store.load(user, body.get('token'), binding)), 'confirmation_handled': False})
-        raise _RequestError(str(exc), 409)
-    return jsonify(conversation_store.public(saved))
-
-
 def _preview_artifact(info, binding):
     if info.get("status") != "success":
         return None
@@ -1274,8 +939,7 @@ def _add_photos(user, session_id, session, images, client_key=None):
     if error:
         raise _RequestError(error)
     params["stage"] = "analyze"
-    # Scene-only 「只照需求改」 can skip analysis. After loading the wishes
-    # below, person targets override this shortcut to establish identities.
+    # Scene-only 「只照需求改」 can skip analysis.
     skip = bool(session["defaults"].get("overwrite_prompt")
                 and (session["defaults"].get("user_prompt") or "").strip())
     if skip:
@@ -1289,7 +953,6 @@ def _add_photos(user, session_id, session, images, client_key=None):
             data = image.read()
             preview_id = request.form.get("preview_job_id") if len(images) == 1 else None
             reuse = False
-            conversation_state = None
             if preview_id and agent_config.ENABLE_CHAT_SUBJECT_PREVIEW:
                 info, binding = _owned_preview(user, preview_id)
                 if (binding["source_sha256"] != source_sha256(data)
@@ -1324,61 +987,11 @@ def _add_photos(user, session_id, session, images, client_key=None):
                     if strict_ready:
                         raise _RequestError(i18n.tr("人物清單暫時無法交接，請重試預覽。"), 409) from exc
                     pass
-            # Freeze unresolved accepted requests even when the bridge has not
-            # finished. Formal analysis starts now; actual editing is guarded.
-            conversation_wishes = request.form.get('conversation_wishes')
-            if conversation_wishes:
-                try:
-                    raw_wishes = json.loads(conversation_wishes)
-                    people = photo_params.get('precomputed_preview', {}).get('preview_people', [])
-                    clauses = conversation_domain.wishes(raw_wishes, people, semantic=True)
-                    conversation_state = {**conversation_domain.fallback(clauses, people),
-                        'people': people, 'binding': photo_params.get('precomputed_preview', {}).get('binding'),
-                        'wishes_digest': conversation_store.digest(raw_wishes), 'revision': 0}
-                    conversation_state['question'] = conversation_domain.question(conversation_state, people)
-                except (ValueError, TypeError) as exc:
-                    raise _RequestError('Invalid pending conversation wishes', 409) from exc
-            conversation_token = request.form.get('conversation_token')
-            if conversation_token:
-                if not preview_id or 'precomputed_preview' not in photo_params:
-                    raise _RequestError('Conversation requires its completed preview', 409)
-                try:
-                    previous = conversation_store.load_previous(user, conversation_token, binding)
-                    if request.form.get('conversation_wishes_digest') != previous['wishes_digest']:
-                        raise ValueError('conversation_wishes_changed')
-                    if conversation_wishes:
-                        # Rebuild from this submission's exact source wishes;
-                        # only unchanged IDs/text inherit server-owned evidence.
-                        clauses = conversation_domain.retain_bindings(clauses, previous)
-                        conversation_state = conversation_domain.retain_questions(
-                            {**conversation_domain.fallback(clauses, people), 'people': people,
-                             'binding': binding, 'wishes_digest': conversation_store.digest(raw_wishes),
-                             'revision': previous['revision']}, previous)
-                        conversation_state = conversation_domain.refresh_state(conversation_state)
-                    else:
-                        conversation_state = previous
-                except ValueError as exc:
-                    raise _RequestError(str(exc), 409)
-                photo_params['preview_wish_bindings'] = conversation_state
-                # The confirmed scope must travel with actual job instructions,
-                # including API callers that did not first patch session defaults.
-                if conversation_state.get('effective_prompt') and not photo_params.get('user_prompt'):
-                    photo_params['user_prompt'] = conversation_state['effective_prompt'][:USER_PROMPT_MAX_LEN]
-            if conversation_state is not None:
-                photo_params['preview_wish_bindings'] = conversation_state
-                photo_params['user_prompt'] = conversation_domain.executable(conversation_state, conversation_state.get('people', []))[:USER_PROMPT_MAX_LEN]
-            request_context = chat_analysis.project(conversation_state,
+            request_context = chat_analysis.project(
                 prompt=photo_params.get('user_prompt') or '', source_sha256=source_sha256(data),
                 analysis_model=photo_params['analysis_model'])
             if request_context:
                 photo_params['analysis_user_requests'] = request_context
-                if getattr(agent_config, 'ENABLE_CHAT_REQUEST_FEASIBILITY', False) and chat_analysis.visual_subset(request_context):
-                    photo_params.pop('skip_analysis', None)
-            # Only-wishes editing still needs analysis when a wish names or
-            # protects a person. Keep overwrite_prompt; this pass establishes
-            # identity without enabling automatic beautification.
-            if _conversation_needs_identity(conversation_state):
-                photo_params.pop('skip_analysis', None)
             engine_params["acts"][0]["params"] = photo_params
             job_id = enqueue(engine_params, src_content=None if reuse else [data])
             current_app.logger.info("Formal analyze job=%s preview_source_reused=%s preview_context_reused=%s",
@@ -1404,19 +1017,11 @@ def _add_photos(user, session_id, session, images, client_key=None):
             "queued_render": None,
             "active_version": None,
             "analysis_skipped": bool(photo_params.get('skip_analysis')),
-            "preview_conversation": conversation_state,
             **({"client_key": client_key} if client_key else {}),
         })
 
     if photos:
         store.add_photos(user, session_id, session, photos)
-        for photo in photos:
-            state = photo.get('preview_conversation')
-            if state:
-                plan = store.load_session(user, session_id)['defaults']
-                plan = default_plan(plan)
-                plan['user_prompt'] = conversation_domain.executable(state, state.get('people', []))[:USER_PROMPT_MAX_LEN]
-                store.save_photo_plan(user, session_id, photo['photo_id'], plan)
         store.append_messages(user, session_id, [store.make_message(
             "user", card={"type": "photos_added", "photo_ids": [p["photo_id"] for p in photos]})])
     session = store.load_session(user, session_id)
@@ -1424,40 +1029,11 @@ def _add_photos(user, session_id, session, images, client_key=None):
     return jsonify({"photos": [p for p in session["photos"] if p["photo_id"] in added], "errors": errors}), 202
 
 
-def _conversation_needs_identity(state):
-    if not state:
-        return False
-    if conversation_domain.pending(state):
-        return True
-    people = state.get('people', [])
-    projected = conversation_domain.wish_lifecycle.project(state, people)
-    return any((clause.get('target_ids') or clause.get('protected_ids'))
-               and conversation_domain.executable({'clauses': [clause]}, people)
-               for clause in projected['clauses'])
-
-
-def _needs_request_validation(photo):
-    if not getattr(agent_config, 'ENABLE_CHAT_REQUEST_FEASIBILITY', False) or not photo['plan'].get('user_prompt'):
-        return False
-    state = photo.get('preview_conversation')
-    sha = photo.get('source_sha256') or ((state or {}).get('binding') or {}).get('source_sha256')
-    if not sha:
-        return True
-    payload = chat_analysis.project(state, prompt=photo['plan']['user_prompt'], source_sha256=sha,
-        analysis_model=photo['plan']['analysis_model'])
-    return bool(payload and chat_analysis.visual_subset(payload))
-
-
 def _needs_analysis(photo):
-    """Skipped photos need analysis for person identities or automatic edits.
-
-    Establishing identities leaves the user's overwrite_prompt choice intact.
-    """
+    """Skipped photos need analysis for automatic edits."""
     plan = photo["plan"]
     return bool(photo.get("analysis_skipped")
-                and (_conversation_needs_identity(photo.get('preview_conversation'))
-                     or _needs_request_validation(photo)
-                     or not (plan.get("overwrite_prompt") and (plan.get("user_prompt") or "").strip())))
+                and not (plan.get("overwrite_prompt") and (plan.get("user_prompt") or "").strip()))
 
 
 def _start_analysis(user, session_id, photo, why):
@@ -1468,34 +1044,13 @@ def _start_analysis(user, session_id, photo, why):
     if error:
         raise _RequestError(error)
     params["stage"] = "analyze"
-    state = photo.get('preview_conversation')
-    if _conversation_needs_identity(state):
-        params['preview_wish_bindings'] = copy.deepcopy(state)
-        if any(p.get('identity_source') != 'formal_analysis' for p in state.get('people', [])):
-            info = get_job_info(photo['analyze_job_id'], keyToGet=['acts']) or {}
-            acts = info.get('acts') or []
-            if isinstance(acts, str):
-                acts = json.loads(acts)
-            context = acts[0]['params'].get('precomputed_preview') if acts else None
-            if not context:
-                raise _RequestError(i18n.tr('人物清單暫時無法交接，請重新上傳照片。'), 409)
-            context = validate_preview_context(context, src_keys=photo['src_keys'])
-            if context['binding']['user'] != user:
-                raise _RequestError(i18n.tr('人物預覽不屬於目前使用者。'), 409)
-            params['precomputed_preview'] = context
     initial = get_job_info(photo['analyze_job_id'], keyToGet=['acts']) or {}
     initial_acts = initial.get('acts') or []
     if isinstance(initial_acts, str): initial_acts = json.loads(initial_acts)
     initial_params = initial_acts[0]['params'] if initial_acts else {}
-    sha = photo.get('source_sha256') or ((state or {}).get('binding') or {}).get('source_sha256') or (initial_params.get('analysis_user_requests') or {}).get('source_sha256')
-    if not sha and getattr(agent_config, 'ENABLE_CHAT_REQUEST_FEASIBILITY', False) and photo['plan'].get('user_prompt'):
-        data, error = download_bytes(photo['src_keys'][0], photo['analyze_job_id'])
-        if error or not data:
-            raise _RequestError(i18n.tr('原圖暫時無法讀取，請稍後再試。'), 409)
-        sha = source_sha256(data)
-        photo['source_sha256'] = sha
+    sha = photo.get('source_sha256') or (initial_params.get('analysis_user_requests') or {}).get('source_sha256')
     if sha:
-        requests = chat_analysis.project(state, prompt=photo['plan'].get('user_prompt') or '',
+        requests = chat_analysis.project(prompt=photo['plan'].get('user_prompt') or '',
             source_sha256=sha, analysis_model=params['analysis_model'])
         if requests: params['analysis_user_requests'] = requests
     engine_params = get_engine_params_template()
@@ -1766,12 +1321,8 @@ def _start_queued_render(user, session_id, photo, queued):
         photo["queued_render"] = queued
         store.save_photo_state(user, session_id, photo)
         return []
-    prepared, problem = _prepare_render(photo, defer_unconfirmed=queued.get('defer_unconfirmed', False))
+    prepared, problem = _prepare_render(photo)
     if problem:
-        if problem[0] in ('unresolved_people', 'unresolved_visual_target', 'protected_scope'):
-            photo['error'] = None
-            store.save_photo_state(user, session_id, photo)
-            return [_confirmation_notice(photo, problem)]
         photo["error"] = problem[1]
         store.save_photo_state(user, session_id, photo)
         return [store.make_message("assistant", card={
@@ -1782,100 +1333,7 @@ def _start_queued_render(user, session_id, photo, queued):
 
 # --- render ----------------------------------------------------------------
 
-def _adopt_request_checks(photo, analysis):
-    report = (analysis or {}).get('_chat_request_checks')
-    if not report:
-        # Switching off an optional new call is not permission to bypass an
-        # already recorded unresolved result from the same photo.
-        if photo.get('chat_request_checks'): _refresh_visual_question(photo)
-        return
-    photo['chat_request_checks'] = copy.deepcopy(report)
-    state = photo.get('preview_conversation')
-    if state is None:
-        rows = report['requests']['requests']
-        clauses = [dict(wish_id=r['wish_id'], request_id=r['wish_id'], text=r['text'],
-            source_text=r['source_text'], status=r['status'], scope=r['scope'],
-            target_ids=r['preview_person_ids'], protected_ids=[], referent='', revision=0) for r in rows]
-        state = dict(clauses=clauses, people=[], revision=0, reply='',
-                     binding={'source_sha256':report['requests']['source_sha256']},
-                     wishes_digest=report['requests']['wishes_digest'],
-                     effective_prompt=report['requests']['effective_prompt'])
-        photo['preview_conversation'] = state
-    _refresh_visual_question(photo)
-
-
-def _refresh_visual_question(photo):
-    state = photo.get('preview_conversation')
-    if not state: return
-    state['question'] = conversation_domain.question(state, state.get('people', []))
-    if state['question']: return
-    blocked = chat_analysis.blocking({'_chat_request_checks':photo.get('chat_request_checks')}, state)
-    if blocked:
-        row = blocked[0]
-        state['question'] = dict(kind='visual', question_id='visual_' + chat_analysis.fingerprint(row)[:16],
-            wish_ids=[row['wish_id']], text=row['question'])
-
-
-def _conversation_render_problem(photo):
-    state = photo.get('preview_conversation')
-    blocked = chat_analysis.blocking({'_chat_request_checks':photo.get('chat_request_checks')}, state)
-    if blocked:
-        return ('unresolved_visual_target', blocked[0]['question'], 409)
-    if state and conversation_domain.pending(state):
-        return ('unresolved_people', i18n.tr('請先確認個人化需求指定的人物，再開始美化。'), 409)
-    if state and (state.get('question') or {}).get('kind') in ('scope', 'wish'):
-        return ('protected_scope', state['question']['text'], 409)
-    if state and any(c.get('protected_ids') or (c['status'] == conversation_domain.OUTSIDE_CONFIRMED and c['scope'] == 'protection') for c in state['clauses']) and not photo['plan'].get('overwrite_prompt'):
-        return ('protected_scope', i18n.tr('有保持原樣的人物，請先選擇僅依需求修改，確認保護範圍。'), 409)
-    return None
-
-
-def _confirmation_notice(photo, problem):
-    """An expected clarification is a conversation turn, not a render failure."""
-    state = photo.get('preview_conversation') or {}
-    question = state.get('question')
-    return store.make_message('assistant', card={'type': 'llm_reply',
-        'photo_id': photo['photo_id'], 'text': question['text'] if question else problem[1],
-        **({'target_question': copy.deepcopy(question), 'question_revision': state['revision']}
-           if question else {})})
-
-
-def _confirmation_deferred_notice(photo):
-    return store.make_message('assistant', card={'type': 'llm_reply',
-        'photo_id': photo['photo_id'],
-        'text': i18n.tr('我會先照你的原句處理，完成後再和你確認需要調整的對象。')})
-
-
-def _render_without_guessed_targets(photo):
-    """Pass complete unresolved edits verbatim, without inferred person bindings."""
-    state = photo.get('preview_conversation')
-    pending = conversation_domain.pending(state) if state else []
-    # Unresolved protection must never be silently omitted.
-    if not pending or any(c['scope'] != 'edit' or
-            conversation_domain.person_request.semantics(c)['action_status'] != 'complete'
-            for c in pending):
-        return photo
-    snapshot = copy.deepcopy(photo)
-    state = snapshot['preview_conversation']
-    deferred = {c['wish_id'] for c in pending}
-    state['clauses'] = [c for c in state['clauses'] if c['wish_id'] not in deferred]
-    state.pop('revision_question', None)
-    state['question'] = conversation_domain.question(state, state.get('people', []))
-    state['effective_prompt'] = conversation_domain.executable(state, state.get('people', []))
-    raw = [c['text'] for c in pending]
-    snapshot['plan']['user_prompt'] = '；'.join(dict.fromkeys(
-        text for text in (state['effective_prompt'], *raw) if text))[:USER_PROMPT_MAX_LEN]
-    snapshot['plan']['prompt_faces'] = []
-    return snapshot
-
-
-def _prepare_render(photo, *, defer_unconfirmed=False):
-    original = photo
-    if defer_unconfirmed:
-        photo = _render_without_guessed_targets(photo)
-    conversation_problem = _conversation_render_problem(photo)
-    if conversation_problem:
-        return None, conversation_problem
+def _prepare_render(photo):
     """Everything a ready photo's render needs, from its plan as it is now:
     (prepared, None) or (None, (reason, message, http_status)), reason being
     a stable code the chat page can word for the user."""
@@ -1887,18 +1345,6 @@ def _prepare_render(photo, *, defer_unconfirmed=False):
         return None, ("invalid_plan", f"photo {photo['photo_id']}: {error}", 400)
     params["stage"] = "finish"
     analysis, error = _load_analysis(_analysis_job_id(photo))
-    if analysis is not None:
-        blocked = chat_analysis.blocking(analysis, photo.get('preview_conversation'))
-        if blocked:
-            return None, ('unresolved_visual_target', blocked[0]['question'], 409)
-        if analysis.get('_chat_request_checks'):
-            analysis = copy.deepcopy(analysis)
-            # Keep passed evidence for active wishes. Only user-cancelled /
-            # removed wishes are excluded from this render's scoped checks.
-            state = photo.get('preview_conversation')
-            if state is not None:
-                active = {c['wish_id'] for c in state['clauses'] if c['status'] not in ('cancelled','superseded')}
-                analysis['_chat_request_checks']['results'] = [r for r in analysis['_chat_request_checks']['results'] if r['wish_id'] in active]
     if error:
         return None, ("analysis_unavailable", f"photo {photo['photo_id']}: {error}", 409)
     if not is_compatible(analysis, min_version=get_min_compatible_version()):
@@ -1906,64 +1352,6 @@ def _prepare_render(photo, *, defer_unconfirmed=False):
     selections = build_selections(plan)
     # Per-person facial requests the editor renders as that person's own final state.
     face_requests = {}
-    state = photo.get('preview_conversation')
-    if state:
-        people = state.get('people', [])
-        projected = conversation_domain.wish_lifecycle.project(state, people)
-        active_clauses = [clause for clause in projected['clauses']
-                          if conversation_domain.executable({'clauses': [clause]}, people)]
-        required_ids = {person_id for clause in active_clauses
-                        for person_id in (clause.get('target_ids') or clause.get('protected_ids') or [])}
-        if required_ids - {person['preview_person_id'] for person in people}:
-            return None, ('unresolved_preview_person', i18n.tr('指定人物尚未完成正式身份確認。'), 409)
-        bindings = analysis.get('_preview_person_bindings') or {}
-        subjects = analysis.get('subjects') or []
-        named = []
-        for person in people:
-            # The preview roster also contains people no active wish targets.
-            # Scene-only editing may intentionally skip formal analysis, so
-            # only referenced/protected people require a formal binding.
-            if person['preview_person_id'] not in required_ids:
-                named.append(person)
-                continue
-            idx = person.get('subject_index') if person.get('identity_source') == 'formal_analysis' else bindings.get(person['preview_person_id'])
-            if type(idx) is not int or not 0 <= idx < len(subjects) or (person.get('identity_source') != 'formal_analysis' and subjects[idx].get('preview_person_id') != person['preview_person_id']):
-                return None, ('unresolved_preview_person', i18n.tr('指定人物尚未完成正式身份確認。'), 409)
-            named.append({**person, 'label': subjects[idx]['label']})
-        if people:
-            canonical = conversation_domain.executable(state, people)
-            resolved_prompt = conversation_domain.executable(state, named)
-            # Later accepted session requests remain in the plan. Rebind only
-            # the exact original canonical fragment, never overwrite new edits.
-            if canonical and canonical in params['user_prompt']:
-                params['user_prompt'] = params['user_prompt'].replace(canonical, resolved_prompt, 1)[:USER_PROMPT_MAX_LEN]
-        # Protection applies to the execution settings, never roster membership.
-        for clause in active_clauses:
-            for person_id in clause.get('protected_ids', []):
-                idx = next((p['subject_index'] for p in people if p['preview_person_id'] == person_id and p.get('identity_source') == 'formal_analysis'), bindings.get(person_id))
-                for category in (fix.id for fix in capabilities.PORTRAIT_FIXES):
-                    selections['face_issue_overrides'][f'{idx}:{category}'] = False
-        for clause in active_clauses:
-            op=clause.get('operation') or {}
-            if clause['status'] != 'matched' or op.get('intent') != 'set': continue
-            if op.get('feature') == 'face_symmetry':
-                active_text = conversation_domain.executable({'clauses': [clause]}, named)
-                if active_text and active_text not in params['user_prompt']:
-                    continue
-                for person_id in clause.get('target_ids', []):
-                    idx = next((p['subject_index'] for p in people if p['preview_person_id'] == person_id and p.get('identity_source') == 'formal_analysis'), bindings.get(person_id))
-                    if type(idx) is int:
-                        face_requests[idx] = active_text
-                continue
-            category = ('blink_issue' if op.get('feature') == 'eyes' and op.get('value') == 'closed' else
-                        'gaze_issue' if op.get('feature') == 'gaze' and op.get('value') not in ('camera', '視線看鏡頭') else None)
-            if category:
-                active_text=conversation_domain.executable({'clauses':[clause]},named)
-                if active_text and active_text not in params['user_prompt']:continue
-                for person_id in clause.get('target_ids',[]):
-                    idx=next((p['subject_index'] for p in people if p['preview_person_id']==person_id and p.get('identity_source')=='formal_analysis'),bindings.get(person_id))
-                    if idx is not None: selections['face_issue_overrides'][f'{idx}:{category}']=False
-        params['preview_wish_bindings'] = copy.deepcopy(state)
     if FIXED_RATIO_RE.match(plan["aspect_ratio"]) and selections.get("recipe_checked"):
         # The page keeps this item on for a fixed ratio; so does the render.
         checked = list(selections["recipe_checked"])
@@ -1988,8 +1376,7 @@ def _prepare_render(photo, *, defer_unconfirmed=False):
         ]}
     run_limit = capabilities.MAX_RUN_COUNT if _debug() else capabilities.GENERAL_MAX_RUN_COUNT
     return {"params": {**params, "analysis": analysis}, "selections": selections,
-            "run_count": min(plan["run_count"], run_limit),
-            "deferred_confirmation": photo is not original}, None
+            "run_count": min(plan["run_count"], run_limit)}, None
 
 
 def _start_render(user, session_id, photo, prepared, base, source=None, draft=None):
@@ -2024,16 +1411,9 @@ def _start_render(user, session_id, photo, prepared, base, source=None, draft=No
     # The plan rides along so the finished version's card can keep it: the
     # next version's note reads what changed from it.
     photo["pending_render"] = {"action_id": action_id, "job_ids": job_ids, "based_on": based_on, "base": base,
-                               "plan": copy.deepcopy(photo["plan"]),
-                               "deferred_confirmation": prepared.get('deferred_confirmation', False)}
+                               "plan": copy.deepcopy(photo["plan"])}
     if source:
         photo["pending_render"].update({"source_result": source_result, "draft": draft})
-    if prepared.get('deferred_confirmation'):
-        photo['pending_render']['plan']['user_prompt'] = prepared['params']['user_prompt']
-        photo['plan']['user_prompt'] = prepared['params']['user_prompt']
-        photo['deferred_request_texts'] = {c['wish_id']:c['text']
-            for c in conversation_domain.pending(photo['preview_conversation'])}
-        store.save_photo_plan(user, session_id, photo['photo_id'], photo['plan'])
     store.save_photo_state(user, session_id, photo)
     return {"photo_id": photo["photo_id"], "action_id": action_id, "job_ids": job_ids}
 
@@ -2092,7 +1472,7 @@ def _prepare_continuation(photo, draft):
     reference_key = photo["src_keys"][0] if "_continuation_original" in analysis else None
     run_limit = capabilities.MAX_RUN_COUNT if _debug() else capabilities.GENERAL_MAX_RUN_COUNT
     return {"params": {**params, "analysis": analysis}, "selections": {},
-            "run_count": min(plan["run_count"], run_limit), "deferred_confirmation": False,
+            "run_count": min(plan["run_count"], run_limit),
             "reference_key": reference_key}
 
 
@@ -2146,9 +1526,6 @@ def render(session_id):
         raise _RequestError(f"base must be one of {_render_bases()}")
     if base == VERSION_BASE:
         return _render_from_version(user, session_id, session, body)
-    defer_unconfirmed = body.get('defer_unconfirmed', False)
-    if type(defer_unconfirmed) is not bool:
-        raise _RequestError('defer_unconfirmed must be a boolean')
 
     photo_ids = body.get("photo_ids")
     if photo_ids == "all":
@@ -2165,9 +1542,6 @@ def render(session_id):
 
     to_render, to_queue, to_analyze = [], [], []
     for photo in photos:
-        problem = _conversation_render_problem(_render_without_guessed_targets(photo) if defer_unconfirmed else photo)
-        if problem:
-            return jsonify({'error': problem[1], 'reason': problem[0]}), problem[2]
         if photo["status"] in ("analyzing", "reframing") and not photo["queued_render"]:
             to_queue.append(photo)
             continue
@@ -2177,7 +1551,7 @@ def render(session_id):
         if photo["status"] != "ready":
             state = "queued" if photo["queued_render"] else photo["status"]
             raise _RequestError(f"photo {photo['photo_id']} is {state}, not ready to render", 409)
-        prepared, problem = _prepare_render(photo, defer_unconfirmed=defer_unconfirmed)
+        prepared, problem = _prepare_render(photo)
         if problem:
             return jsonify({'error': problem[1], 'reason': problem[0]}), problem[2]
         to_render.append((photo, prepared))
@@ -2187,176 +1561,12 @@ def render(session_id):
         _start_analysis(user, session_id, photo, "render")
     to_queue += to_analyze
     for photo in to_queue:
-        if defer_unconfirmed:
-            snapshot = _render_without_guessed_targets(photo)
-            if snapshot is not photo:
-                photo['plan']['user_prompt'] = snapshot['plan']['user_prompt']
-                photo['deferred_request_texts'] = {c['wish_id']:c['text']
-                    for c in conversation_domain.pending(photo['preview_conversation'])}
-                store.save_photo_plan(user, session_id, photo['photo_id'], photo['plan'])
-        photo["queued_render"] = {"base": base, **({'defer_unconfirmed': True} if defer_unconfirmed else {})}
+        photo["queued_render"] = {"base": base}
         store.save_photo_state(user, session_id, photo)
     queued = [p["photo_id"] for p in to_queue]
     store.append_messages(user, session_id, [store.make_message(
         "user", card={"type": "render_requested", "base": base, "renders": renders, "queued": queued})])
-    if defer_unconfirmed:
-        for photo in photos:
-            if _render_without_guessed_targets(photo) is not photo:
-                store.append_messages(user, session_id, [_confirmation_deferred_notice(photo)])
     return jsonify({"renders": renders, "queued": queued}), 202
-
-
-@chat_bp.post('/sessions/<session_id>/photos/<photo_id>/conversation-confirm')
-def confirm_photo_conversation(session_id, photo_id):
-    body = _body()
-    user = _user(body.get('user'))
-    photo = _photo(_session(user, session_id), photo_id)
-    state = copy.deepcopy(photo.get('preview_conversation'))
-    previous_prompt = (state.get('effective_prompt') or conversation_domain.executable(state, state.get('people', []))) if state else ''
-    q = state.get('question') if state else None
-    if not q or q['question_id'] != body.get('question_id') or q['wish_ids'] != body.get('wish_ids') or type(body.get('revision')) is not int or state['revision'] != body.get('revision'):
-        raise _RequestError(i18n.tr('人物確認已過時，請重新選擇。'), 409)
-    if q.get('kind') == 'visual':
-        text = body.get('text')
-        if body.get('subject_indices') or body.get('target_ids') or not isinstance(text, str) or not text.strip() or len(text) > 1000:
-            raise _RequestError(i18n.tr('請說明這筆需求要如何調整，或取消這筆需求。'), 409)
-        if not any(c['wish_id'] in q['wish_ids'] for c in state['clauses']):
-            raise _RequestError(i18n.tr('需求確認結果已過時，請重新分析。'), 409)
-        retry = text == '重新分析這筆需求'
-        if retry and not getattr(agent_config, 'ENABLE_CHAT_REQUEST_FEASIBILITY', False):
-            raise _RequestError(i18n.tr('需求影像確認目前未啟用；可以先取消這筆需求。'), 409)
-        cancel = text == '取消這筆需求'
-        if not retry:
-            for c in state['clauses']:
-                if c['wish_id'] not in q['wish_ids']: continue
-                if cancel:
-                    c.update(status='cancelled', target_ids=[], protected_ids=[])
-                else:
-                    # New wording needs new semantic and visual evidence.
-                    c.update(text=text, source_text=text, reference_text=text,
-                        status=conversation_domain.OUTSIDE_CONFIRMED if c['status'] == conversation_domain.OUTSIDE_CONFIRMED else 'pending',
-                        semantic_required=True, revision=c.get('revision',0)+1)
-                    for key in ('semantic','operation','display_text','display_target_ids','semantic_answer','action_answer','outside_description'):
-                        c.pop(key, None)
-            if not cancel:
-                state = _retry_request_semantics(state)
-                answers = [c for c in state['clauses'] if c['wish_id'] in q['wish_ids'] or c.get('semantic_parent') in q['wish_ids']]
-                if answers and all(c['scope'] == 'query' for c in answers):
-                    # A question about the photo is not a withdrawal/rewrite.
-                    return jsonify({'confirmation_handled':False})
-        state['revision'] += 1
-        state = conversation_domain.refresh_state(state)
-        if not store.claim(user, session_id, f'visual:{photo_id}:{body["revision"]}:{q["question_id"]}'):
-            raise _RequestError(i18n.tr('需求確認已過時，請重新整理。'), 409)
-        photo['preview_conversation'] = state
-        existing = photo['plan'].get('user_prompt') or ''
-        remaining = existing.replace(previous_prompt, state['effective_prompt'], 1).strip('；') if previous_prompt and previous_prompt in existing else '；'.join(dict.fromkeys(x for x in (existing, state['effective_prompt']) if x))
-        photo['plan'] = {**photo['plan'], 'user_prompt':remaining[:USER_PROMPT_MAX_LEN]}
-        store.save_photo_plan(user, session_id, photo_id, photo['plan'])
-        _refresh_visual_question(photo)
-        store.save_photo_state(user, session_id, photo)
-        store.append_messages(user, session_id, [store.make_message('user', text, card={'type':'ask','photo_id':photo_id}),
-            store.make_message('assistant', card={'type':'llm_reply','photo_id':photo_id,
-                'text':i18n.tr('已取消這筆需求，其他需求保留。') if cancel else state['question']['text'] if state.get('question') and conversation_domain.pending(state) else i18n.tr('收到，我會重新確認修改目標。')})])
-        if retry or (not cancel and not conversation_domain.pending(state)):
-            _start_analysis(user, session_id, photo, 'check')
-        return jsonify({'conversation':photo['preview_conversation']})
-    indices = _subject_indices(body)
-    selection = body.get('target_selection', 'listed')
-    outside = selection == 'outside_preview'
-    if selection not in ('listed', 'outside_preview') or (outside and (indices or body.get('target_ids') or q.get('kind') not in (None, 'person'))):
-        raise _RequestError('Invalid target selection', 409)
-    ids = []
-    if q.get('kind') == 'semantic':
-        if indices or body.get('target_ids') or outside:
-            raise _RequestError('Invalid semantic retry', 409)
-        state = _retry_request_semantics(state)
-    elif outside:
-        conversation_domain.confirm_outside_target(state, q['wish_ids'])
-    elif q.get('kind') in ('edit_description', 'action'):
-        if indices or body.get('target_ids'):
-            raise _RequestError('Invalid action target', 409)
-        try:
-            answers = _semantic_action_answer(state, q['wish_ids'], body.get('text'))
-            conversation_domain.complete_action(state, q['wish_ids'], body.get('text'), semantic_answers=answers)
-        except ValueError as exc:
-            if str(exc) == 'new_action_message':
-                return jsonify({'confirmation_handled':False})
-            raise _RequestError(str(exc), 409)
-    elif q.get('kind') not in ('scope', 'wish', 'edit_scope', 'semantic'):
-        analysis, error = _load_analysis(_analysis_job_id(photo))
-        if error or not indices:
-            raise _RequestError(i18n.tr('請先選擇已完成分析的人物。'), 409)
-        subjects = analysis.get('subjects') or []
-        for index in indices:
-            if index >= len(subjects):
-                raise _RequestError('Unknown person', 409)
-            pid = subjects[index].get('preview_person_id') or f'formal_{index}'
-            if pid not in {p['preview_person_id'] for p in state['people']}:
-                raise _RequestError('Unknown person', 409)
-            ids.append(pid)
-    elif q['kind'] == 'scope':
-        if body.get('protection_scope') not in ('features', 'all'):
-            raise _RequestError('Invalid protection scope', 409)
-        state['protection_scope'] = body['protection_scope']
-    elif q['kind'] == 'edit_scope':
-        if body.get('edit_scope') not in ('visible_hair', 'cancel'):
-            raise _RequestError('Invalid edit scope', 409)
-    elif body.get('selected_wish') not in q['wish_ids']:
-        raise _RequestError('Invalid correction wish', 409)
-    target_semantics = _confirmed_target_semantics(state, ids)
-    claim = f'conversation:{photo_id}:{state["revision"]}:{q["question_id"]}'
-    if not store.claim(user, session_id, claim):
-        raise _RequestError(i18n.tr('人物確認已過時，請重新選擇。'), 409)
-    lifecycle_choice = q.get('kind') == 'wish' and q.get('lifecycle_text')
-    if lifecycle_choice:
-        state = conversation_domain.confirm_revision_choice(state,state['people'],body['selected_wish'],q['lifecycle_text'])
-    for clause in state['clauses']:
-        if lifecycle_choice:
-            continue
-        if q.get('kind') == 'wish' and clause['wish_id'] == body['selected_wish']:
-            conversation_domain.clear_outside_target(clause)
-            clause.pop('display_text', None)
-            clause.update(status='pending', target_ids=[], protected_ids=[])
-        elif not outside and q.get('kind') in (None, 'person') and clause['wish_id'] in q['wish_ids']:
-            if clause['wish_id'] in target_semantics:
-                conversation_domain.request_semantics.confirm_target_action(clause, target_semantics[clause['wish_id']])
-            conversation_domain.clear_outside_target(clause)
-            clause.pop('display_text', None)
-            clause.update(status='matched', awaiting_confirmation=False, binding_source='user_confirmation',
-                target_ids=ids if clause['scope'] != 'protection' else [],
-                protected_ids=ids if clause['scope'] == 'protection' else [])
-        elif q.get('kind') == 'edit_scope' and clause['wish_id'] in q['wish_ids']:
-            conversation_domain.confirm_edit_scope(clause, body['edit_scope'])
-    if q.get('kind') == 'wish':
-        state.pop('revision_question', None)
-    state['revision'] += 1
-    state = conversation_domain.refresh_state(state)
-    if not lifecycle_choice:
-        state['reply'] = conversation_domain.acknowledged_reply(state['clauses'], state['people'])
-    if q.get('kind') == 'edit_scope' and body.get('edit_scope') == 'cancel':
-        state['reply'] = i18n.tr('已取消這項髮絲整理需求。')
-    photo['preview_conversation'] = state
-    _refresh_visual_question(photo)
-    existing_prompt = photo['plan'].get('user_prompt') or ''
-    deferred_texts = photo.get('deferred_request_texts') or {}
-    replaced_texts = {deferred_texts[wid] for wid in q['wish_ids'] if wid in deferred_texts}
-    if replaced_texts:
-        existing_prompt = '；'.join(part for part in existing_prompt.split('；') if part not in replaced_texts)
-        photo['deferred_request_texts'] = {wid:text for wid,text in deferred_texts.items() if wid not in q['wish_ids']}
-    if previous_prompt and previous_prompt in existing_prompt:
-        merged_prompt = existing_prompt.replace(previous_prompt, state['effective_prompt'], 1).strip('；')
-    else:
-        merged_prompt = '；'.join(dict.fromkeys(part for part in (existing_prompt, state['effective_prompt']) if part))
-    photo['plan'] = {**photo['plan'], 'user_prompt': merged_prompt[:USER_PROMPT_MAX_LEN]}
-    store.save_photo_plan(user, session_id, photo_id, photo['plan'])
-    store.save_photo_state(user, session_id, photo)
-    store.append_messages(user, session_id, [store.make_message('user', i18n.tr('不在已辨識的人物清單中') if outside else i18n.tr('指定了這筆需求的對象'),
-        card={'type': 'ask', 'photo_id': photo_id, 'subject_indices': indices}),
-        store.make_message('assistant', card={'type': 'llm_reply', 'photo_id': photo_id,
-            'text': state['question']['text'] if state['question'] else state['reply'],
-            'target_question': copy.deepcopy(state['question']), 'question_revision': state['revision']})])
-    return jsonify({'conversation': state})
 
 
 # --- typed questions ---------------------------------------------------------
@@ -2364,9 +1574,6 @@ def confirm_photo_conversation(session_id, photo_id):
 def _ask_render(user, session_id, photo):
     """A typed 一鍵美化: render now, or queue it while the photo is analyzing,
     as the render route would. Returns the messages that follow the reply."""
-    problem = _conversation_render_problem(photo)
-    if problem:
-        return [_confirmation_notice(photo, problem)]
     if photo["status"] == "ready" and _needs_analysis(photo):
         _start_analysis(user, session_id, photo, "render")
     if photo["status"] in ("analyzing", "reframing") and not photo["queued_render"]:
@@ -3004,7 +2211,7 @@ def _start_face_wishes(photo, analysis):
     running alongside the opening brief; None when there is nothing to find."""
     plan = photo["plan"]
     prompt = plan.get("user_prompt") or ""
-    if not prompt.strip() or plan.get("face_requests") or photo.get("preview_conversation"):
+    if not prompt.strip() or plan.get("face_requests"):
         return None
     # Pool threads do not inherit the caller's language: hand it over.
     return _FACE_WISH_POOL.submit(contextvars.copy_context().run, chat_queue.run,
@@ -3219,27 +2426,6 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
     messages = [store.make_message("assistant", card={
         "type": "analysis_ready", "photo_id": photo["photo_id"], **({"skipped": True} if skipped else {})})]
     if analysis is not None and not skipped:
-        _adopt_request_checks(photo, analysis)
-        state = photo.get('preview_conversation')
-        if state and not state.get('people'):
-            refs = analysis.get('_local_face_boxes') or []
-            state['people'] = [{ 'preview_person_id': subject.get('preview_person_id') or f'formal_{i}',
-                'identity_source': 'formal_analysis', 'subject_index': i, 'label': subject.get('label') or i18n.tr('人物 {n}', n=i + 1),
-                'box': refs[i].get('box', {'x': 0, 'y': 0, 'w': 1, 'h': 1}) if i < len(refs) else {'x': 0, 'y': 0, 'w': 1, 'h': 1}}
-                for i, subject in enumerate(analysis.get('subjects') or []) if subject.get('is_person', True)]
-            photo['preview_conversation'] = state
-            _refresh_visual_question(photo)
-        if state:
-            snapshot = _render_without_guessed_targets(photo)
-            if snapshot is not photo:
-                photo['plan']['user_prompt'] = snapshot['plan']['user_prompt']
-                photo['deferred_request_texts'] = {c['wish_id']:c['text']
-                    for c in conversation_domain.pending(state)}
-                store.save_photo_plan(user, session_id, photo['photo_id'], photo['plan'])
-        if state and state.get('question') and not (queued and queued.get('defer_unconfirmed')):
-            messages.append(store.make_message('assistant', card={'type': 'llm_reply',
-                'photo_id': photo['photo_id'], 'text': state['question']['text'],
-                'target_question': copy.deepcopy(state['question']), 'question_revision': state['revision']}))
         # Before the queued render below reads the plan.
         try:
             _name_prompt_faces(user, session_id, photo, analysis)
@@ -3295,7 +2481,6 @@ def _advance_reanalysis(user, session_id, photo, job):
         return [store.make_message("assistant", card={
             "type": "analysis_failed", "photo_id": photo_id, "error": photo["error"],
             "error_code": job.get("error_code"), "queued_render_cancelled": bool(queued), "reanalysis": True})]
-    _adopt_request_checks(photo, analysis)
     photo["analysis_skipped"] = False
     photo["planned_ratio"] = _planned_for(analysis)
     photo["error"] = None
@@ -3387,9 +2572,6 @@ def _advance_rendering(user, session_id, photo, statuses):
     store.save_photo_state(user, session_id, photo)
     # A 長寬比 changed while rendering is re-planned now.
     _reframe_if_needed(user, session_id, photo)
-    state = photo.get('preview_conversation')
-    if pending.get('deferred_confirmation') and state and state.get('question'):
-        messages.append(_confirmation_notice(photo, ('unresolved_people', state['question']['text'], 409)))
     return messages
 
 

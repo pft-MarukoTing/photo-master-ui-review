@@ -14,7 +14,7 @@ minutes.
 import os
 
 from engine_result_code import RESULT_INVALID_PARAMETER
-from photo_agent import chat_assistant, i18n, preview_conversation
+from photo_agent import chat_assistant, i18n
 
 # Read by both sides, so the backend and the worker agree on it from the
 # shared .env.default alone: the job queue's name with ":chat" on the end,
@@ -36,7 +36,7 @@ STAGE_NOTE = "chat_note"
 # The face-symmetry wishes 個人化需求 got before the analysis named anyone:
 # chat_assistant.find_face_wishes.
 STAGE_FACE_WISHES = "chat_face_wishes"
-STAGES = (STAGE_ASK, STAGE_REVIEW, STAGE_OPENING, STAGE_NOTE, STAGE_FACE_WISHES, preview_conversation.STAGE)
+STAGES = (STAGE_ASK, STAGE_REVIEW, STAGE_OPENING, STAGE_NOTE, STAGE_FACE_WISHES)
 
 
 def cache_note(spent):
@@ -70,14 +70,6 @@ def run(params, spent=None):
 
 def _run(params):
     stage = params.get("stage")
-    if stage == preview_conversation.STAGE:
-        if params.get("mode") == "target_action":
-            return preview_conversation.generate_target_action(params)
-        if params.get("mode") == "action":
-            return preview_conversation.generate_action_answer(params)
-        if params.get("mode") == "confirmation":
-            return preview_conversation.generate_confirmation(params)
-        return (preview_conversation.generate_revision(params) if params.get("mode") == "revision" else preview_conversation.generate(params))
     if stage == STAGE_ASK:
         return chat_assistant.ask(
             params.get("analysis"), params["plan"], params["status"], params["history"],

@@ -561,10 +561,6 @@ def finish_stage(
                                      # actually ran (see pre_edit_image_b64 below)
     }
     """
-    from photo_agent.chat_analysis import blocking
-    unresolved_requests = blocking(analysis)
-    if unresolved_requests:
-        raise ValueError(unresolved_requests[0]['question'])
     analysis = sanitize_body_reshape_analysis(analysis)
     if not body_reshape_enabled():
         # finish_stage may be called with a saved analysis created before the

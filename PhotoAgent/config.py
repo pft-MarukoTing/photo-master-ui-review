@@ -14,19 +14,12 @@ ENABLE_BODY_RESHAPE = False
 # Enables Chat previews and ensures Stage 2.0 precedes every analyze_stage call.
 # Ready snapshots are reused; disabling retains the legacy Chat/analyze paths.
 ENABLE_CHAT_SUBJECT_PREVIEW = True
-# Enable the Preview Conversation flow (introduction and request matching).
-# Off keeps Stage 2.0/avatars, and uses chat_review plus the legacy geometry
-# handoff for requests; no chat_preview_conversation call is made by this flow.
-ENABLE_CHAT_PREVIEW_INTRODUCTION = False
 # Continue dialogue only after chat_ask contract validation and repair fail.
 # Off preserves the existing terminal failure/retry behavior.
 ENABLE_CHAT_PATCH_CONTINUE = True
 # Maximum characters per ordinary Chat option, shared with history validation.
 # Options exceeding this bound are dropped, never truncated.
 CHAT_OPTION_MAX_LEN = 200
-# Optional extra visual pass for Chat requests. Enable during rollout to
-# clarify absent/uncertain edit targets; no extra call when disabled or empty.
-ENABLE_CHAT_REQUEST_FEASIBILITY = False
 # 「僅依個人化需求」(overwrite_prompt) edits also get a light whole-photo retouch
 # from the picked preset after the request. Off sends the request (and styles) alone.
 ENABLE_OVERWRITE_BASELINE_RETOUCH = False

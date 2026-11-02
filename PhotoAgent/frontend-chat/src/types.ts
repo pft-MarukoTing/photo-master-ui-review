@@ -53,7 +53,6 @@ export interface ActiveVersion {
 }
 
 export interface Photo {
-  preview_conversation?: import("./preview-conversation").PreviewConversationResult;
   photo_id: string;
   filename?: string;
   case_id?: string;
@@ -155,7 +154,7 @@ export interface Choice {
 }
 
 export interface Capabilities {
-  features?: { subject_preview?: boolean; preview_introduction?: boolean; subject_preview_format_version?: number; low_confidence_candidates?: boolean; render_from_version?: boolean };
+  features?: { subject_preview?: boolean; subject_preview_format_version?: number; low_confidence_candidates?: boolean; render_from_version?: boolean };
   render: {
     analysis_models: { id: string; label: string }[];
     aspect_ratios: Choice[];

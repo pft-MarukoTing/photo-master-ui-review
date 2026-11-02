@@ -325,7 +325,6 @@ function ReportBody(props: {
       onSelectVersion={(v: Version) => props.onSelect(v.version_id)}
       onRender={() => {}}
       onFile={() => {}}
-      onConfirmPeople={noop}
       onAsk={noop}
       onAnswerWaiting={() => {}}
       onPatch={noop}
