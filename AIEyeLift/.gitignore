@@ -1,0 +1,22 @@
+# Test photos, generated pairs and run outputs stay out of git (the split lists are kept).
+data/*
+!data/splits/
+results/
+# LoRA training pairs are crops of the test photos; the 2:1-crop run was abandoned
+training/lora_eyelift/
+training/lora_eyelift_sq/train/
+training/lora_eyelift_sq/test/
+# Earlier DEWE + CoordFill inpainting baseline: only the face/landmark code and models used by api/eyes.py are kept
+inpainting/*
+!inpainting/DroopyEyelidUtils/
+!inpainting/models/
+inpainting/models/*
+!inpainting/models/facert_model.onnx
+!inpainting/models/align_weights_3548.onnx
+training/CoordFill/
+# Rejected post-processing experiments (compositing, geometric warp)
+api/compose.py
+api/warp_lift.py
+__pycache__/
+# Slides are 29 MB
+docs/*.pptx
