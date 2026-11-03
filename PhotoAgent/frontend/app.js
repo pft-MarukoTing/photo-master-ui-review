@@ -50,7 +50,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, isGuestUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, closePersonalizePopover, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, syncReframingRatioLock, restoreCompositionState, applyCompositionToRender, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFindingsCardsShown, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, closePersonalizePopover, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, syncReframingRatioLock, restoreCompositionState, applyCompositionToRender, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFindingsCardsShown, setReviewSuggestionsHeld, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -312,6 +312,12 @@
   // and switching back to 接著這張調整 on the same version picks it up again.
   // { owner, versionId, prefill, applied }.
   let panelContinuationStash = null;
+  // The other way round: what 從原圖美化 had besides the request (修圖建議
+  // checks, 人像 picks, 僅依需求修改, the model…) when a version was picked as
+  // the base, put back once the panel is on 原圖 again. For the case on
+  // screen (historyViewToken), whichever version that then is: the analysis
+  // those picks are on is the case's. { token, review } in readReviewState's terms.
+  let panelOriginStash = null;
   // The version the revise panel was last painted for, and the base it
   // opens on there: a version made from another one carries on from itself
   // (從第 N 版美化), any other starts from the original (defaultRun null).
@@ -1237,10 +1243,10 @@
   // The unsent edits as the request the chat keeps across a switch -- the
   // 個人化需求 and the styles moved off default -- and the names of the rest.
   function splitUnsentReview() {
-    const { user_prompt: text = "", style_options: style = {}, overwrite_prompt: _o, ...rest } = readUnsentReview() || {};
+    const { user_prompt: text = "", style_options: style = {}, ...rest } = readUnsentReview() || {};
     return {
       request: { text, style_options: Object.fromEntries(Object.entries(style).filter(([, v]) => v && v !== "default")) },
-      lost: Object.keys(rest),
+      rest,
     };
   }
 
@@ -1318,7 +1324,12 @@
       if (run) Promise.resolve().then(() => enterPanelContinuation(run, prefill));
       return;
     }
+    applyReviewState(handoff);
+  }
 
+  // Review fields in readReviewState's terms onto the panel; a field left
+  // out keeps what is there.
+  function applyReviewState(handoff) {
     const model = findModelQualityOptionByPair(handoff.image_model, handoff.image_quality);
     if (model && model.model === handoff.image_model && model.quality === handoff.image_quality) {
       applyModelQualityChange(model.value);
@@ -1860,10 +1871,10 @@
     if (btn.hidden) closeApCaseSettingsModal();
     syncApContinueBase();
     // 幫我分析 runs ahead of a 美化, so only beside one -- and only while the
-    // case still has nothing but 「只照需求改」's stub analysis.
+    // case still has nothing but 「只照需求改」's stub analysis. On a version
+    // base too: it analyzes the original photo (analyzeJobId) all the same.
     if (els.apSkipAnalyzeBtn) {
-      els.apSkipAnalyzeBtn.hidden = !(runVisible && singleFlowState?.analysis?._skipped_analysis)
-        || !!activeContinuation();
+      els.apSkipAnalyzeBtn.hidden = !(runVisible && caseUnanalyzed());
     }
     const dirty = !!apCaseSettingsBaseline && apCaseSettingsBaseline !== snapshotApCaseSettings();
     if (els.apCaseSettingsDirty) els.apCaseSettingsDirty.hidden = !dirty;
@@ -2571,7 +2582,7 @@
   // combined job (onContinue in waitForInlineAnalysisAction).
   async function analyzeSkippedCase() {
     const state = singleFlowState;
-    if (!state?.analysis?._skipped_analysis || !state.analyzeJobId) return;
+    if (!caseUnanalyzed() || !state.analyzeJobId) return;
     const confirmed = await showConfirmModal(
       tr("AI 會分析整張照片，整理出修圖建議；你寫的個人化需求會保留。要繼續嗎？"),
       { confirmLabel: tr("開始分析"), danger: false, costSteps: [analysisPreflightStep()] }
@@ -2580,6 +2591,7 @@
     // The case on screen, not singleFlowState: stepping to another version
     // replaces that object but keeps the case, and the result still belongs.
     const myToken = historyViewToken;
+    const continuing = !!activeContinuation();
     setSkipHintBusy(true);
     hideError();
     const restoreCanvas = showSkippedCaseAnalyzing();
@@ -2616,8 +2628,29 @@
     // is a new version, so the strip comes up with it at the end even for a
     // case that had only one edit to show before.
     if (landed && historyViewToken === myToken) {
+      if (continuing) showAnalysisFromOriginal();
       refreshVersionsAfterEdit({ pendingAnalysis: true }).catch(() => {});
     }
+  }
+
+  // 幫我分析 asked on a version base: the analysis is the photo's, so the
+  // panel moves to 從原圖美化 to show it, carrying the request over the way
+  // switching there by hand does (exitPanelContinuation).
+  function showAnalysisFromOriginal() {
+    const run = singleRuns?.[singleMirrorIndex];
+    if (!run) return;
+    const request = pendingContinuationRequest();
+    applyHistoryVersionContext(run, null);
+    // Asked for, so it is put to use: 僅依需求修改 off, as adoptSkippedCaseAnalysis does.
+    lastSingleSelections = { ...lastSingleSelections, overwritePrompt: false };
+    if (singleFlowState.origin) singleFlowState.origin.selections.overwritePrompt = false;
+    const defaultRun = isContinuationRun(run) && canContinueFromRun(run) ? run : null;
+    panelBase = { owner: singleFlowState, run, defaultRun };
+    panelContinuation = null;
+    panelContinuationStash = isEmptyContinuationRequest(request) ? null
+      : { owner: singleFlowState, versionId: run.versionId, prefill: request };
+    syncVersionStripCurrent();
+    openInlineAnalysisForCurrentContext(true);
   }
 
   // The same 正在分析照片 card (thinking rings + analyze progress feed) a
@@ -2668,6 +2701,9 @@
   function adoptSkippedCaseAnalysis(analysis, jobId) {
     historyCaseAnalysis = analysis;
     historyCaseAnalysisJobId = jobId || null;
+    // On a version base the panel is rebuilt on 原圖 once the canvas is back
+    // (showAnalysisFromOriginal); this one keeps showing the version.
+    if (activeContinuation()) return;
     const userPrompt = els.promptInput?.value || "";
     // renderAnalysisPreview rebuilds the style groups at their defaults.
     const { options: styleOptions } = readStyleSelectionsFromDom();
@@ -2676,7 +2712,7 @@
     setCurrentCaseAnalysisVersion(analysis);
     lastSingleSelections = { ...(lastSingleSelections || {}), userPrompt, overwritePrompt: false };
     renderAnalysisPreview({ analysis, preset: singleFlowState.preset, expanded: true,
-      requestOnly: isContinuationRun(singleRuns?.[singleMirrorIndex]) });
+      requestOnly: isContinuationRun(singleRuns?.[singleMirrorIndex]), versionCard: madeWithoutAnalysis(panelRun()) });
     applyAdvancedOptionsOption(recordAdvancedOptions(singleFlowState.advancedOptions, analysis), "ap");
     applyStyleSelections({ options: styleOptions, recipeChecked: null });
     if (els.promptInput) els.promptInput.value = userPrompt;
@@ -2694,6 +2730,18 @@
   // base: its note in place of 照片總覽, no 人像檢查/畫面建議.
   function isContinuationRun(run) {
     return Boolean(run?.result?.analysis?._continuation) && run.versionNumber != null;
+  }
+
+  // Its own analysis is a stub: an analysis done since is the case's, so its
+  // overview stays the version's card (#ap-skip-hint), not 照片總覽.
+  function madeWithoutAnalysis(run) {
+    return isContinuationRun(run) || Boolean(run?.result?.analysis?._skipped_analysis);
+  }
+
+  // The case has nothing but 「只照需求改」's stub analysis: not this version
+  // alone, which keeps its stub even once another version was analyzed.
+  function caseUnanalyzed() {
+    return Boolean(singleFlowState?.analysis?._skipped_analysis) && !historyCaseAnalysis;
   }
 
   function activeContinuation() {
@@ -2810,14 +2858,12 @@
     // along unchanged, as the chat's does when its base is switched.
     if (!prefill && activeContinuation()) prefill = pendingContinuationRequest();
     // From 從原圖美化: the unsent 個人化需求 and styles come along as the
-    // request, and the model/ratio stay on singleFlowState, so only the
-    // other unsent edits are lost and asked about.
+    // request, and the rest waits for 原圖 to be picked again (panelOriginStash).
     let carried = null;
     if (!activeContinuation() && isReviewDirty()) {
-      const { request, lost } = splitUnsentReview();
+      const { request, rest } = splitUnsentReview();
       carried = request;
-      if (lost.some((k) => !["image_model", "image_quality", "aspect_ratio"].includes(k)) && !(await showConfirmModal(tr("個人化需求和風格會帶過去，其他還沒美化的調整會清掉。確定要接著這張調整嗎？"),
-        { confirmLabel: tr("繼續"), cancelLabel: tr("留在這裡"), danger: false }))) return;
+      panelOriginStash = Object.keys(rest).length ? { token: historyViewToken, review: rest } : null;
     }
     const idx = singleRuns.indexOf(run);
     if (idx < 0) return;
@@ -2855,6 +2901,12 @@
     const { text, style_options: style } = stash.prefill;
     if (text && els.promptInput) els.promptInput.value = text;
     if (Object.keys(style).length) applyStyleSelections({ options: { ...readStyleSelectionsFromDom().options, ...style } });
+  }
+
+  function applyOriginStash() {
+    const stash = panelOriginStash;
+    panelOriginStash = null;
+    if (stash?.token === historyViewToken) applyReviewState(stash.review);
   }
 
   // #ap-continue-base, at the right of the shell's title: which image the
@@ -2989,7 +3041,8 @@
   function paintSkipHint() {
     const run = panelRun();
     const continuation = isContinuationRun(run);
-    const named = run?.versionNumber != null && (continuation || !!activeContinuation());
+    const skipped = Boolean(run?.result?.analysis?._skipped_analysis);
+    const named = run?.versionNumber != null && (continuation || skipped || !!activeContinuation());
     if (els.apSkipHintTitle) {
       els.apSkipHintTitle.textContent = !named ? tr("這張照片沒有做分析")
         : run.versionFrom ? tr("第 {n} 版完成・由第 {m} 版調整", { n: run.versionNumber, m: run.versionFrom })
@@ -2997,9 +3050,20 @@
     }
     if (!els.apSkipHintText) return;
     const request = (run?.versionParams?.user_prompt || "").trim();
-    els.apSkipHintText.textContent = !named ? SKIP_HINT_TEXT
-      : run.versionNote || (request ? tr("依你的需求調整：「{request}」", { request })
-        : continuation ? tr("依你挑的風格調整。") : tr("依 AI 分析的建議美化。"));
+    if (!named) {
+      els.apSkipHintText.textContent = SKIP_HINT_TEXT;
+      return;
+    }
+    let text = run.versionNote || (request ? tr("依你的需求調整：「{request}」", { request })
+      : continuation || skipped ? tr("依你挑的風格調整。") : tr("依 AI 分析的建議美化。"));
+    // The case not analyzed yet: 幫我分析 sits beside 美化 on either base.
+    if (caseUnanalyzed()) {
+      if (!/[。！？.!?]$/.test(text)) text += tr("。@@句尾");
+      text = activeContinuation()
+        ? tr("{text}這張照片還沒分析過。「幫我分析」會分析原圖並整理修圖建議，完成後出發點會換成原圖。", { text })
+        : tr("{text}這張照片還沒分析過。想先看 AI 的修圖建議，請按「幫我分析」；或取消勾選「僅依需求修改」，按「美化」時會一起分析。", { text });
+    }
+    els.apSkipHintText.textContent = text;
   }
 
   function setSkipHintBusy(busy) {
@@ -4511,6 +4575,9 @@
     toggle.disabled = !showTray;
     if (els.promptOverwriteTray) els.promptOverwriteTray.hidden = !showTray;
     if (els.apReviewPanel) els.apReviewPanel.classList.toggle("is-request-only", on);
+    // Made without an analysis and still kept to the request: the case's
+    // suggestions come up only once the box is unticked.
+    setReviewSuggestionsHeld(on && madeWithoutAnalysis(panelRun()));
     if (!showTray || !els.promptOverwriteHint) return;
     els.promptOverwriteHint.textContent = on ? tr("只動你寫到的地方（加上你挑的風格），其他保持原樣。")
       : skippedCaseNeedsAnalysis() ? tr("沒勾的話會整體美化：先分析整張照片，再依照分析結果和你的需求一起修圖。")
@@ -6991,7 +7058,8 @@
     const origin = !continuing && singleFlowState.origin?.run === panelRun() ? singleFlowState.origin.selections : null;
     const selections = origin || lastSingleSelections;
     renderAnalysisPreview({ analysis: singleFlowState.analysis, preset: singleFlowState.preset, expanded: true,
-      requestOnly: !!continuing || (!origin && isContinuationRun(panelRun())) });
+      requestOnly: !!continuing || (!origin && isContinuationRun(panelRun())),
+      versionCard: madeWithoutAnalysis(panelRun()) });
     paintSkipHint();
     // Paint this record's global 人像修正設定 independently before restoring any
     // per-person choices. Pose below changes only the latter.
@@ -7045,6 +7113,7 @@
       // 從原圖美化, read as nothing changed (no 調整中 tile).
       markReviewBaseline();
       applyPendingModeHandoff();
+      applyOriginStash();
       applyContinuationStash();
     }
     updateInlineAnalysisContinueBtnState();
@@ -7056,6 +7125,7 @@
     if (action !== "cancel") {
       reviewBaseline = null; // sent with this 美化
       panelContinuationStash = null;
+      panelOriginStash = null;
     }
     // Closing straight into #canvas-loading (below) rather than back onto
     // the photo -- skip .results-canvas-row's panel-close animation (styles.
@@ -10869,6 +10939,15 @@
     if (base?.status === "unloaded") await loadHistoryRun(runs, base);
   }
 
+  // A job on the case's original photo for anything that works off the
+  // photo (幫我分析, 從原圖美化): a continuation's own job edits the version
+  // it was made from. Any version made from the original serves.
+  function originJobId(run) {
+    if (!run?.versionParams?.source_result) return run?.jobId || null;
+    const base = continuationBaseRun(run) || (singleRuns || []).find((r) => r.jobId && !r.versionParams?.source_result);
+    return base?.jobId || run.jobId;
+  }
+
   // {analysis, jobId} of that version, or null when it ran 只照需求改 itself.
   function continuationBaseAnalysis(run) {
     const base = continuationBaseRun(run);
@@ -10897,10 +10976,10 @@
     // 只照需求改 are how a continuation renders, no choice of the user's for
     // the photo: those are the version it was made from.
     const caseParams = continuation ? continuationSourceParams(run) : params;
-    // Analyzed since: the next 美化 works off the full analysis, not just
-    // the 個人化需求 the version was made with.
+    // Analyzed since, on a version made with 只照需求改: still 僅依需求修改,
+    // as it was made -- unticking it is what brings the analysis in.
     const { analysis: restoredAnalysis, selections } = restoreReviseSelections(
-      attached || run.result.analysis, params.user_prompt, caseParams.overwrite_prompt && !attached);
+      attached || run.result.analysis, params.user_prompt, caseParams.overwrite_prompt || (!continuation && !!attached));
     // 從原圖美化 off this version (#ap-continue-base on 原圖): the version
     // the chain started from's own request and styles, not this one's --
     // like the chat's plan, which a continuation never touches.
@@ -10917,7 +10996,7 @@
     }
     singleFlowState = {
       analysis: restoredAnalysis,
-      analyzeJobId: attached && continuation && caseAnalysis.jobId ? caseAnalysis.jobId : run.jobId,
+      analyzeJobId: attached && continuation && caseAnalysis.jobId ? caseAnalysis.jobId : originJobId(run),
       presetKey: params.preset || "natural",
       preset: presets[params.preset] || presets.natural,
       imageQuality: params.image_quality || extraInfo.image_quality || "medium",
@@ -10964,9 +11043,11 @@
   // The analysis a 「只照需求改」 case got afterwards (from 自訂模式's
   // 「幫我分析」 or the chat's), which get_history hands over as
   // analysis_job_id. One still running or failed reads as none: the case
-  // opens on its stub and 幫我分析 is offered again.
-  async function fetchAttachedCaseAnalysis(job, runs) {
-    if (!job.analysis_job_id || !runs.some((run) => run.result?.analysis?._skipped_analysis)) return null;
+  // opens on its stub and 幫我分析 is offered again. Fetched whenever the
+  // case has one: only the newest version comes loaded, and it may be the
+  // analyzed one while the 只照需求改 ones before it are not yet.
+  async function fetchAttachedCaseAnalysis(job) {
+    if (!job.analysis_job_id) return null;
     try {
       return (await getAnalyzeResult(job.analysis_job_id)).result.analysis || null;
     } catch {
@@ -11005,7 +11086,7 @@
     // equivalent of applyHistoryVersionContext and would show older versions
     // without ever re-pointing the page at them.
     const runs = await fetchAllHistoryRuns(job, { allVersions: job.path === "local" });
-    const attachedAnalysis = job.path === "local" ? await fetchAttachedCaseAnalysis(job, runs) : null;
+    const attachedAnalysis = job.path === "local" ? await fetchAttachedCaseAnalysis(job) : null;
     // Opens on the newest version (see below); a continuation reads its
     // case analysis off the version its chain started from.
     if (job.path === "local" && !attachedAnalysis && runs.length) {
@@ -12601,6 +12682,7 @@
     if (singleRuns?.[singleMirrorIndex] !== run) return;
     panelContinuation = null;
     panelContinuationStash = null;
+    panelOriginStash = null;
     panelBase = null;
     await loadContinuationBase(singleRuns, run);
     applyHistoryVersionContext(run, null);

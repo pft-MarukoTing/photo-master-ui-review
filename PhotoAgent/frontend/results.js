@@ -2283,6 +2283,11 @@ window.PhotoAgentResults = (() => {
   // made from another one (接著這張調整), so its panel reads as a request-only
   // version even when the case has an analysis -- no 人像檢查/畫面建議.
   let reviewRequestOnly = false;
+  // Set by setReviewSuggestionsHeld: a version made without an analysis,
+  // still on 僅依需求修改 as it was made -- the case's analysis is there, but
+  // 人像檢查/畫面建議 only come up once the box is unticked.
+  let reviewSuggestionsHeld = false;
+  let reviewSkipped = false;
 
   // Every locally-detected face (openai_client.analyze_photo's
   // _local_face_boxes), not just the <=3 that got a zoomed crop sent to the
@@ -2428,8 +2433,9 @@ window.PhotoAgentResults = (() => {
   function renderFaceReviewCards() {
     const tabs = els.apFaceTabs;
     if (!tabs) return;
-    if (els.apReviewTabFace) els.apReviewTabFace.hidden = reviewRequestOnly || !faceThumbEntries.length;
-    if (reviewRequestOnly && activeReviewTab === "face") activeReviewTab = "prompt";
+    const held = reviewRequestOnly || reviewSuggestionsHeld;
+    if (els.apReviewTabFace) els.apReviewTabFace.hidden = held || !faceThumbEntries.length;
+    if (held && activeReviewTab === "face") activeReviewTab = "prompt";
     if (!faceThumbEntries.length) {
       tabs.innerHTML = "";
       if (els.apFaceDetail) els.apFaceDetail.innerHTML = "";
@@ -2539,6 +2545,16 @@ window.PhotoAgentResults = (() => {
     if (els.apReviewPrompt) els.apReviewPrompt.hidden = activeReviewTab !== "prompt";
     // For #ap-request-only-note, which shows over the tabs 僅依需求修改 leaves out.
     if (els.apReviewPanel) els.apReviewPanel.dataset.tab = activeReviewTab;
+  }
+
+  function setReviewSuggestionsHeld(held) {
+    if (reviewSuggestionsHeld === held) return;
+    reviewSuggestionsHeld = held;
+    if (held && (activeReviewTab === "recipe" || activeReviewTab === "findings")) activeReviewTab = "prompt";
+    if (els.apReviewTabRecipe) els.apReviewTabRecipe.hidden = reviewSkipped || held;
+    renderFindingsCards(findingsAnalysis);
+    renderFaceReviewCards();
+    applyActiveReviewTab();
   }
 
   // If a tab is only partly visible at the edge of a horizontal scrolling
@@ -3477,7 +3493,7 @@ window.PhotoAgentResults = (() => {
   // renderFaceReviewCards, called both from here and later re-renders (e.g.
   // applyBatchReviewSelections), can read the same setting without it being
   // re-threaded through every call.
-  function renderAnalysisPreview({ analysis, preset, expanded = true, requestOnly = false }) {
+  function renderAnalysisPreview({ analysis, preset, expanded = true, requestOnly = false, versionCard = false }) {
     // This is a full render for a newly selected photo/RUN. The overview's
     // disclosure state is view-local, so it must not carry an expanded card
     // (or that card's scroll position) over from the previously shown image.
@@ -3496,10 +3512,14 @@ window.PhotoAgentResults = (() => {
     // part that still applies. 風格調整 stays: the picked style is sent after
     // the user's request. (人像檢查 hides itself: the stub has no faces.)
     // A requestOnly version reads the same way, analysis or not.
+    // versionCard: the version was made without one, so even with the
+    // case's analysis in the panel its overview is the version's card.
     reviewRequestOnly = requestOnly;
+    reviewSuggestionsHeld = false;
     const skipped = requestOnly || Boolean(analysis?._skipped_analysis);
-    if (els.apSkipHint) els.apSkipHint.hidden = !skipped;
-    if (els.apPhotoSummary) els.apPhotoSummary.hidden = skipped;
+    reviewSkipped = skipped;
+    if (els.apSkipHint) els.apSkipHint.hidden = !(skipped || versionCard);
+    if (els.apPhotoSummary) els.apPhotoSummary.hidden = skipped || versionCard;
     if (els.apReviewTabRecipe) els.apReviewTabRecipe.hidden = skipped;
     if (els.apReviewTabStyle) els.apReviewTabStyle.hidden = false;
     // The shell's heading speaks of AI suggestions this case doesn't have.
@@ -3605,9 +3625,10 @@ window.PhotoAgentResults = (() => {
   }
   function renderFindingsCards(analysis) {
     findingsAnalysis = analysis;
-    const cards = findingsCardsShown && Array.isArray(analysis?.findings?.cards) ? analysis.findings.cards : [];
+    const cards = findingsCardsShown && !reviewSuggestionsHeld && Array.isArray(analysis?.findings?.cards)
+      ? analysis.findings.cards : [];
     if (els.apReviewTabFindings) els.apReviewTabFindings.hidden = !cards.length;
-    if (!cards.length && activeReviewTab === "findings") activeReviewTab = "recipe";
+    if (!cards.length && activeReviewTab === "findings") activeReviewTab = reviewSuggestionsHeld ? "prompt" : "recipe";
     if (!els.apFindingsCards) return;
     els.apFindingsCards.innerHTML = "";
     if (!cards.length) return;
@@ -3668,7 +3689,7 @@ window.PhotoAgentResults = (() => {
     getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock, resetFaceReviewState,
     buildPlannedEditMessages,
     setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled,
-    renderFaceReviewCards, setFindingsCardsShown,
+    renderFaceReviewCards, setFindingsCardsShown, setReviewSuggestionsHeld,
     syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion
   };
 })();
