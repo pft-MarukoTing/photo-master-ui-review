@@ -3701,6 +3701,16 @@
     const panelSummary = panel.querySelector(":scope > summary");
     if (shellSummary) new ResizeObserver(syncAnalysisPanelHeights).observe(shellSummary);
     if (panelSummary) new ResizeObserver(syncAnalysisPanelHeights).observe(panelSummary);
+    // Shell's siblings (#ap-skip-hint/#ap-photo-summary above it, the Run
+    // row below) share its flex column under side-panel-layout, so one of
+    // them showing up or re-wrapping its text shrinks shell without any
+    // summary or the viewport changing -- the inner heights stayed stale and
+    // the panel's bottom border got clipped. None of them size off shell,
+    // so watching them can't loop back the way watching shell itself did.
+    const siblingObserver = new ResizeObserver(syncAnalysisPanelHeights);
+    for (const sibling of shell.parentElement?.children || []) {
+      if (sibling !== shell) siblingObserver.observe(sibling);
+    }
     window.addEventListener("resize", syncAnalysisPanelHeights);
     syncAnalysisPanelHeights();
   })();
