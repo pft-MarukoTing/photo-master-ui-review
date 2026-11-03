@@ -12,13 +12,6 @@ CATEGORIES = ("light_color", "background", "portrait", "clarity", "composition")
 MODEL_CATEGORIES = tuple(category for category in CATEGORIES if category != "portrait")
 RATINGS = ("good", "could_be_better", "needs_work")
 
-CATEGORY_DEFINITIONS = {
-    "light_color": "brightness, shadows, highlights, contrast, depth, white balance, color cast, saturation, and skin tone",
-    "background": "elements that compete with the subject: clutter, passers-by, objects to remove or tone down",
-    "clarity": "focus, sharpness, noise, and fine detail",
-    "composition": "crop, framing, output aspect ratio, tilt, and perspective",
-}
-
 _AXIS_CATEGORY = {
     "exposure": "light_color", "shadow": "light_color", "highlight": "light_color", "contrast": "light_color",
     "white_balance": "light_color", "saturation": "light_color", "skin": "light_color",
@@ -61,6 +54,15 @@ _PORTRAIT_KINDS = {
 }
 # The lens item comes from the portrait-QC pass, so its finding is written here rather than by a model.
 LENS_FINDING = "偵測到有人物在畫面邊緣被廣角拉寬。"
+# A card's finding when the model wrote none that fits its rating.
+GOOD_FALLBACK = {
+    "light_color": "光線與色彩表現自然。", "background": "背景沒有搶走主體的元素。",
+    "clarity": "主體細節清楚。", "composition": "構圖平衡穩定。",
+}
+PROBLEM_FALLBACK = {
+    "light_color": "光線或色彩還有可以改善的地方。", "background": "背景有分散注意力的元素。",
+    "clarity": "細節還可以更清楚。", "composition": "構圖還可以更好。",
+}
 # The food look item is a suggested style on this page; other screens keep its own prefix.
 FOOD_LOOK_LABEL = "建議風格："
 
@@ -167,9 +169,12 @@ def build_findings(analysis, model_cards=None, assignment=None, source="fallback
         # The rating follows the items: no items is good, and items are never good.
         rating = ("could_be_better" if card["rating"] in (None, "good") else card["rating"]) if card["items"] else "good"
         adjusted = card["rating"] is not None and rating != card["rating"]
-        if adjusted and rating == "good":
-            # The written finding describes a problem nothing addresses.
-            card["finding"] = ""
+        if category in MODEL_CATEGORIES:
+            # A finding written for the other kind of rating would contradict the card.
+            if rating == "good" and (adjusted or not card["finding"]):
+                card["finding"] = i18n.tr(GOOD_FALLBACK[category])
+            elif rating != "good" and (card["rating"] == "good" or not card["finding"]):
+                card["finding"] = i18n.tr(PROBLEM_FALLBACK[category])
         if lens:
             card["items"] = card["items"] + lens
             lens_finding = i18n.tr(LENS_FINDING)
@@ -177,3 +182,38 @@ def build_findings(analysis, model_cards=None, assignment=None, source="fallback
             rating = "could_be_better" if rating == "good" else rating
         cards.append({"category": category, **card, "rating": rating, "rating_adjusted": adjusted})
     return {"source": source, "cards": cards, "item_count": sum(len(card["items"]) for card in cards)}
+
+
+def take_review_findings(overall):
+    """Moves Call A's correction_aspect and review_findings into _review_findings, keyed by plan text, since later
+    steps may add, drop, or rewrite review items."""
+    aspects = overall.pop("correction_aspect", None) or []
+    written = overall.pop("review_findings", None) or []
+    cards = {}
+    for entry in written:
+        if isinstance(entry, dict) and entry.get("aspect") in MODEL_CATEGORIES and entry["aspect"] not in cards:
+            cards[entry["aspect"]] = {"rating": entry.get("rating"), "finding": entry.get("finding")}
+    plans = dict(zip((str(plan) for plan in overall.get("correction_plan") or []), aspects))
+    overall["_review_findings"] = {"cards": cards, "plans": plans, "written": [
+        {"aspect": entry.get("aspect"), "rating": entry.get("rating")} for entry in written if isinstance(entry, dict)]}
+    return overall
+
+
+def findings_from_review(analysis):
+    """The cards for an analysis whose Call A tagged each item with an aspect and wrote the aspects' findings."""
+    summary = analysis.get("_review_findings")
+    if not isinstance(summary, dict):
+        return build_findings(analysis)
+    plans = summary.get("plans") or {}
+    cards = summary.get("cards") or {}
+    axes = list(analysis.get("correction_axes") or [])
+    assignment = {}
+    for index, plan in enumerate(analysis.get("correction_plan") or []):
+        if plan not in plans:
+            continue
+        aspect = plans[plan]
+        if (cards.get(aspect) or {}).get("rating") == "good":
+            # The model judged this aspect fine, so an item tagged to it more likely belongs where its axes point.
+            aspect = fallback_category(axes[index] if index < len(axes) else [])
+        assignment[index] = aspect
+    return build_findings(analysis, cards, assignment, source="call_a")

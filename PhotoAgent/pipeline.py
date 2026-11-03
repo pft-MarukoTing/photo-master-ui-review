@@ -46,7 +46,7 @@ from photo_agent.analysis_skills import ANALYSIS_SKILLS
 from photo_agent import i18n
 from photo_agent.branch_skills import BRANCH_SKILLS, branch_named
 from photo_agent.photo_router import ROUTER_INSTRUCTION, run_call0, select_branch
-from photo_agent.findings_summary import attach_findings, start_summary
+from photo_agent.findings import findings_from_review
 from photo_agent.edit_prompt import overwrites_prompt
 from photo_agent import capabilities
 from photo_agent.editor_skills import EDITOR_SKILLS
@@ -262,8 +262,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     Chat may supply validated read-only intent before analysis; observations
     remain factual and separate from the desired edit. Legacy callers omit it.
 
-    findings_cards: also write analysis["findings"], the per-aspect review cards. Its summary call starts as soon as
-    Call A returns and runs alongside the portrait passes.
+    findings_cards: also write analysis["findings"], the per-aspect review cards, from what the analysis wrote for them.
 
     advanced_options: the Advanced Settings toggles dict (e.g.
     {"eye_closed_detection": False}). These do not change the one-time
@@ -302,16 +301,6 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
         if route["state"] == "ready":
             preview_args["photo_facts"] = route
     branch = select_branch(route, BRANCH_SKILLS) if route and route["state"] == "ready" else None
-    pending_summary = []
-
-    def summary_hook(overall):
-        if not findings_cards:
-            return
-        try:
-            pending_summary.append(start_summary(image_bytes, overall))
-        except Exception:
-            logger.exception("Findings summary could not start after Call A; it runs after the analysis instead")
-
     t0 = time.time()
     if branch is not None:
         logger.info("Step 2: %s branch replaces Call A", branch.name)
@@ -320,8 +309,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
         for skill in ANALYSIS_SKILLS:
             analysis = skill.skip(analysis)
     else:
-        analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options, analysis_model=analysis_model,
-                                              after_call_a=summary_hook, **preview_args)
+        analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options, analysis_model=analysis_model, **preview_args)
     analysis = strip_dedicated_route_items(sanitize_body_reshape_analysis(analysis))
     if not body_reshape_enabled():
         # Keep the stage boundary clean even when an alternate analyzer or a
@@ -389,7 +377,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # re-analyzing the photo.
     analysis["_advanced_options"] = dict(advanced_options or {})
     if findings_cards:
-        analysis = attach_findings(image_bytes, analysis, pending_summary[0] if pending_summary else None)
+        analysis["findings"] = findings_from_review(analysis)
     # Stamped so a history item resumed under a later app version (see
     # backend/routes/api.py's continue_job) can tell which analyze_stage
     # shape produced it -- see compatibility_version.py for how that's read back.

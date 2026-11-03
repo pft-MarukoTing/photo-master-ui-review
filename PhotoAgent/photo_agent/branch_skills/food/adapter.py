@@ -16,6 +16,7 @@ LOOK_DECLINED = (
     "only where they apply."
 )
 ALIGNMENT_DECLINED = "保留原圖的傾斜與透視。"
+ITEM_ASPECT = {"reframe": "composition", "alignment": "composition", "distraction": "background", "shadow": "light_color"}
 _FULL_FRAME = 0.965
 
 
@@ -108,6 +109,8 @@ def to_analysis(result, photo_facts, image_size):
     """The shared analysis for one food-branch result; result is kept whole under food_branch."""
     result = normalize(copy.deepcopy(result))
     analysis = _empty_like(ANALYSIS_RESPONSE_SCHEMA_OVERALL["schema"])
+    analysis.pop("correction_aspect")
+    analysis.pop("review_findings")
     hero = _hero(result)
     keep = result["framing"]["keep_in_frame"] or ([{"label": hero["label"], "box": hero["box"]}] if hero else [])
     look_recipe = result["look_recipe"]
@@ -137,6 +140,13 @@ def to_analysis(result, photo_facts, image_size):
         **framing_fields({**result["framing"], "keep_in_frame": keep}, hero, image_size),
     )
     analysis["subject_extent_box"] = None
+    written = result.get("review_findings") or []
+    analysis["_review_findings"] = {
+        "cards": {entry["aspect"]: {"rating": entry["rating"], "finding": entry["finding"]} for entry in reversed(written)},
+        "plans": {result["edit_brief"]: "light_color",
+                  **{item["plan"]: ITEM_ASPECT[item["kind"]] for item in result["review_items"]}},
+        "written": [{"aspect": entry["aspect"], "rating": entry["rating"]} for entry in written],
+    }
     analysis["analysis_branch"] = BRANCH
     analysis["food_branch"] = result
     return analysis

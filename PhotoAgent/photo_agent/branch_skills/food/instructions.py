@@ -3,7 +3,7 @@
 from photo_agent import i18n
 from prompts import (
     _BOX_SCHEMA, _canvas_shape_difference, _cross_direction_retained, _schema_array_of, _schema_boolean,
-    _schema_enum, _schema_object, _schema_string, expand_permitted,
+    _schema_enum, _schema_object, _schema_string, expand_permitted, REVIEW_ASPECTS,
 )
 
 COMPOSITIONS = (
@@ -56,9 +56,12 @@ _STEP_SHADOWS = """6. Shadows: judge every shadow and dark area by what it does 
 
 _STEP_REVIEW = """7. review_items: a reframe item when the frame changes, an alignment item when step 4 calls for one, distraction items for removals, and a shadow item for shadows. Each has plan (the editor's instruction, written as the finished state), recipe (the one-line user-facing version, starting with its kind's prefix: 重新構圖：／水平／透視校正：／移除干擾物：／改善陰影：), and inverse (what stays exactly as captured if the user declines this item: that region and property). Fewer, coherent changes look more natural than many patches; leave out what the photo does not need. issues then names, most important first, the two to six problems in the capture this plan fixes, the look included: each one short sentence saying what is wrong and where."""
 
+_STEP_FINDINGS = """8. review_findings, written last, summarises the settled plan for the photo's owner and never adds, drops, or changes an item. Write one entry for each of the four aspects; each aspect holds these items: light_color the finished look and the shadow item, background the distraction items, clarity none (focus, sharpness, and fine detail), composition the reframe and alignment items. An aspect with no item is good, and its finding names what already works there. For an aspect with items, rating judges how much the capture holds the photo back in that aspect, not how large the edit is: could_be_better for a weakness noticed on a closer look, needs_work for a problem that hurts the photo at first glance; its finding names that problem and where it is. Each finding is one short plain sentence, with no numbers or editing terms, and does not say what will be done."""
+
 ANALYSIS_INSTRUCTION = (
     _PERSONA + "\n\n" + _OUTPUT_RULES + "\n\n## How to decide\n\n"
-    + "\n\n".join((_STEP_READ, _STEP_LOOK, _STEP_FRAMING, _STEP_ALIGNMENT, _STEP_REMOVALS, _STEP_SHADOWS, _STEP_REVIEW)) + "\n"
+    + "\n\n".join((_STEP_READ, _STEP_LOOK, _STEP_FRAMING, _STEP_ALIGNMENT, _STEP_REMOVALS, _STEP_SHADOWS, _STEP_REVIEW,
+                     _STEP_FINDINGS)) + "\n"
 )
 
 _RATIO_AUTO = """
@@ -162,6 +165,11 @@ def analysis_schema(labels):
                 "inverse": _schema_string(),
             })),
             "issues": _schema_array_of(_schema_string()),
+            "review_findings": _schema_array_of(_schema_object({
+                "aspect": _schema_enum(list(REVIEW_ASPECTS)),
+                "rating": _schema_enum(["good", "could_be_better", "needs_work"]),
+                "finding": _schema_string(),
+            })),
         }),
     }
 
