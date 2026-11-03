@@ -130,6 +130,8 @@ window.PhotoAgentDom = (() => {
     apContinuePick: document.querySelector("#ap-continue-pick"),
     apContinueShot: document.querySelector("#ap-continue-shot"),
     apContinueLabel: document.querySelector("#ap-continue-label"),
+    apContinueLead: document.querySelector("#ap-continue-lead"),
+    apContinueTail: document.querySelector("#ap-continue-tail"),
     apContinueMenu: document.querySelector("#ap-continue-menu"),
     apContinueExit: document.querySelector("#ap-continue-exit"),
     apPhotoHighlights: document.querySelector("#ap-photo-highlights"),

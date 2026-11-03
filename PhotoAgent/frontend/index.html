@@ -1110,14 +1110,10 @@
        that width's left edge, and the chevron row needs the full width for
        justify-content:center to center against the card, not just against
        the title text above it. */
-    /* A grid so #ap-continue-base can sit at the right of the title and
-       description, which keep column 1. */
     .ap-analysis-shell-summary {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      column-gap: 12px;
-      row-gap: 6px;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
     }
     /* The outer analysis shell is informational and stays open; its summary
        has no collapse affordance. */
@@ -1426,24 +1422,31 @@
       z-index: 2;
     }
 
-    /* #ap-continue-base -- where the next 美化 starts, at the right end of the
-       shell's title block. The chat's pill above its composer
-       (.chat-continue-from, frontend-chat chat.css) in this page's tokens: a
-       pale accent token with the base's thumbnail, opening a menu of 原圖 and
-       every version, downward and right-aligned under it, scrolling on its
-       own once there are many versions. */
+    /* #ap-continue-base -- 下一次從 [原圖 ⌄] 美化, the first line of the
+       shell's body, above the tabs. The words in the body's quiet text tone;
+       the pill is the chat's (.chat-continue-from, frontend-chat chat.css) in
+       this page's tokens: a pale accent token with the base's thumbnail,
+       opening a menu of 原圖 and every version, downward and left-aligned
+       under it, scrolling on its own once there are many versions. */
     .ap-continue-base {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: var(--text-2);
+    }
+    .ap-continue-base[hidden] { display: none; }
+    .ap-continue-text:empty { display: none; }
+    .ap-continue-control {
       position: relative;
       display: inline-flex;
       min-width: 0;
-      grid-column: 2;
-      grid-row: 1;
-      justify-self: end;
-      font-size: 13px;
+      max-width: 100%;
       font-weight: 600;
-      cursor: default;
     }
-    .ap-continue-base[hidden] { display: none; }
     .ap-continue-pick {
       display: inline-flex;
       align-items: center;
@@ -1488,7 +1491,7 @@
     .ap-continue-exit:hover { background: rgba(var(--accent-rgb),.16); }
     .ap-continue-exit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .ap-continue-exit[hidden] { display: none; }
-    .ap-continue-base:has(.ap-continue-exit:not([hidden])) .ap-continue-pick {
+    .ap-continue-control:has(.ap-continue-exit:not([hidden])) .ap-continue-pick {
       border-radius: 999px 0 0 999px;
       padding-right: 10px;
     }
@@ -1513,7 +1516,7 @@
     .ap-continue-menu {
       position: absolute;
       top: calc(100% + 4px);
-      right: 0;
+      left: 0;
       z-index: 20;
       min-width: 160px;
       max-height: min(320px, 50vh);
@@ -5805,26 +5808,33 @@
                       </span>
                       <span class="ap-analysis-shell-desc" id="ap-analysis-shell-desc">這是 AI 分析後提供的建議，你可依此在這裡進一步調整設定</span>
                     </div>
-                    <!-- Where the next 美化 starts, like the chat's pill above its
-                         composer: 原圖, or any version to adjust (接著這張調整).
-                         syncApContinueBase (app.js) owns its `hidden`, label and menu;
-                         it shows only while 美化 is offered. Clicks in it don't
-                         toggle the <details> (app.js). -->
-                    <div id="ap-continue-base" class="ap-continue-base" hidden>
-                      <button type="button" id="ap-continue-pick" class="ap-continue-pick" aria-haspopup="menu" aria-expanded="false" title="換一張當底">
-                        <img id="ap-continue-shot" class="ap-continue-shot" alt="">
-                        <span id="ap-continue-label" class="ap-continue-label">從原圖美化</span>
-                        <span class="ap-continue-caret" aria-hidden="true"></span>
-                      </button>
-                      <!-- 不調整了, as the 美化紀錄 tile's × does, joined onto the
-                           pill while 調整中. syncApContinueExit owns its `hidden`. -->
-                      <button type="button" id="ap-continue-exit" class="ap-continue-exit" title="不調整了" aria-label="不調整了" hidden>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
-                      </button>
-                      <div id="ap-continue-menu" class="ap-continue-menu" role="menu" hidden></div>
-                    </div>
                   </summary>
                   <div class="ap-analysis-shell-body">
+                <!-- Where the next 美化 starts, one sentence above the tabs: 下一次從
+                     [原圖 ⌄] 美化. Said as the next one, not just 底圖, so it can't
+                     read as what the version on screen was made from -- and above
+                     the tabs since the base decides what they offer. The pill
+                     holds only the image's name; the menu lists 原圖 and every
+                     version. syncApContinueBase (app.js) owns the row's `hidden`,
+                     the sentence around the pill (one template, any word order),
+                     and the menu; the row shows only while 美化 is offered. -->
+                <div id="ap-continue-base" class="ap-continue-base" hidden>
+                  <span id="ap-continue-lead" class="ap-continue-text">下一次從</span>
+                  <div class="ap-continue-control">
+                    <button type="button" id="ap-continue-pick" class="ap-continue-pick" aria-haspopup="menu" aria-expanded="false" title="換一張當底">
+                      <img id="ap-continue-shot" class="ap-continue-shot" alt="">
+                      <span id="ap-continue-label" class="ap-continue-label">原圖</span>
+                      <span class="ap-continue-caret" aria-hidden="true"></span>
+                    </button>
+                    <!-- 不調整了, as the 美化紀錄 tile's × does, joined onto the
+                         pill while 調整中. syncApContinueExit owns its `hidden`. -->
+                    <button type="button" id="ap-continue-exit" class="ap-continue-exit" title="不調整了" aria-label="不調整了" hidden>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+                    </button>
+                    <div id="ap-continue-menu" class="ap-continue-menu" role="menu" hidden></div>
+                  </div>
+                  <span id="ap-continue-tail" class="ap-continue-text">美化</span>
+                </div>
                 <details class="ap-toggle-card ap-options-toggle" id="ap-review-panel" open>
                   <summary class="ap-label ap-review-summary">
                     <div class="ap-review-summary-inner">

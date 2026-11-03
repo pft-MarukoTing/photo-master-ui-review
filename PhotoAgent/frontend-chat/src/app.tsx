@@ -7511,7 +7511,9 @@ type ContTurn = { text: string; reply?: string; ask?: boolean; options?: string[
 // 一次接續美化：從哪一版、照什麼需求和風格。
 type ContRun = { from: Version; text: string; styles: Record<string, string> };
 
-// 輸入框上方「從原圖美化／從第 N 版美化」那顆：點了掀開選單換底，原圖或任一版。
+// 輸入框上方「下一次從 [原圖 ⌄] 美化」那句：中間的藥丸點了掀開選單換底，原圖或任一版。
+// 寫成一句話，才不會被當成「這張是從哪張做的」；藥丸裡只放名詞，不像另一顆美化鍵。
+// 前後的字從同一個模板切出來，換語言時可以整句換語序。
 // 藥丸本身會把太長的字截掉（overflow:hidden），選單得掛在外面那層，不然會被切掉。
 // 原圖是預設，沒有叉叉；接著某一版時才有，按了就不接續、打好的也不留。
 function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
@@ -7545,13 +7547,16 @@ function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
     setOpen(false);
     if ((v?.version_id ?? null) !== (from?.version_id ?? null)) onPick(v);
   };
+  const [lead, tail = ""] = t("下一次從 {base} 美化").split("{base}");
   return (
     <span class="chat-continue-base" ref={wrap}>
+      {lead.trim() && <span class="chat-continue-text">{lead.trim()}</span>}
+      <span class="chat-continue-control">
       <span class="chat-composer-who chat-continue-from">
         <button type="button" class="chat-continue-pick" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
           title={t("換一張當底")} onClick={() => setOpen((o) => !o)}>
           <img class="chat-continue-shot" src={from ? urls.resultThumb(versionJob(from)) : original} alt="" />
-          {from ? t("從第 {n} 版美化", { n: from.ordinal }) : t("從原圖美化")}
+          {from ? t("第 {n} 版", { n: from.ordinal }) : t("原圖")}
           <span class={`chat-opt-caret${open ? " is-open" : ""}`} />
         </button>
         {from && onClose && (
@@ -7579,6 +7584,8 @@ function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
           })}
         </div>
       )}
+      </span>
+      {tail.trim() && <span class="chat-continue-text">{tail.trim()}</span>}
     </span>
   );
 }

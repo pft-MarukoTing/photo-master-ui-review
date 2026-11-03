@@ -2914,7 +2914,7 @@
     if (stash?.token === historyViewToken) applyReviewState(stash.review);
   }
 
-  // #ap-continue-base, at the right of the shell's title: which image the
+  // #ap-continue-base, above the tabs: which image the
   // next 美化 starts from -- 原圖, or any version to adjust -- as the chat's
   // pill above its composer offers it. Every version of the case is listed,
   // not just the one on screen; picking one steps to it.
@@ -3003,7 +3003,12 @@
     }
     const cont = activeContinuation();
     els.apContinueShot.src = cont ? cont.thumbUrl : apContinueOriginThumb();
-    els.apContinueLabel.textContent = cont ? tr("從第 {n} 版美化", { n: cont.versionNumber }) : tr("從原圖美化");
+    els.apContinueLabel.textContent = cont ? tr("第 {n} 版", { n: cont.versionNumber }) : tr("原圖");
+    // The words around the pill, from one template so a language can put
+    // them on either side of it.
+    const [lead, tail = ""] = tr("下一次從 {base} 美化").split("{base}");
+    els.apContinueLead.textContent = lead.trim();
+    els.apContinueTail.textContent = tail.trim();
     if (!els.apContinueMenu.hidden) renderApContinueMenu();
     syncApContinueExit();
   }
@@ -3029,9 +3034,6 @@
       els.apContinueMenu.hidden = false;
       els.apContinuePick.setAttribute("aria-expanded", "true");
     });
-    // It sits in #ap-analysis-shell's <summary>: a click in it must not
-    // fold the shell.
-    els.apContinueBase.addEventListener("click", (event) => event.preventDefault());
     // Clicking anywhere else or Esc closes it, like the chat's.
     document.addEventListener("mousedown", (event) => {
       if (!els.apContinueBase.contains(event.target)) closeApContinueMenu();
@@ -3709,7 +3711,15 @@
     const shellBodyStyle = getComputedStyle(shellBody);
     const shellBodyPadding =
       (parseFloat(shellBodyStyle.paddingTop) || 0) + (parseFloat(shellBodyStyle.paddingBottom) || 0);
-    const panelHeight = Math.max(0, bodyHeight - shellBodyPadding);
+    // Whatever sits above the panel inside the body (#ap-continue-base, when
+    // it's showing) takes its share first -- measured from the real layout so
+    // its margin and any wrapping come along.
+    const aboveHeight = Math.max(
+      0,
+      panel.getBoundingClientRect().top - shellBody.getBoundingClientRect().top
+        - (parseFloat(shellBodyStyle.paddingTop) || 0)
+    );
+    const panelHeight = Math.max(0, bodyHeight - shellBodyPadding - aboveHeight);
     panel.style.height = `${panelHeight}px`;
 
     const panelSummaryHeight = panelSummary.getBoundingClientRect().height;
@@ -3775,6 +3785,10 @@
     for (const sibling of shell.parentElement?.children || []) {
       if (sibling !== shell) siblingObserver.observe(sibling);
     }
+    // #ap-continue-base, the row above the panel inside the body: showing,
+    // hiding or re-wrapping it changes what's left for the panel. It doesn't
+    // size off the panel, so this can't loop either.
+    if (els.apContinueBase) siblingObserver.observe(els.apContinueBase);
     window.addEventListener("resize", syncAnalysisPanelHeights);
     syncAnalysisPanelHeights();
   })();

@@ -1162,10 +1162,8 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
    carrying the picked state, so it is thicker than the pill's. */
 .chat-face-chip.is-avatar{min-height:0;padding:3px;gap:0;border-radius:50%;
   transition:border-color .15s ease,box-shadow .15s ease}
-/* 40, not 32: the strip no longer spends height on padding, so the face can
-   have it instead. It now sets the strip's height on its own -- which is the
-   right way round, since recognising who is who is the only thing this row is
-   for. */
+/* 40px wherever a face stands on its own. On phones the strip above the
+   composer shrinks its own to 28px (--footbar-face, further down). */
 .chat-face-chip.is-avatar img,.chat-face-chip.is-avatar .chat-face-blank{width:40px;height:40px}
 .chat-face-chip.is-avatar.is-picked{background:var(--card);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.22)}
 /* The same face, as an answer under the AI's 「哪一位？」: once answered, the
@@ -2042,14 +2040,23 @@ button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
   .report-view-when .mode-switch-opt{padding:0 9px;font-size:12px}
 }
 
-/* 接著某一版調整：輸入框上方那條帶著當底的那一版，跟指定人物的 token 同一個樣子。 */
-.chat-footbar .chat-continue-from{max-width:none;margin:var(--sp-2) 0;padding-right:var(--sp-1)}
+/* 輸入框上方那條的換底鍵：跟同一條上人物收合的「更多」鍵同一個樣子（白底細框、粗體），
+   高度也一樣，才不會像一行散掉的小字。 */
+.chat-footbar .chat-continue-from{max-width:none;margin:var(--sp-2) 0;padding:3px var(--sp-1) 3px 3px;
+  border:1px solid var(--n34);background:var(--card);color:var(--n64)}
+.chat-footbar .chat-continue-from:has(.chat-continue-pick:not(:disabled):hover),
+.chat-footbar .chat-continue-from:has(.chat-continue-pick[aria-expanded="true"]){border-color:var(--accent);color:var(--accent-text)}
+.chat-footbar .chat-continue-pick .chat-continue-shot{width:32px;height:32px}
 /* 接著這張調整時，美化項目還有沒美化的改動：一行小字講它們這次不會用到。 */
 .chat-continue-note{min-width:0;font-size:var(--chat-fs-sm);color:var(--n54);text-wrap:pretty}
 .chat-continue-shot{width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0}
-/* 藥丸本身就是換底的鍵：點縮圖和「從第 N 版美化」掀開選單，叉叉還是取消。選單往上
-   浮在對話上面、靠左對齊藥丸；版本多了自己捲，不把對話整個蓋掉。 */
-.chat-continue-base{position:relative;display:inline-flex;min-width:0}
+/* 一句「下一次從 [原圖 ⌄] 美化」：前後的字是一般說明文字，藥丸本身就是換底的鍵，點縮圖
+   和「原圖／第 N 版」掀開選單，叉叉還是取消。選單往上浮在對話上面、靠左對齊藥丸（掛在
+   .chat-continue-control 上，不是整句）；版本多了自己捲，不把對話整個蓋掉。 */
+.chat-continue-base{display:inline-flex;align-items:center;gap:var(--sp-1);min-width:0;
+  font-size:var(--chat-fs-sm);color:var(--n54);white-space:nowrap}
+.chat-continue-text{flex-shrink:0}
+.chat-continue-control{position:relative;display:inline-flex;min-width:0}
 .chat-continue-pick{display:inline-flex;align-items:center;gap:var(--sp-1);min-width:0;padding:0 var(--sp-1) 0 0;
   border:0;border-radius:999px;background:none;font:inherit;color:inherit;cursor:pointer}
 .chat-continue-pick .chat-opt-caret{margin-left:2px;flex-shrink:0}
@@ -2057,9 +2064,26 @@ button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
 .chat-continue-pick:disabled .chat-opt-caret{opacity:.45}
 .chat-continue-pick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .chat-continue-menu{left:0;right:auto;max-height:min(320px,50vh);overflow-y:auto}
-/* 換底跟指定對象是兩件事，同一條上用一道短直線隔開；左右各留一樣的空（footbar 的
-   gap 在左，picker 自己的 gap 加一點在右）。 */
+/* 換底跟指定對象是兩件事，同一條上換底在左、人物在右，中間用一道短直線隔開；左右各留
+   一樣的空（footbar 的 gap 在左，picker 自己的 gap 加一點在右）。永遠同一行：換底那句
+   不縮，擠的時候人物那排自己收進「更多」（FacePicker 量的是自己剩下的寬度）。 */
+.chat-footbar .chat-continue-base{flex-shrink:0}
 .chat-continue-base+.chat-face-picker::before{content:"";flex-shrink:0;width:1px;height:20px;margin-right:var(--sp-1);background:var(--border)}
+/* 這一條上的頭像大小：桌機 40px（跟其他地方一樣），手機縮成 28px，整條人物頭像、收合
+   的「更多」、換底鍵都是 36px 高。FacePicker（chat.tsx）讀這個變數算擺不擺得下。
+   展開的人物面板裡維持大頭像，不受影響。 */
+.chat-footbar{--footbar-face:40px}
+.chat-footbar .chat-face-track .chat-face-chip.is-avatar img,
+.chat-footbar .chat-face-track .chat-face-chip.is-avatar .chat-face-blank,
+.chat-footbar .chat-face-fold .chat-face-chip.is-avatar img,
+.chat-footbar .chat-face-fold .chat-face-chip.is-avatar .chat-face-blank{width:var(--footbar-face);height:var(--footbar-face)}
+@media (max-width:900px){
+  .chat-footbar{--footbar-face:28px}
+  .chat-footbar .chat-continue-pick .chat-continue-shot{width:28px;height:28px}
+  .chat-footbar .chat-face-fold-faces>.chat-face-chip+.chat-face-chip{margin-left:-9px}
+  /* 頭像縮小後撐不起整條的高度了，上下留跟換底鍵一樣的空，只有人物時也不會貼著邊。 */
+  .chat-footbar .chat-face-picker{padding:var(--sp-2) 0}
+}
 /* 前面多了換底藥丸，picker 不再從 footbar 左緣開始；面板還靠 picker 定位的話會被
    推到右邊、手機上整個超出去。在 footbar 裡改靠整條定位，左右各留跟 footbar 一樣的邊。 */
 .chat-footbar{position:relative}

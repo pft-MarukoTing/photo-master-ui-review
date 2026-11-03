@@ -531,7 +531,6 @@ export function FootBar({ faces }: { faces?: ComponentChildren }) {
 // Each tap adds that face to the pick or takes it back out; the pick keeps the
 // order the faces were tapped in. Picking several is the point, so a tap does
 // not close the panel -- its X, the button again, Esc or a tap outside do.
-const FACE_W = 48; // .chat-face-chip.is-avatar: 40 + 3px pad + 1px border, each side
 const FACE_GAP = 8; // --sp-2
 const FOLDED_FACES = 2;
 
@@ -560,8 +559,12 @@ export function FacePicker(props: {
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
-    const need = people.length * FACE_W + (people.length - 1) * FACE_GAP;
-    const fit = () => setFolded(need > el.clientWidth - (label.current?.offsetWidth || 0) - FACE_GAP);
+    // 一顆頭像的寬：--footbar-face（chat.css，桌機 40、手機 28）加上 3px 的邊和 1px 的框，左右各一。
+    const fit = () => {
+      const face = (parseFloat(getComputedStyle(el).getPropertyValue("--footbar-face")) || 40) + 8;
+      const need = people.length * face + (people.length - 1) * FACE_GAP;
+      setFolded(need > el.clientWidth - (label.current?.offsetWidth || 0) - FACE_GAP);
+    };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
