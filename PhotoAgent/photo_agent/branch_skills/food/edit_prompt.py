@@ -2,7 +2,11 @@
 
 from aspect_ratio_rules import _label_ratio
 from photo_agent.capabilities import ASPECT_RATIOS
-from prompts import UNIFORM_SCALE_ONLY, USER_SCENE_CONSISTENCY_RULE, _expand_plan_lines, build_user_preserved_choices
+from photo_agent.feature_resolver import _compact_raw_style_instruction
+from prompts import (
+    UNIFORM_SCALE_ONLY, USER_SCENE_CONSISTENCY_RULE, _expand_plan_lines, build_framing_sections,
+    build_user_preserved_choices,
+)
 
 from .adapter import LOOK_AXES
 
@@ -13,8 +17,15 @@ EDIT_INTRO = (
 )
 EDIT_PRESERVATION = (
     "Keep unchanged, apart from the approved removals: the same dishes, ingredients, portions, shapes, counts, and "
-    "arrangement; the same tableware, table, place, and camera viewpoint. Nothing is added, everything keeps its place "
+    "arrangement; the same tableware, table, place{viewpoint}. {added}, everything keeps its place "
     "relative to everything else, and nothing is stretched or squashed."
+)
+# Style categories the food editor applies; pose would rearrange the dishes this prompt keeps in place.
+FOOD_STYLE_CATEGORIES = ("angle", "lighting", "size")
+LIGHTING_OWNERSHIP = (
+    "The selected lighting owns the light: its source, direction, colour, and the light and shadow it casts belong to "
+    "the finished photo. The finished look still sets the food's appeal, texture, and colour, and approved shadow "
+    "items refer only to shadows already in the photograph."
 )
 # Fixed finished states the editor renders towards, whatever wording the analysis used for the item.
 ITEM_DONE = {
@@ -96,12 +107,23 @@ def _framing_block(framing, crop, ratio, expand, aligning):
     return "\n".join(lines)
 
 
+def _selected_styles(framed_analysis):
+    options = framed_analysis.get("style_options") or {}
+    return {key: options[key] for key in FOOD_STYLE_CATEGORIES if options.get(key) and options[key] != "default"}
+
+
 def build_food_edit_prompt(framed_analysis, crop_plan, source_size, revision_feedback=None):
     """The editor prompt for an approved food-branch analysis; crop_plan is the shared geometry's fitted crop."""
     food = framed_analysis["food_branch"]
     approved = list(zip(framed_analysis.get("correction_plan") or [], framed_analysis.get("correction_axes") or []))
     kinds = [_kind(axes) for _, axes in approved]
-    expand = framed_analysis.get("reframe_extension")
+    styles = _selected_styles(framed_analysis)
+    widening = styles.get("size") in ("wide", "wider")
+    style_sections = build_framing_sections(
+        {**framed_analysis, "style_options": styles}, crop_plan, source_size=source_size,
+    )
+    # A selected framing size replaces the analysis's own reframing, as in the main editor prompt.
+    expand = None if "size" in styles else framed_analysis.get("reframe_extension")
     crop = crop_plan
     if crop and crop["w"] > 0.965 and crop["h"] > 0.965 and not expand:
         crop = None
@@ -110,7 +132,10 @@ def build_food_edit_prompt(framed_analysis, crop_plan, source_size, revision_fee
     sections = [EDIT_INTRO]
     if "look" in kinds:
         sections.append("Finished look:\n" + food["edit_brief"])
-    sections.append(_framing_block(food["framing"], crop, ratio, expand, "alignment" in kinds))
+    if widening:
+        sections.append("Framing:\n" + style_sections["crop_instruction"])
+    else:
+        sections.append(_framing_block(food["framing"], crop, ratio, expand, "alignment" in kinds))
     items = [(plan, kind) for (plan, _), kind in zip(approved, kinds) if kind not in ("look", "crop")]
     if items:
         sections.append("Approved changes:\n" + "\n".join(
@@ -118,7 +143,15 @@ def build_food_edit_prompt(framed_analysis, crop_plan, source_size, revision_fee
     preserved = build_user_preserved_choices(framed_analysis)
     if preserved:
         sections.append(preserved)
-    sections.append(EDIT_PRESERVATION)
+    sections.append(EDIT_PRESERVATION.format(
+        viewpoint="" if "angle" in styles else ", and camera viewpoint",
+        added="No dish, ingredient, or prop is added" if widening else "Nothing is added",
+    ))
+    style_block = _compact_raw_style_instruction(style_sections["style_instruction"], styles)
+    if style_block:
+        if "lighting" in styles:
+            style_block += "\n- " + LIGHTING_OWNERSHIP
+        sections.append("Mandatory style overrides:\n" + style_block)
     user_direction = ((framed_analysis.get("user_instruction") or {}).get("normalized_user_direction") or "").strip()
     if user_direction:
         sections.append("User direction (highest priority):\n" + user_direction + "\n" + USER_SCENE_CONSISTENCY_RULE)

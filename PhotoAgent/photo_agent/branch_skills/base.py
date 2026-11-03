@@ -21,4 +21,6 @@ class BranchSkill:
         raise NotImplementedError
 
     def build_edit_prompt(self, framed_analysis, crop_plan, source_size, revision_feedback=None):
+        """The whole editor prompt; it must apply analysis["style_options"] itself and drop its own preservation
+        rules that a selected style overrides, since the main editor prompt's style section never reaches it."""
         raise NotImplementedError
