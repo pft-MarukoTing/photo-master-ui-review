@@ -4245,9 +4245,12 @@ button.version-origin-tile:focus-visible {
    #results-canvas-top, so letting the original/generated toggle change this
    frame's height shifted it up and down every time #compare-toggle-btn was
    pressed; a shorter image just centers within the fixed height instead,
-   trading a little vertical checkerboard for a stable layout below. Carries
-   the rounded/shadowed "framed" look itself (rather than .compare-card above)
-   so that look also hugs the image's width instead of stretching full-width. */
+   trading a little vertical checkerboard for a stable layout below. Rounded
+   and clipped, but no shadow of its own: the box is a fixed height, so at any
+   column width where the photo comes out shorter than it, a shadow here
+   outlined the blank band above and below the photo as a second frame inside
+   .compare-card's own -- present at some window widths and gone at others.
+   .compare-card's dashed border and shadow are the photo's one frame. */
 .photo-frame {
   position: relative;
   display: flex;
@@ -4256,7 +4259,6 @@ button.version-origin-tile:focus-visible {
   height: 480px;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--shadow-lg);
 }
 
 .photo-frame img {
@@ -4289,13 +4291,12 @@ button.version-origin-tile:focus-visible {
   max-width: 100%;
   max-height: 480px;
   z-index: 2;
-  /* The framed look lives on .photo-frame (rounded + clipped + shadowed) and
-     this stand-in sits OUTSIDE it, so without repeating it here the photo
-     visibly squared off its four corners and dropped its shadow for the whole
-     swap, then got them back when the real image landed. Same two values, so
-     the stand-in is indistinguishable from what it stands in for. */
+  /* The rounding lives on .photo-frame (rounded + clipped) and this stand-in
+     sits OUTSIDE it, so without repeating it here the photo visibly squared
+     off its four corners for the whole swap, then got them back when the real
+     image landed. Same radius, so the stand-in is indistinguishable from what
+     it stands in for. */
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
 }
 
 /* Analysis-preview flow: #ap-options-card-inline (the review tabs + controls)
