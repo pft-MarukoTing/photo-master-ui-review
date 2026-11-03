@@ -262,12 +262,6 @@ def _validate_params(params: dict) -> dict:
 
     normalized["advanced_options"] = normalize_advanced_options(normalized.get("advanced_options"))
 
-    # The app's review screen shows per-aspect findings cards; other clients leave them out of the analysis.
-    findings_cards = normalized.get("findings_cards", False)
-    if not isinstance(findings_cards, bool):
-        raise RuntimeError(f"{EFFECT_NAME}: findings_cards must be a boolean", RESULT_INVALID_PARAMETER)
-    normalized["findings_cards"] = findings_cards
-
     # How many independent edit variations the combined ("full" stage) job
     # generates from ONE shared analysis, entirely within itself -- lets a
     # multi-RUN request keep generating server-side regardless of whether the

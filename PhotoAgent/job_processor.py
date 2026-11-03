@@ -158,7 +158,7 @@ class PhotoAgentJobProcessor:
 
         params = request["params"]
         self.logger.info(task_id, f'[{EFFECT_NAME}] Start job: src={len(request["src_keys"])}, dst_key={request["dst_key"]}')
-        self.logger.info(task_id, f'[{EFFECT_NAME}] Params: preset={params["preset"]} image_quality={params["image_quality"]} image_model={params["image_model"]} analysis_model={params["analysis_model"]} aspect_ratio={params.get("aspect_ratio", "auto")} output_scale={params.get("output_scale", "1K")} ai_photo_editing={params["ai_photo_editing"]} run_qa={params.get("run_qa", True)} overwrite_prompt={params.get("overwrite_prompt", False)} advanced_options={params.get("advanced_options", {})} single_pass_edit={params.get("single_pass_edit", True)} findings_cards={params.get("findings_cards", False)} has_prompt={bool(params.get("user_prompt"))}')
+        self.logger.info(task_id, f'[{EFFECT_NAME}] Params: preset={params["preset"]} image_quality={params["image_quality"]} image_model={params["image_model"]} analysis_model={params["analysis_model"]} aspect_ratio={params.get("aspect_ratio", "auto")} output_scale={params.get("output_scale", "1K")} ai_photo_editing={params["ai_photo_editing"]} run_qa={params.get("run_qa", True)} overwrite_prompt={params.get("overwrite_prompt", False)} advanced_options={params.get("advanced_options", {})} single_pass_edit={params.get("single_pass_edit", True)} has_prompt={bool(params.get("user_prompt"))}')
         if (bool(params.get("user_prompt"))):
             self.logger.info(task_id, f'[{EFFECT_NAME}] User prompt: {params.get("user_prompt")}')
         self.logger.info(task_id, f'[{EFFECT_NAME}] Metadata: {build_job_metadata(task_info)}')
@@ -253,7 +253,6 @@ class PhotoAgentJobProcessor:
                         aspect_ratio=params.get("aspect_ratio", "auto"),
                         advanced_options=params.get("advanced_options", {}),
                         analysis_model=params["analysis_model"],
-                        findings_cards=params.get("findings_cards", False),
                         **({"precomputed_preview": context} if context is not None else {}),
                         **({"analysis_user_requests": params["analysis_user_requests"]} if params.get("analysis_user_requests") else {}),
                     )
@@ -330,7 +329,6 @@ class PhotoAgentJobProcessor:
                 aspect_ratio=params.get("aspect_ratio", "auto"),
                 advanced_options=params.get("advanced_options", {}),
                 analysis_model=params["analysis_model"],
-                findings_cards=params.get("findings_cards", False),
             )
             set_job_info(job_id=task_id, results={"stage": "edit", "run_count": run_count, "runs_done": 0})
 

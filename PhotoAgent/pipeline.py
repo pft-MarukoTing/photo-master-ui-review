@@ -253,7 +253,7 @@ def _prepare_analysis_preview(image_bytes, analysis_model, existing):
     return preview, raw
 
 
-def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = MODELS["analysis"], *, precomputed_preview=None, analysis_user_requests=None, findings_cards: bool = False) -> dict:
+def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = MODELS["analysis"], *, precomputed_preview=None, analysis_user_requests=None) -> dict:
     """Steps 1-2: read the photo and analyze it.
 
     With ENABLE_CHAT_SUBJECT_PREVIEW enabled, reuse a ready preview or complete
@@ -261,8 +261,6 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
 
     Chat may supply validated read-only intent before analysis; observations
     remain factual and separate from the desired edit. Legacy callers omit it.
-
-    findings_cards: also write analysis["findings"], the per-aspect review cards, from what the analysis wrote for them.
 
     advanced_options: the Advanced Settings toggles dict (e.g.
     {"eye_closed_detection": False}). These do not change the one-time
@@ -376,8 +374,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # genuine finding and a later revise can turn a toggle back on without
     # re-analyzing the photo.
     analysis["_advanced_options"] = dict(advanced_options or {})
-    if findings_cards:
-        analysis["findings"] = findings_from_review(analysis)
+    analysis["findings"] = findings_from_review(analysis)
     # Stamped so a history item resumed under a later app version (see
     # backend/routes/api.py's continue_job) can tell which analyze_stage
     # shape produced it -- see compatibility_version.py for how that's read back.

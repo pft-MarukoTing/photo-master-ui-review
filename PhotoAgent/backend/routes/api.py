@@ -131,7 +131,6 @@ def _parse_and_validate_params(form):
         # applied there instead of here since it's gated on whether this
         # photo's analysis actually has an approved gaze fix to bundle.
         "single_pass_edit": str(form.get("single_pass_edit", "true")).lower() == "true",
-        "findings_cards": str(form.get("findings_cards", "false")).lower() == "true",
     }
     user_prompt = form.get("user_prompt")
     if user_prompt:
@@ -1545,7 +1544,6 @@ def aipoc_analyze():
             image.read(),
             aspect_ratio=params.get("aspect_ratio", "auto"),
             advanced_options=params.get("advanced_options", {}),
-            findings_cards=params["findings_cards"],
         )
     except Exception as exc:
         return jsonify({"error": i18n.tr("分析失敗：{exc}", exc=exc)}), 502
@@ -1573,7 +1571,6 @@ def aipoc_analyze_batch():
 
     aspect_ratio = params.get("aspect_ratio", "auto")
     advanced_options = params.get("advanced_options", {})
-    findings_cards = params["findings_cards"]
     # Read every file's bytes up front -- request.files' underlying streams
     # belong to this request context and aren't safe to touch from the
     # worker threads below. Each analyze_stage() call is a real OpenAI vision
@@ -1591,8 +1588,7 @@ def aipoc_analyze_batch():
         filename, data = entry
         try:
             with i18n.use(lang):
-                analysis = analyze_stage(data, aspect_ratio=aspect_ratio, advanced_options=advanced_options,
-                                         findings_cards=findings_cards)
+                analysis = analyze_stage(data, aspect_ratio=aspect_ratio, advanced_options=advanced_options)
             return {"filename": filename, "analysis": analysis}
         except Exception as exc:
             return {"filename": filename, "error": str(exc)}
@@ -1715,7 +1711,6 @@ def aipoc_submit():
         analysis=analysis,
         advanced_options=params.get("advanced_options", {}),
         single_pass_edit=params.get("single_pass_edit", True),
-        findings_cards=params.get("findings_cards", False),
     )
     task_id = body.get("result", {}).get("taskId")
     if not task_id:
