@@ -363,7 +363,6 @@ window.PhotoAgentApi = (() => {
         run_qa: runQa === false ? "false" : "true",
         single_pass_edit: !!singlePassEdit,
         advanced_options: advancedOptions || {},
-        findings_cards: findingsCards,
         selections: selections || null,
         user_prompt: userPrompt || "",
         overwrite_prompt: !!overwritePrompt,
