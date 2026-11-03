@@ -1273,9 +1273,14 @@
     // same version, with the request so far.
     // With nothing written yet it is not an edit, but the base still goes
     // over: the chat page carries on from the same version, nothing typed.
+    // Only while adjusting, though: a 接著這張調整 version only looked at has
+    // itself as its default base (ensurePanelBase), and the panel is open
+    // alongside any result anyway, so that alone is no more carried on from
+    // than a version from 原圖. One the chat page handed over (handed) still
+    // goes back as it came.
     const cont = activeContinuation();
     if (cont) {
-      if (!isReviewDirty()) return write({ idle: true, base: cont.source });
+      if (!isReviewDirty()) return write(cont.handed || isAdjusting() ? { idle: true, base: cont.source } : { idle: true });
       const { text, style_options } = pendingContinuationRequest();
       return write({ continuation: { ...cont.source, text, style_options } });
     }
@@ -2784,7 +2789,7 @@
     // is this version's default base, as when it is opened here.
     const b = handoff?.idle ? handoff.base : null;
     if (b && run && canContinueFromRun(run) && run.versionId === b.version_id) {
-      panelContinuation = continuationOn(run, run === defaultRun ? madeWithRequest(run) : null);
+      panelContinuation = { ...continuationOn(run, run === defaultRun ? madeWithRequest(run) : null), handed: true };
       return;
     }
     if (!handoff || handoff.idle) {
@@ -2794,7 +2799,7 @@
     const c = handoff.continuation;
     if (c && run && canContinueFromRun(run) && run.versionId === c.version_id) {
       pendingModeHandoff = null;
-      panelContinuation = continuationOn(run, { text: c.text || "", style_options: c.style_options || {} });
+      panelContinuation = { ...continuationOn(run, { text: c.text || "", style_options: c.style_options || {} }), handed: true };
       return;
     }
     panelContinuation = null;
