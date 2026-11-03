@@ -793,7 +793,7 @@ window.PHOTOAGENT_CATALOGS.en = {
   "重要區域": "Key area",
   "AI 美化失敗。": "AI retouching failed.",
   "分析卡片": "Findings Cards",
-  "分析時另外把美化項目整理成光線色彩、背景、人像、清晰度、構圖的評等卡片（app 審閱畫面用），會多一次分析呼叫。": "Also sorts the retouch items into rated Light & Color, Background, Portrait, Clarity, and Composition cards (for the app's review screen). Adds one more analysis call.",
+  "在面板模式顯示「分析卡片」分頁：美化項目依光線色彩、背景、人像、清晰度、構圖整理成評等卡片（app 審閱畫面用）。": "Shows the Findings Cards tab in panel mode: the retouch items sorted into rated Light & Color, Background, Portrait, Clarity, and Composition cards (for the app's review screen).",
   "光線色彩": "Light & Color",
   "色彩": "Color",
   "背景": "Background",

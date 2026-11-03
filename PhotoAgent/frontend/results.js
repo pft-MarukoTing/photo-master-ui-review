@@ -3592,10 +3592,18 @@ window.PhotoAgentResults = (() => {
   };
   const FINDING_RATING_LABELS = { needs_work: "需要處理", could_be_better: "可以更好", good: "良好" };
 
-  // The 分析卡片 tab (debug only): analysis.findings as the app's review screen groups it. Hidden when the
-  // analysis was made without the 分析卡片 switch.
+  // The 分析卡片 tab (debug only): analysis.findings as the app's review screen groups it. Shown only while the
+  // 分析卡片 switch is on and the analysis has cards.
+  let findingsCardsShown = false;
+  let findingsAnalysis = null;
+  function setFindingsCardsShown(shown) {
+    findingsCardsShown = !!shown;
+    renderFindingsCards(findingsAnalysis);
+    applyActiveReviewTab();
+  }
   function renderFindingsCards(analysis) {
-    const cards = Array.isArray(analysis?.findings?.cards) ? analysis.findings.cards : [];
+    findingsAnalysis = analysis;
+    const cards = findingsCardsShown && Array.isArray(analysis?.findings?.cards) ? analysis.findings.cards : [];
     if (els.apReviewTabFindings) els.apReviewTabFindings.hidden = !cards.length;
     if (!cards.length && activeReviewTab === "findings") activeReviewTab = "recipe";
     if (!els.apFindingsCards) return;
@@ -3658,7 +3666,7 @@ window.PhotoAgentResults = (() => {
     getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock, resetFaceReviewState,
     buildPlannedEditMessages,
     setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled,
-    renderFaceReviewCards,
+    renderFaceReviewCards, setFindingsCardsShown,
     syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion
   };
 })();
