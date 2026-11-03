@@ -67,6 +67,28 @@ def default_plan(settings=None):
     }
 
 
+def plan_of_version(params):
+    """A finished version's plan, rebuilt from what its history row kept
+    (`params`, with the review screen's `selections` -- build_selections the
+    other way round): for the note under a version that no chat plan came
+    with, such as one made in 面板模式. What the row never kept (face_requests)
+    stays empty."""
+    plan = default_plan()
+    for key in ("aspect_ratio", "user_prompt", "overwrite_prompt", "literal_texts"):
+        if params.get(key) is not None:
+            plan[key] = copy.deepcopy(params[key])
+    selections = params.get("selections") if isinstance(params.get("selections"), dict) else {}
+    advanced = selections.get("advanced_options") or params.get("advanced_options")
+    if isinstance(advanced, dict):
+        plan["advanced_options"] = copy.deepcopy(advanced)
+    for key, field in (("options", "style_options"), ("recipe_checked", "recipe_checked"),
+                       ("face_issue_overrides", "face_issue_overrides"),
+                       ("body_reshape_enabled", "body_reshape_enabled")):
+        if selections.get(key) is not None:
+            plan[field] = copy.deepcopy(selections[key])
+    return plan
+
+
 def settings_of(plan):
     return {k: copy.deepcopy(v) for k, v in plan.items() if k not in PHOTO_ONLY_KEYS}
 

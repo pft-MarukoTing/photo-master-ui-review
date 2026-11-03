@@ -41,6 +41,7 @@
     listChatSessions,
     getChatSession,
     deleteChatSessions,
+    versionNote: fetchVersionNote,
     getJobStatusOnce,
     reportJob,
     getReport,
@@ -3043,6 +3044,13 @@
     });
   }
 
+  // ensureVersionNote's bookkeeping, declared ahead of paintSkipHint, which
+  // reads it and may run before the code below it has.
+  const VERSION_NOTE_POLL_MS = 3000;
+  const VERSION_NOTE_MAX_POLLS = 40;
+  const versionNoteAsks = new Map();
+  const versionNotes = new Map();
+
   // Always the version the panel is for, never the next 美化's base: that
   // one is #ap-continue-base's (and the shell's description) to name.
   function paintSkipHint() {
@@ -3058,19 +3066,95 @@
     if (!els.apSkipHintText) return;
     const request = (run?.versionParams?.user_prompt || "").trim();
     if (!named) {
-      els.apSkipHintText.textContent = SKIP_HINT_TEXT;
+      paintSkipHintText(SKIP_HINT_TEXT);
       return;
     }
+    if (!run.versionNote && versionNotes.has(run.versionId)) run.versionNote = versionNotes.get(run.versionId);
+    if (!run.versionNote && !["pending", "processing", "error"].includes(run.status)) {
+      ensureVersionNote(run.caseKey || currentCaseHistoryImageKey, run.versionId);
+    }
+    const waiting = !run.versionNote && versionNoteAsks.get(run.versionId) === "asking";
     let text = run.versionNote || (request ? tr("依你的需求調整：「{request}」", { request })
       : continuation || skipped ? tr("依你挑的風格調整。") : tr("依 AI 分析的建議美化。"));
+    let tail = "";
     // The case not analyzed yet: 幫我分析 sits beside 美化 on either base.
     if (caseUnanalyzed()) {
       if (!/[。！？.!?]$/.test(text)) text += tr("。@@句尾");
-      text = activeContinuation()
-        ? tr("{text}這張照片還沒分析過。「幫我分析」會分析原圖並整理修圖建議，完成後出發點會換成原圖。", { text })
+      const full = activeContinuation()
+        ? tr("{text}這張照片還沒分析過。「幫我分析」會分析原圖並整理修圖建議，完成後會換成從原圖美化。", { text })
         : tr("{text}這張照片還沒分析過。想先看 AI 的修圖建議，請按「幫我分析」；或取消勾選「僅依需求修改」，按「美化」時會一起分析。", { text });
+      // What to press next goes on a line of its own, apart from the note.
+      tail = full.slice(full.indexOf(text) + text.length).trim();
+      text = full.slice(0, full.indexOf(text) + text.length);
     }
-    els.apSkipHintText.textContent = text;
+    paintSkipHintText(waiting ? null : text, tail);
+  }
+
+  // #ap-skip-hint-text while the version's note is still being written holds
+  // the room a note usually takes, so the 個人化需求 below doesn't jump when it
+  // lands; the note (or, with none coming, the short line) then fades in and
+  // the box eases to its real height. `text` null = still waiting.
+  function paintSkipHintText(text, tail = "") {
+    const el = els.apSkipHintText;
+    const wasWaiting = el.classList.contains("is-note-waiting");
+    const before = el.getBoundingClientRect().height;
+    el.classList.toggle("is-note-waiting", text == null);
+    // The tail waits too: it follows the note, so it shows up with it.
+    if (text == null) {
+      const line = document.createElement("span");
+      line.className = "ap-skip-hint-waiting";
+      line.textContent = tr("正在整理這版的修圖說明…");
+      el.replaceChildren(line);
+      return;
+    }
+    const next = document.createElement("span");
+    next.className = "ap-skip-hint-next";
+    next.textContent = tail;
+    el.replaceChildren(text, ...(tail ? [next] : []));
+    if (!wasWaiting || !before || typeof el.animate !== "function"
+        || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const after = el.getBoundingClientRect().height;
+    el.animate([{ height: `${before}px`, opacity: 0 }, { height: `${after}px`, opacity: 1 }],
+      { duration: 260, easing: "cubic-bezier(.2,.7,.3,1)" });
+  }
+
+  // A version made in the panel has no note until one is asked for: the
+  // backend writes it on the first ask and answers "pending" until the
+  // worker is done. Asked as soon as the version's result is in
+  // (refreshVersionsAfterEdit), so the note is usually there before anyone
+  // looks; and again from paintSkipHint for one opened from history. Each
+  // version is asked about once per page load -- "asking" while polling,
+  // then "done" / "none" for good, so repainting never re-asks -- and the
+  // note lands on every run of that version, single view and batch alike.
+  function ensureVersionNote(caseKey, versionId) {
+    const user = getCurrentUser();
+    if (!user || !caseKey || !versionId || versionNoteAsks.has(versionId)) return;
+    versionNoteAsks.set(versionId, "asking");
+    const settle = (note) => {
+      versionNoteAsks.set(versionId, note ? "done" : "none");
+      if (note) {
+        versionNotes.set(versionId, note);
+        const runLists = [singleRuns, ...batchRecords.map((record) => record.runs)];
+        runLists.forEach((runs) => (runs || []).forEach((r) => {
+          if (r.versionId === versionId) r.versionNote = note;
+        }));
+      }
+      if (panelRun()?.versionId === versionId) paintSkipHint();
+    };
+    (async () => {
+      for (let attempt = 0; attempt < VERSION_NOTE_MAX_POLLS; attempt += 1) {
+        let answer;
+        try {
+          answer = await fetchVersionNote(user, caseKey, versionId);
+        } catch (error) {
+          return settle(null); // an older backend without the endpoint, or a gone case
+        }
+        if (answer?.status === "none") return settle(null);
+        if (answer?.status === "done" && answer.note) return settle(answer.note);
+        await new Promise((resolve) => setTimeout(resolve, VERSION_NOTE_POLL_MS));
+      }
+      settle(null);
+    })();
   }
 
   function setSkipHintBusy(busy) {
@@ -10260,7 +10344,7 @@
     if (!shown.length) return null;
     const latest = shown[shown.length - 1];
     const latestRuns = await fetchVersionRuns(latest.runs || [], latest.path || job.path);
-    return buildVersionRunList(shown, latestRuns, job.path);
+    return buildVersionRunList(shown, latestRuns, job.path, job.image_key);
   }
 
   // An analyze-only version is a real part of the case's history (it is the
@@ -10274,7 +10358,7 @@
   // the flat, run-numbered list both the arrows and the version strip walk.
   // Every version but the newest contributes placeholders; see
   // fetchHistoryVersionRuns for why.
-  function buildVersionRunList(shown, latestRuns, fallbackPath) {
+  function buildVersionRunList(shown, latestRuns, fallbackPath, caseKey) {
     if (!shown.length || !latestRuns.length) return null;
     const latest = shown[shown.length - 1];
     const flat = [];
@@ -10311,6 +10395,9 @@
           // that one is gone), and the chat's note on it, if one was written.
           versionFrom: fromNumber(version),
           versionNote: version.note || null,
+          // The case the version belongs to -- ensureVersionNote asks for the
+          // note of a version the chat never wrote one for by it.
+          caseKey: caseKey || null,
           runInVersion: ri + 1,
           runsInVersion: entries.length,
         });
@@ -10326,9 +10413,10 @@
   // case is opened, so it can be stale, and answering with someone else's
   // history would file this result as a version of it.
   async function caseVersionsHolding(user, lookup, jobId) {
+    let data;
     let versions;
     try {
-      const data = await getHistoryCase(user, lookup);
+      data = await getHistoryCase(user, lookup);
       versions = data && data.case ? data.case.versions : null;
     } catch (error) {
       return null; // no history row, or a backend that doesn't take this lookup
@@ -10337,7 +10425,7 @@
     const shown = browsableVersions(versions);
     const latest = shown.length ? shown[shown.length - 1] : null;
     if (!latest || !(latest.runs || []).includes(jobId)) return null;
-    return { shown, latest };
+    return { shown, latest, caseKey: data.case.image_key || lookup.imageKey || null };
   }
 
   // Which case does a just-finished job belong to? Three ways in, tried until
@@ -10416,10 +10504,11 @@
     if (!user || !anchor || !anchor.jobId) return;
 
     const found = await findCaseForJob(user, anchor.jobId);
+    if (found && !pendingAnalysis) ensureVersionNote(found.caseKey, found.latest.version_id);
     if (!found || found.shown.length < (pendingAnalysis ? 1 : 2)) return;
-    const { shown, latest } = found;
+    const { shown, latest, caseKey } = found;
     const latestRuns = await fetchVersionRuns(latest.runs || [], latest.path || "local");
-    const rebuilt = buildVersionRunList(shown, latestRuns, "local");
+    const rebuilt = buildVersionRunList(shown, latestRuns, "local", caseKey);
     // Superseded while fetching -- the user opened a different record, or a
     // further edit replaced the list this was computed against.
     if (!rebuilt || (singleRuns && singleRuns.length ? singleRuns : null) !== live) return;
@@ -13754,11 +13843,12 @@
     if (!user || !anchor || !anchor.jobId) return;
 
     const found = await findCaseForJob(user, anchor.jobId);
+    if (found) ensureVersionNote(found.caseKey, found.latest.version_id);
     if (!found || found.shown.length < 2) return;
-    const { shown, latest } = found;
+    const { shown, latest, caseKey } = found;
     const path = batchSettings.path || "local";
     const latestRuns = await fetchVersionRuns(latest.runs || [], latest.path || path);
-    const rebuilt = buildVersionRunList(shown, latestRuns, path);
+    const rebuilt = buildVersionRunList(shown, latestRuns, path, caseKey);
     // Superseded while fetching -- another revise of this same photo
     // replaced the list this was computed against.
     if (!rebuilt || record.runs !== live) return;

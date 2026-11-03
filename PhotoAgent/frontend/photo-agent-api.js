@@ -689,6 +689,22 @@ window.PhotoAgentApi = (() => {
     return data; // { session_id, photos: [{ photo_id, case_id, analyze_job_id, status, active_version, ... }], ... }
   }
 
+  // The note under one finished version (面板模式): queued on the first ask,
+  // { status: "pending" } until it is in -- ask again --, then
+  // { status: "done", note } or { status: "none" }.
+  async function versionNote(user, caseId, versionId) {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/chat/version-note`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user, case_id: caseId, version_id: versionId })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+    return data;
+  }
+
   // rows: session ids. A session goes together with the history cases of
   // its photos (see delete_sessions in backend/routes/chat.py).
   async function deleteChatSessions(user, rows) {
@@ -898,6 +914,7 @@ window.PhotoAgentApi = (() => {
     listChatSessions,
     getChatSession,
     deleteChatSessions,
+    versionNote,
     getJobStatusOnce,
     reportJob,
     getReport,

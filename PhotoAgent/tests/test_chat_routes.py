@@ -733,6 +733,22 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertNotIn("plan", new[0]["card"])
         self.assertEqual(self.status(sid)["session"]["photos"][0]["active_version"]["version_id"], "x2")
 
+    def test_a_custom_mode_versions_note_shows_up_in_the_session(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        a = photo["analyze_job_id"]
+        self.jobs["x1"] = {"status": "success", "error": None}
+        self.jobs["x2"] = {"status": "success", "error": None}
+        entry = self.case(photo["case_id"], [(a, "analyze", [a]), ("x1", "edit", ["x1"])])
+        entry["versions"][-1]["note"] = "背景亮了。"
+        self.assertEqual(self.cards(sid, "render_done")[-1]["note"], "背景亮了。")  # posted with it
+
+        # Written after its card went up: put in on the next look.
+        entry = self.case(photo["case_id"], [(a, "analyze", [a]), ("x1", "edit", ["x1"]), ("x2", "edit", ["x2"])])
+        self.assertNotIn("note", self.cards(sid, "render_done")[-1])
+        entry["versions"][-1]["note"] = "加了石燈籠。"
+        self.assertEqual([c.get("note") for c in self.cards(sid, "render_done")], ["背景亮了。", "加了石燈籠。"])
+
     def test_a_custom_mode_continuation_keeps_its_source(self):
         sid = self.new_session()
         photo = self.ready_photo(sid)
@@ -1361,6 +1377,92 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(images[0][0], "BEFORE (the version this one was made from):")
         # Kept with the version too, for 面板模式.
         kept.assert_called_once_with(USER, photo["case_id"], render["action_id"], "杯子拿掉了，桌面乾淨多了。")
+
+    # --- the note under a 面板模式 version ----------------------------------
+
+    def version_note(self, case_id, version_id):
+        res = self.client.post("/api/photo-agent/chat/version-note",
+                               json={"user": USER, "case_id": case_id, "version_id": version_id})
+        self.assertEqual(res.status_code, 200, res.get_json())
+        return res.get_json()
+
+    def panel_case(self, *versions):
+        """A case of (version_id, job_id, params, note, based_on), oldest
+        first, every job finished."""
+        rows = [{"version_id": vid, "kind": "edit", "created_at": 100.0, "based_on": based_on,
+                 "params": params, "note": note, "path": "local", "runs": [job],
+                 "results": [{"job_id": job, "run": 1, "field": "0_res0"}]}
+                for vid, job, params, note, based_on in versions]
+        for row in rows:
+            self.jobs[row["results"][0]["job_id"]] = {"status": "success", "error": None}
+        self.cases["case-p"] = {"image_key": "case-p", "path": "local", "ts": 100.0, "versions": rows}
+
+    def test_a_panel_version_gets_its_note_written_and_kept(self):
+        seen, sources = [], []
+
+        def model(context, images=()):
+            seen.append((context, images))
+            return {"note": "加了石燈籠，鳥居下更有氣氛。"}
+
+        def note_images(original_key, job_id, source=None):
+            sources.append((original_key, job_id, source))
+            return "data:before", "data:after"
+
+        self.panel_case(("v1", "j1", {"user_prompt": "人都移除", "overwrite_prompt": True}, "人都移除了。", None),
+                        ("v2", "j2", {"user_prompt": "鳥居下增加石燈籠", "overwrite_prompt": True}, None, None))
+        with patch.object(chat, "get_redis_conn", lambda: self.redis), \
+                patch.object(chat.chat_assistant, "call_render_note", model), \
+                patch.object(chat, "_note_images", note_images), \
+                patch.object(chat, "set_version_note") as kept:
+            self.assertEqual(self.version_note("case-p", "v2"), {"status": "pending"})
+            # Asked again while it is being written: nothing is queued twice.
+            self.assertEqual(self.version_note("case-p", "v2"),
+                             {"status": "done", "note": "加了石燈籠，鳥居下更有氣氛。"})
+        self.assertEqual(len(seen), 1)
+        context, images = seen[0]
+        self.assertIn("鳥居下增加石燈籠", context)
+        self.assertIn("EARLIER NOTES:\n- 人都移除了。", context)
+        self.assertEqual(len(images), 2)
+        # Made from the original: before is the case's own photo.
+        self.assertEqual(sources, [("case-p", "j2", None)])
+        kept.assert_called_once_with(USER, "case-p", "v2", "加了石燈籠，鳥居下更有氣氛。")
+
+    def test_a_panel_continuation_note_reads_its_request_against_its_source(self):
+        seen, sources = [], []
+        source = {"version_id": "v1", "job_id": "j1", "run": 1}
+        self.panel_case(("v1", "j1", {}, None, None),
+                        ("v2", "j2", {"base": "version", "source_result": source, "user_prompt": "remove the cup",
+                                      "style_options": {"lighting": "gold"}}, None, "v1"))
+        with patch.object(chat, "get_redis_conn", lambda: self.redis), \
+                patch.object(chat.chat_assistant, "call_render_note",
+                             lambda context, images=(): seen.append(context) or {"note": "杯子拿掉了。"}), \
+                patch.object(chat, "_note_images",
+                             lambda original_key, job_id, source=None: sources.append(source) or ("b", "a")), \
+                patch.object(chat, "set_version_note"):
+            self.version_note("case-p", "v2")
+            self.assertEqual(self.version_note("case-p", "v2")["note"], "杯子拿掉了。")
+        self.assertEqual(sources, [source])
+        self.assertIn('REQUEST: "remove the cup"', seen[0])
+        self.assertIn("金色", seen[0])
+
+    def test_a_version_note_is_not_written_twice_or_for_nothing(self):
+        self.panel_case(("v1", "j1", {"user_prompt": "x"}, "已經寫好了。", None))
+        self.cases["case-p"]["versions"].insert(0, {
+            "version_id": "a0", "kind": "analyze", "created_at": 1.0, "based_on": None, "params": {},
+            "note": None, "results": [{"job_id": "a0", "run": 1, "field": "0_res0"}]})
+        with patch.object(chat, "get_redis_conn", lambda: self.redis), \
+                patch.object(chat.chat_queue, "submit") as submit:
+            self.assertEqual(self.version_note("case-p", "v1"), {"status": "done", "note": "已經寫好了。"})
+            self.assertEqual(self.version_note("case-p", "a0"), {"status": "none"})
+        submit.assert_not_called()
+        # A version still rendering is asked about again later.
+        self.panel_case(("v2", "j2", {"user_prompt": "x"}, None, None))
+        self.jobs["j2"]["status"] = "processing"
+        with patch.object(chat, "get_redis_conn", lambda: self.redis):
+            self.assertEqual(self.version_note("case-p", "v2"), {"status": "pending"})
+        res = self.client.post("/api/photo-agent/chat/version-note",
+                               json={"user": USER, "case_id": "case-p", "version_id": "gone"})
+        self.assertEqual(res.status_code, 404)
 
     def test_a_continuation_can_be_styles_alone(self):
         sid = self.new_session()

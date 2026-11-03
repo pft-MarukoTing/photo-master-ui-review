@@ -796,6 +796,43 @@
       color: var(--text-2);
     }
     .ap-photo-summary-text:empty { display: none; }
+    /* #ap-skip-hint-text while a panel version's note is being written
+       (paintSkipHintText, app.js): holds about the three lines a note
+       takes, so nothing below moves when it lands, and the wait line gets
+       the progress feed's slow shine to read as in progress. */
+    .ap-photo-summary-text.is-note-waiting { min-height: 4.5em; }
+    .ap-skip-hint-waiting { color: var(--text-2); }
+    /* What to press next, under the note (paintSkipHintText): set off by
+       the summary's own hairline rule and a step quieter, so it reads as
+       an aside rather than more of the note. */
+    .ap-skip-hint-next {
+      display: block;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-3);
+    }
+    @supports ((background-clip: text) or (-webkit-background-clip: text)) {
+      .ap-skip-hint-waiting {
+        background-image: linear-gradient(110deg, var(--text-2) 40%, var(--accent) 48%, #fff 50%, var(--accent) 52%, var(--text-2) 60%);
+        background-size: 250% 100%;
+        background-position: 100% 0;
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+        animation: progressFeedShineLoop 4s ease-in-out .6s infinite;
+      }
+    }
+    @media (prefers-reduced-motion: reduce), (forced-colors: active) {
+      .ap-skip-hint-waiting {
+        animation: none;
+        background: none;
+        color: var(--text-2);
+        -webkit-text-fill-color: currentColor;
+      }
+    }
     /* #ap-skip-analyze-btn: 幫我分析, left of 美化 for a 「只照需求改」 case
        (#ap-skip-hint explains why). Secondary to 美化, so the tonal accent
        pill rather than the gradient -- same sizing as its neighbour. */

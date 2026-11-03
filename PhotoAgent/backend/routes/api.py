@@ -91,6 +91,15 @@ def _apply_review_selections(analysis, raw_selections):
     return apply_selections(analysis, raw_selections), None
 
 
+def _selections_extra(raw_selections):
+    """The review screen's choices as a version keeps them (`extra`), the way
+    chat's renders record theirs: the version's note rebuilds its plan from
+    them. Called after _apply_review_selections has accepted them."""
+    if isinstance(raw_selections, str) and raw_selections:
+        raw_selections = json.loads(raw_selections)
+    return {"selections": raw_selections} if isinstance(raw_selections, dict) else {}
+
+
 # 「只照需求改」的 case 只有 skipped_analysis_stage 的空殼，沒有 subject_category；
 # 面板上改了需求或挑了風格再美化，照樣接著修。空殼沒有任何建議可修，只有照使用者
 # 自己的需求改才修得出東西。
@@ -1271,7 +1280,8 @@ def analyze_and_finish(job_id):
     engine_params["acts"][0]["params"] = params
     new_job_id = enqueue(engine_params, src_content=None)
     user = body.get("user")
-    _record_history_safely(user, new_job_id, "local", engine_params["srcKeys"][0], new_job_id, params=params)
+    _record_history_safely(user, new_job_id, "local", engine_params["srcKeys"][0], new_job_id, params=params,
+                           extra=_selections_extra(selections))
     if user:
         try:
             attach_case_analysis(normalize_username(user), engine_params["srcKeys"][0], new_job_id)
@@ -1373,7 +1383,8 @@ def continue_job(job_id):
     # new_job_id when absent makes a plain single-RUN continue its own
     # standalone group, same as before action_id existed.
     action_id = body.get("action_id") or new_job_id
-    _record_history_safely(body.get("user"), new_job_id, "local", engine_params["srcKeys"][0], action_id, params=params)
+    _record_history_safely(body.get("user"), new_job_id, "local", engine_params["srcKeys"][0], action_id, params=params,
+                           extra={**_selections_extra(body.get("selections")), "analysis_job_id": job_id})
     return jsonify({"job_id": new_job_id}), 202
 
 
@@ -1426,7 +1437,8 @@ def continue_version():
     new_job_id = enqueue(engine_params, src_content=None)
     action_id = body.get("action_id") or new_job_id
     _record_history_safely(user, new_job_id, "local", case_id, action_id, params=params,
-                           extra={"base": "version", "source_result": source}, based_on=source["version_id"])
+                           extra={"base": "version", "source_result": source, "style_options": styles},
+                           based_on=source["version_id"])
     analysis_job_id = body.get("analysis_job_id")
     if isinstance(analysis_job_id, str) and analysis_job_id:
         try:
@@ -1493,7 +1505,8 @@ def rerun():
     # folder's original run recorded (a different session entirely, quite
     # possibly a different user's).
     action_id = request.form.get("action_id") or job_id
-    _record_history_safely(request.form.get("user"), job_id, "local", engine_params["srcKeys"][0], action_id, params=params)
+    _record_history_safely(request.form.get("user"), job_id, "local", engine_params["srcKeys"][0], action_id, params=params,
+                           extra=_selections_extra(request.form.get("selections")))
     return jsonify({"job_id": job_id}), 202
 
 

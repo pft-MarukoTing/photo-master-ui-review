@@ -50,7 +50,7 @@ from backend.services.account import (
     set_version_note,
 )
 from backend.services.compatibility import get_min_compatible_version
-from backend.services.put_job import download_bytes, enqueue, get_session_id, lost_job_error
+from backend.services.put_job import download_bytes, enqueue, get_redis_conn, get_session_id, lost_job_error
 from backend.services.report import get_report_by_id, get_report_chat, get_report_page, is_admin
 from backend.services.template_params import get_engine_params_template
 from compatibility_version import get_compatibility_version, is_compatible
@@ -69,6 +69,7 @@ from photo_agent.chat_plan import (
     apply_plan_patch,
     build_render_form,
     build_selections,
+    plan_of_version,
 )
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/api/photo-agent/chat")
@@ -524,7 +525,9 @@ def _sync_from_history(user, session_id, session):
     面板模式, and those of an expired session a photo was reopened from.
     A version is posted once (claimed by its version_id, like a chat
     render). One still running is followed as the photo's pending render,
-    so the page shows it rendering and the status polls post it."""
+    so the page shows it rendering and the status polls post it. A note
+    written for a version after its card went up (/version-note) is put into
+    that card on the next sync."""
     statuses, messages, posted = {}, [], None
     for photo in session["photos"]:
         if photo["status"] != "ready":
@@ -533,12 +536,18 @@ def _sync_from_history(user, session_id, session):
         edits = [v for v in entry.get("versions") or []
                  if v["kind"] != "analyze" and v["runs"] and (v.get("path") or "local") == "local"]
         if edits and posted is None:
-            posted = {(m.get("card") or {}).get("version_id")
-                      for m in store.get_messages(user, session_id, limit=store.MESSAGES_MAX_LEN)}
+            posted = {}
+            for m in store.get_messages(user, session_id, limit=store.MESSAGES_MAX_LEN):
+                card = m.get("card") or {}
+                if card.get("type") == "render_done" or card.get("version_id") not in posted:
+                    posted[card.get("version_id")] = m
         changed = False
         for version in edits:
             version_id = version["version_id"]
             if version_id in posted:
+                card = posted[version_id].get("card") or {}
+                if version.get("note") and card.get("type") == "render_done" and not card.get("note"):
+                    store.update_card(user, session_id, posted[version_id]["id"], {"note": version["note"]})
                 continue
             jobs = {job_id: _job_status(job_id, statuses) for job_id in version["runs"]}
             if any(j["status"] not in TERMINAL_STATUSES for j in jobs.values()):
@@ -563,7 +572,8 @@ def _sync_from_history(user, session_id, session):
             messages += _land_panel_version(user, session_id, photo, entry, statuses, {
                 "type": "render_done", "photo_id": photo["photo_id"], "version_id": version_id,
                 "job_ids": succeeded, "failed_job_ids": [j for j in version["runs"] if j not in succeeded],
-                "via": "custom", **_panel_continuation(version)}, version.get("based_on"))
+                "via": "custom", **_panel_continuation(version),
+                **({"note": version["note"]} if version.get("note") else {})}, version.get("based_on"))
         landed = _take_case_analysis(user, session_id, photo, entry, statuses)
         if landed is not None:
             changed = True
@@ -2373,18 +2383,17 @@ def _valid_brief(brief):
     return brief if ok else None
 
 
-def _note_images(photo, job_id, source=None):
+def _note_images(original_key, job_id, source=None):
     """(before, result) as small data URLs for the note under a finished
     version, or (None, None) when either cannot be had -- the note then only
-    says what the version set out to do. Before is the original, or for a
-    continuation the result it was made from (`source`). The first run stands
-    for a multi-run version."""
+    says what the version set out to do. Before is the original
+    (`original_key`), or for a continuation the result it was made from
+    (`source`). The first run stands for a multi-run version."""
     try:
         res0 = (get_job_info(job_id, keyToGet=["0_res0"]) or {}).get("0_res0") or {}
         runs = res0.get("runs")
         keys = (runs[0].get("cusKeys") if runs else res0.get("cusKeys")) or []
-        src = (continuation_svc.result_key(source["job_id"], source["run"]) if source
-               else (photo.get("src_keys") or [None])[0])
+        src = continuation_svc.result_key(source["job_id"], source["run"]) if source else original_key
         if not keys or not src:
             return None, None
         before, before_error = download_bytes(src, job_id)
@@ -2429,7 +2438,8 @@ def _submit_note(user, session_id, photo, pending):
     job_id = pending["render_job"]
     previous_plan, earlier_notes = _earlier_versions(user, session_id, photo["photo_id"], pending.get("based_on"))
     with timed("note_images", photo=photo["photo_id"], job=job_id):
-        before, after = _note_images(photo, job_id, continuation and continuation["source_result"])
+        before, after = _note_images((photo.get("src_keys") or [None])[0], job_id,
+                                     continuation and continuation["source_result"])
     try:
         return chat_queue.submit({"stage": chat_jobs.STAGE_NOTE, "analysis": analysis, "plan": pending["plan"],
                                   "previous_plan": previous_plan, "earlier_notes": earlier_notes,
@@ -2481,6 +2491,129 @@ def _advance_texts(user, session_id, photo):
         photo.update(fields)
         store.update_photo_state(user, session_id, photo["photo_id"], fields)
     return messages
+
+
+# --- The note under a 面板模式 version ----------------------------------------
+# Chat writes its notes as versions land (_advance_texts, with 詳細解說 on);
+# 面板模式 asks for one per finished version here, and the note is kept with
+# the version the same way, so both modes then read it off the case.
+
+# While a note is being written: {job_id, since}; after one could not be:
+# {"none": true}, so the page stops asking for a while.
+VERSION_NOTE_KEY = "photo_agent:version_note:{user}:{case_id}:{version_id}"
+VERSION_NOTE_NONE_SECONDS = 3600
+
+
+def _version_note_key(user, case_id, version_id):
+    return VERSION_NOTE_KEY.format(user=user, case_id=case_id, version_id=version_id)
+
+
+def _version_analysis(entry, version):
+    """The analysis a version was made against, or None for one made from
+    the request alone: the one its /continue was told, the case's, the
+    case's latest analyze run before it, or its own (a combined /submit)."""
+    earlier = entry["versions"][:entry["versions"].index(version)]
+    candidates = [(version.get("params") or {}).get("analysis_job_id"), entry.get("analysis_job_id")]
+    candidates += [v["results"][0]["job_id"] for v in reversed(earlier)
+                   if v.get("kind") == "analyze" and v.get("results")]
+    candidates.append(version["results"][0]["job_id"])
+    for job_id in filter(None, candidates):
+        analysis, error = _load_analysis(job_id)
+        if not error and not (analysis or {}).get("_skipped_analysis"):
+            return analysis
+    return None
+
+
+def _submit_version_note(case_id, entry, version):
+    """Queue the note on one finished version of a case; the job id, or None
+    when there is nothing to write it from."""
+    params = version.get("params") or {}
+    versions = entry["versions"]
+    earlier = [v for v in versions[:versions.index(version)] if v.get("kind") != "analyze"]
+    earlier_notes = [v["note"] for v in earlier if isinstance(v.get("note"), str)][-EARLIER_NOTES_MAX:]
+    source = params.get("source_result") if params.get("base") == VERSION_BASE else None
+    source = source if isinstance(source, dict) else None
+    job_id = version["results"][0]["job_id"]
+    analysis = _version_analysis(entry, version)
+    plan = plan_of_version(params)
+    continuation = None
+    if source:
+        selections = params.get("selections") if isinstance(params.get("selections"), dict) else {}
+        continuation = {"request": params.get("user_prompt") or "", "source_result": source,
+                        "style_options": params.get("style_options") or selections.get("options") or {}}
+    elif analysis is None and not (params.get("user_prompt") or "").strip():
+        return None
+    based_on = next((v for v in earlier if version.get("based_on") and v["version_id"] == version["based_on"]),
+                    earlier[-1] if earlier else None)
+    with timed("note_images", job=job_id):
+        before, after = _note_images(case_id, job_id, source)
+    return chat_queue.submit({"stage": chat_jobs.STAGE_NOTE, "analysis": analysis, "plan": plan,
+                              "previous_plan": plan_of_version(based_on["params"] or {}) if based_on else None,
+                              "earlier_notes": earlier_notes, "before": before, "after": after,
+                              "continuation": continuation, "lang": i18n.current()})
+
+
+@chat_bp.post("/version-note")
+def version_note():
+    """The note under one finished version of a case, for 面板模式: asked for
+    the first time, it is queued; asked again, the answer is picked up once it
+    is in. {status: "pending"} until then -- the page asks again --, then
+    {status: "done", note} or {status: "none"} when no note can be had."""
+    body = _body()
+    user = _user(body.get("user"))
+    case_id, version_id = body.get("case_id"), body.get("version_id")
+    if not (isinstance(case_id, str) and case_id and isinstance(version_id, str) and version_id):
+        return jsonify({"error": "case_id and version_id are required"}), 400
+    entry = get_history_entry(user, case_id)
+    version = next((v for v in (entry or {}).get("versions") or [] if v["version_id"] == version_id), None)
+    if version is None:
+        return jsonify({"error": "version not found"}), 404
+    if version.get("note"):
+        return jsonify({"status": "done", "note": version["note"]})
+    if version.get("kind") == "analyze" or not version.get("results"):
+        return jsonify({"status": "none"})
+    redis = get_redis_conn()
+    key = _version_note_key(user, case_id, version_id)
+    raw = redis.get(key)
+    state = json.loads(raw) if raw else None
+    if state is None:
+        status = (get_job_info(version["results"][0]["job_id"], keyToGet=["status"]) or {}).get("status")
+        if status != "success":
+            return jsonify({"status": "none" if status == "error" else "pending"})
+        # Whoever sets the key first writes the note; the rest wait for it.
+        if not redis.set(key, json.dumps({"since": time.time()}), nx=True, ex=chat_queue.WAIT_SECONDS + 60):
+            return jsonify({"status": "pending"})
+        try:
+            job_id = _submit_version_note(case_id, entry, version)
+        except Exception:
+            current_app.logger.exception("version note failed")
+            job_id = None
+        if not job_id:
+            redis.set(key, json.dumps({"none": True}), ex=VERSION_NOTE_NONE_SECONDS)
+            return jsonify({"status": "none"})
+        redis.set(key, json.dumps({"job_id": job_id, "since": time.time()}), ex=chat_queue.WAIT_SECONDS + 60)
+        return jsonify({"status": "pending"})
+    if state.get("none"):
+        return jsonify({"status": "none"})
+    if not state.get("job_id"):
+        return jsonify({"status": "pending"})
+    done, answer = chat_queue.poll(state["job_id"], state["since"], chat_jobs.STAGE_NOTE)
+    if not done:
+        return jsonify({"status": "pending"})
+    text = answer.strip() if isinstance(answer, str) else ""
+    if not text:
+        redis.set(key, json.dumps({"none": True}), ex=VERSION_NOTE_NONE_SECONDS)
+        return jsonify({"status": "none"})
+    # Chat's own note (詳細解說) may have landed meanwhile: that one stays.
+    landed = next((v.get("note") for v in (get_history_entry(user, case_id) or {}).get("versions") or []
+                   if v["version_id"] == version_id), None)
+    if not landed:
+        try:
+            set_version_note(user, case_id, version_id, text)
+        except Exception:
+            current_app.logger.exception("version note history failed")
+    redis.delete(key)
+    return jsonify({"status": "done", "note": landed or text})
 
 
 def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
