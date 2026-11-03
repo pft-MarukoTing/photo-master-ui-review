@@ -8,7 +8,7 @@ from photo_agent.branch_skills.food.instructions import LOOK_PREFIX
 from prompts import AXIS_ALIASES, LENS_AXIS, smile_adjustment_suggested
 
 CATEGORIES = ("light_color", "background", "portrait", "clarity", "composition")
-# Portrait comes from the portrait-QC pass, so the analysis model writes only the other five.
+# Portrait comes from the portrait-QC pass, so the analysis model writes only the other four.
 MODEL_CATEGORIES = tuple(category for category in CATEGORIES if category != "portrait")
 RATINGS = ("good", "could_be_better", "needs_work")
 

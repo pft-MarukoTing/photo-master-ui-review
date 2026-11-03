@@ -262,7 +262,7 @@ def _validate_params(params: dict) -> dict:
 
     normalized["advanced_options"] = normalize_advanced_options(normalized.get("advanced_options"))
 
-    # The app's review screen shows per-aspect findings cards; other clients skip their extra summary call.
+    # The app's review screen shows per-aspect findings cards; other clients leave them out of the analysis.
     findings_cards = normalized.get("findings_cards", False)
     if not isinstance(findings_cards, bool):
         raise RuntimeError(f"{EFFECT_NAME}: findings_cards must be a boolean", RESULT_INVALID_PARAMETER)
