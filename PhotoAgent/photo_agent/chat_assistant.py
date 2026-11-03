@@ -85,7 +85,7 @@ OPEN_PANELS = {"人像": "face", "畫面": "recipe", "風格": "style", "個人�
 UNMAPPED_REPLY = "這個調整我沒辦法對應到可設定的項目，可以直接在面板上修改。"
 ALREADY_SET_REPLY = "這些已經在目前的設定裡了。"
 ALREADY_SET_REDO = "想照這樣重新產生一版，可以按「再美化」。"
-# 回覆把人帶進「接續某一版修改」（continue_from）：頁面切到那一版、打開「美化第 N 版」，
+# 回覆把人帶進「接續某一版修改」（continue_from）：頁面切到那一版、打開「從第 N 版美化」，
 # 要改的地方（continue_request）先放進去，按「接續第 N 版美化」才產生。
 CONTINUE_REPLY = "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的個人化需求了，沒問題就按「接續第 {n} 版美化」；想換光線、角度這類效果，可以先按「風格」。"
 CONTINUE_ASK_REPLY = "好，已經切到第 {n} 版，接著在這版上改。想改哪裡直接打在下面，我會先幫你看過、記下來；想換光線、角度這類效果，可以按「風格」。都好了再按「接續第 {n} 版美化」。"
@@ -1344,7 +1344,7 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     render = result.get("action") == "render" and not wanted
     cont = None if wanted or render or result.get("action") == "close" else _continue_from(result, screen)
     if cont:
-        # 頁面切到那一版、打開「美化第 N 版」；回覆由這裡寫，跟頁面上看到的一致。
+        # 頁面切到那一版、打開「從第 N 版美化」；回覆由這裡寫，跟頁面上看到的一致。
         reply = i18n.tr(CONTINUE_REPLY if cont["request"] else CONTINUE_ASK_REPLY).format(n=cont["version"])
         return {"reply": reply, "render": False, "proposal": None, "options": [], "close": False, "lines": False,
                 "open": "", "continue": cont, **({"request_validated": True} if result.get("request_validated") else {})}

@@ -314,7 +314,7 @@
   let panelContinuationStash = null;
   // The version the revise panel was last painted for, and the base it
   // opens on there: a version made from another one carries on from itself
-  // (美化第 N 版), any other starts from the original (defaultRun null).
+  // (從第 N 版美化), any other starts from the original (defaultRun null).
   // While 調整中 the panel stays on it, whatever version is stepped to
   // (renderSingleRunSwitcher). { owner, run, defaultRun }.
   let panelBase = null;
@@ -2717,7 +2717,7 @@
   // On each repaint of the panel: a new singleFlowState (another version or
   // case, a 美化) starts on its version's default base, unless a mode was
   // already put on it. Either way the panel shows what the version was made
-  // with: 從原圖美化 its settings, 美化第 N 版 its request.
+  // with: 從原圖美化 its settings, 從第 N 版美化 its request.
   // A chat handoff with something unsent puts the chat's base on it instead:
   // 接著這張調整 on this very version is taken here, with its request; any
   // other is 從原圖美化 for now, so applyPendingModeHandoff, which runs only
@@ -2946,7 +2946,7 @@
     }
     const cont = activeContinuation();
     els.apContinueShot.src = cont ? cont.thumbUrl : apContinueOriginThumb();
-    els.apContinueLabel.textContent = cont ? tr("美化第 {n} 版", { n: cont.versionNumber }) : tr("從原圖美化");
+    els.apContinueLabel.textContent = cont ? tr("從第 {n} 版美化", { n: cont.versionNumber }) : tr("從原圖美化");
     if (!els.apContinueMenu.hidden) renderApContinueMenu();
     syncApContinueExit();
   }
@@ -7040,7 +7040,7 @@
     // After the snapshot: what the chat page changed counts as a change here
     // too, so 美化 is not blocked as if nothing had been touched.
     if (!continuing) {
-      // Not while 美化第 N 版: the fields then hold that request, and a
+      // Not while 從第 N 版美化: the fields then hold that request, and a
       // baseline taken off them would make the same request, carried back to
       // 從原圖美化, read as nothing changed (no 調整中 tile).
       markReviewBaseline();

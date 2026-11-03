@@ -5724,7 +5724,7 @@ export function SessionView(props: {
     setContPrompt(r.text || "");
     setContStyles(r.style_options || {});
   }, [props.resume, versions.length]);
-  // AI 回「從第 N 版接著改」：切到那一版、打開「美化第 N 版」，要改的地方先放進去，
+  // AI 回「從第 N 版接著改」：切到那一版、打開「從第 N 版美化」，要改的地方先放進去，
   // 按「接續第 N 版美化」才產生。只認打開這串對話之後才來的那則，同一則只接一次。
   // （adjusting、leaveAdjust 在後面才宣告；effect 在整個 render 跑完才執行，拿得到。）
   const continuedFrom = useRef<string | null>(null);
@@ -6380,7 +6380,7 @@ export function SessionView(props: {
             );
           }
           if (navigation && idx === guideAt) return firstGuide();
-          // 「從第 N 版接著改」的那句：下面接的是美化第 N 版的卡，原本那一輪的項目不放。
+          // 「從第 N 版接著改」的那句：下面接的是從第 N 版美化的卡，原本那一輪的項目不放。
           return navigation && open && editing && cats.length > 0 && !c.continue ? <div class="chat-choices">{catChips()}</div> : null;
         })()}
       </>
@@ -6878,7 +6878,7 @@ export function SessionView(props: {
           return (
             <AskBubble text={[c.prompt, ...pickedStyles(styleAnalysis, caps, { style_options: c.style_options || {} })]
               .filter(Boolean).join(t("、"))}
-              meta={[from ? t("美化第 {n} 版", { n: from.ordinal }) : t("接著調整"), clockLabel(m.created_at)].join(" · ")} />
+              meta={[from ? t("從第 {n} 版美化", { n: from.ordinal }) : t("接著調整"), clockLabel(m.created_at)].join(" · ")} />
           );
         }
         const meta = renderMeta(caps, photo.plan);
@@ -7511,7 +7511,7 @@ type ContTurn = { text: string; reply?: string; ask?: boolean; options?: string[
 // 一次接續美化：從哪一版、照什麼需求和風格。
 type ContRun = { from: Version; text: string; styles: Record<string, string> };
 
-// 輸入框上方「從原圖美化／美化第 N 版」那顆：點了掀開選單換底，原圖或任一版。
+// 輸入框上方「從原圖美化／從第 N 版美化」那顆：點了掀開選單換底，原圖或任一版。
 // 藥丸本身會把太長的字截掉（overflow:hidden），選單得掛在外面那層，不然會被切掉。
 // 原圖是預設，沒有叉叉；接著某一版時才有，按了就不接續、打好的也不留。
 function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
@@ -7551,7 +7551,7 @@ function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
         <button type="button" class="chat-continue-pick" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
           title={t("換一張當底")} onClick={() => setOpen((o) => !o)}>
           <img class="chat-continue-shot" src={from ? urls.resultThumb(versionJob(from)) : original} alt="" />
-          {from ? t("美化第 {n} 版", { n: from.ordinal }) : t("從原圖美化")}
+          {from ? t("從第 {n} 版美化", { n: from.ordinal }) : t("從原圖美化")}
           <span class={`chat-opt-caret${open ? " is-open" : ""}`} />
         </button>
         {from && onClose && (

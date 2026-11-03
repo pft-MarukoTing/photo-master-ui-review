@@ -216,7 +216,7 @@ window.PHOTOAGENT_CATALOGS.en = {
   "這個版本只依照個人化需求修圖，沒有分析整張照片，所以沒有 AI 的修圖建議。可以直接在下方修改個人化需求；想要 AI 給建議的話，請按「美化」左邊的「幫我分析」。": "This version was retouched based on My Requests only. The whole photo wasn't analyzed, so there are no AI suggestions. You can edit My Requests below, or tap “Analyze for Me” (left of “Retouch”) for AI suggestions.",
   "第 {n} 版完成・由第 {m} 版調整": "Version {n} ready · adjusted from version {m}",
   "第 {n} 版完成": "Version {n} is ready",
-  "美化第 {n} 版": "Retouching version {n}",
+  "從第 {n} 版美化": "Retouch from Version {n}",
   "先寫下想調整的地方，或挑一個風格。": "Write what you'd like to change, or pick a style first.",
   "個人化需求和風格會帶過去，其他還沒美化的調整會清掉。確定要接著這張調整嗎？": "Your request and styles come along; other unretouched changes will be cleared. Adjust this one anyway?",
   "只改你要求的地方，其他保持第 {n} 版的樣子。": "Changes only what you ask; the rest stays as in version {n}.",
