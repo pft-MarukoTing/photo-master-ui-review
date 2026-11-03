@@ -1,0 +1,122 @@
+job: extension
+config:
+  name: eye_lift_sq_20261102
+  process:
+  - type: diffusion_trainer
+    training_folder: output
+    sqlite_db_path: ./aitk_db.db
+    device: cuda
+    trigger_word: null
+    performance_log_every: 10
+    network:
+      type: lora
+      linear: 16
+      linear_alpha: 16
+      conv: 16
+      conv_alpha: 16
+      lokr_full_rank: true
+      lokr_factor: -1
+      network_kwargs:
+        ignore_if_contains: []
+    save:
+      dtype: bf16
+      save_every: 100
+      max_step_saves_to_keep: 40
+      save_format: diffusers
+      push_to_hub: false
+    datasets:
+    - folder_path: datasets/eye_lift_sq/train/target
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: Lift the drooping upper eyelids so both eyes look naturally more open. If an eye is fully closed or hidden behind sunglasses, leave that eye unchanged. Keep the identity, eye shape, iris, gaze, eyelashes, eyebrows, makeup, skin texture and lighting unchanged.
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 1
+      dataset_augmentations: []
+      control_path_1: datasets/eye_lift_sq/train/control
+      control_path_2: null
+      control_path_3: null
+    train:
+      batch_size: 1
+      balanced_dataset_sampling: false
+      bypass_guidance_embedding: false
+      steps: 6000
+      gradient_accumulation: 1
+      train_unet: true
+      train_text_encoder: false
+      gradient_checkpointing: true
+      noise_scheduler: flowmatch
+      optimizer: adamw8bit
+      timestep_type: weighted
+      content_or_style: balanced
+      optimizer_params:
+        weight_decay: 0.0001
+      unload_text_encoder: false
+      cache_text_embeddings: true
+      lr: 0.0006
+      ema_config:
+        use_ema: true
+        ema_decay: 0.99
+      skip_first_sample: false
+      force_first_sample: false
+      disable_sampling: false
+      dtype: bf16
+      diff_output_preservation: false
+      diff_output_preservation_multiplier: 1
+      diff_output_preservation_class: person
+      switch_boundary_every: 1
+      loss_type: mse
+    logging:
+      log_every: 1
+      use_ui_logger: true
+    model:
+      name_or_path: Qwen/Qwen-Image-Edit-2509
+      quantize: true
+      qtype: qfloat8
+      quantize_te: true
+      qtype_te: qfloat8
+      arch: qwen_image_edit_plus
+      low_vram: true
+      model_kwargs:
+        match_target_res: false
+      layer_offloading: false
+      layer_offloading_text_encoder_percent: 1
+      layer_offloading_transformer_percent: 1
+    sample:
+      sampler: flowmatch
+      sample_every: 100
+      width: 1024
+      height: 1024
+      samples:
+      - prompt: Lift the drooping upper eyelids so both eyes look naturally more open. If an eye is fully closed or hidden behind sunglasses, leave that eye unchanged. Keep the identity, eye shape, iris, gaze, eyelashes, eyebrows, makeup, skin texture and lighting unchanged.
+        ctrl_img_1: datasets/eye_lift_sq/test/control/55_43658_Original.jpg
+      - prompt: Lift the drooping upper eyelids so both eyes look naturally more open. If an eye is fully closed or hidden behind sunglasses, leave that eye unchanged. Keep the identity, eye shape, iris, gaze, eyelashes, eyebrows, makeup, skin texture and lighting unchanged.
+        ctrl_img_1: datasets/eye_lift_sq/test/control/16_50448_Original.jpg
+      - prompt: Lift the drooping upper eyelids so both eyes look naturally more open. If an eye is fully closed or hidden behind sunglasses, leave that eye unchanged. Keep the identity, eye shape, iris, gaze, eyelashes, eyebrows, makeup, skin texture and lighting unchanged.
+        ctrl_img_1: datasets/eye_lift_sq/test/control/22_45120_Original.jpg
+      - prompt: Lift the drooping upper eyelids so both eyes look naturally more open. If an eye is fully closed or hidden behind sunglasses, leave that eye unchanged. Keep the identity, eye shape, iris, gaze, eyelashes, eyebrows, makeup, skin texture and lighting unchanged.
+        ctrl_img_1: datasets/eye_lift_sq/test/control/49_44980_Original.jpg
+      - prompt: Lift the drooping upper eyelids so both eyes look naturally more open. If an eye is fully closed or hidden behind sunglasses, leave that eye unchanged. Keep the identity, eye shape, iris, gaze, eyelashes, eyebrows, makeup, skin texture and lighting unchanged.
+        ctrl_img_1: datasets/eye_lift_sq/test/control/36_39845_Original.jpg
+      - prompt: Lift the drooping upper eyelids so both eyes look naturally more open. If an eye is fully closed or hidden behind sunglasses, leave that eye unchanged. Keep the identity, eye shape, iris, gaze, eyelashes, eyebrows, makeup, skin texture and lighting unchanged.
+        ctrl_img_1: datasets/eye_lift_sq/test/control/38_22097_Original.jpg
+      neg: ''
+      seed: 42
+      walk_seed: false
+      guidance_scale: 4
+      sample_steps: 10
+      num_frames: 1
+      fps: 1
+meta:
+  name: eye_lift_sq_20261102
+  version: '1.0'
