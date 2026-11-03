@@ -358,6 +358,47 @@ body[data-theme="caramel-dark"] {
   --shadow-accent: 0 10px 30px rgba(241,170,66,.2);
 }
 
+/* "YCO" (sky) -- the YouCam Enhance (yce.perfectcorp.com) palette, and the
+   default theme. Light only: it has no dark counterpart. Every value is read
+   off YCE's own design tokens: brand cyan #03ADE2 (--brand-light-1000), the
+   cyan -> green #3FD75B title gradient, and the slate greys (#F5F9FA,
+   #12181A/#293133) for the neutral ladder, ~195 deg at low saturation like
+   default's own cool grey.
+   #03ADE2 itself is only 2.6:1 under white, so it stays on label-free
+   surfaces (the swatch, the glow) and --accent is the next step down, #06A6D9
+   (2.8:1 -- under the ~3.2 light-theme floor, traded for brightness on the
+   user's call); labels use chat.css's deeper --accent-text. YCE's green is
+   toned to a blue-green for --accent-2 (#0E9BA6, 3.36:1), so the page reads
+   cyan first, the way YCE's own pages do. The page and its light greys sit a
+   shade whiter than YCE's #F5F9FA, to match how airy YCE's white pages read;
+   every alpha (borders, glows, header, shadows, sheen) is the other light
+   themes' own.
+   Past the hues, it follows the existing light themes' structure: --mv-grad
+   runs soft -> accent (52%) -> deep like purple-light/caramel, though its
+   deep end stops at #0B85A8 (4.3:1) rather than their ~9-10:1 so the page
+   stays bright -- the user's call. Its pale gradient ends on a tint of
+   --accent-2. */
+body[data-theme="sky"] {
+  --n04: #FAFCFD; --n09: #FFFFFF; --n14: #F1F6F8; --n24: #E6EEF1;
+  --n34: #D2DCE0; --n44: #94A3A8; --n54: #67787D; --n64: #535F63;
+  --n74: #3D474A; --n84: #293133; --n100: #12181A;
+  --bg: var(--n04); --card: var(--n09); --card-2: var(--n14); --card-3: var(--n24);
+  --text: var(--n100); --text-2: var(--n64); --text-3: var(--n74); --text-4: var(--n84);
+  --border: rgba(17,24,26,.10); --border-2: rgba(17,24,26,.18);
+  --accent: #06A6D9; --accent-2: #0E9BA6; --accent-rgb: 6,166,217; --accent-2-rgb: 14,155,166;
+  --scrollbar-accent-rgb: 6,166,217;
+  --accent-soft-rgb: 93,208,245; --on-surface-rgb: 17,24,26; --on-surface-color: #12181A;
+  --glass-rgb: 255,255,255;
+  --accent-pale-color: #D8F6FD; --accent-pale-grad: linear-gradient(110deg, #F2FCFF 0%, #D8F6FD 68%, #A5E4E8 100%);
+  --header-bg: rgba(250,252,253,.82); --card-sheen: linear-gradient(160deg, rgba(var(--on-surface-rgb),.08), rgba(var(--on-surface-rgb),0) 55%);
+  --mv-grad: linear-gradient(135deg, #5DD0F5 0%, #06A6D9 52%, #0B85A8 100%);
+  --bg-glow-1: rgba(6,166,217,.09); --bg-glow-2: rgba(14,155,166,.08); --shadow-accent: 0 10px 30px rgba(6,166,217,.18);
+  /* Same light-theme shadow retint as paper above, see its comment. */
+  --shadow-sm: 0 2px 10px rgba(var(--on-surface-rgb),.09);
+  --shadow-lg: 0 16px 40px rgba(var(--on-surface-rgb),.10);
+  --shadow-btn: 0 6px 16px rgba(var(--on-surface-rgb),.14);
+}
+
 /* Every rule below that keys off body[data-theme-mode="light"] is a patch a
    theme needs purely because its surfaces are light -- almost all of them
    retinting a shadow that :root defines as flat black (fine on a dark card,
@@ -404,6 +445,9 @@ body[data-theme="purple-light"] #ap-review-panel { --hue-face: #7C3AED; --hue-re
    four tabs stay tellable apart within a single hue family. */
 body[data-theme="lilac-dark"] #ap-review-panel { --hue-face: #D876A9; --hue-recipe: #B788C8; --hue-style: #C967A2; --hue-prompt: #C694C6; }
 body[data-theme="caramel-dark"] #ap-review-panel { --hue-face: #F1AA42; --hue-recipe: #F9D178; --hue-style: #E79A6A; --hue-prompt: #E96753; }
+/* Same two-hues x two-lightnesses split as purple-light: cyan / blue-green,
+   light then deep. */
+body[data-theme="sky"] #ap-review-panel { --hue-face: #06A6D9; --hue-recipe: #0E9BA6; --hue-style: #0A6F99; --hue-prompt: #0B5A63; }
 
 /* .field-input/.field-ta (further down) default to background: var(--card)
    -- on every other theme --card is a step lighter/darker than --bg, but
@@ -432,6 +476,9 @@ body[data-theme="caramel"] .field-ta { background: var(--card-2); }
    arrangement var(--card) was written for. */
 body[data-theme="purple-light"] .field-input,
 body[data-theme="purple-light"] .field-ta { background: var(--card-2); }
+/* sky's --card is pure #FFFFFF over a #FAFCFD page -- same near-white case. */
+body[data-theme="sky"] .field-input,
+body[data-theme="sky"] .field-ta { background: var(--card-2); }
 
 /* ════════════════════════════════════════
    BASE
@@ -2473,22 +2520,22 @@ body[data-theme-mode="light"] .ios-thumb {
 .theme-swatch-purple-light { background: linear-gradient(135deg, #eeeef1, #8b5cf6 45%, #3730a3); }
 .theme-swatch-lilac-dark { background: linear-gradient(135deg, #d876a9, #804595 50%, #141014); }
 .theme-swatch-caramel-dark { background: linear-gradient(135deg, #f9d178, #d56723 50%, #141210); }
+.theme-swatch-sky { background: linear-gradient(135deg, #edf3f5, #06a6d9 45%, #0b85a8); }
 /* applyTheme (app.js) writes the current theme's own name into this label. Any
    width change here moves the whole header: every header button to this one's
    left shifts with it, and so does #report-btn, which is position:fixed at
    coordinates syncReportBtnPosition measures off #report-btn-spacer, this
    button's immediate right-hand neighbour. So the label is pinned to the
-   widest of the six names.
-   All six (極光 鳶尾 夜霞 藕荷 燼火 暖陽) are two CJK glyphs and every one of
-   them measures 25.70px at this button's 700 13px Inter with -0.15px tracking
-   -- CJK is fixed-advance, so they agree exactly and the lock is currently a
-   guard rather than a correction. It earns its keep the moment a name of a
-   different length is added: the previous set ran 51.4px to 77.1px and the
-   button visibly jumped ~26px on every click. Re-measure whenever the names
+   widest of the seven names.
+   Six of them (極光 鳶尾 夜霞 藕荷 燼火 暖陽) are two CJK glyphs and each
+   measures 25.70px at this button's 700 13px Inter with -0.15px tracking (CJK
+   is fixed-advance); the seventh, YCO, is Latin and the widest at 28.13px, so
+   that is what the lock is sized to. Without it the previous set ran 51.4px
+   to 77.1px and the button visibly jumped ~26px on every click. Re-measure whenever the names
    change; this value is deliberately in pixels, not ch, because it has to
    track the rendered font rather than the glyph count. Centering keeps a
    shorter future name from sitting off to one side inside the fixed box. */
-#theme-toggle-btn .btn-label { min-width: 26px; text-align: center; }
+#theme-toggle-btn .btn-label { min-width: 29px; text-align: center; }
 /* rgba(var(--on-surface-rgb)) instead of a hardcoded navy -- paper's own
    on-surface-rgb (23,32,51) was already that same navy in disguise, but
    the literal value silently stayed navy for peach's warm brown too. */

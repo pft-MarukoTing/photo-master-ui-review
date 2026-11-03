@@ -52,6 +52,7 @@ body[data-theme-mode="light"]{
    Measured on the wash, the tighter of the two surfaces:
      caramel 4.62  peach 4.62  lilac 4.63  paper 4.61  purple-light 4.61
      default 4.60  lilac-dark 4.60  ocean 7.49  forest 7.05  caramel-dark 7.04
+     sky 4.65
 
    The var(--accent) fallback sits on body, not :root. A var() inside a custom
    property is substituted against the element the property is declared on, and
@@ -69,6 +70,7 @@ body[data-theme="peach"]{--accent-text:#AE493F}
 body[data-theme="lilac"]{--accent-text:#924D92}
 body[data-theme="caramel"]{--accent-text:#A64F19}
 body[data-theme="purple-light"]{--accent-text:#7B39EA}
+body[data-theme="sky"]{--accent-text:#04769B}
 /* ocean, forest and caramel-dark are absent above on purpose: their accents
    already clear 4.5:1, so they keep the body-level var(--accent) fallback. */
 

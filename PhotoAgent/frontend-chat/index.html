@@ -15,8 +15,8 @@
   <script src="../zip-tool.js"></script>
   <!-- old-inline-styles -->
 </head>
-<body data-theme="caramel" data-theme-mode="light" class="side-panel-layout">
-  <!-- The attributes above are caramel, the fallback, so the common first load
+<body data-theme="sky" data-theme-mode="light" class="side-panel-layout">
+  <!-- The attributes above are sky, the fallback, so the common first load
        needs no swap at all. This runs before first paint to repoint them at a
        saved theme instead -- the module script below is deferred, so without
        it a browser holding 極光 would get a cream page for a frame and then a
@@ -25,22 +25,24 @@
   <script>
     (function () {
       try {
-        var KEYS = ["default", "purple-light", "lilac-dark", "lilac", "caramel-dark", "caramel"];
+        var KEYS = ["sky", "default", "purple-light", "lilac-dark", "lilac", "caramel-dark", "caramel"];
         var MODE = {
+          "sky": "light",
           "default": "dark", "purple-light": "light",
           "lilac-dark": "dark", "lilac": "light",
           "caramel-dark": "dark", "caramel": "light"
         };
         var SCROLLBAR = {
+          "sky": "6,166,217",
           "default": "147,51,234", "purple-light": "124,58,237",
           "lilac-dark": "201,103,162", "lilac": "136,71,136",
           "caramel-dark": "241,170,66", "caramel": "185,81,27"
         };
         // Read on its own so a blocked localStorage still leaves the markup's
-        // caramel fully applied rather than stranding the page half-themed.
+        // sky fully applied rather than stranding the page half-themed.
         var saved = null;
         try { saved = localStorage.getItem("photomaster-theme"); } catch (_) { /* storage may be blocked */ }
-        var theme = KEYS.indexOf(saved) !== -1 ? saved : "caramel";
+        var theme = KEYS.indexOf(saved) !== -1 ? saved : "sky";
         document.documentElement.style.setProperty("--scrollbar-accent-rgb", SCROLLBAR[theme]);
         if (theme === "default") delete document.body.dataset.theme;
         else document.body.dataset.theme = theme;

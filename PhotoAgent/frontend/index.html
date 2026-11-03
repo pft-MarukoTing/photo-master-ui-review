@@ -4885,13 +4885,14 @@
       // THEME_LABELS, app.js) -- a key that app.js would reject has to be
       // rejected here too, or a browser holding a since-hidden theme (peach,
       // ocean, forest, paper) would get it painted for one frame and then
-      // replaced by caramel once app.js runs: the exact flash this script
+      // replaced by sky once app.js runs: the exact flash this script
       // exists to prevent, just in the other direction.
-      var THEME_KEYS = ["default", "purple-light", "lilac-dark", "lilac", "caramel-dark", "caramel"];
+      var THEME_KEYS = ["sky", "default", "purple-light", "lilac-dark", "lilac", "caramel-dark", "caramel"];
       // Mirrors THEME_MODE in app.js -- the light-only patches in styles.css
       // key off body[data-theme-mode], so it has to be on the body from the
       // first frame too, not just the palette itself.
       var THEME_MODE = {
+        "sky": "light",
         "default": "dark",
         "purple-light": "light",
         "lilac-dark": "dark",
@@ -4900,6 +4901,7 @@
         "caramel": "light"
       };
       var THEME_SCROLLBAR_RGB = {
+        "sky": "6,166,217",
         "default": "147,51,234",
         "purple-light": "124,58,237",
         "lilac-dark": "201,103,162",
@@ -4913,7 +4915,7 @@
       // data-theme-mode and paint black shadows over white cards.
       var saved = null;
       try { saved = localStorage.getItem("photomaster-theme"); } catch (_) { /* storage may be blocked */ }
-      var theme = THEME_KEYS.indexOf(saved) !== -1 ? saved : "caramel";
+      var theme = THEME_KEYS.indexOf(saved) !== -1 ? saved : "sky";
       document.documentElement.style.setProperty(
         "--scrollbar-accent-rgb",
         THEME_SCROLLBAR_RGB[theme]
@@ -5063,14 +5065,14 @@
            fixed) button's left. The swatch span's background
            is repainted per theme by applyTheme, and so is the label -- this
            button no longer opens a picker naming every option, so it names the
-           current theme itself instead. The markup below holds caramel's name
-           because caramel is the fallback both here and in applyTheme, so the
+           current theme itself instead. The markup below holds sky's name
+           because sky is the fallback both here and in applyTheme, so the
            common first load needs no swap at all; a browser holding one of the
-           other five sees this text for the one frame before app.js runs,
+           other six sees this text for the one frame before app.js runs,
            exactly as the swatch class beside it already did. -->
       <button id="theme-toggle-btn" class="btn btn-secondary btn-sm" type="button" title="點擊切換主題">
-        <span id="theme-toggle-swatch" class="theme-swatch theme-toggle-swatch theme-swatch-caramel" aria-hidden="true"></span>
-        <span class="btn-label">暖陽</span>
+        <span id="theme-toggle-swatch" class="theme-swatch theme-toggle-swatch theme-swatch-sky" aria-hidden="true"></span>
+        <span class="btn-label">YCO</span>
       </button>
       <!-- ⋯ 選單裡的回報（只在手機出現）：代按 #report-btn，那顆固定定位的按鈕在手機上收起來。 -->
       <button id="header-menu-report-btn" class="btn btn-sm" type="button">

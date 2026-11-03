@@ -11681,23 +11681,25 @@
   // browser. THEME_CYCLE is the fixed click order, and these three objects are
   // the single source of truth for what counts as a selectable theme: a key
   // missing from THEME_LABELS is treated as invalid by applyTheme and falls
-  // back to caramel. ocean/forest/paper/peach keep their full body[data-theme]
+  // back to sky. ocean/forest/paper/peach keep their full body[data-theme]
   // CSS (styles.css) but are deliberately absent here -- hiding a theme means
   // dropping it from these lists, not deleting its stylesheet, so it can be
   // brought back by re-adding the key alone. peach ("淺色・暖橘") is hidden as
-  // of this change; anyone who had it saved lands on caramel at next load.
+  // of this change; anyone who had it saved lands on sky at next load.
   //
-  // Each of the three families ships both a light and a dark palette, and
-  // THEME_CYCLE walks them in pairs (dark then light of one family, then the
-  // next family) so a single click is always the small step -- same hue, other
-  // brightness -- and every second click is the bigger one.
+  // sky (the default) comes first and is light only. Each of the three other
+  // families ships both a light and a dark palette, and THEME_CYCLE walks them
+  // in pairs (dark then light of one family, then the next family) so a single
+  // click is always the small step -- same hue, other brightness -- and every
+  // second click is the bigger one.
   const THEME_KEY = "photomaster-theme";
   const THEME_CYCLE = [
+    "sky",
     "default", "purple-light",
     "lilac-dark", "lilac",
     "caramel-dark", "caramel",
   ];
-  // The six names are independent rather than three family names under a
+  // The seven names are independent rather than three family names under a
   // 深色/淺色 prefix: the prefix scheme forced one noun to describe both halves
   // of a family, and the two halves are not the same palette -- purple-light is
   // violet+indigo where default is neon purple+hot pink, so "紫" was accurate
@@ -11708,6 +11710,7 @@
   //   藕荷  #9C539C mauve + #C967A2 rose -- the traditional colour name for it
   //   燼火  #F1AA42 gold + #D56723 orange, embers on near-black
   //   暖陽  #D56723 orange + #F1AA42 gold, warm sun on cream
+  //   YCO   #06A6D9 cyan + #0E9BA6 blue-green (YCE's brand pair), clear sky on white
   // No two share a character, on purpose: the old 紫 / 紫丁香 pair was the
   // linguistic form of the same "these two look alike" complaint the colours
   // themselves drew. Keep that rule when editing this map -- caramel's first
@@ -11716,9 +11719,10 @@
   // (極光/夜霞/燼火 read dark, 鳶尾/藕荷/暖陽 read light) together with the
   // swatch beside the label. 燼火 vs 暖陽 is the pair that leans on this
   // hardest, since both are the same orange+gold: embers against sunlight.
-  // All six are two glyphs -- see the width lock in styles.css, which is
+  // Six are two glyphs and YCO is three Latin letters -- see the width lock in styles.css, which is
   // measured off that fact.
   const THEME_LABELS = {
+    sky: tr("YCO"),
     default: tr("極光"),
     "purple-light": tr("鳶尾"),
     "lilac-dark": tr("夜霞"),
@@ -11727,6 +11731,7 @@
     caramel: tr("暖陽"),
   };
   const THEME_SWATCH_CLASS = {
+    sky: "theme-swatch-sky",
     default: "theme-swatch-purple",
     "purple-light": "theme-swatch-purple-light",
     "lilac-dark": "theme-swatch-lilac-dark",
@@ -11739,6 +11744,7 @@
   // maps above but missing here would render with :root's dark-tuned black
   // shadows over its light cards, so the two lists have to stay in step.
   const THEME_MODE = {
+    sky: "light",
     default: "dark",
     "purple-light": "light",
     "lilac-dark": "dark",
@@ -11747,6 +11753,7 @@
     caramel: "light",
   };
   const THEME_SCROLLBAR_RGB = {
+    sky: "6,166,217",
     default: "147,51,234",
     "purple-light": "124,58,237",
     ocean: "14,165,194",
@@ -11759,7 +11766,7 @@
     caramel: "185,81,27",
   };
   function applyTheme(theme, persist = true) {
-    const selected = Object.prototype.hasOwnProperty.call(THEME_LABELS, theme) ? theme : "caramel";
+    const selected = Object.prototype.hasOwnProperty.call(THEME_LABELS, theme) ? theme : "sky";
     document.body.dataset.theme = selected;
     if (selected === "default") delete document.body.dataset.theme;
     // Set even for dark themes (rather than only when light) so the attribute
@@ -11772,8 +11779,8 @@
     );
     if (els.themeToggleBtn) {
       // The button's label IS the current theme's name -- the swatch says which
-      // color, the text says which of the six, and the pair needs no separate
-      // noun for "theme". All six names are two glyphs, but they are not all
+      // color, the text says which of the seven, and the pair needs no separate
+      // noun for "theme". The seven names are not all
       // the same rendered width, so the label is still width-locked in CSS
       // (#theme-toggle-btn .btn-label) to the widest: this button sits
       // immediately left of #report-btn-spacer, and #report-btn is
@@ -11797,8 +11804,8 @@
     }
   }
   function setupThemeToggle() {
-    let saved = "caramel";
-    try { saved = localStorage.getItem(THEME_KEY) || "caramel"; } catch (_) { /* storage may be blocked */ }
+    let saved = "sky";
+    try { saved = localStorage.getItem(THEME_KEY) || "sky"; } catch (_) { /* storage may be blocked */ }
     applyTheme(saved, false);
     if (els.themeToggleBtn) {
       els.themeToggleBtn.addEventListener("click", () => {

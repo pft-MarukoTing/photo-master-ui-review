@@ -22,7 +22,7 @@ import { dayLabel, timeLabel } from "./util";
 
 // One click advances the fixed cycle (theme.ts) -- no picker, the way the old
 // header does it. The swatch says which colour, the label names which of the
-// six, so the button needs no separate noun for 主題; the title carries the
+// seven, so the button needs no separate noun for 主題; the title carries the
 // affordance the label used to. At narrow widths styles.css hides .btn-label
 // across .header-actions and this collapses to the swatch alone.
 // Its own chat-* id, not the old #theme-toggle-btn: the old index.html <style>

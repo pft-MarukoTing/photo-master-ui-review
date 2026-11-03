@@ -10,9 +10,11 @@ import { t } from "./i18n";
 
 export const THEME_KEY = "photomaster-theme";
 
-// Each family ships a dark and a light palette, walked in pairs so one click
-// is always the small step (same hue, other brightness).
+// sky (the default) is light only; every other family ships a dark and a
+// light palette, walked in pairs so one click is the small step (same hue,
+// other brightness).
 export const THEME_CYCLE = [
+  "sky",
   "default",
   "purple-light",
   "lilac-dark",
@@ -24,8 +26,9 @@ export const THEME_CYCLE = [
 export type ThemeKey = (typeof THEME_CYCLE)[number];
 
 // The button's label is the theme's own name -- no two share a glyph, and all
-// six are two glyphs wide (styles.css width-locks .btn-label off that fact).
+// seven are two glyphs wide (styles.css width-locks .btn-label off that fact).
 export const THEME_LABELS: Record<ThemeKey, string> = {
+  sky: t("YCO"),
   default: t("極光"),
   "purple-light": t("鳶尾"),
   "lilac-dark": t("夜霞"),
@@ -35,6 +38,7 @@ export const THEME_LABELS: Record<ThemeKey, string> = {
 };
 
 export const THEME_SWATCH_CLASS: Record<ThemeKey, string> = {
+  sky: "theme-swatch-sky",
   default: "theme-swatch-purple",
   "purple-light": "theme-swatch-purple-light",
   "lilac-dark": "theme-swatch-lilac-dark",
@@ -47,6 +51,7 @@ export const THEME_SWATCH_CLASS: Record<ThemeKey, string> = {
 // body[data-theme-mode], so a theme listed above but missing here would render
 // with the dark-tuned black shadows over its light cards.
 export const THEME_MODE: Record<ThemeKey, "dark" | "light"> = {
+  sky: "light",
   default: "dark",
   "purple-light": "light",
   "lilac-dark": "dark",
@@ -56,6 +61,7 @@ export const THEME_MODE: Record<ThemeKey, "dark" | "light"> = {
 };
 
 export const THEME_SCROLLBAR_RGB: Record<ThemeKey, string> = {
+  sky: "6,166,217",
   default: "147,51,234",
   "purple-light": "124,58,237",
   "lilac-dark": "201,103,162",
@@ -65,7 +71,7 @@ export const THEME_SCROLLBAR_RGB: Record<ThemeKey, string> = {
 };
 
 // Same fallback as app.js: anything the cycle doesn't name -- a hidden theme a
-// browser still has saved, or nothing at all -- lands on caramel.
+// browser still has saved, or nothing at all -- lands on sky.
 export function readTheme(): ThemeKey {
   let saved: string | null = null;
   try {
@@ -73,14 +79,14 @@ export function readTheme(): ThemeKey {
   } catch {
     /* storage may be blocked */
   }
-  return (THEME_CYCLE as readonly string[]).includes(saved || "") ? (saved as ThemeKey) : "caramel";
+  return (THEME_CYCLE as readonly string[]).includes(saved || "") ? (saved as ThemeKey) : "sky";
 }
 
 // What the page is showing right now. body[data-theme] is absent for "default"
 // (that palette lives on :root), which is why this can't just read the dataset.
 export function currentTheme(): ThemeKey {
   const attr = document.body.dataset.theme || "default";
-  return (THEME_CYCLE as readonly string[]).includes(attr) ? (attr as ThemeKey) : "caramel";
+  return (THEME_CYCLE as readonly string[]).includes(attr) ? (attr as ThemeKey) : "sky";
 }
 
 export function nextTheme(theme: ThemeKey): ThemeKey {
