@@ -934,7 +934,6 @@
     if (els.twoStageEditRow) els.twoStageEditRow.style.display = isDebug ? "" : "none";
     if (els.findingsCardsRow) els.findingsCardsRow.style.display = isDebug ? "" : "none";
     applyFindingsCardsOption();
-    if (els.promptOverwriteRow) els.promptOverwriteRow.style.display = isDebug ? "" : "none";
     // 生成張數 (RUN count > 1) is being pulled from the release build for now
     // -- hide both pickers (upload-page settings-modal + results-page
     // ap-settings-modal) outside debug mode and pin the value to 1, rather
@@ -2567,14 +2566,21 @@
     els.apSkipAnalyzeBtn.addEventListener("click", () => analyzeSkippedCase());
   }
 
-  async function analyzeSkippedCase() {
+  // editCostStep: from 美化, which goes straight on to the edit once the
+  // analysis lands -- no go-ahead asked, only the cost preflight 一鍵美化
+  // shows, and the strip is left to the edit's own refresh. Resolves whether
+  // the analysis landed on the case still on screen.
+  async function analyzeSkippedCase({ editCostStep = null } = {}) {
     const state = singleFlowState;
     if (!state?.analysis?._skipped_analysis || !state.analyzeJobId) return;
-    const confirmed = await showConfirmModal(
-      tr("AI 會分析整張照片，整理出修圖建議；你寫的個人化需求會保留。要繼續嗎？"),
-      { confirmLabel: tr("開始分析"), danger: false, costSteps: [analysisPreflightStep()] }
-    );
-    if (!confirmed || singleFlowState !== state) return;
+    const thenEdit = !!editCostStep;
+    const confirmed = thenEdit
+      ? await showPreflightCostModal([analysisPreflightStep(), editCostStep])
+      : await showConfirmModal(
+        tr("AI 會分析整張照片，整理出修圖建議；你寫的個人化需求會保留。要繼續嗎？"),
+        { confirmLabel: tr("開始分析"), danger: false, costSteps: [analysisPreflightStep()] }
+      );
+    if (!confirmed || singleFlowState !== state) return false;
     // The case on screen, not singleFlowState: stepping to another version
     // replaces that object but keeps the case, and the result still belongs.
     const myToken = historyViewToken;
@@ -2613,9 +2619,10 @@
     // After the restore, which puts the strip back as it was: the analysis
     // is a new version, so the strip comes up with it at the end even for a
     // case that had only one edit to show before.
-    if (landed && historyViewToken === myToken) {
+    if (landed && historyViewToken === myToken && !thenEdit) {
       refreshVersionsAfterEdit({ pendingAnalysis: true }).catch(() => {});
     }
+    return landed && historyViewToken === myToken;
   }
 
   // The same 正在分析照片 card (thinking rings + analyze progress feed) a
@@ -2667,6 +2674,8 @@
     historyCaseAnalysis = analysis;
     historyCaseAnalysisJobId = jobId || null;
     const userPrompt = els.promptInput?.value || "";
+    // renderAnalysisPreview rebuilds the style groups at their defaults.
+    const { options: styleOptions } = readStyleSelectionsFromDom();
     singleFlowState.analysis = analysis;
     if (jobId) singleFlowState.analyzeJobId = jobId;
     setCurrentCaseAnalysisVersion(analysis);
@@ -2674,6 +2683,7 @@
     renderAnalysisPreview({ analysis, preset: singleFlowState.preset, expanded: true,
       requestOnly: isContinuationRun(singleRuns?.[singleMirrorIndex]) });
     applyAdvancedOptionsOption(recordAdvancedOptions(singleFlowState.advancedOptions, analysis), "ap");
+    applyStyleSelections({ options: styleOptions, recipeChecked: null });
     if (els.promptInput) els.promptInput.value = userPrompt;
     if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = false;
     updateInlineAnalysisContinueBtnState();
@@ -4471,9 +4481,43 @@
   // with no snapshot, so there's nothing to flag for an image's very first
   // review.
   function updateInlineAnalysisContinueBtnState() {
+    syncPromptOverwriteState();
     syncAdjustingTile();
     if (!els.inlineAnalysisContinueBtn) return;
     els.inlineAnalysisContinueBtn.classList.toggle("is-blocked", inlineReviseHasNoChanges());
+  }
+
+  // 僅依需求修改 (#prompt-overwrite) only means something with a request
+  // typed, so it is held off without one; #prompt-overwrite-hint says what
+  // this 美化 will do, and #ap-review-panel's is-request-only dims the
+  // suggestions the edit then leaves out. The box keeps its tick while held
+  // off, so typing the request back brings the choice back with it.
+  // Hidden while 接著這張調整: that edit is request-only whatever the box
+  // says (continuation_form), as the shell's description already tells.
+  function syncPromptOverwriteState() {
+    const toggle = els.promptOverwriteToggle;
+    if (!toggle) return;
+    const continuing = !!activeContinuation();
+    const hasPrompt = !!els.promptInput?.value.trim();
+    const on = !continuing && hasPrompt && toggle.checked;
+    // The tray shows only once there is a request to keep to, and never
+    // while continuing: that edit is request-only regardless.
+    const showTray = !continuing && hasPrompt;
+    toggle.disabled = !showTray;
+    if (els.promptOverwriteTray) els.promptOverwriteTray.hidden = !showTray;
+    if (els.apReviewPanel) els.apReviewPanel.classList.toggle("is-request-only", on);
+    if (!showTray || !els.promptOverwriteHint) return;
+    els.promptOverwriteHint.textContent = on ? tr("只動你寫到的地方（加上你挑的風格），其他保持原樣。")
+      : skippedCaseNeedsAnalysis() ? tr("沒勾的話會整體美化：先分析整張照片，再依照分析結果和你的需求一起修圖。")
+      : tr("沒勾的話會整體美化：照你的需求修改，光線、人像、構圖也一起調整。");
+  }
+
+  // A 「只照需求改」 case (only the stub analysis) can be edited as it is only
+  // under 僅依需求修改 with a request; anything else needs the analysis first.
+  // Not while 接著這張調整: that edits from the version, no analysis needed.
+  function skippedCaseNeedsAnalysis() {
+    if (!singleFlowState?.analysis?._skipped_analysis || activeContinuation()) return false;
+    return !(els.promptOverwriteToggle?.checked && els.promptInput?.value.trim());
   }
 
   // Resolves "continue" or "cancel" depending on which inline button the user
@@ -4498,8 +4542,22 @@
       // alongside the next photo's own 美化 handler and submit a second,
       // paid /continue for it.
       const myToken = historyViewToken;
-      inlineAnalysisContinueHandler = async () => {
+      inlineAnalysisContinueHandler = async function onContinue() {
         if (historyViewToken !== myToken) { clearInlineAnalysisWait(); return; }
+        // 整體美化 on a case that skipped its analysis: one go, like the
+        // chat's 一鍵美化 -- the analysis runs first and the edit follows
+        // with its suggestions, no stop to review them in between.
+        if (skippedCaseNeedsAnalysis()) {
+          const { model, quality } = getModelQuality();
+          const est = preflightEditEstimate(model, quality);
+          const landed = await analyzeSkippedCase(
+            { editCostStep: { label: tr("美化花費"), modelLabel: est.label, cost: est.cost } });
+          // Still this panel's 美化 to give: not cancelled or replaced meanwhile.
+          if (!landed || inlineAnalysisContinueHandler !== onContinue) return;
+          clearInlineAnalysisWait();
+          resolve("continue");
+          return;
+        }
         const blockedNotice = getBlockedNotice();
         if (blockedNotice) { showNoticeModal(blockedNotice); return; }
         // Nothing to actually change vs. the existing result -- confirm the

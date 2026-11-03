@@ -4671,7 +4671,79 @@
       gap: 10px;
       margin-bottom: 6px;
     }
-    .ap-prompt-label-row .prompt-overwrite-toggle { margin-bottom: 0; }
+    /* The request + its 僅依需求修改 tray as one box: the textarea keeps
+       .field-ta (themes, short-viewport sizing), the tray sits on its top
+       edge sharing the border, and the focus ring wraps both. */
+    .ap-prompt-box {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-height: 0;
+      border-radius: var(--radius);
+      transition: box-shadow .2s;
+    }
+    .ap-prompt-box:focus-within { box-shadow: 0 0 0 4px rgba(var(--accent-rgb),.14); }
+    .ap-prompt-box .field-ta:focus { box-shadow: none; }
+    .ap-prompt-box:has(> .ap-prompt-overwrite-row:not([hidden])) > .field-ta {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+    .ap-prompt-overwrite-row {
+      --overwrite-box: 13px;
+      --overwrite-gap: 6px;
+      flex: none;
+      padding: 8px 14px 9px;
+      /* No bottom border: the textarea's own top edge is the divider. */
+      border: 1px solid var(--border-2);
+      border-bottom-width: 0;
+      border-radius: var(--radius) var(--radius) 0 0;
+      background: rgba(var(--accent-rgb),.05);
+      transition: border-color .2s;
+      animation: apOverwriteTrayIn .18s ease-out;
+    }
+    .ap-prompt-box:focus-within .ap-prompt-overwrite-row { border-color: rgba(var(--accent-rgb),.55); }
+    @keyframes apOverwriteTrayIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ap-prompt-overwrite-row { animation: none; }
+    }
+    .ap-prompt-overwrite-row .prompt-overwrite-toggle {
+      gap: var(--overwrite-gap);
+      margin-bottom: 0;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-2);
+    }
+    .ap-prompt-overwrite-row .prompt-overwrite-toggle input {
+      flex: none;
+      width: var(--overwrite-box);
+      height: var(--overwrite-box);
+    }
+    .ap-prompt-overwrite-hint {
+      display: block;
+      margin-top: 2px;
+      padding-left: calc(var(--overwrite-box) + var(--overwrite-gap));
+      font-size: 11.5px;
+      line-height: 1.5;
+      color: var(--text-3);
+      text-wrap: pretty;
+    }
+    .ap-request-only-note {
+      display: none;
+      margin: 0 0 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(var(--accent-rgb),.08);
+      color: var(--text-2);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #ap-review-panel.is-request-only:is([data-tab="face"], [data-tab="recipe"], [data-tab="findings"]) .ap-request-only-note { display: block; }
+    /* The person avatars (#ap-face-tabs) stay clickable for browsing; only
+       the fixes themselves dim. */
+    #ap-review-panel.is-request-only :is(#ap-face-detail, #ap-recipe-list, #ap-findings-cards) { opacity: .45; pointer-events: none; }
     /* Dim/disable just the option list when locked -- the lock-toggle above
        it must stay clickable so the user can actually unlock it. */
     .ap-style-item.is-locked .step-inline-list { opacity: .45; pointer-events: none; }
@@ -5786,6 +5858,10 @@
                     </div>
                   </summary>
                   <div class="ap-toggle-card-body">
+                    <!-- Over 人像檢查/畫面建議/分析卡片 while 僅依需求修改 is on: the edit
+                         then leaves the analysis' suggestions out. CSS shows
+                         it from #ap-review-panel's is-request-only + data-tab. -->
+                    <p class="ap-request-only-note" id="ap-request-only-note">已勾選「僅依需求修改」，這裡的建議這次不會套用。</p>
                     <ul id="ap-recipe-list" class="step-inline-list" hidden></ul>
                     <div id="ap-findings-cards" class="ap-findings-cards" hidden></div>
                     <div class="ap-face-detail" id="ap-face-detail">
@@ -5865,14 +5941,23 @@
                     <div class="form-field ap-options-prompt" id="ap-review-prompt" hidden>
                       <div class="ap-prompt-label-row">
                         <p class="ap-prompt-intro">說出你的想法，打造專屬美化效果</p>
-                        <label class="batch-lock-toggle prompt-overwrite-toggle" id="prompt-overwrite-row">
-                          <input type="checkbox" id="prompt-overwrite">
-                          <span>取代 AI 原本規劃的美化方式</span>
-                        </label>
                       </div>
-                      <textarea id="prompt" class="field-ta" rows="4"
-                        aria-label="個人化需求"
-                        placeholder="例如：增加亮度，調整成冷色調，模糊背景。"></textarea>
+                      <!-- The request and its 僅依需求修改 tray read as one box.
+                           The tray only shows once there is a request to keep
+                           to; its hint says what this 美化 will do
+                           (syncPromptOverwriteState, app.js). -->
+                      <div class="ap-prompt-box">
+                        <div class="ap-prompt-overwrite-row" id="prompt-overwrite-tray" hidden>
+                          <label class="batch-lock-toggle prompt-overwrite-toggle" id="prompt-overwrite-row">
+                            <input type="checkbox" id="prompt-overwrite">
+                            <span>僅依需求修改</span>
+                          </label>
+                          <span class="ap-prompt-overwrite-hint" id="prompt-overwrite-hint"></span>
+                        </div>
+                        <textarea id="prompt" class="field-ta" rows="4"
+                          aria-label="個人化需求"
+                          placeholder="例如：增加亮度，調整成冷色調，模糊背景。"></textarea>
+                      </div>
                     </div>
                   </div>
                 </details>
@@ -7119,7 +7204,7 @@
          own model is a separate, fixed choice (config.MODELS["gaze_repair"],
          currently nano-banana-2) untouched by this toggle -- the option-desc
          below just surfaces that split so it isn't a silent surprise.
-         Debug-only, same display gating as #run-qa-row/#prompt-overwrite-row
+         Debug-only, same display gating as #run-qa-row
          (applyDebugUiVisibility, app.js). -->
     <label id="two-stage-edit-row" class="option-row" style="display: none;">
       <div class="option-text">

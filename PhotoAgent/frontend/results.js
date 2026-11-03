@@ -2537,6 +2537,8 @@ window.PhotoAgentResults = (() => {
     if (els.apFaceTabs) els.apFaceTabs.hidden = activeReviewTab !== "face";
     if (els.apReviewStyle) els.apReviewStyle.hidden = activeReviewTab !== "style";
     if (els.apReviewPrompt) els.apReviewPrompt.hidden = activeReviewTab !== "prompt";
+    // For #ap-request-only-note, which shows over the tabs 僅依需求修改 leaves out.
+    if (els.apReviewPanel) els.apReviewPanel.dataset.tab = activeReviewTab;
   }
 
   // If a tab is only partly visible at the edge of a horizontal scrolling
