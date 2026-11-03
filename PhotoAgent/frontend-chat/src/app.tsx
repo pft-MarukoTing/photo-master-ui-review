@@ -5580,6 +5580,11 @@ export function SessionView(props: {
     for (const c of Object.keys(CATEGORIES) as Category[]) if (touched.has(c)) parkedCats.push(c);
   }
   const parkedNote = parkedCats.length ? t("改了{v1}，還沒美化", { v1: parkedCats.map((c) => nameOf(c)).join(t("、")) }) : undefined;
+  // 沒開「看美化項目」也可能改了設定（從接續某一版換回原圖，打的需求寫進個人化需求）：
+  // 跟上一次從原圖美化時的設定比，不一樣就是有東西要美化，「再美化」不用先問。面板做的
+  // 那張沒記設定，比不出來就照舊先問。
+  const lastPlan: Dict | undefined = lastPlanRender >= 0 ? messages[lastPlanRender].card?.plan : undefined;
+  const planMoved = !!lastPlan && JSON.stringify(snapshotOf(lastPlan as Plan)) !== JSON.stringify(snapshotOf(photo.plan));
   // 從原圖換到某一版接著改：還沒美化的那一輪（開著的或按返回留著的）是對原圖改的，
   // 接著那一版用不到，跟面板一樣清掉。這輪加進個人化需求的那幾段、挑的風格帶過去；
   // 模型、畫質（render_option）和比例接著那一版也用，留著不清；其他的（lost）先問過
@@ -5800,13 +5805,14 @@ export function SessionView(props: {
   // go there, even if the user had scrolled up.
   const [toBottom, setToBottom] = useState(0);
   // 分析或美化一完成（分析後的開場、第 N 版完成），對話捲到這一段的開頭（ChatPanel toStart）。
-  // 摘要可能比分析完成晚幾秒才到，那時它屬於前面那則 analysis_ready，不再捲一次。
+  // 摘要可能比分析完成晚幾秒才到（面板模式的一鍵美化會晚到結果圖後面），它本身不
+  // 顯示，算在前一則上，不再捲一次。
   const lastDone = (() => {
     const DONE = ["analysis_ready", "analysis_brief", "render_done", "render_failed"];
     const done = messages.filter((m) => DONE.includes(m.card?.type as string) && !m.card?.skipped);
     const last = done[done.length - 1];
     const prev = done[done.length - 2];
-    return last?.card?.type === "analysis_brief" && prev?.card?.type === "analysis_ready" ? prev.id : last?.id ?? null;
+    return last?.card?.type === "analysis_brief" && prev ? prev.id : last?.id ?? null;
   })();
   useEffect(() => {
     setPointed([]);
@@ -5833,6 +5839,13 @@ export function SessionView(props: {
   const renderRound = (label: string, icon: string) => {
     if (promptChanged) return setAskMode({ label, icon });
     render(label, icon, photo.plan.overwrite_prompt && !promptOnlyRound ? { overwrite_prompt: false } : undefined);
+  };
+  // 美化完沒開那一輪就改了需求（從接續某一版換回原圖）：「再美化」跟調整中的美化一樣先問。
+  const promptMoved = planMoved && !!promptNow && String(lastPlan?.user_prompt || "").trim() !== promptNow;
+  const rerender = () => {
+    if (promptMoved) return setAskMode({ label: "再美化", icon: "redo" });
+    if (parkedNote || planMoved) return render("再美化", "redo");
+    setConfirmRerun(true);
   };
   // 按美化時框裡還有沒送出的字：先問要不要用，不然它不會進這一版，使用者還以為有套用。
   // 要用就照送出那樣交出去，AI 直接套用了就接著美化；要使用者確認（提案要按套用、
@@ -6485,7 +6498,7 @@ export function SessionView(props: {
         <Chip label={t("看美化項目")} icon="pencil" badge={parkedNote} disabled={busy || !ready} onClick={enterAdjust} />
         {analyzeChip}
         <Chip label={t("再美化")} icon="redo" kind="primary" disabled={busy}
-          onClick={() => (parkedNote ? render("再美化", "redo") : setConfirmRerun(true))} />
+          onClick={rerender} />
       </>
     );
     bar = [...(offerAnalyze ? ["看美化項目", "幫我分析"] : ["看美化項目"]), "再美化"];
@@ -7103,7 +7116,7 @@ export function SessionView(props: {
     </AssistantMsg>
   ) : null;
 
-  if (askMode && photo.status === "ready" && editing) {
+  if (askMode && photo.status === "ready" && (editing || promptMoved)) {
     // 跟上傳頁面那一題同一套字，兩邊才不會各講各的。挑過風格的話，只照需求改
     // 也會套上（見 build_style_override_block），說明裡要講到，不然像是風格會被丟掉。
     const styles = pickedStyles(analysis, caps, photo.plan);

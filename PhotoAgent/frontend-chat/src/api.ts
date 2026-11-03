@@ -337,7 +337,7 @@ export const api = {
     if (!pending) {
       pending = request<Dict>(`${API}/photo-agent/result/${encodeURIComponent(jobId)}`).then((r) => {
         if (r?.status !== "success") results.delete(jobId);
-        return r;
+        return firstRun(r);
       });
       pending.catch(() => results.delete(jobId));
       results.set(jobId, pending);
@@ -352,6 +352,9 @@ const results = new Map<string, Promise<Dict>>();
 
 const enc = encodeURIComponent;
 const withRun = (url: string, run?: number) => (run ? `${url}?run=${run}` : url);
+// 面板模式的一鍵美化是一支合併 job，/result 把成果包在 runs 裡（api.py result）；
+// 對話模式的版本只看第一個 run（resultImage 不帶 run 也是它），攤平成單一 job 的樣子。
+const firstRun = (r: Dict) => (r?.runs ? { status: r.status, ...r.runs[0] } : r);
 export const urls = {
   previewImage: (job: string) => `${CHAT}/previews/${enc(job)}/image${q()}`,
   sourceImage: (job: string) => `${API}/photo-agent/source/${enc(job)}/image`,

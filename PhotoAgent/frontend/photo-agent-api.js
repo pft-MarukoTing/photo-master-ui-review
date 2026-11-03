@@ -344,6 +344,40 @@ window.PhotoAgentApi = (() => {
     return data.job_id;
   }
 
+  // 美化 on a 「只照需求改」 case from 自訂模式's panel: the analysis it skipped
+  // and the edit as ONE combined job on the photo the earlier job holds
+  // (api.py's analyze_and_finish) -- polled like a /submit combined job.
+  // `selections` (buildEditSelections) are the panel's choices, applied by
+  // the worker onto the analysis it makes.
+  async function analyzeAndFinishExistingJob({ jobId, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, selections, userPrompt, overwritePrompt, runCount, user }) {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/analyze-and-finish/${encodeURIComponent(jobId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        preset,
+        image_quality: imageQuality,
+        image_model: imageModel || "gpt-image-2",
+        analysis_model: analysisModel || "gpt-5.6-luna",
+        aspect_ratio: aspectRatio || "auto",
+        ai_photo_editing: aiPhotoEditing ? "true" : "false",
+        run_qa: runQa === false ? "false" : "true",
+        single_pass_edit: !!singlePassEdit,
+        advanced_options: advancedOptions || {},
+        findings_cards: findingsCards,
+        selections: selections || null,
+        user_prompt: userPrompt || "",
+        overwrite_prompt: !!overwritePrompt,
+        run_count: runCount || 1,
+        user: user || ""
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || tr("提交失敗：HTTP {status}", { status: response.status }));
+    }
+    return data.job_id;
+  }
+
   async function getAnalyzeResult(jobId) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/analyze/result/${encodeURIComponent(jobId)}`);
     const data = await response.json().catch(() => ({}));
@@ -847,6 +881,7 @@ window.PhotoAgentApi = (() => {
     analyzeJob,
     analyzeJobBatch,
     analyzeExistingJob,
+    analyzeAndFinishExistingJob,
     getAnalyzeResult,
     continueJob,
     continueVersionJob,

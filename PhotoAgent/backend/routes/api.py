@@ -1234,6 +1234,52 @@ def analyze_existing(job_id):
     return jsonify({"job_id": new_job_id}), 202
 
 
+@api_bp.post("/analyze-and-finish/<job_id>")
+def analyze_and_finish(job_id):
+    """美化 on a 「只照需求改」 case from 自訂模式's panel: the analysis it
+    skipped and the edit in ONE combined job on the photo it already has --
+    the same job a one-click /submit runs, plus the review screen's
+    `selections`, which the worker applies onto the analysis it makes. Left
+    alone, the job finishes on its own, the way a one-click upload does.
+
+    One version of the case, as /submit records it, and attached to the case
+    the way analyze_existing is, so the case's earlier renders and its chat
+    session pick up the analysis (/analyze/result reads it off the job)."""
+    body = request.get_json(silent=True) or {}
+    params, error = _parse_and_validate_params(body)
+    if error:
+        return jsonify({"error": error}), 400
+    selections = body.get("selections")
+    if isinstance(selections, str):
+        try:
+            selections = json.loads(selections)
+        except (TypeError, ValueError):
+            return jsonify({"error": "selections must be valid JSON"}), 400
+    if selections is not None:
+        error = validate_selections(selections)
+        if error:
+            return jsonify({"error": error}), 400
+        params["selections"] = selections
+    params["stage"] = "full"
+
+    prior = get_job_info(job_id, keyToGet=["srcKeys"])
+    if not prior or not prior.get("srcKeys"):
+        return jsonify({"error": "Prior job not found"}), 404
+
+    engine_params = get_engine_params_template()
+    engine_params["srcKeys"] = prior["srcKeys"]
+    engine_params["acts"][0]["params"] = params
+    new_job_id = enqueue(engine_params, src_content=None)
+    user = body.get("user")
+    _record_history_safely(user, new_job_id, "local", engine_params["srcKeys"][0], new_job_id, params=params)
+    if user:
+        try:
+            attach_case_analysis(normalize_username(user), engine_params["srcKeys"][0], new_job_id)
+        except Exception:
+            current_app.logger.warning("attach_case_analysis failed for %s", new_job_id, exc_info=True)
+    return jsonify({"job_id": new_job_id}), 202
+
+
 @api_bp.get("/analyze/result/<job_id>")
 def analyze_result(job_id):
     info = _readable_job_info(job_id, ["status", "error", "0_res0"])
@@ -1243,15 +1289,25 @@ def analyze_result(job_id):
     if info.get("status") != "success":
         return jsonify({"status": info.get("status"), "error": info.get("error")})
 
-    result_keys = (info.get("0_res0") or {}).get("cusKeys") or []
+    # A combined job (analyze_and_finish, attached to its case) has no
+    # analysis of its own to key: it rides inside the first RUN's result
+    # metadata, the same place chat._load_analysis reads it from.
+    res0 = info.get("0_res0") or {}
+    runs = res0.get("runs")
+    result_keys = ((runs[0] if runs else res0).get("cusKeys")) or []
     if not result_keys:
         return jsonify({"status": "error", "error": "job succeeded but analysis key is missing"})
 
-    analysis_bytes, download_error = download_bytes(result_keys[0], job_id)
+    combined = runs is not None
+    analysis_bytes, download_error = download_bytes(result_keys[1 if combined else 0], job_id)
     if download_error or analysis_bytes is None:
         return jsonify({"status": "error", "error": f"failed to download analysis: {download_error}"})
 
     analysis = json.loads(analysis_bytes)
+    if combined:
+        analysis = analysis.get("analysis") if isinstance(analysis, dict) else None
+        if not analysis:
+            return jsonify({"status": "error", "error": "job result carries no analysis"})
     # compatible tells the frontend (viewAnalyzeHistoryRecord) whether this
     # history item's analysis still meets the floor continue_job below will
     # itself enforce -- surfaced here so it can hint "reprocess this photo"

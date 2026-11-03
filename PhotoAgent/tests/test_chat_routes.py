@@ -1730,6 +1730,50 @@ class ChatRoutesTest(unittest.TestCase):
         state = self.status(sid)["session"]["photos"][0]
         self.assertEqual((state["status"], state["analysis_skipped"]), ("ready", True))
 
+    def test_a_panel_one_click_job_shows_up_while_it_runs_and_lands_both(self):
+        """面板模式's 一鍵美化 on a 只照需求改 photo: one analyze_and_finish
+        job that is the case's new version and its analysis at once. The
+        worker writes no status until it is done."""
+        sid = self.new_session()
+        photo, _ = self.only_what_i_said(sid)
+        self.jobs[self.enqueued[-1][0]]["status"] = "success"  # the 只照需求改 render
+        self.status(sid)
+        self.jobs["z1"] = {"error": None}
+        a = photo["analyze_job_id"]
+        self.case(photo["case_id"], [(a, "analyze", [a]), ("z1", "edit", ["z1"])],
+                  ts=time.time() + 1)["analysis_job_id"] = "z1"
+        # The home tile and the opened chat both show it rendering.
+        self.assertEqual(self.summary(sid)["status"], "rendering")
+        session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        self.assertEqual(session["photos"][0]["status"], "rendering")
+
+        self.analysis = self.real_analysis
+        self.jobs["z1"]["status"] = "success"
+        self.case(photo["case_id"], [(a, "analyze", [a]), ("z1", "edit", ["z1"])], ts=time.time() + 1)
+        self.cases[photo["case_id"]]["analysis_job_id"] = "z1"
+        self.cases[photo["case_id"]]["versions"][-1]["params"] = {
+            "stage": "full", "user_prompt": "背景亮一點", "overwrite_prompt": False,
+            "selections": {"options": {"lighting": "soft", "pose": "default"}}}
+        with patch.object(chat.chat_assistant, "call_render_note", lambda context, images=(): {"note": "背景亮了。"}), \
+                patch.object(chat, "_note_images", lambda photo, job_id, source=None: ("data:before", "data:after")):
+            done = self.status(sid)
+            self.status(sid)
+        # As a chat 一鍵美化 lands: the analysis card hosting its brief, and
+        # the result, whose note 詳細解說 writes.
+        self.assertEqual([(m["card"]["type"], m["card"].get("version_id")) for m in done["new_messages"]],
+                         [("analysis_ready", None), ("render_done", "z1"), ("analysis_brief", None)])
+        self.assertNotIn("skipped", done["new_messages"][0]["card"])
+        self.assertEqual(self.cards(sid, "render_done")[-1]["note"], "背景亮了。")
+        plan = done["new_messages"][1]["card"]["plan"]
+        self.assertEqual((plan["overwrite_prompt"], plan["user_prompt"], plan["style_options"]),
+                         (False, "背景亮一點", {"lighting": "soft"}))
+        state = done["session"]["photos"][0]
+        self.assertEqual((state["status"], state["analysis_skipped"], state["analysis_job_id"]), ("ready", False, "z1"))
+        # The chat's plan takes on what the version was made with, so 再美化 carries on from it.
+        self.assertEqual({k: state["plan"][k] for k in ("overwrite_prompt", "user_prompt", "style_options")},
+                         {"overwrite_prompt": False, "user_prompt": "背景亮一點", "style_options": {"lighting": "soft"}})
+        self.assertEqual(len(self.cards(sid, "analysis_brief")), 1)  # adopted once
+
     def test_the_chats_own_analysis_is_attached_to_the_case(self):
         sid = self.new_session()
         photo, _ = self.only_what_i_said(sid)

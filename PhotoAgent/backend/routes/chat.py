@@ -253,11 +253,11 @@ def list_sessions():
     # Up to the whole merged list: 面板模式's 最近照片 pages through every
     # case, so a cap here would hide older ones only on the chat side.
     limit = max(1, min(request.args.get("limit", 20, type=int), LISTED_SESSIONS_MAX + HISTORY_MAX_LEN))
-    sessions = [_landed(user, s) if s["status"] in BUSY_SESSION_STATUSES else s
-                for s in store.list_sessions(user, limit=LISTED_SESSIONS_MAX)]
+    history = get_history(user, limit=HISTORY_MAX_LEN)
+    case_ts = {e["image_key"]: e.get("ts") or 0 for e in history}
+    sessions = [_listed(user, s, case_ts) for s in store.list_sessions(user, limit=LISTED_SESSIONS_MAX)]
     covered = {case_id for s in sessions for case_id in s["case_ids"]}
-    cases = [_case_summary(e) for e in get_history(user, limit=HISTORY_MAX_LEN)
-             if e["image_key"] not in covered and _opens_in_chat(e)]
+    cases = [_case_summary(e) for e in history if e["image_key"] not in covered and _opens_in_chat(e)]
     rows = sorted(_batched(sessions) + cases, key=lambda r: r["updated_at"] or 0, reverse=True)
     return jsonify({"sessions": rows[:limit]})
 
@@ -312,6 +312,22 @@ def _batch_row(members):
         "rendered_count": sum(s["rendered_count"] for s in members),
         "case_ids": [c for s in members for c in s["case_ids"]],
     }
+
+
+def _listed(user, row, case_ts):
+    """A session's row as of now. A busy one is advanced (_landed); one
+    whose case got a version in 面板模式 after the session last changed is
+    synced from history first, so its tile shows that edit -- running or
+    done -- without the session being opened."""
+    if row["status"] in BUSY_SESSION_STATUSES:
+        return _landed(user, row)
+    if not any(case_ts.get(c, 0) > (row["updated_at"] or 0) for c in row["case_ids"]):
+        return row
+    session = store.load_session(user, row["session_id"])
+    if session is None:
+        return row
+    _sync_from_history(user, row["session_id"], session)
+    return store.session_summary(user, row["session_id"]) or row
 
 
 def _landed(user, row):
@@ -526,7 +542,7 @@ def _sync_from_history(user, session_id, session):
                 continue
             jobs = {job_id: _job_status(job_id, statuses) for job_id in version["runs"]}
             if any(j["status"] not in TERMINAL_STATUSES for j in jobs.values()):
-                if any(j["status"] is None for j in jobs.values()):
+                if any(j.get("expired") for j in jobs.values()):
                     continue  # a job that has expired out of Redis never finishes
                 photo["status"] = "rendering"
                 photo["pending_render"] = {"action_id": version_id, "job_ids": list(version["runs"]),
@@ -544,19 +560,14 @@ def _sync_from_history(user, session_id, session):
                 continue
             photo["active_version"] = store.active_version(version_id, succeeded[0])
             changed = True
-            messages.append(store.make_message("assistant", card={
+            messages += _land_panel_version(user, session_id, photo, entry, statuses, {
                 "type": "render_done", "photo_id": photo["photo_id"], "version_id": version_id,
                 "job_ids": succeeded, "failed_job_ids": [j for j in version["runs"] if j not in succeeded],
-                "via": "custom", **_panel_continuation(version)}))
-        if _adopt_case_analysis(photo, entry, statuses):
+                "via": "custom", **_panel_continuation(version)}, version.get("based_on"))
+        landed = _take_case_analysis(user, session_id, photo, entry, statuses)
+        if landed is not None:
             changed = True
-            # Usually long finished by the time the chat opens: land it now,
-            # rather than show the photo as 分析中 until the next status poll.
-            job_id = photo["analysis_job_id"]
-            job = _job_status(job_id, statuses)
-            if job["status"] in TERMINAL_STATUSES and store.claim(user, session_id, job_id):
-                with i18n.use(job.get("lang", i18n.current())):
-                    messages.extend(_advance_reanalysis(user, session_id, photo, job))
+            messages.extend(landed)
         if changed:
             store.save_photo_state(user, session_id, photo)
     store.append_messages(user, session_id, messages)
@@ -573,7 +584,8 @@ def _adopt_case_analysis(photo, entry, statuses):
     if (not job_id or not photo.get("analysis_skipped") or photo["status"] != "ready"
             or job_id == photo.get("analysis_job_id")):
         return False
-    if _job_status(job_id, statuses)["status"] in (None, "error"):
+    job = _job_status(job_id, statuses)
+    if job.get("expired") or job["status"] == "error":
         return False
     photo["analysis_job_id"] = job_id
     photo["reanalysis"] = "custom"
@@ -581,6 +593,58 @@ def _adopt_case_analysis(photo, entry, statuses):
     photo["planned_ratio"] = None
     photo["error"] = None
     return True
+
+
+def _take_case_analysis(user, session_id, photo, entry, statuses):
+    """_adopt_case_analysis, landing the analysis right away when it's
+    already done rather than show the photo as 分析中 until the next status
+    poll. The messages that posts, or None when nothing was adopted."""
+    if not _adopt_case_analysis(photo, entry, statuses):
+        return None
+    job_id = photo["analysis_job_id"]
+    job = _job_status(job_id, statuses)
+    if job["status"] not in TERMINAL_STATUSES or not store.claim(user, session_id, _reanalysis_token(job_id)):
+        return []
+    with i18n.use(job.get("lang", i18n.current())):
+        return _advance_reanalysis(user, session_id, photo, job)
+
+
+def _land_panel_version(user, session_id, photo, entry, statuses, card, based_on=None):
+    """The messages a 面板模式 version's render_done `card` goes up with. One
+    from 一鍵美化 analyzed the photo in the same job: it lands as a chat 一鍵美化
+    does -- the analysis card with its brief, then the result with its plan, so
+    詳細解說 writes the note under it -- and the photo's plan takes on what that
+    version was made with (its 個人化需求 and 風格, beautifying the whole
+    photo), so 再美化 carries on from it."""
+    message = store.make_message("assistant", card=card)
+    if entry.get("analysis_job_id") != card["version_id"]:
+        return [message]
+    landed = _take_case_analysis(user, session_id, photo, entry, statuses)
+    if landed is None or photo.get("analysis_skipped"):
+        return [message, *(landed or [])]
+    version = next((v for v in entry.get("versions") or [] if v["version_id"] == card["version_id"]), {})
+    params = version.get("params") or {}
+    # Dropping the unset picks, as the worker's apply_selections does.
+    styles = {group: value for group, value in ((params.get("selections") or {}).get("options") or {}).items()
+              if value and value not in capabilities.STYLE_UNSET_VALUES}
+    photo["plan"].update({"overwrite_prompt": False, "user_prompt": params.get("user_prompt") or "",
+                          "style_options": styles})
+    store.save_photo_plan(user, session_id, photo["photo_id"], photo["plan"])
+    plan = copy.deepcopy(photo["plan"])
+    card["plan"] = plan
+    if plan.get("detailed_explanation"):
+        photo["pending_note"] = {"version_id": card["version_id"], "message_id": message["id"],
+                                 "render_job": card["job_ids"][0], "based_on": based_on,
+                                 "plan": plan, "lang": i18n.current()}
+    ready = store.make_message("assistant", card={"type": "analysis_ready", "photo_id": photo["photo_id"]})
+    return [ready, *landed, message]
+
+
+def _reanalysis_token(job_id):
+    """What landing a reanalysis claims. Not the bare job id: 面板模式's
+    analyze_and_finish job is the edit's version too, whose render_done
+    claims that (_sync_from_history, _advance_rendering)."""
+    return f"reanalysis:{job_id}"
 
 
 @chat_bp.get("/sessions/<session_id>")
@@ -2176,8 +2240,10 @@ def _job_status(job_id, statuses):
         if lost:
             statuses[job_id] = {"status": lost["status"], "error": lost["error_message"], "error_code": lost["error"]}
         else:
+            # A job the worker is still on has no status yet either; only one
+            # whose info is gone has expired out of Redis.
             statuses[job_id] = {"status": info.get("status"), "error": info.get("error_message") or info.get("error"),
-                                "error_code": info.get("error")}
+                                "error_code": info.get("error"), "expired": not info}
         # Work owns its language, including source-language jobs whose params
         # omit lang. Old/missing job records fall back to the caller's context.
         acts = info.get("acts")
@@ -2422,7 +2488,8 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
     analysis's own summary -- not worth a worker call on opening a case."""
     job_id = _analysis_job_id(photo)
     job = _job_status(job_id, statuses)
-    if job["status"] not in TERMINAL_STATUSES or not store.claim(user, session_id, job_id):
+    token = _reanalysis_token(job_id) if photo.get("reanalysis") else job_id
+    if job["status"] not in TERMINAL_STATUSES or not store.claim(user, session_id, token):
         return []
     timeline(photo=photo["photo_id"], job=job_id, event="analyzed", **job_spans("analyze", job_id))
     if photo.get("reanalysis"):
@@ -2588,6 +2655,11 @@ def _advance_rendering(user, session_id, photo, statuses):
             photo["pending_note"]["continuation"] = {
                 "source_result": pending["source_result"], "request": sent.get("text") or "",
                 "style_options": sent.get("style_options") or {}}
+    if succeeded and pending.get("base") == "custom":
+        entry = get_history_entry(user, photo["case_id"]) or {}
+        messages = _land_panel_version(user, session_id, photo, entry, statuses, card, pending.get("based_on"))
+        # An analysis made from 自訂模式 apart from this edit lands with it too.
+        messages += _take_case_analysis(user, session_id, photo, entry, statuses) or []
     store.save_photo_state(user, session_id, photo)
     # A 長寬比 changed while rendering is re-planned now.
     _reframe_if_needed(user, session_id, photo)

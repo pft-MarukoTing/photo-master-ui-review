@@ -25,6 +25,7 @@
     analyzeJob,
     analyzeJobBatch,
     analyzeExistingJob,
+    analyzeAndFinishExistingJob,
     getAnalyzeResult,
     continueJob,
     continueVersionJob,
@@ -2566,21 +2567,16 @@
     els.apSkipAnalyzeBtn.addEventListener("click", () => analyzeSkippedCase());
   }
 
-  // editCostStep: from 美化, which goes straight on to the edit once the
-  // analysis lands -- no go-ahead asked, only the cost preflight 一鍵美化
-  // shows, and the strip is left to the edit's own refresh. Resolves whether
-  // the analysis landed on the case still on screen.
-  async function analyzeSkippedCase({ editCostStep = null } = {}) {
+  // 美化 doesn't come through here: it runs the analysis and the edit as one
+  // combined job (onContinue in waitForInlineAnalysisAction).
+  async function analyzeSkippedCase() {
     const state = singleFlowState;
     if (!state?.analysis?._skipped_analysis || !state.analyzeJobId) return;
-    const thenEdit = !!editCostStep;
-    const confirmed = thenEdit
-      ? await showPreflightCostModal([analysisPreflightStep(), editCostStep])
-      : await showConfirmModal(
-        tr("AI 會分析整張照片，整理出修圖建議；你寫的個人化需求會保留。要繼續嗎？"),
-        { confirmLabel: tr("開始分析"), danger: false, costSteps: [analysisPreflightStep()] }
-      );
-    if (!confirmed || singleFlowState !== state) return false;
+    const confirmed = await showConfirmModal(
+      tr("AI 會分析整張照片，整理出修圖建議；你寫的個人化需求會保留。要繼續嗎？"),
+      { confirmLabel: tr("開始分析"), danger: false, costSteps: [analysisPreflightStep()] }
+    );
+    if (!confirmed || singleFlowState !== state) return;
     // The case on screen, not singleFlowState: stepping to another version
     // replaces that object but keeps the case, and the result still belongs.
     const myToken = historyViewToken;
@@ -2619,10 +2615,9 @@
     // After the restore, which puts the strip back as it was: the analysis
     // is a new version, so the strip comes up with it at the end even for a
     // case that had only one edit to show before.
-    if (landed && historyViewToken === myToken && !thenEdit) {
+    if (landed && historyViewToken === myToken) {
       refreshVersionsAfterEdit({ pendingAnalysis: true }).catch(() => {});
     }
-    return landed && historyViewToken === myToken;
   }
 
   // The same 正在分析照片 card (thinking rings + analyze progress feed) a
@@ -4554,16 +4549,20 @@
       const myToken = historyViewToken;
       inlineAnalysisContinueHandler = async function onContinue() {
         if (historyViewToken !== myToken) { clearInlineAnalysisWait(); return; }
-        // 整體美化 on a case that skipped its analysis: one go, like the
-        // chat's 一鍵美化 -- the analysis runs first and the edit follows
-        // with its suggestions, no stop to review them in between.
+        // 整體美化 on a case that skipped its analysis: one go, the same
+        // combined job 一鍵美化 runs (finishSingleFlow's useCombinedJob) --
+        // the analysis first and the edit with its suggestions, no stop to
+        // review them in between, and done on its own if the user leaves.
         if (skippedCaseNeedsAnalysis()) {
+          const state = singleFlowState;
           const { model, quality } = getModelQuality();
           const est = preflightEditEstimate(model, quality);
-          const landed = await analyzeSkippedCase(
-            { editCostStep: { label: tr("美化花費"), modelLabel: est.label, cost: est.cost } });
+          const confirmed = await showPreflightCostModal(
+            [analysisPreflightStep(), { label: tr("美化花費"), modelLabel: est.label, cost: est.cost }]);
           // Still this panel's 美化 to give: not cancelled or replaced meanwhile.
-          if (!landed || inlineAnalysisContinueHandler !== onContinue) return;
+          if (!confirmed || singleFlowState !== state || inlineAnalysisContinueHandler !== onContinue) return;
+          state.useCombinedJob = true;
+          state.combinedFromJobId = state.analyzeJobId;
           clearInlineAnalysisWait();
           resolve("continue");
           return;
@@ -6080,8 +6079,14 @@
   // still needs the real two-stage analyze->adjust->continue path (and its
   // own per-RUN edit jobs, since each RUN there can carry different
   // per-image style/recipe overrides picked during review).
-  async function runCombinedMultiRun({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt = "", overwritePrompt = false, runCount = 1, onStage, onRunDone }) {
-    const jobId = await submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt, overwritePrompt, runCount, user: getCurrentUser(), path: "local" });
+  //
+  // fromJobId: instead of uploading `file`, runs on the photo that job
+  // already holds -- 美化 on a 「只照需求改」 case (analyzeAndFinishExistingJob),
+  // with the panel's `selections` for the worker to apply.
+  async function runCombinedMultiRun({ file, fromJobId = null, selections = null, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt = "", overwritePrompt = false, runCount = 1, onStage, onRunDone }) {
+    const jobId = fromJobId
+      ? await analyzeAndFinishExistingJob({ jobId: fromJobId, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, selections, userPrompt, overwritePrompt, runCount, user: getCurrentUser() })
+      : await submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt, overwritePrompt, runCount, user: getCurrentUser(), path: "local" });
     await watchCombinedJobRuns(jobId, runCount, { onStage, onRunDone });
   }
 
@@ -6426,7 +6431,7 @@
     // This is the common entry point for the first edit and every later
     // revise. Analysis-only views intentionally never set modifiedAt.
     markCurrentCaseModified();
-    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
+    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob, combinedFromJobId } = singleFlowState;
     // Read the live checkbox at submission time. The result-page control can
     // change after singleFlowState was created during analysis; the visible
     // selection, not that earlier snapshot, is authoritative for this edit.
@@ -6443,6 +6448,13 @@
     const editAnalysis = useCombinedJob ? null : analysis;
     const editSelections = useCombinedJob ? null : buildEditSelections(
       { ...selections, advancedOptions, faceIssueOverrides, bodyReshapeEnabled: bodyReshapeReviewEnabled });
+    // Except on a 「只照需求改」 case (combinedFromJobId): its panel already
+    // offered the styles, so those go along for the worker to apply onto the
+    // analysis it makes. Only what that panel shows -- no recipes, faces or
+    // body to pick there yet.
+    const combinedSelections = combinedFromJobId
+      ? buildEditSelections({ options: selections.options, advancedOptions })
+      : null;
     const editTipsOnly = useCombinedJob || singleFlowState.progressTipsOnly === true;
     // Consume the initial one-click policy; later user-reviewed edits show
     // their own submitted choices, including after an AIPoC one-click run.
@@ -6562,7 +6574,8 @@
       const stepStart = Date.now();
       try {
         await runCombinedMultiRun({
-          file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt, overwritePrompt, runCount,
+          file: selectedFile, fromJobId: combinedFromJobId || null, selections: combinedSelections,
+          preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt, overwritePrompt, runCount,
           onStage: onCombinedStage,
           onRunDone: async (runData) => {
             const run = myRuns[runData.run - 1];
@@ -6602,6 +6615,13 @@
         });
       }
 
+      // A 「只照需求改」 case's combined 美化 is one go, done or not: a failed
+      // one leaves the case as it was, still skipped, and the next 美化 asks
+      // again (onContinue) instead of re-running this one unasked.
+      if (combinedFromJobId && isCurrent()) {
+        singleFlowState.useCombinedJob = false;
+        singleFlowState.combinedFromJobId = null;
+      }
       if (!myRuns.some((r) => r.status === "done")) {
         throw new Error(myRuns.find((r) => r.error)?.error || tr("全部處理失敗，請稍後再試。"));
       }
@@ -6617,6 +6637,13 @@
         singleFlowState.analysis = doneRun.result.analysis;
         singleFlowState.analyzeJobId = doneRun.jobId;
         singleFlowState.useCombinedJob = false;
+        // The case's analysis from now on, as adoptSkippedCaseAnalysis sets
+        // it: the job is attached to the case (api.analyze_and_finish).
+        if (combinedFromJobId) {
+          historyCaseAnalysis = doneRun.result.analysis;
+          historyCaseAnalysisJobId = doneRun.jobId;
+          setCurrentCaseAnalysisVersion(doneRun.result.analysis);
+        }
         await showSingleResult();
       }
     } else if (runCount === 1) {

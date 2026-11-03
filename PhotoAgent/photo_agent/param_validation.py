@@ -275,6 +275,17 @@ def _validate_params(params: dict) -> dict:
         )
     normalized["run_count"] = run_count
 
+    # Review-screen choices (photo_agent/selections.py) the combined job
+    # applies onto the analysis it makes itself; any other stage gets its
+    # analysis with them already applied.
+    if normalized.get("selections") is not None:
+        if stage != "full":
+            raise RuntimeError(f"{EFFECT_NAME}: selections require the full stage", RESULT_INVALID_PARAMETER)
+        from .selections import validate_selections  # selections imports this module
+        error = validate_selections(normalized["selections"])
+        if error:
+            raise RuntimeError(f"{EFFECT_NAME}: {error}", RESULT_INVALID_PARAMETER)
+
     return normalized
 
 

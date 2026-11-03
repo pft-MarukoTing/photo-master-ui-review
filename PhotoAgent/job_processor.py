@@ -10,6 +10,7 @@ from aiserver_utils.queue import set_job_info, get_job_info
 from engine_result_code import RESULT_INVALID_PARAMETER, RESULT_UNKNOWN_INTERNAL_ERROR
 from image_tools import ensure_jpeg_bytes, RESULT_JPEG_QUALITY
 from photo_agent import EFFECT_NAME, i18n, validate_photo_agent_request
+from photo_agent.selections import apply_selections
 from pipeline import (
     analyze_preview_stage, analyze_stage, skipped_analysis_stage,
     reframe_stage, review_stage, finish_stage,
@@ -330,6 +331,11 @@ class PhotoAgentJobProcessor:
                 advanced_options=params.get("advanced_options", {}),
                 analysis_model=params["analysis_model"],
             )
+            # The review-screen choices of a 美化 on a case that skipped its
+            # analysis (api.analyze_and_finish): picked before this analysis
+            # existed, so they land here, the way /continue applies them.
+            if params.get("selections") is not None:
+                analysis = apply_selections(analysis, params["selections"])
             set_job_info(job_id=task_id, results={"stage": "edit", "run_count": run_count, "runs_done": 0})
 
             # Step 3 once for the whole job: every RUN receives the same
