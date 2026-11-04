@@ -13,6 +13,8 @@ import { recipeItems } from "./util";
 const KEY = "photoagent:mode-handoff";
 // 只接剛剛切過來的：留太久的（例如中途關掉、隔天再開）不算數。
 const MAX_AGE_MS = 2 * 60 * 1000;
+// 接著某一版美化時照 plan 用的設定（接續那一輪的「設定」改的就是這些）。
+const BASE_SETTINGS = ["render_option", "output_scale"];
 
 export interface Handoff {
   case_id: string;
@@ -20,6 +22,7 @@ export interface Handoff {
   image_model?: string;
   image_quality?: string;
   aspect_ratio?: string;
+  output_scale?: string;
   run_count?: number;
   advanced_options?: Record<string, boolean>;
   style_options?: Record<string, string>;
@@ -36,7 +39,7 @@ export interface Handoff {
   // 一樣是接著調整的樣子。
   continuation?: HandoffContinuation;
   // 沒有還沒美化的調整（idle），底卻不是原圖：那邊接著哪一版。接手的這邊一樣
-  // 接著那一版、什麼都還沒打，跟剛美化完一樣。沒有就是原圖。
+  // 接著那一版、什麼都還沒打，跟剛美化完一樣（引擎照 image_model 帶）。沒有就是原圖。
   base?: { version_id: string; job_id: string; run: number };
   // 接手的那邊要打開哪一版（成品歷程裡的 version_id）：接著調整時是調整的那一版，
   // 不然是畫面上那一版。
@@ -65,17 +68,25 @@ export interface HandoffContinuation {
 export function writeHandoff(caseId: string, plan: Plan, caps: Capabilities, analysis: Analysis | undefined,
   unsent: string[] | null, continuation?: HandoffContinuation, versionId?: string, base?: Handoff["base"]) {
   const has = (k: string) => !unsent || unsent.includes(k);
-  const idle = !continuation && !!unsent && !unsent.length;
+  // 接著某一版、什麼都還沒打時，「設定」裡改的引擎、輸出尺寸是給接著那一版用的，
+  // 不算對原圖的調整：底照樣帶，引擎跟著 base 一起過去。
+  const pending = base && unsent ? unsent.filter((k) => !BASE_SETTINGS.includes(k)) : unsent;
+  const idle = !continuation && !!pending && !pending.length;
   // 有還沒美化的調整：那些調整是對原圖改的，接著哪一版就不算了，底不帶過去。
   if (!idle) base = undefined;
   const option = caps.render.options.find((o) => o.id === plan.render_option);
+  // 接著某一版調整用的也是 plan 的引擎（「設定」裡改的就寫在這），所以接著哪一版
+  // 時引擎一律帶，那邊接著同一版也照這個引擎。
+  const engine = has("render_option") || !!continuation || !!base;
   const items = analysis ? recipeItems(analysis) : [];
   const h: Handoff = {
     case_id: caseId,
     at: Date.now(),
-    image_model: has("render_option") ? option?.image_model : undefined,
-    image_quality: has("render_option") ? option?.quality : undefined,
+    image_model: engine ? option?.image_model : undefined,
+    image_quality: engine ? option?.quality : undefined,
     aspect_ratio: has("aspect_ratio") ? plan.aspect_ratio : undefined,
+    // 輸出尺寸跟著引擎走：接著某一版時也帶，那邊照同一個尺寸美化。
+    output_scale: engine || has("output_scale") ? plan.output_scale : undefined,
     run_count: has("run_count") ? plan.run_count : undefined,
     advanced_options: has("advanced_options") ? plan.advanced_options : undefined,
     style_options: has("style_options") ? plan.style_options : undefined,
@@ -120,6 +131,7 @@ export function handoffPatch(h: Handoff, current: Plan, caps: Capabilities, anal
   const option = caps.render.options.find((o) => o.image_model === h.image_model && o.quality === h.image_quality);
   if (option) patch.render_option = option.id;
   if (h.aspect_ratio && caps.render.aspect_ratios.some((a) => a.value === h.aspect_ratio)) patch.aspect_ratio = h.aspect_ratio;
+  if (h.output_scale && (caps.render.output_scales || []).some((s) => s.value === h.output_scale)) patch.output_scale = h.output_scale;
   if (h.advanced_options) patch.advanced_options = h.advanced_options;
   if (h.style_options) patch.style_options = h.style_options;
   // face_issue_overrides 在後端是逐鍵合併的，所以這邊沒有的鍵要明確送 null 清掉，

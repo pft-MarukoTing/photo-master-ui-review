@@ -1158,12 +1158,22 @@ export function App() {
       if (h.idle) {
         const own = (s.messages || []).filter((m) => cardAbout(m.card, p.photo_id));
         const round = unsentRound(own);
-        const keys = unsentPlanKeys(own, p.plan) || [];
-        if (!round || (!round.open && !keys.length)) return { session: s, version_id };
-        if (round.open) {
+        const keys = (round && unsentPlanKeys(own, p.plan)) || [];
+        // 那邊接著某一版：接著改用的引擎是那邊選的，這邊 plan 的引擎跟著換。
+        const engine = h.base
+          ? c.render.options.find((o) => o.image_model === h.image_model && o.quality === h.image_quality)?.id
+          : undefined;
+        const patch: Plan = round && keys.length ? revertPlanPatch(round.start, p.plan, keys) : {};
+        if (engine && engine !== (patch.render_option ?? p.plan.render_option)) patch.render_option = engine;
+        if (!round?.open && !Object.keys(patch).length) return { session: s, version_id };
+        if (round?.open) {
           await api.postMessage(s.session_id, { type: "adjust_cancelled", photo_id: p.photo_id, kept: [], auto: true }, "", true);
         }
-        if (keys.length) await api.patchPhotoPlan(s.session_id, p.photo_id, revertPlanPatch(round.start, p.plan, keys));
+        // 引擎被擋（一般帳號）就不帶這項，改回這輪開始的照樣送。
+        if (Object.keys(patch).length) await api.patchPhotoPlan(s.session_id, p.photo_id, patch).catch(() => {
+          const { render_option, ...rest } = patch;
+          return Object.keys(rest).length ? api.patchPhotoPlan(s.session_id, p.photo_id, rest) : undefined;
+        });
         return { session: await api.getSession(s.session_id), version_id };
       }
       // 分析只有對修圖建議的勾選才用得到；抓到了就留給這頁，不用再抓一次。
@@ -5611,9 +5621,12 @@ export function SessionView(props: {
       .filter((k) => JSON.stringify(from[k]) !== JSON.stringify(now[k]) && !BASE_KEPT.includes(k));
     const carried = Object.fromEntries(["user_prompt", "style_options", ...BASE_KEPT].map((k) => [k, (photo.plan as Dict)[k]]));
     const lost = changedCats({ ...start, ...carried }, photo.plan);
+    // 這輪改的長寬比（可能已經重新構圖過）接著那一版也要，當這一輪的長寬比；"auto" 接續沒有。
+    const ratio = photo.plan.aspect_ratio;
     return {
       text: parts(photo.plan.user_prompt).filter((x) => !before.has(x)).join("；"),
       styles,
+      ratio: ratio && ratio !== start.aspect_ratio && ratio !== "auto" ? ratio : "original",
       lost: pending.filter((c) => lost.has(c)),
       patch: revertPlanPatch(start, photo.plan, keys),
     };
@@ -5676,6 +5689,23 @@ export function SessionView(props: {
   const [contRatio, setContRatio] = useState("original");
   const [contSettingsOpen, setContSettingsOpen] = useState(false);
   const contReshaped = contRatio !== "original";
+  // 「設定」裡的引擎、輸出尺寸跟接著的這一版當初用的不一樣，也算有要改的：面板做的那版
+  // 看卡上記的引擎（卡上的 plan 是對話這邊的，不是那一版的），對話做的看它的 plan。
+  // 舊的卡兩樣都沒有，就當沒改。
+  const contEngineChanged = ((): boolean => {
+    if (!continuing) return false;
+    const c = messages.find((m) => m.card?.type === "render_done" && m.card.version_id === continuing.version_id)?.card;
+    const options = caps.render.options;
+    const made = c?.image_model
+      ? { option: (options.find((o) => o.image_model === c.image_model && o.quality === c.image_quality)
+          || options.find((o) => o.image_model === c.image_model))?.id, scale: c.output_scale }
+      : c?.plan ? { option: c.plan.render_option, scale: c.plan.output_scale } : null;
+    if (!made?.option) return false;
+    if (made.option !== photo.plan.render_option) return true;
+    if (options.find((o) => o.id === made.option)?.scalable === false) return false;
+    const fallback = caps.render.defaults.output_scale;
+    return (made.scale || fallback) !== (photo.plan.output_scale || fallback);
+  })();
   // 打的每一句先給 AI 看過（跟上傳頁的個人化需求一樣），收下的累積在 contPrompt，
   // 可以直接改字；按「接續第 N 版美化」才連同風格一起送出。
   const [contTurns, setContTurnsState] = useState<ContTurn[]>([]);
@@ -5691,7 +5721,7 @@ export function SessionView(props: {
     setContPromptState(text);
   };
   // 打了需求或選了風格，下一步就是「接續第 N 版美化」；「再美化」只在什麼都還沒動時給。
-  const offerRerun = !!(rerun || remake) && !contPrompt.trim() && !contStyled && !contReshaped;
+  const offerRerun = !!(rerun || remake) && !contPrompt.trim() && !contStyled && !contReshaped && !contEngineChanged;
   const [contReviewing, setContReviewing] = useState(false);
   // 不調整了還在等的 review，回來就不算數。
   const contGen = useRef(0);
@@ -5776,9 +5806,10 @@ export function SessionView(props: {
   }, [busy, adjusting, continuing?.version_id]);
   // 輸入框上方那顆換底，美化過就一直在，預設是原圖。換到某一版就接著那版改，左邊也
   // 切過去：原本在接續的，打好的需求、風格都留著；原本在原圖上還有沒美化的調整，那一輪
-  // 收起來、清掉（跟 AI 說要接著改一樣），加進個人化需求的那幾段、挑的風格帶過去，其他
+  // 收起來、清掉（跟 AI 說要接著改一樣），加進個人化需求的那幾段、挑的風格、改的長寬比帶過去，其他
   // 會清掉的先問（sure：問過了）。換回原圖就不接續了，打好的需求寫進個人化需求（已經在
-  // 裡面的不重複寫）、挑的風格寫進照片的風格，開一輪一般的調整，用「從原圖美化」產生。
+  // 裡面的不重複寫）、挑的風格寫進照片的風格、改的長寬比寫進照片的長寬比，開一輪一般的
+  // 調整，用「從原圖美化」產生。
   // request：AI 回「從第 N 版接著改」時說的要改的地方，有的話取代這輪加的需求。
   function continueFrom(v: Version | null, sure = false, request?: string) {
     if (v) {
@@ -5791,6 +5822,7 @@ export function SessionView(props: {
         setContTurns([]);
         setContPrompt(request || left?.text || "");
         setContStyles(left?.styles || {});
+        setContRatio(left?.ratio || "original");
       }
       if (v.version_id !== current?.version_id) props.onSelectVersion(v);
       setContinuing(v);
@@ -5803,6 +5835,8 @@ export function SessionView(props: {
     const patch: Plan = {
       ...(text ? { user_prompt: promptNow ? `${promptNow}\n${text}` : text } : {}),
       ...(contStyled ? { style_options: contStyles } : {}),
+      // 接續時挑的長寬比也是原圖要的；"original"（維持那一版的）原圖沒有對應，就不動。
+      ...(contReshaped && caps.render.aspect_ratios.some((a) => a.value === contRatio) ? { aspect_ratio: contRatio } : {}),
     };
     // 改回原圖就是回到一般的樣子（換底那顆預設就是原圖）：需求、風格寫進去，
     // 不開「看美化項目」那一輪；接續裡打的字跟 AI 的回答留在對話裡。
@@ -6204,7 +6238,7 @@ export function SessionView(props: {
       return;
     }
     const text = contPromptRef.current.trim();
-    if (!text && !contStyled && !contReshaped) return;
+    if (!text && !contStyled && !contReshaped && !contEngineChanged) return;
     await continueRun({ from: continuing, text, styles: contStyles, ratio: contRatio });
   }
 
@@ -6214,7 +6248,7 @@ export function SessionView(props: {
   function pickPreview(v: Version | null) {
     const same = (v?.version_id ?? null) === (continuing?.version_id ?? null);
     const editing = adjusting || parkedCats.length > 0
-      || (!!continuing && !!(contPromptRef.current.trim() || contStyled || contTurnsRef.current.length));
+      || (!!continuing && !!(contPromptRef.current.trim() || contStyled || contEngineChanged || contTurnsRef.current.length));
     if (props.onContinue && !busy && !contReviewing && photo.status === "ready" && editing && !same) return continueFrom(v);
     if (v) props.onSelectVersion(v);
     if (!props.onContinue || busy || contReviewing || editing) return;
@@ -7437,7 +7471,7 @@ export function SessionView(props: {
                               render("再美化", "redo", remake!);
                             }} />
                         )}
-                        {(!!contPrompt.trim() || contStyled || contReshaped) && (
+                        {(!!contPrompt.trim() || contStyled || contReshaped || contEngineChanged) && (
                           <Chip label={t("接續第 {n} 版美化", { n: continuing.ordinal })} icon="wand" kind="primary" disabled={busy}
                             onClick={() => withDraft(() => void continueNow())} />
                         )}

@@ -1500,6 +1500,23 @@ class ChatRoutesTest(unittest.TestCase):
             saved = self.save_draft(sid, photo, source, "", style_options={"lighting": "default"})
             self.assertIsNone(saved.get_json()["photos"][0]["continuation_draft"])
             self.assertEqual(self.render_from(sid, photo, source).status_code, 409)
+            self.assertEqual(self.render_from(sid, photo, source, draft_revision=1).status_code, 409)
+
+    def test_a_continuation_with_nothing_asked_renders_the_version_under_the_plans_settings(self):
+        # A 設定 change alone (engine, output size), as the panel's continue-version allows.
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True):
+            res = self.render_from(sid, photo, source, draft_revision=0)
+            self.assertEqual(res.status_code, 202, res.get_json())
+            render = res.get_json()["renders"][0]
+        (engine_params,) = [p for j, p in self.enqueued if j in render["job_ids"]]
+        params = engine_params["acts"][0]["params"]
+        self.assertFalse(params.get("user_prompt"))
+        self.assertTrue(params["analysis"]["_continuation"])
+        self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json"])
+        self.assertEqual(self.cards(sid, "render_requested")[-1]["prompt"], "")
 
     def test_a_continuation_points_the_case_at_the_photos_analysis(self):
         # Its version carries a stub; 面板模式 reads the case's analysis instead.

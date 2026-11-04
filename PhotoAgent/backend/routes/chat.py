@@ -521,6 +521,14 @@ def _panel_continuation(version):
             "aspect_ratio": params.get("aspect_ratio") or "original"}
 
 
+def _panel_engine(version):
+    """What a 面板模式 version was rendered with, for its render_done card:
+    the chat page tells a 設定 change while carrying on from it by these.
+    Not the card's plan, which is the chat's own (_land_panel_version)."""
+    params = version.get("params") or {}
+    return {k: params[k] for k in ("image_model", "image_quality", "output_scale") if params.get(k)}
+
+
 def _sync_from_history(user, session_id, session):
     """Post the versions a session's photos got outside it as render_done
     cards, so the chat page lists them like its own -- edits made in
@@ -558,7 +566,8 @@ def _sync_from_history(user, session_id, session):
                 photo["status"] = "rendering"
                 photo["pending_render"] = {"action_id": version_id, "job_ids": list(version["runs"]),
                                            "based_on": version.get("based_on"), "base": "custom", "plan": None,
-                                           "panel_continuation": _panel_continuation(version)}
+                                           "panel_continuation": _panel_continuation(version),
+                                           "panel_engine": _panel_engine(version)}
                 changed = True
                 break
             # A one-shot case's first version is also the photo's analyze
@@ -574,7 +583,7 @@ def _sync_from_history(user, session_id, session):
             messages += _land_panel_version(user, session_id, photo, entry, statuses, {
                 "type": "render_done", "photo_id": photo["photo_id"], "version_id": version_id,
                 "job_ids": succeeded, "failed_job_ids": [j for j in version["runs"] if j not in succeeded],
-                "via": "custom", **_panel_continuation(version),
+                "via": "custom", **_panel_continuation(version), **_panel_engine(version),
                 **({"note": version["note"]} if version.get("note") else {})}, version.get("based_on"))
         landed = _take_case_analysis(user, session_id, photo, entry, statuses)
         if landed is not None:
@@ -1576,11 +1585,16 @@ def _render_from_version(user, session_id, session, body):
     if photo["status"] != "ready":
         raise _RequestError(f"photo {photo['photo_id']} is {photo['status']}, not ready to render", 409)
     draft = photo.get("continuation_draft")
-    if not draft or not continuation_svc.same_source(draft["source_result"], source) \
-            or not (draft["text"] or draft.get("style_options") or (draft.get("aspect_ratio") or "original") != "original"):
-        raise _RequestError("draft_missing", 409)
     revision = body.get("draft_revision")
-    if revision is not None and revision != draft["revision"]:
+    if not draft or not continuation_svc.same_source(draft["source_result"], source):
+        # Nothing asked but a 設定 change (engine, output size), as the panel's
+        # /continue-version allows: the version again under the plan's
+        # settings. Only when the client says it has no draft (revision 0),
+        # so a stale tab's render still fails instead of going out empty.
+        if revision != 0:
+            raise _RequestError("draft_missing", 409)
+        draft = {"source_result": source, "text": "", "style_options": {}, "aspect_ratio": "original", "revision": 0}
+    elif revision is not None and revision != draft["revision"]:
         return jsonify({"error": "draft_changed", "draft": draft}), 409
     resolved = continuation_svc.resolve_source_result(user, photo["case_id"], source)
     prepared = _prepare_continuation(photo, draft)
@@ -2807,7 +2821,7 @@ def _advance_rendering(user, session_id, photo, statuses):
         photo["active_version"] = store.active_version(pending["action_id"], succeeded[0])
         card = {"type": "render_done", "photo_id": photo["photo_id"], "version_id": pending["action_id"],
                 "job_ids": succeeded, "failed_job_ids": [j for j in pending["job_ids"] if j not in succeeded],
-                "via": "custom", **(pending.get("panel_continuation") or {})}
+                "via": "custom", **(pending.get("panel_continuation") or {}), **(pending.get("panel_engine") or {})}
     elif succeeded:
         photo["active_version"] = store.active_version(pending["action_id"], succeeded[0])
         plan = pending.get("plan") or photo["plan"]

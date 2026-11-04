@@ -68,10 +68,20 @@ window.PhotoAgentConfig = {
     { value: "gpt-image-2.5-sunburst:high", model: "gpt-image-2.5-sunburst", quality: "high", label: "GPT Image 2.5 Sunburst · Premium", displayLabel: "Sunburst · Premium" },
     { value: "gpt-image-2.5-flare:low", model: "gpt-image-2.5-flare", quality: "low", label: "GPT Image 2.5 Flare · Standard", displayLabel: "Image 2.5 Flare" },
     { value: "gpt-image-2.5-flare:medium", model: "gpt-image-2.5-flare", quality: "medium", label: "GPT Image 2.5 Flare · Enhanced", displayLabel: "Image 2.5 Flare·Enhanced" },
-    { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2", displayLabel: "Nano Banana 2" },
-    { value: "MAI-Image-2.6", model: "MAI-Image-2.6", quality: "medium", label: "MAI-Image-2.6", displayLabel: "MAI-Image-2.6" }
+    { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2", displayLabel: "Nano Banana 2", scalable: false },
+    { value: "MAI-Image-2.6", model: "MAI-Image-2.6", quality: "medium", label: "MAI-Image-2.6", displayLabel: "MAI-Image-2.6", scalable: false }
   ],
   defaultImageModelQuality: "gpt-image-2.5-sunburst:medium",
+  // 輸出尺寸 tiers (backend capabilities.OUTPUT_SCALES), named by long edge.
+  // Only engines that take an arbitrary size honour it -- the ones marked
+  // `scalable: false` above render at their own fixed size, and the picker
+  // is disabled for them. The per-ratio pixel sizes shown next to each tier
+  // come from /api/capabilities at startup rather than being copied here.
+  outputScaleOptions: [
+    { value: "1K", label: "1K", description: tr("標準") },
+    { value: "2K", label: "2K" }
+  ],
+  defaultOutputScale: "1K",
   // User-facing aspect-ratio choices (upload page + analyze-preview, above
   // 生成張數) -- "auto" takes the output ratio from the framing the analysis
   // proposed (measured off its crop rectangle on the backend, not picked by

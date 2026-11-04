@@ -34,7 +34,7 @@ window.PhotoAgentApi = (() => {
     return path === "aipoc" ? "/api/photo-agent/aipoc" : "/api/photo-agent";
   }
 
-  async function submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis, selections, advancedOptions, runCount, user, actionId, singlePassEdit, path = "local" }) {
+  async function submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis, selections, advancedOptions, runCount, user, actionId, singlePassEdit, path = "local" }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
@@ -42,6 +42,7 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
+    form.append("output_scale", outputScale || "1K");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
     // One-shot alternative to the default two-call edit (Step 5 + Step 5b
@@ -258,7 +259,7 @@ window.PhotoAgentApi = (() => {
   // (AIPoC's own two-stage equivalent is analyzeAipoc() below + the existing
   // submitJob/pollJobStatus/getJobResult with path="aipoc" for stage 2.)
 
-  async function analyzeJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, advancedOptions, user }) {
+  async function analyzeJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, userPrompt, advancedOptions, user }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
@@ -266,6 +267,7 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
+    form.append("output_scale", outputScale || "1K");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
     form.append("single_pass_edit", singlePassEdit ? "true" : "false");
@@ -287,7 +289,7 @@ window.PhotoAgentApi = (() => {
     return data.job_id;
   }
 
-  async function analyzeJobBatch({ files, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions, user }) {
+  async function analyzeJobBatch({ files, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, userPrompt, advancedOptions, user }) {
     const form = new FormData();
     files.forEach((file) => form.append("image", file, file.name || "photo.jpg"));
     form.append("preset", preset);
@@ -295,6 +297,7 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
+    form.append("output_scale", outputScale || "1K");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
     if (userPrompt) form.append("user_prompt", userPrompt);
@@ -319,7 +322,7 @@ window.PhotoAgentApi = (() => {
   // on a 「只照需求改」 case. Not a version of its own: the backend attaches
   // it to the case (api.py's analyze_existing), so with `user` set, later
   // opens of the case and its chat session pick it up.
-  async function analyzeExistingJob({ jobId, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, advancedOptions, user }) {
+  async function analyzeExistingJob({ jobId, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, userPrompt, advancedOptions, user }) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/analyze/${encodeURIComponent(jobId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -329,6 +332,7 @@ window.PhotoAgentApi = (() => {
         image_model: imageModel || "gpt-image-2",
         analysis_model: analysisModel || "gpt-5.6-luna",
         aspect_ratio: aspectRatio || "auto",
+        output_scale: outputScale || "1K",
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
         run_qa: runQa === false ? "false" : "true",
         single_pass_edit: !!singlePassEdit,
@@ -349,7 +353,7 @@ window.PhotoAgentApi = (() => {
   // (api.py's analyze_and_finish) -- polled like a /submit combined job.
   // `selections` (buildEditSelections) are the panel's choices, applied by
   // the worker onto the analysis it makes.
-  async function analyzeAndFinishExistingJob({ jobId, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, selections, userPrompt, overwritePrompt, runCount, user }) {
+  async function analyzeAndFinishExistingJob({ jobId, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, selections, userPrompt, overwritePrompt, runCount, user }) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/analyze-and-finish/${encodeURIComponent(jobId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -359,6 +363,7 @@ window.PhotoAgentApi = (() => {
         image_model: imageModel || "gpt-image-2",
         analysis_model: analysisModel || "gpt-5.6-luna",
         aspect_ratio: aspectRatio || "auto",
+        output_scale: outputScale || "1K",
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
         run_qa: runQa === false ? "false" : "true",
         single_pass_edit: !!singlePassEdit,
@@ -386,7 +391,7 @@ window.PhotoAgentApi = (() => {
     return data; // { status, result: { analysis } }
   }
 
-  async function continueJob(jobId, { analysis, selections, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId, singlePassEdit }) {
+  async function continueJob(jobId, { analysis, selections, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId, singlePassEdit }) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/continue/${encodeURIComponent(jobId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -398,6 +403,7 @@ window.PhotoAgentApi = (() => {
         image_model: imageModel || "gpt-image-2",
         analysis_model: analysisModel || "gpt-5.6-luna",
         aspect_ratio: aspectRatio || "auto",
+        output_scale: outputScale || "1K",
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
         run_qa: runQa === false ? "false" : "true",
         user_prompt: userPrompt || "",
@@ -423,7 +429,7 @@ window.PhotoAgentApi = (() => {
   // 接著這張調整: edit one finished version's output with only this round's
   // request, styles and output shape (backend services/continuation, shared with chat).
   // Same {job_id} as continueJob, fetched the same way.
-  async function continueVersionJob({ caseId, sourceResult, userPrompt, styleOptions, aspectRatio, imageQuality, imageModel, user, actionId, analysisJobId }) {
+  async function continueVersionJob({ caseId, sourceResult, userPrompt, styleOptions, aspectRatio, outputScale, imageQuality, imageModel, user, actionId, analysisJobId }) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/continue-version`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -433,6 +439,7 @@ window.PhotoAgentApi = (() => {
         user_prompt: userPrompt || "",
         style_options: styleOptions || {},
         aspect_ratio: aspectRatio || "original",
+        output_scale: outputScale || "1K",
         image_quality: imageQuality,
         image_model: imageModel || "gpt-image-2",
         user: user || "",
@@ -450,7 +457,7 @@ window.PhotoAgentApi = (() => {
   // continueJob's sibling for an imported result folder: same stage="finish"
   // job, but the photo rides along with the request because there is no
   // earlier job holding it.
-  async function rerunJob({ file, analysis, selections, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId, singlePassEdit }) {
+  async function rerunJob({ file, analysis, selections, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId, singlePassEdit }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("analysis", JSON.stringify(analysis));
@@ -460,6 +467,7 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
+    form.append("output_scale", outputScale || "1K");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
     if (userPrompt) form.append("user_prompt", userPrompt);
@@ -514,7 +522,7 @@ window.PhotoAgentApi = (() => {
     return data; // local: { job_id }; aipoc: { status, analysis }
   }
 
-  async function analyzeAipoc({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
+  async function analyzeAipoc({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, userPrompt, advancedOptions }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
@@ -522,6 +530,7 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
+    form.append("output_scale", outputScale || "1K");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
     if (userPrompt) form.append("user_prompt", userPrompt);
@@ -537,7 +546,7 @@ window.PhotoAgentApi = (() => {
     return data; // { status, analysis }
   }
 
-  async function analyzeAipocBatch({ files, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
+  async function analyzeAipocBatch({ files, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, userPrompt, advancedOptions }) {
     const form = new FormData();
     files.forEach((file) => form.append("image", file, file.name || "photo.jpg"));
     form.append("preset", preset);
@@ -545,6 +554,7 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
+    form.append("output_scale", outputScale || "1K");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
     if (userPrompt) form.append("user_prompt", userPrompt);
@@ -879,8 +889,18 @@ window.PhotoAgentApi = (() => {
     return data;
   }
 
+  // What the backend currently offers (backend/routes/static.py). The panel
+  // only reads the output-scale pixel sizes from it; a failure just leaves
+  // the 輸出尺寸 rows without their sizes.
+  async function getCapabilities() {
+    const response = await fetchWithRetry(`${BASE_URL}/api/capabilities`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  }
+
   return {
     fetchWithRetry,
+    getCapabilities,
     submitJob,
     pollJobStatus,
     getJobResult,

@@ -48,7 +48,8 @@
     getReports,
     updateReportStatus,
     deleteReport,
-    reportScreenshotUrl
+    reportScreenshotUrl,
+    getCapabilities
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, isGuestUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
   const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, closePersonalizePopover, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, syncReframingRatioLock, restoreCompositionState, applyCompositionToRender, isReviewSkipped, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFindingsCardsShown, setReviewSuggestionsHeld, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
@@ -311,7 +312,9 @@
   let panelContinuation = null;
   // The request a 從原圖美化 switch left behind: it stays the 個人化需求 there,
   // and switching back to 接著這張調整 on the same version picks it up again.
-  // { owner, versionId, prefill, applied }.
+  // engine is a 設定 change made meanwhile (continuationEngineChanged), in
+  // readReviewState's terms: it stays picked on 原圖 too, as the chat's plan does.
+  // { owner, versionId, prefill, engine, applied }; prefill null when nothing was typed.
   let panelContinuationStash = null;
   // The other way round: what 從原圖美化 had besides the request (修圖建議
   // checks, 人像 picks, 僅依需求修改, the model…) when a version was picked as
@@ -1193,6 +1196,7 @@
       image_model: state.imageModel,
       image_quality: state.imageQuality,
       aspect_ratio: state.aspectRatio,
+      output_scale: state.outputScale || els.apImageOutputScaleSelect?.value,
       advanced_options: readAdvancedOptionsFromDom("ap"),
       style_options: options,
       face_issue_overrides: getFaceIssueOverrides(),
@@ -1217,11 +1221,8 @@
   function isReviewDirty() {
     const cont = activeContinuation();
     if (cont) {
-      // Unsent is a request other than the one the base version was made
-      // with, whichever base is picked: another version's request carried
-      // onto it counts, even when the base's own was not empty.
-      const base = singleRuns?.find((run) => isContinuationSource(cont, run));
-      return continuationRequestKey(pendingContinuationRequest()) !== continuationRequestKey(madeWithRequest(base));
+      // A request or a 設定 other than what the base version was made with.
+      return continuationRequestDirty(cont) || continuationEngineChanged(cont);
     }
     if (!reviewBaseline || reviewBaseline.owner !== singleFlowState) return false;
     const review = readReviewState();
@@ -1286,11 +1287,20 @@
     // alongside any result anyway, so that alone is no more carried on from
     // than a version from 原圖. One the chat page handed over (handed) still
     // goes back as it came.
+    // The engine goes along too: 美化 on the version carried on from uses
+    // the picker's, as the chat's uses its plan's.
     const cont = activeContinuation();
     if (cont) {
-      if (!isReviewDirty()) return write(cont.handed || isAdjusting() ? { idle: true, base: cont.source } : { idle: true });
+      const engine = { image_model: singleFlowState?.imageModel, image_quality: singleFlowState?.imageQuality,
+        output_scale: singleFlowState?.outputScale || els.apImageOutputScaleSelect?.value };
+      // Only 設定 changed: still nothing typed, so the base goes over as
+      // above, but as an edit -- the engine is what is unsent.
+      if (!continuationRequestDirty(cont)) {
+        return write(cont.handed || isAdjusting() ? { idle: true, base: cont.source, ...engine } : { idle: true },
+          continuationEngineChanged(cont));
+      }
       const { text, style_options, aspect_ratio } = pendingContinuationRequest();
-      return write({ continuation: { ...cont.source, text, style_options, aspect_ratio } });
+      return write({ continuation: { ...cont.source, text, style_options, aspect_ratio }, ...engine });
     }
     const unapplied = pendingModeHandoff?.case_id === caseKey ? pendingModeHandoff : null;
     if (unapplied) return write(unapplied);
@@ -1348,6 +1358,7 @@
     if (model && model.model === handoff.image_model && model.quality === handoff.image_quality) {
       applyModelQualityChange(model.value);
     }
+    applyHandedOutputScale(handoff);
     if (isDebugUiActive && typeof handoff.run_count === "number") applyRunCountChange(handoff.run_count);
     if (handoff.advanced_options) {
       // As if each switch were flipped by hand: its per-person lock follows,
@@ -1515,8 +1526,11 @@
       panel.style.left = "";
       const anchorRect = details.getBoundingClientRect();
       const panelRect = panel.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - anchorRect.bottom;
-      const spaceAbove = anchorRect.top;
+      // Inside a settings modal the body scrolls and clips the panel, so
+      // measure the room against it rather than the viewport.
+      const clip = details.closest(".settings-modal-body")?.getBoundingClientRect();
+      const spaceBelow = Math.min(window.innerHeight, clip ? clip.bottom : Infinity) - anchorRect.bottom;
+      const spaceAbove = anchorRect.top - Math.max(0, clip ? clip.top : 0);
       if (spaceBelow < panelRect.height + 16 && spaceAbove > spaceBelow) {
         panel.classList.add("open-upward");
       }
@@ -1625,9 +1639,9 @@
     });
   }
 
-  // When the three upload selectors no longer fit on one line, move the
-  // model selector groups (and their live picker state) into one compact
-  // menu; 長寬比 stays its own pill. They move back once the row has room.
+  // When the upload selectors no longer fit on one line, move every group
+  // but 長寬比 (models, 輸出尺寸 -- with their live picker state) into one
+  // compact menu; 長寬比 stays its own pill. They move back once the row has room.
   function setupCompactUploadSelectors() {
     const row = document.querySelector(".upload-inline-settings-row-1");
     const secondRow = document.querySelector("#upload-inline-settings-row-2");
@@ -1848,6 +1862,7 @@
       analysisModel: els.apAnalysisModelSelect?.value || "",
       imageModelQuality: els.apImageModelQualitySelect?.value || "",
       aspectRatio: els.apImageAspectRatioSelect?.value || "",
+      outputScale: els.apImageOutputScaleSelect?.value || "",
       advancedOptions: readAdvancedOptionsFromDom("ap"),
     };
   }
@@ -1867,6 +1882,13 @@
     // ran), with the modal one click away for the detail.
     if (ratio && ratio !== "auto") {
       parts.push(findAspectRatioOption(ratio)?.label || ratio);
+    }
+    // Same for 輸出尺寸: only a tier above the default, and only where the
+    // engine actually renders at it.
+    const scale = findOutputScaleOption(els.apImageOutputScaleSelect?.value);
+    if (scale && scale.value !== window.PhotoAgentConfig.defaultOutputScale
+      && engineIsScalable(els.apImageModelQualitySelect?.value)) {
+      parts.push(scale.label);
     }
     return parts.join(" · ") || tr("設定");
   }
@@ -1941,6 +1963,7 @@
       const valueEl = picker?.querySelector(".ap-style-value");
       if (valueEl) valueEl.textContent = opt.displayLabel || opt.label;
     });
+    syncOutputScalePickers();
     refreshApCaseSettings({ fromUser });
   }
 
@@ -2313,6 +2336,7 @@
       : [els.apImageAspectRatioPicker];
     pickers.forEach((picker) => renderAspectRatioValue(picker, opt.value));
     syncReframingRatioLock();
+    syncOutputScalePickers();
     refreshApCaseSettings({ fromUser });
   }
 
@@ -2406,6 +2430,134 @@
       handleUserAspectRatioPick(els.apImageAspectRatioSelect.value);
     });
   }
+
+  // ── 輸出尺寸 (#image-output-scale / #ap-image-output-scale) ───────────────
+  // Same two-copy arrangement as 美化引擎/長寬比 above: the upload page's
+  // select belongs to the next upload, the results page's to the case on
+  // screen, and a change is pushed into whichever flow state is live so the
+  // submit paths read it from there. Each row names the size it renders at
+  // for the ratio picked beside it ("2K · 2512×1408"); auto/original only
+  // know their ratio after analysis, so they get the pixel count instead.
+  // An engine that renders at a fixed size (config.js `scalable: false`)
+  // ignores the tier, so the picker is disabled and shows the default while
+  // it is picked -- the select keeps the user's own tier for when they
+  // switch back to one that honours it.
+  let outputScaleSizes = {};
+
+  function findOutputScaleOption(value) {
+    const config = window.PhotoAgentConfig;
+    const options = config.outputScaleOptions || [];
+    const defaultOpt = options.find((o) => o.value === config.defaultOutputScale) || options[0] || null;
+    if (!value) return defaultOpt;
+    // A tier no longer offered (3K/4K, saved before they were dropped) falls
+    // back to the largest remaining one, as the backend does.
+    return options.find((o) => o.value === value) || options[options.length - 1] || defaultOpt;
+  }
+
+  function engineIsScalable(modelQualityValue) {
+    return findModelQualityOption(modelQualityValue)?.scalable !== false;
+  }
+
+  function outputScaleRowText(opt, ratio) {
+    const info = outputScaleSizes[opt.value];
+    const size = info?.sizes?.[ratio];
+    const detail = size
+      ? size.replace("x", "×")
+      : (info?.megapixels ? tr("約 {mp}MP", { mp: info.megapixels }) : opt.description);
+    return detail ? `${opt.label} · ${detail}` : opt.label;
+  }
+
+  function populateOutputScaleSelect(select) {
+    if (!select) return;
+    select.innerHTML = "";
+    (window.PhotoAgentConfig.outputScaleOptions || []).forEach((opt) => {
+      const optionEl = document.createElement("option");
+      optionEl.value = opt.value;
+      optionEl.textContent = opt.label;
+      optionEl.dataset.displayLabel = opt.label;
+      select.appendChild(optionEl);
+    });
+    select.value = findOutputScaleOption(null)?.value || select.value;
+  }
+
+  // Each copy is read against its own page's 美化引擎 and 長寬比. The rows'
+  // text is rewritten in place; wireOptionPicker rebuilds its list from the
+  // select's options on every open, so the next open shows it.
+  const outputScaleCopies = () => [
+    [els.imageOutputScalePicker, els.imageOutputScaleSelect, els.imageModelQualitySelect, els.imageAspectRatioSelect],
+    [els.apImageOutputScalePicker, els.apImageOutputScaleSelect, els.apImageModelQualitySelect, els.apImageAspectRatioSelect],
+  ];
+
+  function syncOutputScalePickers() {
+    outputScaleCopies().forEach(([picker, select, engineSelect, ratioSelect]) => {
+      if (!picker || !select) return;
+      const ratio = ratioSelect?.value;
+      Array.from(select.options).forEach((optionEl) => {
+        const opt = findOutputScaleOption(optionEl.value);
+        if (opt) optionEl.textContent = outputScaleRowText(opt, ratio);
+      });
+      const scalable = engineIsScalable(engineSelect?.value);
+      picker.classList.toggle("is-single-option", !scalable);
+      if (!scalable) picker.open = false;
+      picker.title = scalable ? "" : tr("這個美化引擎的輸出尺寸是固定的");
+      const shown = scalable ? findOutputScaleOption(select.value) : findOutputScaleOption(null);
+      const valueEl = picker.querySelector(".ap-style-value");
+      if (valueEl && shown) valueEl.textContent = shown.label;
+    });
+  }
+
+  // Results page's copy only, same rule as applyModelQualityOption.
+  function applyOutputScaleOption(opt, { includeUpload = false, fromUser = false } = {}) {
+    if (!opt) return;
+    if (includeUpload && els.imageOutputScaleSelect) els.imageOutputScaleSelect.value = opt.value;
+    if (els.apImageOutputScaleSelect) els.apImageOutputScaleSelect.value = opt.value;
+    syncOutputScalePickers();
+    refreshApCaseSettings({ fromUser });
+  }
+
+  function applyOutputScaleChange(value) {
+    const opt = findOutputScaleOption(value);
+    if (!opt) return;
+    applyOutputScaleOption(opt, { fromUser: true });
+    if (singleFlowState) singleFlowState.outputScale = opt.value;
+    // Per-case routing, same as applyModelQualityChange.
+    const batchRecord = currentDetailBatchRecord();
+    if (batchRecord) {
+      batchRecord.outputScale = opt.value;
+    } else if (batchSettings) {
+      batchSettings.outputScale = opt.value;
+    }
+  }
+
+  populateOutputScaleSelect(els.imageOutputScaleSelect);
+  populateOutputScaleSelect(els.apImageOutputScaleSelect);
+  wireOptionPicker(els.imageOutputScalePicker, els.imageOutputScaleSelect);
+  wireOptionPicker(els.apImageOutputScalePicker, els.apImageOutputScaleSelect);
+  syncOutputScalePickers();
+  if (els.imageOutputScaleSelect) {
+    els.imageOutputScaleSelect.addEventListener("change", () =>
+      applyOutputScaleChange(els.imageOutputScaleSelect.value));
+  }
+  if (els.apImageOutputScaleSelect) {
+    els.apImageOutputScaleSelect.addEventListener("change", () => {
+      applyOutputScaleChange(els.apImageOutputScaleSelect.value);
+      updateInlineAnalysisContinueBtnState();
+    });
+  }
+  // The engine and ratio pickers change what this one can offer and what
+  // its rows say. Programmatic sets go through applyModelQualityOption /
+  // applyAspectRatioOption, which call syncOutputScalePickers themselves;
+  // these cover the upload copies a user pick changes directly.
+  [els.imageModelQualitySelect, els.imageAspectRatioSelect].forEach((select) =>
+    select?.addEventListener("change", syncOutputScalePickers));
+  getCapabilities()
+    .then((caps) => {
+      (caps?.render?.output_scales || []).forEach((s) => {
+        outputScaleSizes[s.value] = { sizes: s.sizes || {}, megapixels: s.megapixels };
+      });
+      syncOutputScalePickers();
+    })
+    .catch(() => {});
 
   // Owner (batch record or singleFlowState) -> the ratio it is being reframed for.
   const reframesInFlight = new Map();
@@ -2627,6 +2779,7 @@
         imageModel: state.imageModel,
         analysisModel: state.analysisModel,
         aspectRatio: state.aspectRatio,
+        outputScale: state.outputScale,
         aiPhotoEditing: state.aiPhotoEditing,
         runQa: state.runQa,
         singlePassEdit: state.singlePassEdit,
@@ -2662,7 +2815,7 @@
   function showAnalysisFromOriginal() {
     const run = singleRuns?.[singleMirrorIndex];
     if (!run) return;
-    const request = pendingContinuationRequest();
+    const stash = continuationStashOf(activeContinuation(), run.versionId);
     applyHistoryVersionContext(run, null);
     // Asked for, so it is put to use: 僅依需求修改 off, as adoptSkippedCaseAnalysis does.
     lastSingleSelections = { ...lastSingleSelections, overwritePrompt: false };
@@ -2670,8 +2823,7 @@
     const defaultRun = isContinuationRun(run) && canContinueFromRun(run) ? run : null;
     panelBase = { owner: singleFlowState, run, defaultRun };
     panelContinuation = null;
-    panelContinuationStash = isEmptyContinuationRequest(request) ? null
-      : { owner: singleFlowState, versionId: run.versionId, prefill: request };
+    panelContinuationStash = stash && { ...stash, owner: singleFlowState };
     syncVersionStripCurrent();
     openInlineAnalysisForCurrentContext(true);
   }
@@ -2836,6 +2988,7 @@
     const b = handoff?.idle ? handoff.base : null;
     if (b && run && canContinueFromRun(run) && run.versionId === b.version_id) {
       panelContinuation = { ...continuationOn(run, run === defaultRun ? madeWithRequest(run) : null), handed: true };
+      applyHandedEngine(handoff);
       return;
     }
     if (!handoff || handoff.idle) {
@@ -2847,9 +3000,29 @@
       pendingModeHandoff = null;
       panelContinuation = { ...continuationOn(run, { text: c.text || "", style_options: c.style_options || {},
         aspect_ratio: continuationAspectRatio(c.aspect_ratio) }), handed: true };
+      applyHandedEngine(handoff);
       return;
     }
     panelContinuation = null;
+  }
+
+  // Carrying on from the chat's version: with the chat's engine too, picked
+  // in its 設定 there, not the one that version was made with.
+  function applyHandedEngine(handoff) {
+    const model = findModelQualityOptionByPair(handoff.image_model, handoff.image_quality);
+    if (!model || model.model !== handoff.image_model || model.quality !== handoff.image_quality) return;
+    applyHandedOutputScale(handoff);
+    if (singleFlowState?.imageModel === model.model && singleFlowState?.imageQuality === model.quality) return;
+    applyModelQualityChange(model.value);
+  }
+
+  // 輸出尺寸 rides along with the engine; only a tier this page offers is
+  // taken, so a value the panel can't show is left where it is.
+  function applyHandedOutputScale(handoff) {
+    const opt = findOutputScaleOption(handoff?.output_scale);
+    if (!handoff?.output_scale || opt?.value !== handoff.output_scale) return;
+    if (els.apImageOutputScaleSelect?.value === opt.value && singleFlowState?.outputScale === opt.value) return;
+    applyOutputScaleChange(opt.value);
   }
 
   // 調整中: something unsent in the panel, or, while it is open, a base
@@ -2901,6 +3074,26 @@
   function isEmptyContinuationRequest(request) {
     return !request || (!request.text && !Object.keys(request.style_options || {}).length
       && continuationAspectRatio(request.aspect_ratio) === "original");
+  }
+
+  // Unsent is a request other than the one the base version was made with,
+  // whichever base is picked: another version's request carried onto it
+  // counts, even when the base's own was not empty.
+  function continuationRequestDirty(cont) {
+    const base = singleRuns?.find((run) => isContinuationSource(cont, run));
+    return continuationRequestKey(pendingContinuationRequest()) !== continuationRequestKey(madeWithRequest(base));
+  }
+
+  // A 設定 change is asked for too: the engine or 輸出尺寸 美化 would use,
+  // against what the base version was made with. A version with no params
+  // on record has nothing to tell against, so it reads as unchanged.
+  function continuationEngineChanged(cont) {
+    const params = singleRuns?.find((run) => isContinuationSource(cont, run))?.versionParams;
+    if (!params?.image_model || !singleFlowState) return false;
+    const { imageModel, imageQuality, outputScale } = singleFlowState;
+    if (params.image_model !== imageModel || (params.image_quality || imageQuality) !== imageQuality) return true;
+    if (!engineIsScalable(findModelQualityOptionByPair(imageModel, imageQuality)?.value)) return false;
+    return findOutputScaleOption(params.output_scale)?.value !== findOutputScaleOption(outputScale)?.value;
   }
 
   // The panel open: what is in it; closed by 取消: what was kept from it.
@@ -2961,7 +3154,7 @@
     const stash = panelContinuationStash;
     panelContinuationStash = null;
     if (!prefill && !isEmptyContinuationRequest(carried)) prefill = carried;
-    if (!prefill && stash?.owner === singleFlowState && stash.versionId === run.versionId) prefill = stash.prefill;
+    if (!prefill && stash?.owner === singleFlowState && stash.versionId === run.versionId) prefill = stash.prefill || null;
     panelContinuation = continuationOn(run, prefill);
     // Off 原圖 onto the version already on screen: no step to put the photo
     // back on its After side, so that happens here (as the strip's tile does).
@@ -2977,17 +3170,42 @@
     return switchPanelBase(stepOutOfContinuation);
   }
 
+  // What leaving 接著這張調整 for 從原圖美化 carries (panelContinuationStash,
+  // less its owner): the unsent request and any 設定 change. Null when neither.
+  function continuationStashOf(cont, versionId) {
+    const request = pendingContinuationRequest();
+    const prefill = isEmptyContinuationRequest(request) ? null : request;
+    const { imageModel, imageQuality, outputScale } = singleFlowState || {};
+    const engine = cont && continuationEngineChanged(cont)
+      ? { image_model: imageModel, image_quality: imageQuality, output_scale: outputScale } : null;
+    return prefill || engine ? { versionId, prefill, engine } : null;
+  }
+
   function stepOutOfContinuation() {
     const cont = activeContinuation();
     if (!cont) return;
-    const request = pendingContinuationRequest();
-    panelContinuationStash = isEmptyContinuationRequest(request) ? null
-      : { owner: singleFlowState, versionId: cont.source.version_id, prefill: request };
+    const stash = continuationStashOf(cont, cont.source.version_id);
+    panelContinuationStash = stash && { ...stash, owner: singleFlowState };
+    if (stash?.engine) resetToVersionEngine(cont);
     panelContinuation = null;
     // The next 美化 starts from the original, so the photo shows it, as the
     // strip's 原圖 tile does.
     pickVersionStripOrigin();
     openInlineAnalysisForCurrentContext(true);
+  }
+
+  // Back to the engine `cont`'s version was made with, as showing it puts it
+  // (applyHistoryVersionContext). The change is put back on 原圖 as the
+  // user's (applyContinuationStash), so there it reads as one -- 調整中 and
+  // 設定's 已變更 -- instead of going into that side's baselines.
+  function resetToVersionEngine(cont) {
+    const params = singleRuns?.find((run) => isContinuationSource(cont, run))?.versionParams;
+    if (!params?.image_model || !singleFlowState) return;
+    singleFlowState.imageModel = params.image_model;
+    if (params.image_quality) singleFlowState.imageQuality = params.image_quality;
+    singleFlowState.outputScale = findOutputScaleOption(params.output_scale)?.value;
+    applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
+    applyOutputScaleOption(findOutputScaleOption(singleFlowState.outputScale));
   }
 
   // Like the chat, one request across both modes: what 接著這張調整 had is put
@@ -2996,9 +3214,20 @@
     const stash = panelContinuationStash;
     if (!stash || stash.owner !== singleFlowState || stash.applied) return;
     stash.applied = true;
-    const { text, style_options: style } = stash.prefill;
+    if (stash.engine) {
+      const { image_model: model, image_quality: quality } = stash.engine;
+      const opt = findModelQualityOptionByPair(model, quality);
+      if (opt && opt.model === model && opt.quality === quality) applyModelQualityChange(opt.value);
+      applyHandedOutputScale(stash.engine);
+    }
+    if (!stash.prefill) return;
+    const { text, style_options: style, aspect_ratio: ratio } = stash.prefill;
     if (text && els.promptInput) els.promptInput.value = text;
     if (Object.keys(style).length) applyStyleSelections({ options: { ...readStyleSelectionsFromDom().options, ...style } });
+    // A shape picked for the version is one for the original too; "original"
+    // (keep the version's) has no counterpart there, so the case's stays.
+    const shape = continuationAspectRatio(ratio);
+    if (shape !== "original" && findAspectRatioOption(shape)?.value === shape) applyAspectRatioChange(shape);
   }
 
   function applyOriginStash() {
@@ -3601,6 +3830,7 @@
     applyModelQualityOption(findModelQualityOption(config.defaultImageModelQuality), { includeUpload: true });
     applyAnalysisModelOption(findAnalysisModelOption(config.defaultAnalysisModel), { includeUpload: true });
     applyAspectRatioOption(findAspectRatioOption(config.defaultAspectRatio), { includeUpload: true });
+    applyOutputScaleOption(findOutputScaleOption(config.defaultOutputScale), { includeUpload: true });
     applyAdvancedOptionsOption(defaultAdvancedOptions(), "upload");
     applyAdvancedOptionsOption(defaultAdvancedOptions(), "ap");
     applySinglePassEditOption(DEFAULT_SINGLE_PASS_EDIT);
@@ -4709,6 +4939,7 @@
       modelQuality: els.apImageModelQualitySelect ? els.apImageModelQualitySelect.value : null,
       runCount: els.apRunCountSelect ? els.apRunCountSelect.value : null,
       aspectRatio: els.apImageAspectRatioSelect ? els.apImageAspectRatioSelect.value : null,
+      outputScale: els.apImageOutputScaleSelect ? els.apImageOutputScaleSelect.value : null,
       // 人像修正設定 (#advanced-settings-fold, folded into 設定 on either page) --
       // just as real an edit as the picks above, so it needs the same
       // before/after snapshot to unblock the Run button.
@@ -4757,7 +4988,8 @@
   function inlineReviseHasNoChanges() {
     // 接著這張調整 edits only what is asked: nothing asked, nothing to do.
     // What the version was made with, unchanged, is asked again (再美化).
-    if (activeContinuation()) return isEmptyContinuationRequest(continuationRequestFromDom());
+    const cont = activeContinuation();
+    if (cont) return isEmptyContinuationRequest(continuationRequestFromDom()) && !continuationEngineChanged(cont);
     if (!inlineReviseSnapshot) return false;
     const { options, recipeChecked } = readStyleSelectionsFromDom();
     const prompt = els.promptInput ? els.promptInput.value.trim() : "";
@@ -4773,13 +5005,15 @@
     const sameRunCount = runCount === inlineReviseSnapshot.runCount;
     const sameAspectRatio = (els.apImageAspectRatioSelect ? els.apImageAspectRatioSelect.value : null)
       === inlineReviseSnapshot.aspectRatio;
+    const sameOutputScale = (els.apImageOutputScaleSelect ? els.apImageOutputScaleSelect.value : null)
+      === inlineReviseSnapshot.outputScale;
     const advancedOptions = readAdvancedOptionsFromDom("ap");
     const sameAdvancedOptions = Object.keys(advancedOptions).every(
       (key) => advancedOptions[key] === inlineReviseSnapshot.advancedOptions[key]);
     const sameFaceIssues = sameFaceIssueOverrides(getFaceIssueOverrides(), inlineReviseSnapshot.faceIssueOverrides);
     const sameBodyReshape = getBodyReshapeReviewEnabled() === inlineReviseSnapshot.bodyReshapeEnabled;
     return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount && sameAspectRatio
-      && sameAdvancedOptions && sameFaceIssues && sameBodyReshape && sameCompositionAsShownResult();
+      && sameOutputScale && sameAdvancedOptions && sameFaceIssues && sameBodyReshape && sameCompositionAsShownResult();
   }
 
   // Against the shown result rather than the snapshot: a reframe stays a change
@@ -6110,6 +6344,7 @@
       imageModel: null,
       imageQuality: null,
       aspectRatio: null,
+      outputScale: null,
       analysisModel: null
     };
   }
@@ -6405,10 +6640,10 @@
   // fromJobId: instead of uploading `file`, runs on the photo that job
   // already holds -- 美化 on a 「只照需求改」 case (analyzeAndFinishExistingJob),
   // with the panel's `selections` for the worker to apply.
-  async function runCombinedMultiRun({ file, fromJobId = null, selections = null, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt = "", overwritePrompt = false, runCount = 1, onStage, onRunDone }) {
+  async function runCombinedMultiRun({ file, fromJobId = null, selections = null, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt = "", overwritePrompt = false, runCount = 1, onStage, onRunDone }) {
     const jobId = fromJobId
-      ? await analyzeAndFinishExistingJob({ jobId: fromJobId, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, selections, userPrompt, overwritePrompt, runCount, user: getCurrentUser() })
-      : await submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt, overwritePrompt, runCount, user: getCurrentUser(), path: "local" });
+      ? await analyzeAndFinishExistingJob({ jobId: fromJobId, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, selections, userPrompt, overwritePrompt, runCount, user: getCurrentUser() })
+      : await submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt, overwritePrompt, runCount, user: getCurrentUser(), path: "local" });
     await watchCombinedJobRuns(jobId, runCount, { onStage, onRunDone });
   }
 
@@ -6506,6 +6741,7 @@
     const imageModel = modelQualityOpt.model || "gpt-image-2";
     const analysisModel = els.analysisModelSelect?.value || window.PhotoAgentConfig.defaultAnalysisModel || "gpt-5.6-luna";
     const aspectRatio = els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto";
+    const outputScale = els.imageOutputScaleSelect?.value || window.PhotoAgentConfig.defaultOutputScale || "1K";
     const aiPhotoEditing = els.aiEditToggle.checked;
     const runQa = els.runQaToggle ? els.runQaToggle.checked : false;
     const singlePassEdit = readSinglePassEditOption();
@@ -6557,14 +6793,14 @@
 
       if (!useCombinedJob) {
         if (processingPath === "aipoc") {
-          const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, advancedOptions });
+          const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, advancedOptions });
           analysis = analyzeData.analysis;
           const t = analysis.timings || {};
           recordAnalyzeTiming(tr("初步分析"), Date.now() - stepStart, [
             { label: tr("Step 2：照片分析"), duration: secToMs(t["Step 2 - photo_analysis"]) }
           ]);
         } else {
-          analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, user: getCurrentUser() });
+          analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, user: getCurrentUser() });
           recordAnalyzeTiming(tr("送出分析任務"), Date.now() - stepStart);
 
           stepStart = Date.now();
@@ -6582,7 +6818,7 @@
         }
       }
 
-      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, processingPath, analyzeTimings, useCombinedJob, progressTipsOnly: skipReview };
+      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, processingPath, analyzeTimings, useCombinedJob, progressTipsOnly: skipReview };
       // A fresh analyze always runs the current analyze_stage, so there's
       // nothing to flag as incompatible here -- just the version number, for
       // debug mode. useCombinedJob has no `analysis` yet at this point
@@ -6694,6 +6930,7 @@
       userPrompt: request.text,
       styleOptions: request.style_options,
       aspectRatio: request.aspect_ratio,
+      outputScale: singleFlowState.outputScale || els.apImageOutputScaleSelect?.value,
       imageQuality,
       imageModel,
       user: getCurrentUser(),
@@ -6754,7 +6991,7 @@
     // This is the common entry point for the first edit and every later
     // revise. Analysis-only views intentionally never set modifiedAt.
     markCurrentCaseModified();
-    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob, combinedFromJobId } = singleFlowState;
+    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob, combinedFromJobId } = singleFlowState;
     // Read the live checkbox at submission time. The result-page control can
     // change after singleFlowState was created during analysis; the visible
     // selection, not that earlier snapshot, is authoritative for this edit.
@@ -6898,7 +7135,7 @@
       try {
         await runCombinedMultiRun({
           file: selectedFile, fromJobId: combinedFromJobId || null, selections: combinedSelections,
-          preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt, overwritePrompt, runCount,
+          preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt, overwritePrompt, runCount,
           onStage: onCombinedStage,
           onRunDone: async (runData) => {
             const run = myRuns[runData.run - 1];
@@ -6980,9 +7217,9 @@
       let finalJobId, imageUrl, result;
 
       if (processingPath === "aipoc") {
-        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, analysis: editAnalysis, selections: editSelections, user: getCurrentUser(), path: "aipoc" });
+        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, analysis: editAnalysis, selections: editSelections, user: getCurrentUser(), path: "aipoc" });
       } else {
-        finalJobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: editAnalysis, selections: editSelections, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, user: getCurrentUser() });
+        finalJobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: editAnalysis, selections: editSelections, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, user: getCurrentUser() });
       }
       // Timings go into one shared list (dom.js) that belongs to whichever
       // record is on screen -- once the user has moved to another record,
@@ -7073,7 +7310,7 @@
 
       const actionId = generateActionId();
       await runBatchPool(myRuns, async (run) => {
-        await runSingleItem(run, { analyzeJobId, editAnalysis, editSelections, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, processingPath, analyzeTimings, actionId });
+        await runSingleItem(run, { analyzeJobId, editAnalysis, editSelections, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, processingPath, analyzeTimings, actionId });
         doneCount += 1;
         updateRunProgress();
         // autoOpenPanel: false -- this fires per-RUN, not just once at the
@@ -7129,14 +7366,14 @@
       : rerunJob({ file, ...payload });
   }
 
-  async function runSingleItem(run, { analyzeJobId, editAnalysis, editSelections, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, processingPath, analyzeTimings, actionId }) {
+  async function runSingleItem(run, { analyzeJobId, editAnalysis, editSelections, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, processingPath, analyzeTimings, actionId }) {
     try {
       let stepStart = Date.now();
 
       if (processingPath === "aipoc") {
-        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, analysis: editAnalysis, selections: editSelections, user: getCurrentUser(), actionId, path: "aipoc" });
+        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, analysis: editAnalysis, selections: editSelections, user: getCurrentUser(), actionId, path: "aipoc" });
       } else {
-        run.jobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: editAnalysis, selections: editSelections, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, user: getCurrentUser(), actionId });
+        run.jobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: editAnalysis, selections: editSelections, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, outputScale, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, user: getCurrentUser(), actionId });
       }
       const submitMs = Date.now() - stepStart;
 
@@ -7383,7 +7620,7 @@
 
     const action = await waitForInlineAnalysisAction(undefined, () => (
       continuing && activeContinuation() === continuing
-        && isEmptyContinuationRequest(continuationRequestFromDom())
+        && isEmptyContinuationRequest(continuationRequestFromDom()) && !continuationEngineChanged(continuing)
         ? tr("先寫下想調整的地方，或挑一個風格。") : null));
     if (action !== "cancel") {
       reviewBaseline = null; // sent with this 美化
@@ -7513,6 +7750,7 @@
       imageModel: modelQualityOpt.model || "gpt-image-2",
       analysisModel: els.analysisModelSelect?.value || window.PhotoAgentConfig.defaultAnalysisModel || "gpt-5.6-luna",
       aspectRatio: els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto",
+      outputScale: els.imageOutputScaleSelect?.value || window.PhotoAgentConfig.defaultOutputScale || "1K",
       aiPhotoEditing: els.aiEditToggle.checked,
       runQa: els.runQaToggle ? els.runQaToggle.checked : false,
       singlePassEdit: readSinglePassEditOption(),
@@ -7562,6 +7800,7 @@
       imageModel: batchSettings.imageModel,
       analysisModel: batchSettings.analysisModel,
       aspectRatio: batchSettings.aspectRatio,
+      outputScale: batchSettings.outputScale,
       aiPhotoEditing: batchSettings.aiPhotoEditing,
       advancedOptions: batchSettings.advancedOptions,
       user: getCurrentUser()
@@ -7711,6 +7950,7 @@
     record.imageQuality = batchSettings.imageQuality;
     record.analysisModel = batchSettings.analysisModel;
     record.aspectRatio = batchSettings.aspectRatio;
+    record.outputScale = batchSettings.outputScale;
     record.advancedOptions = { ...batchSettings.advancedOptions };
     record.singlePassEdit = batchSettings.singlePassEdit;
     try {
@@ -7721,6 +7961,7 @@
         imageModel: batchSettings.imageModel,
         analysisModel: batchSettings.analysisModel,
         aspectRatio: batchSettings.aspectRatio,
+        outputScale: batchSettings.outputScale,
         aiPhotoEditing: batchSettings.aiPhotoEditing,
         runQa: batchSettings.runQa,
         singlePassEdit: batchSettings.singlePassEdit,
@@ -7849,6 +8090,10 @@
     return record.aspectRatio || batchSettings.aspectRatio;
   }
 
+  function effectiveOutputScale(record) {
+    return record.outputScale || batchSettings.outputScale;
+  }
+
   function effectiveAdvancedOptions(record) {
     return record.advancedOptions || batchSettings.advancedOptions;
   }
@@ -7937,6 +8182,7 @@
       const modelQuality = effectiveModelQuality(record);
       const analysisModel = effectiveAnalysisModel(record);
       const aspectRatio = effectiveAspectRatio(record);
+      const outputScale = effectiveOutputScale(record);
       // Same live-value rule as finishSingleFlow: a per-image revise may
       // change the result-page toggle after batchSettings was first created.
       const singlePassEdit = readSinglePassEditOption();
@@ -7953,6 +8199,7 @@
       record.imageQuality = modelQuality.quality;
       record.analysisModel = analysisModel;
       record.aspectRatio = aspectRatio;
+      record.outputScale = outputScale;
       record.advancedOptions = { ...advancedOptions };
       record.singlePassEdit = singlePassEdit;
       let stepStart = Date.now();
@@ -7964,6 +8211,7 @@
           imageModel: modelQuality.model,
           analysisModel,
           aspectRatio,
+          outputScale,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
           singlePassEdit,
@@ -7984,6 +8232,7 @@
           imageModel: modelQuality.model,
           analysisModel,
           aspectRatio,
+          outputScale,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
           singlePassEdit,
@@ -8658,6 +8907,7 @@
       applyAnalysisModelOption(findAnalysisModelOption(settings.analysisModel), { includeUpload: true });
       applyModelQualityOption(findModelQualityOption(settings.imageModelQuality), { includeUpload: true });
       applyAspectRatioOption(findAspectRatioOption(settings.aspectRatio), { includeUpload: true });
+      applyOutputScaleOption(findOutputScaleOption(settings.outputScale), { includeUpload: true });
       applyAdvancedOptionsOption(settings.advancedOptions, "upload");
     }
     showSection("processing");
@@ -10132,7 +10382,7 @@
   // (preset/image_quality/...) -- viewHistoryRecord already falls back to
   // sensible defaults for those when absent.
   const REPORT_VERSION_PARAM_KEYS = [
-    "preset", "image_quality", "image_model", "analysis_model", "aspect_ratio",
+    "preset", "image_quality", "image_model", "analysis_model", "aspect_ratio", "output_scale",
     "ai_photo_editing", "run_qa", "single_pass_edit", "overwrite_prompt", "advanced_options"
   ];
 
@@ -10828,6 +11078,7 @@
       imageModel: job.image_model || "gpt-image-2",
       analysisModel: job.analysis_model || "gpt-5.6-luna",
       aspectRatio: job.aspect_ratio || "auto",
+      outputScale: findOutputScaleOption(job.output_scale)?.value,
       aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : true,
       runQa: job.run_qa != null ? job.run_qa : true,
       singlePassEdit: resolvedSinglePassEdit(job.single_pass_edit),
@@ -10849,6 +11100,7 @@
     applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
     applyAnalysisModelOption(findAnalysisModelOption(singleFlowState.analysisModel));
     applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
+    applyOutputScaleOption(findOutputScaleOption(singleFlowState.outputScale));
     applyAdvancedOptionsOption(
       recordAdvancedOptions(singleFlowState.advancedOptions, singleFlowState.analysis), "ap");
     // #prompt / #prompt-overwrite are shared with the results page's
@@ -11014,6 +11266,7 @@
             imageModel: job.image_model || extraInfo.image_model || "gpt-image-2",
             analysisModel: job.analysis_model || extraInfo.analysis_model || "gpt-5.6-luna",
             aspectRatio: job.aspect_ratio || "auto",
+            outputScale: findOutputScaleOption(job.output_scale || extraInfo.output_scale)?.value,
             aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
             runQa: job.run_qa != null ? job.run_qa : true,
             singlePassEdit: resolvedSinglePassEdit(job.single_pass_edit, extraInfo.single_pass_edit),
@@ -11030,6 +11283,7 @@
           applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
           applyAnalysisModelOption(findAnalysisModelOption(singleFlowState.analysisModel));
           applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
+          applyOutputScaleOption(findOutputScaleOption(singleFlowState.outputScale));
           applyAdvancedOptionsOption(
             recordAdvancedOptions(singleFlowState.advancedOptions, restoredAnalysis), "ap");
           lastSingleSelections = selections;
@@ -11274,6 +11528,7 @@
       // ratio would re-plan its composition.
       aspectRatio: continuation && attached
         ? attached._aspect_ratio_pref_at_analysis || "auto" : caseParams.aspect_ratio || "auto",
+      outputScale: findOutputScaleOption(params.output_scale || extraInfo.output_scale)?.value,
       aiPhotoEditing: params.ai_photo_editing != null ? params.ai_photo_editing : !!extraInfo.image_model,
       runQa: params.run_qa != null ? params.run_qa : true,
       singlePassEdit: resolvedSinglePassEdit(params.single_pass_edit, extraInfo.single_pass_edit),
@@ -11296,6 +11551,7 @@
     applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
     applyAnalysisModelOption(findAnalysisModelOption(singleFlowState.analysisModel));
     applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
+    applyOutputScaleOption(findOutputScaleOption(singleFlowState.outputScale));
     // singleFlowState.advancedOptions itself is left unset by the historical
     // reconstruction above (unlike imageModel/aspectRatio) -- falling back to
     // singleFlowState.analysis._advanced_options, the same key a later
@@ -11548,6 +11804,7 @@
     ));
     applyAnalysisModelOption(findAnalysisModelOption(job.analysis_model || extraInfo.analysis_model || "gpt-5.6-luna"));
     applyAspectRatioOption(findAspectRatioOption(job.aspect_ratio || "auto"));
+    applyOutputScaleOption(findOutputScaleOption(job.output_scale || extraInfo.output_scale));
     applyAdvancedOptionsOption(recordAdvancedOptions(null, record.result.analysis), "ap");
     if (historyViewToken === myToken) closeHistoryDrawer();
     releaseHistoryCanvasRow(myToken); // see the local-path branch above
@@ -13637,6 +13894,7 @@
     record.imageQuality = params.image_quality || extraInfo.image_quality || batchSettings.imageQuality;
     record.analysisModel = params.analysis_model || extraInfo.analysis_model || batchSettings.analysisModel;
     record.aspectRatio = params.aspect_ratio || batchSettings.aspectRatio;
+    record.outputScale = findOutputScaleOption(params.output_scale || extraInfo.output_scale || batchSettings.outputScale)?.value;
     record.advancedOptions = recordAdvancedOptions(null, restoredAnalysis);
     record.singlePassEdit = resolvedSinglePassEdit(params.single_pass_edit, extraInfo.single_pass_edit);
   }
@@ -13866,6 +14124,7 @@
     applyModelQualityOption(findModelQualityOptionByPair(effMq.model, effMq.quality));
     applyAnalysisModelOption(findAnalysisModelOption(effectiveAnalysisModel(record)));
     applyAspectRatioOption(findAspectRatioOption(effectiveAspectRatio(record)));
+    applyOutputScaleOption(findOutputScaleOption(effectiveOutputScale(record)));
     applyAdvancedOptionsOption(effectiveAdvancedOptions(record), "ap");
 
     // Unlike the single-image flow (separate showPendingResults vs
@@ -15186,6 +15445,7 @@
       aspectRatio: result.analysis?._aspect_ratio_pref_at_edit
         || result.analysis?._aspect_ratio_pref_at_analysis
         || "auto",
+      outputScale: findOutputScaleOption(extraInfo.output_scale)?.value,
       // extra-info.image_model is null exactly when the run was local-only.
       aiPhotoEditing: Boolean(extraInfo.image_model),
       // A skipped QA writes an empty `checks` object; a QA that ran (or ran and
@@ -15228,6 +15488,7 @@
     if (settings.modelQualityOpt.value) applyModelQualityChange(settings.modelQualityOpt.value);
     applyAnalysisModelChange(settings.analysisModel);
     applyAspectRatioChange(settings.aspectRatio);
+    applyOutputScaleChange(settings.outputScale);
     singleFlowState = {
       analysis,
       analyzeJobId: null,            // no prior job -> rerunJob, not continueJob
@@ -15238,6 +15499,7 @@
       imageModel: settings.imageModel,
       analysisModel: settings.analysisModel,
       aspectRatio: settings.aspectRatio,
+      outputScale: settings.outputScale,
       aiPhotoEditing: settings.aiPhotoEditing,
       runQa: settings.runQa,
       singlePassEdit: settings.singlePassEdit,
@@ -15277,6 +15539,7 @@
       imageModel: settings.imageModel,
       analysisModel: settings.analysisModel,
       aspectRatio: settings.aspectRatio,
+      outputScale: settings.outputScale,
       aiPhotoEditing: settings.aiPhotoEditing,
       runQa: settings.runQa,
       singlePassEdit: settings.singlePassEdit,
@@ -15285,6 +15548,7 @@
     applySinglePassEditOption(batchSettings.singlePassEdit);
     if (settings.modelQualityOpt.value) applyModelQualityChange(settings.modelQualityOpt.value);
     applyAspectRatioChange(settings.aspectRatio);
+    applyOutputScaleChange(settings.outputScale);
 
     batchRecords = [];
     for (const image of images) {
