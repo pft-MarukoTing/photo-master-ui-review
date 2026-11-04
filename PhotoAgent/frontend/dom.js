@@ -134,6 +134,7 @@ window.PhotoAgentDom = (() => {
     apContinueLabel: document.querySelector("#ap-continue-label"),
     apContinueLead: document.querySelector("#ap-continue-lead"),
     apContinueTail: document.querySelector("#ap-continue-tail"),
+    apPromptIntro: document.querySelector("#ap-review-prompt .ap-prompt-intro"),
     apContinueMenu: document.querySelector("#ap-continue-menu"),
     apContinueExit: document.querySelector("#ap-continue-exit"),
     apPhotoHighlights: document.querySelector("#ap-photo-highlights"),

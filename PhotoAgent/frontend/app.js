@@ -3345,6 +3345,7 @@
   function syncApContinueBase() {
     if (!els.apContinueBase || panelBaseSwitching) return;
     syncRedoLabel();
+    syncApPromptIntro();
     const runVisible = !!(els.inlineAnalysisContinueBtn && !els.inlineAnalysisContinueBtn.hidden);
     const show = runVisible && apContinueRuns().length > 0;
     els.apContinueBase.hidden = !show;
@@ -3365,6 +3366,17 @@
     els.apContinueTail.textContent = tail.trim();
     if (!els.apContinueMenu.hidden) renderApContinueMenu();
     syncApContinueExit();
+  }
+
+  // Once there are versions, the 個人化需求 kept from them reads like edits on
+  // the latest; on 原圖 it is a redo from the photo with all of them, which
+  // the intro says, as the chat's does.
+  function syncApPromptIntro() {
+    if (!els.apPromptIntro) return;
+    const fromOriginal = !activeContinuation() && apContinueRuns().length > 0;
+    els.apPromptIntro.textContent = fromOriginal
+      ? tr("從原圖美化會從原圖重做一版，這裡的需求會一起套用，要調整的話可以先編輯。")
+      : tr("說出你的想法，打造專屬美化效果");
   }
 
   // The X and #ap-editing-hint (編輯中, with 返回) show together.

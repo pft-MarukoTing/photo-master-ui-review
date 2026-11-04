@@ -5688,9 +5688,9 @@ export function SessionView(props: {
     return plan ? revertPlanPatch(plan, photo.plan, [...ADJUSTABLE, "overwrite_prompt"]) : null;
   })();
   // 美化過之後，個人化需求是累積下來的，看起來像在某一版上接著改；其實一般的
-  // 「美化」是從原圖重做、每條都套。能接續某版的話，在需求旁邊把這件事講出來。
+  // 「美化」是從原圖重做、需求一起套用。能接續某版的話，在需求旁邊把這件事講出來。
   const fromOriginal = props.onContinue && !continuing && versions.length > 0
-    ? t("按「從原圖美化」會從原圖重新做一版，這裡每一條都會套用。")
+    ? t("按「從原圖美化」會從原圖重做一版，這裡的需求會一起套用，要調整的話可以先編輯。")
     : "";
   // 這一輪另外挑的風格，跟打的字一起送；只屬於這一輪，不寫進照片的設定。
   const [contStyles, setContStyles] = useState<Record<string, string>>({});

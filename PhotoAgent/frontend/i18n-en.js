@@ -248,6 +248,7 @@ window.PHOTOAGENT_CATALOGS.en = {
   "取景範圍": "Framing",
   "清除取景範圍": "Clear framing",
   "說出你的想法，打造專屬美化效果": "Describe what you have in mind for a personalized retouch",
+  "從原圖美化會從原圖重做一版，這裡的需求會一起套用，要調整的話可以先編輯。": "Retouching from the original makes a new version from the original photo with all the requests here; edit them first if you want changes.",
   "僅依需求修改": "Only My Requests",
   "已勾選「僅依需求修改」，這裡的建議這次不會套用。": "“Only My Requests” is on, so these suggestions won't be applied this time.",
   "只動你寫到的地方（加上你挑的風格），其他保持原樣。": "Changes only what you described (plus the styles you picked) and leaves the rest as is.",

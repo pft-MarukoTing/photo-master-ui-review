@@ -449,7 +449,7 @@ export const EN: Record<string, string> = {
     "Whole-image suggestions based on the original. Checkmarks carry over from the last retouch; tap to turn them on or off.",
   "這是上次選的風格，想換可以直接改；不選就維持照片原本的樣子。": "This is the style you chose last time. You can change it here, or leave it blank to keep the photo's original look.",
   "這是上次的個人化需求，可以直接修改或清除。": "These are your requests from last time. You can edit or clear them here.",
-  "按「從原圖美化」會從原圖重新做一版，這裡每一條都會套用。": "Tapping “Retouch from Original” makes a new version from the original photo, with every request here applied.",
+  "按「從原圖美化」會從原圖重做一版，這裡的需求會一起套用，要調整的話可以先編輯。": "Tapping “Retouch from Original” makes a new version from the original photo with all the requests here; edit them first if you want changes.",
   "這是上次美化用的引擎與輸出設定，可以直接修改。": "The engine and output settings from your last retouch. You can change them here.",
   "看過原圖後建議調整": "Suggested after reviewing the original",
   "照片裡每個人都可以分開調整，{base}": "Each person in the photo can be adjusted individually. {base}",
