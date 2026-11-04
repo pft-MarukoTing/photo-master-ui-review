@@ -124,6 +124,8 @@ export const EN: Record<string, string> = {
   "無法載入：{error}": "Couldn't load: {error}",
   "回到首頁": "Back to Home",
   "留在這裡": "Stay Here",
+  "不調整了": "Stop Adjusting",
+  "還沒美化的調整會清掉。確定不調整了嗎？": "Changes that haven't been retouched will be lost. Stop adjusting?",
   "確定": "OK",
   "刪除": "Delete",
   "第 {v1} 張": "Photo {v1}",

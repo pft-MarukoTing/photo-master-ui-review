@@ -5636,6 +5636,8 @@ export function SessionView(props: {
     };
   }
   const [baseAsk, setBaseAsk] = useState<{ v: Version; lost: Category[]; request?: string } | null>(null);
+  // 接續中按輸入框上方的叉叉：打好的需求、風格、長寬比和跟 AI 的往來都會清掉，有的話先問。
+  const [leaveAsk, setLeaveAsk] = useState(false);
 
   // Who the composer is pointed at, and the option fields to flash.
   const [pointed, setPointed] = useState<number[]>([]);
@@ -5848,6 +5850,13 @@ export function SessionView(props: {
     setContinuing(null);
     setContTurns([]);
     if (Object.keys(patch).length || turns.length) void props.onPatch(patch, turns);
+  }
+  // 叉叉不接續了：跟面板的「不調整了」一樣，有還沒美化的調整先問，按了才清掉。
+  // 引擎、輸出尺寸改在照片的 plan 上，叉叉不會動到，不算在內。
+  function stopContinuing(sure = false) {
+    const lost = !!contPromptRef.current.trim() || contStyled || contReshaped || contTurnsRef.current.length > 0;
+    if (lost && !sure) return void setLeaveAsk(true);
+    setContinuing(null);
   }
   // 這一輪寫了（或改了）個人化需求，美化前先問：只照需求改，還是順便整張美化。
   // 記著按的是哪顆美化，問完照那顆的字送出去。
@@ -7324,6 +7333,15 @@ export function SessionView(props: {
           onDismiss={() => setBaseAsk(null)}
         />
       )}
+      {leaveAsk && (
+        <ConfirmModal
+          message={t("還沒美化的調整會清掉。確定不調整了嗎？")}
+          confirmLabel={t("不調整了")}
+          cancelLabel={t("留在這裡")}
+          onAnswer={(go) => { setLeaveAsk(false); if (go) stopContinuing(true); }}
+          onDismiss={() => setLeaveAsk(false)}
+        />
+      )}
       <StepIndicator step={stepN} state={stepHow} />
       <section id="results-section" class="section visible">
         <div class={`container results-body showing-analysis${props.sidebar ? " batch-mode" : ""}`} id="results-body">
@@ -7364,7 +7382,7 @@ export function SessionView(props: {
                           continuing ? (
                             <>
                             <ContinueBase versions={versions} from={continuing} original={thumb} disabled={busy || contReviewing}
-                              onPick={continueFrom} onClose={() => setContinuing(null)} />
+                              onPick={continueFrom} onClose={() => stopContinuing()} />
                             </>
                           ) : (baseShown || facesShown) && (
                             <>
@@ -7602,7 +7620,7 @@ type ContRun = { from: Version; text: string; styles: Record<string, string>; ra
 // 寫成一句話，才不會被當成「這張是從哪張做的」；藥丸裡只放名詞，不像另一顆美化鍵。
 // 前後的字從同一個模板切出來，換語言時可以整句換語序。
 // 藥丸本身會把太長的字截掉（overflow:hidden），選單得掛在外面那層，不然會被切掉。
-// 原圖是預設，沒有叉叉；接著某一版時才有，按了就不接續、打好的也不留。
+// 原圖是預設，沒有叉叉；接著某一版時才有，按了就不接續、打好的也不留（有打的話先問）。
 function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
   versions: Version[];
   from: Version | null;
