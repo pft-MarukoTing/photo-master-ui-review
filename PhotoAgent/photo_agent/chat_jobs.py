@@ -36,7 +36,11 @@ STAGE_NOTE = "chat_note"
 # The face-symmetry wishes 個人化需求 got before the analysis named anyone:
 # chat_assistant.find_face_wishes.
 STAGE_FACE_WISHES = "chat_face_wishes"
-STAGES = (STAGE_ASK, STAGE_REVIEW, STAGE_OPENING, STAGE_NOTE, STAGE_FACE_WISHES)
+# A line typed while adjusting a version that only the photo can answer:
+# chat_assistant.answer_from_version. The backend sends that version as a
+# small data URL, as for STAGE_NOTE.
+STAGE_LOOK = "chat_look"
+STAGES = (STAGE_ASK, STAGE_REVIEW, STAGE_OPENING, STAGE_NOTE, STAGE_FACE_WISHES, STAGE_LOOK)
 
 
 def cache_note(spent):
@@ -92,4 +96,8 @@ def _run(params):
             previous_plan=params.get("previous_plan"), earlier_notes=params.get("earlier_notes") or ())
     if stage == STAGE_FACE_WISHES:
         return chat_assistant.find_face_wishes(params.get("prompt") or "", params.get("analysis"))
+    if stage == STAGE_LOOK:
+        return chat_assistant.answer_from_version(
+            params["line"], params.get("prompt", ""), params.get("history", []), photo=params.get("photo"),
+            continuation=params.get("continuation") or False, deadline=params.get("deadline"))
     raise RuntimeError(f"unknown chat stage: {stage}", RESULT_INVALID_PARAMETER)

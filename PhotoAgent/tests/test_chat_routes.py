@@ -2424,6 +2424,35 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.chat_assistant.OFFER_REPLY,
                                           "offer": True, "options": chat.chat_assistant.OFFER_OPTIONS})
 
+    # 接續第 N 版時，只有照片答得出來的（推薦標題）：看那一版的輸出回答，標題給成可點的句子。
+    def test_a_continuation_question_only_the_photo_can_answer_looks_at_that_version(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        source = self.finished_version(sid, photo)
+        looked = []
+
+        def look(context, images=(), **kwargs):
+            looked.append((context, images))
+            return {"reply": "可以用這幾句：", "options": ["夏日派對", "一起乾杯"], "lines": True}
+
+        asked = {"verdict": "answer", "reply": "我看一下。", "line": "", "options": [], "later": True}
+        where = {"user": USER, "continuation": 2, "session_id": sid, "photo_id": photo["photo_id"]}
+        with patch.object(chat, "create_preview_bytes", lambda data: b"jpeg"), \
+                patch.object(chat.chat_assistant, "call_look", look):
+            res, _ = self.review("推薦標題", asked, prompt="做成海報", source_result=source, **where)
+            body = res.get_json()
+            self.assertEqual((body["reply"], body["options"], body["lines"]),
+                             ("可以用這幾句：", ["夏日派對", "一起乾杯"], True))
+            self.assertNotIn("ask", body)
+            self.assertIn("LINES SO FAR:", looked[0][0])
+            self.assertEqual(looked[0][1][0][0], "THIS VERSION:")
+            # 不在這個 case 的版本：不看，留 review 原本的回答。
+            res, _ = self.review("推薦標題", asked, source_result={**source, "version_id": "nope"}, **where)
+            body = res.get_json()
+            self.assertEqual(body["reply"], "我看一下。")
+            self.assertNotIn("lines", body)
+            self.assertEqual(len(looked), 1)
+
     # The upload page only ever leads to the two starts: a 「先不用」 the model
     # adds is dropped, and a missing start is put back.
     def test_an_offer_carries_both_starts_and_nothing_else(self):

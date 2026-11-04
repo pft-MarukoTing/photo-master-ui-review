@@ -2044,6 +2044,8 @@ PROMPT_REVIEW_LABEL_MAX_LEN = 40
 # 個人化需求一個人一段，加上沒指定對象的那段。
 PROMPT_REVIEW_SECTIONS_MAX = PROMPT_REVIEW_PEOPLE_MAX + 1
 PROMPT_REVIEW_WAIT_SECONDS = chat_queue.WAIT_SECONDS
+# 接續時看那一版回答，是 review 之後再問一次：剩下的時間不夠就不問了，用 review 的回話。
+LOOK_MIN_SECONDS = 8
 
 
 @chat_bp.post("/prompt-review")
@@ -2067,6 +2069,7 @@ def prompt_review():
     comes back written out in full (`line`), with the person it carried over
     (`person`, one of `people`), so each wish in the list stands on its own.
     """
+    started = time.time()
     body = _body()
     text = body.get("text")
     if not isinstance(text, str) or not text.strip() or len(text) > MESSAGE_TEXT_MAX_LEN:
@@ -2150,6 +2153,14 @@ def prompt_review():
         # starts until they say so -- the options say it for them.
         out["offer"] = True
         out["options"] = answer["options"]
+    look = _look_answer(body, text, prompt, history, continuation, started) if answer.get("look") else None
+    if look:
+        # 要看照片才答得出來的：看那一版回答，標題、文案排成清單讓人挑。
+        out["reply"] = look["reply"]
+        if look["options"]:
+            out["options"] = look["options"]
+        if look["lines"]:
+            out["lines"] = True
     if answer.get("continue_from"):
         # 「從第二版調」：頁面切到那一版接著改，已經記下的需求都留著。
         out["continue_from"] = answer["continue_from"]
@@ -2381,6 +2392,38 @@ def _valid_brief(brief):
     ok = (isinstance(brief, dict) and isinstance(brief.get("summary"), str)
           and isinstance(brief.get("issues"), list) and all(isinstance(i, str) for i in brief["issues"]))
     return brief if ok else None
+
+
+def _look_answer(body, text, prompt, history, continuation, started):
+    """For prompt_review: a line typed while adjusting a version that only the
+    photo can answer, answered from that version's output
+    (chat_assistant.answer_from_version) -- {reply, options, lines}, or None
+    when the version cannot be had or the model gives nothing in time; the
+    review's own reply stands then. The page names the version by
+    session_id, photo_id and source_result, checked against the case's own
+    history as a render from it would be."""
+    remaining = PROMPT_REVIEW_WAIT_SECONDS - (time.time() - started)
+    if remaining < LOOK_MIN_SECONDS:
+        return None
+    try:
+        user = _user(body.get("user"))
+        session_id, photo_id = body.get("session_id"), body.get("photo_id")
+        if not isinstance(session_id, str) or not isinstance(photo_id, str):
+            return None
+        photo = _photo(_session(user, session_id), photo_id)
+        source = continuation_svc.source_result_ref(body.get("source_result"))
+        resolved = continuation_svc.resolve_source_result(user, photo["case_id"], source)
+        data, error = download_bytes(resolved["key"], source["job_id"])
+        if error or not data:
+            return None
+        image = image_to_data_url(create_preview_bytes(data), "image/jpeg")
+        return chat_queue.run({
+            "stage": chat_jobs.STAGE_LOOK, "line": text, "prompt": prompt, "history": history, "photo": image,
+            "continuation": continuation, "deadline": started + PROMPT_REVIEW_WAIT_SECONDS,
+        }, wait_seconds=remaining)
+    except Exception:
+        current_app.logger.exception("chat continuation look failed")
+        return None
 
 
 def _note_images(original_key, job_id, source=None):

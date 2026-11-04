@@ -675,6 +675,46 @@ class ReviewLineTest(unittest.TestCase):
         result, _ = self.continuation_review(answer, line="1*2+3")
         self.assertEqual((result["offer"], result["options"], result["reply"]), (False, [], "1*2+3 等於 5。"))
 
+    # 只有照片答得出來的（推薦標題、文案）：頁面會另外看那一版回答，這一輪不收、不給鍵。
+    def test_a_continuation_question_only_the_photo_can_answer_is_looked_at(self):
+        for verdict in ("answer", "offer", "clarify"):
+            with self.subTest(verdict=verdict):
+                result, _ = self.continuation_review({"verdict": verdict, "reply": "我看一下這張。", "line": "",
+                                                      "options": ["幫我分析"], "later": True}, line="推薦標題")
+                self.assertTrue(result["look"])
+                self.assertEqual((result["kept"], result["options"], result["later"]), (False, [], False))
+        # 換底、later 沒開、不是接續模式：都不看。
+        for answer, continuation in (
+                ({"verdict": "answer", "reply": "好。", "options": [], "later": True, "continue_from": "2"}, 4),
+                ({"verdict": "answer", "reply": "好。", "options": [], "later": False}, 4),
+                ({"verdict": "answer", "reply": "好。", "options": [], "later": True}, False)):
+            with self.subTest(answer=answer, continuation=continuation):
+                result, _ = self.continuation_review(answer, line="推薦標題", continuation=continuation, versions=4)
+                self.assertNotIn("look", result)
+
+    def look(self, answer, photo="data:image/jpeg;base64,AAAA", **kwargs):
+        seen = []
+        result = chat_assistant.answer_from_version(
+            "推薦標題", "做成海報", [{"role": "user", "text": "做成海報"}], photo=photo, continuation=3,
+            model=lambda context, images: seen.append((context, images)) or answer, **kwargs)
+        return result, seen
+
+    def test_answer_from_version_sees_only_that_version_and_the_draft(self):
+        result, seen = self.look({"reply": "可以用這幾句：", "options": ["夏日派對", "一起乾杯"], "lines": True})
+        self.assertEqual(result, {"reply": "可以用這幾句：", "options": ["夏日派對", "一起乾杯"], "lines": True})
+        context, images = seen[0]
+        self.assertIn("LINES SO FAR:\n做成海報", context)
+        self.assertIn("NEW LINE:\n推薦標題", context)
+        self.assertIn("「接續第 3 版美化」", context)
+        self.assertNotIn("ANALYSIS", context)
+        self.assertEqual(images, [("THIS VERSION:", "data:image/jpeg;base64,AAAA")])
+        # 沒有選項就不是清單；沒有圖、沒有回覆都退回 review 原本的回答。
+        self.assertFalse(self.look({"reply": "適合當海報。", "options": [], "lines": True})[0]["lines"])
+        self.assertIsNone(self.look({"reply": "x", "options": [], "lines": False}, photo=None)[0])
+        self.assertIsNone(self.look({"reply": "", "options": ["a"], "lines": True})[0])
+        with self.assertRaises(TimeoutError):
+            self.look({"reply": "x", "options": [], "lines": False}, deadline=0)
+
     # 比例和開關沿用那一版：講到的話當一般需求收下，不改設定。
     def test_a_continuation_keeps_a_ratio_as_a_wish(self):
         answer = {"verdict": "setting", "reply": "", "line": "", "options": [], "aspect_ratio": "9:16"}

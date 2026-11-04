@@ -6148,14 +6148,17 @@ export function SessionView(props: {
     const n = continuing!.ordinal;
     try {
       const r = await api.promptReview(line, prompt, history, [], prompt ? [{ who: "", text: prompt }] : [],
-        undefined, n, versions.length);
+        undefined, n, versions.length, { session_id: props.session.session_id, photo_id: photo.photo_id,
+          source_result: { version_id: continuing!.version_id, job_id: versionJob(continuing!), run: 1 } });
       if (gen !== contGen.current) return;
       // 跟前面衝突的，模型把前面那段改寫過；撤回的那句本身不進清單。
       let next = (r.accepted ? r.merged?.find((m) => m.section === 0)?.text : undefined) ?? contPromptRef.current;
       if (r.accepted && !r.withdrawn) next = [next, r.line || line].filter(Boolean).join(t("；"));
       setContPrompt(next);
       turn = { text: line, reply: r.reply || (r.accepted ? t("好，這句記下來了，按「接續第 {n} 版美化」時一起套用。", { n }) : ""),
-        ...(r.ask ? { ask: true, options: r.options || [] } : {}) };
+        ...(r.ask ? { ask: true, options: r.options || [] } : {}),
+        // 看那一版回答的（推薦標題、這張適合什麼）：只是回答，選項點了當一般的一句送回去。
+        ...(!r.ask && r.options?.length ? { options: r.options, ...(r.lines ? { lines: true } : {}) } : {}) };
       start = r.start === "render" || (go && r.accepted && !r.ask);
       // 「從第二版調」：換到那一版接著改，記下的需求、挑的風格都留著。「改成基於原圖」：
       // 結束接續、從原圖開一輪調整，記下的需求一樣帶過去。
@@ -7325,7 +7328,7 @@ export function SessionView(props: {
                         <AssistantMsg>
                           <p class="chat-text">{x.reply}</p>
                           {!!x.options?.length && (
-                            <AnswerList options={x.options} open={i === contTurns.length - 1}
+                            <AnswerList options={x.options} copy={x.lines} open={i === contTurns.length - 1}
                               picked={i === contTurns.length - 1 ? null : contTurns[i + 1]?.text ?? null}
                               busy={busy || contReviewing} onPick={(o) => void reviewCont(o)} />
                           )}
@@ -7336,8 +7339,10 @@ export function SessionView(props: {
                   {continuing && contReviewing && <AssistantMsg>{typing}</AssistantMsg>}
                   {/* 按了「接續第 N 版美化」到動畫出來之間 busy 也要留著這張卡：收掉的話最後一則會變成
                       上面那句「按下面的「接續第 N 版美化」就會開始」，像又講了一次。 */}
-                  {/* AI 還在問的時候整張先收起來，只留問題跟選項：答完才回來，裡面的需求都還在。 */}
-                  {continuing && !contReviewing && !contTurns[contTurns.length - 1]?.ask && (
+                  {/* AI 還在問、或剛給了幾句可以挑（推薦標題）的時候整張先收起來，只留問題跟選項：
+                      選了或自己打一句才回來，裡面的需求都還在。 */}
+                  {continuing && !contReviewing && !contTurns[contTurns.length - 1]?.ask
+                    && !contTurns[contTurns.length - 1]?.options?.length && (
                     <AssistantMsg>
                       {/* 切到哪一版，一開始都講。AI 剛說完「從第 N 版接著改」的話，該怎麼做它已經
                           講了，後面那段不再說一次。 */}
@@ -7507,7 +7512,7 @@ function AnswerList(props: {
 
 // 接續某一版時打的一句和 AI 的回覆；`options` 是 AI 追問時給的選項。
 // ask：AI 這句在問、還沒回答。
-type ContTurn = { text: string; reply?: string; ask?: boolean; options?: string[] };
+type ContTurn = { text: string; reply?: string; ask?: boolean; options?: string[]; lines?: boolean };
 // 一次接續美化：從哪一版、照什麼需求和風格。
 type ContRun = { from: Version; text: string; styles: Record<string, string> };
 

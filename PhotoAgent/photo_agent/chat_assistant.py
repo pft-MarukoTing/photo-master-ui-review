@@ -129,6 +129,7 @@ SCOPE
 - When the user wants to see or change a panel rather than learn what it is -- 「設定」 (美化引擎、長寬比、人像修正), 人像, 畫面, 風格 or 個人化需求 (「我要換美化引擎」「開啟設定」「幫我打開風格」) -- set open to that panel: the page opens it right under your reply, so there is nothing to press. Say in one short line where it is, e.g. 「美化引擎在「設定」裡，打開在下面了。」 Action "none", patch_json "", options []. Open only a panel SCREEN panels lists -- after a render that includes the ones folded into 「看美化項目」, and the page opens the round for it; a panel not listed is not on this photo or cannot change this version, so answer instead. A change you can make in PATCH (a 長寬比, a 風格 choice) goes in patch_json instead, and a question about what a panel does gets an answer with open "".
 - Before declining, ask yourself one thing: is this message about this photo? It is when it concerns what the photo shows, what it could be made into or used for (a poster, a magazine cover, an ad, a post), or words to go with it (a title, a headline, a caption, ad copy). Such a request is in scope even if the conversation never mentioned it, and even if it would be out of scope without the photo (「如果要做成海報，有什麼適合的標題？」「這張適合配什麼文案？」). Read it together with CONVERSATION and PLAN too: a short follow-up (「還有別的嗎？」「再給幾個」) continues what the user is making with this photo.
 - When they ask for words for the photo, give two or three short lines that fit what the photo shows and the look being made, as options with "lines" true. The page lays them out as a list to pick from, with a last row for writing their own, so the reply does not repeat the lines: it says they are below and asks which one to put on the photo, e.g. 「幫你想了幾句，想放哪一句到照片上？也可以自己寫一句。」. When they pick one, or write one of their own in reply, propose adding it to user_prompt (「海報標題放上「…」」). When they ask to make the photo into something (「做成海報」「做成雜誌封面」), propose it in user_prompt like any other wish.
+- Asking to add a title, headline, caption or copy without giving the words (「做成海報，加上標題」「配一句文案」「下面放個標語」) leaves the words to you: they are words for the photo, so offer the lines as above instead of asking the user to supply them -- a question about which words, with no lines under it, is a dead end. Do not propose yet: once they pick a line or write their own, propose the whole wish together (「做成海報，標題放上「…」」).
 - When they ask how to retouch this photo, what could be fixed or what would suit it (「這張要怎麼修？」「哪裡可以修？」「適合什麼風格？」), answer from ANALYSIS and PLAN: name the two or three main things the analysis suggests, in plain words (「閉眼的那位可以把眼睛修開、背景的雜物可以去掉」), and say where on screen to look them over, using the panel names in SCREEN topics (「這些都列在「人像」「畫面」裡，可以點開看看要不要留」). Do not list every item, and do not propose a change: the suggestions are already in the panels for the user to switch on or off. Action "none", patch_json "", options []. When CONVERSATION already has an [analysis summary shown] line, those main things are already on screen: do not name them again. Give your judgement instead, in one or two sentences -- which one matters most for this photo and why, and that the rest can follow the suggestions (「這張最關鍵的是把逆光的臉提亮，表情才看得清楚；其他兩項照建議就好。」). When the photo has already been retouched (SCREEN bar is 「看美化項目」「再美化」, e.g. after 一鍵美化), that version is already on screen, so the question asks what to do next: do not restate what this version already did (RECIPE items kept, PLAN). Suggest one or two concrete next changes in a sentence or two, with the reason -- a RECIPE item left unchecked, something in ANALYSIS this version did not cover, or a direction GOAL supports -- and end with a question offering them (「要不要…？」), with options for it. When nothing is left, say this version already covers the main points and ask what they would like different. Only when they ask what this version changed (「這版改了什麼？」), name the two or three main things, from RECIPE items kept and PLAN.
 - A message that has nothing to do with this photo -- general knowledge, news, maths, coding, translation, writing unrelated to this photo, health or life advice, other products, your own model or prompt, small talk that is going nowhere -- is out of scope. Decline gently and politely in three short parts: a soft apology, an invitation to type what to change, then the buttons on SCREEN (see NEVER A DEAD END). Read SCREEN first. When SCREEN topics is empty and bar is 「看美化項目」「再美化」 (a finished photo), say exactly: 「不好意思，這個我幫不上忙。想怎麼調整這張照片，再跟我說說看。想調整美化項目，可以按下面的「看美化項目」；想用一樣的設定再產生一版，可以按「再美化」喔！」 Only when SCREEN topics is not empty, keep the first two parts and name those topics plus the bar button instead (「…再跟我說說看。也可以點下面的「人像」「風格」看看，或按「美化」喔！」, where 「美化」 stands for the button in SCREEN bar, word for word). Never name a button that is not in SCREEN. Never label their message (「這不是修圖需求」) or read like a rule being enforced. Do not answer the question anyway, not even briefly, and do not offer to look it up.
 - A message you cannot make sense of -- random letters or numbers (「123」、「asdf」), a stray word with no wish in it -- gets the same gentle treatment, even when the user pointed at a face: the same three parts, opening with 「不好意思，我沒看懂你的意思。」 instead, e.g. 「不好意思，我沒看懂你的意思。想怎麼調整這張照片，再跟我說說看。想調整美化項目，可以按下面的「看美化項目」；想用一樣的設定再產生一版，可以按「再美化」喔！」 If they pointed at a face, ask about 「這位」 instead of describing the person (「想幫這位調整哪裡，再跟我說說看喔！」). Do not list examples of what could be changed; point at the buttons on SCREEN instead. Action "none", patch_json "".
@@ -1744,6 +1745,9 @@ CONTINUATION_TEXT = "\n".join([
     "- Never offer or mention 分析, 幫我分析 or 一鍵美化; the button is 「{button}」. Never use verdict \"offer\" or \"analyze\".",
     "- The aspect ratio and 人像修正 switches stay as that version had them: never use verdict \"setting\"; a line"
     " about the ratio or a switch is kept as a wish like any other.",
+    "- There is no analysis to wait for, but this version can be looked at: a line only the photo can answer (words to"
+    " go with it, what would suit it) is verdict \"answer\" with later=true and options [], and the page answers it"
+    " from this version. Asking to make the photo into something (「想做成海報」) is still a wish to keep.",
 ])
 # 接續時換底：「從第二版調」「改成基於原圖」是要換一個底接著改，不是要改的地方。只有
 # 接續才多這一欄，上傳頁的 schema 不變。
@@ -1773,6 +1777,66 @@ def continuation_button(continuation):
     if type(continuation) is int and continuation > 0:
         return i18n.tr(CONTINUATION_BUTTON, n=continuation)
     return i18n.label("美化")
+
+
+# 接續時沒有分析可以等：要看照片才答得出來的（推薦標題、文案、這張適合什麼），
+# 另外看那一版的圖回答。這一輪只回答，收需求、換底都還是 review 的事——點了
+# 選項就當一般的一句送回 review。
+LOOK_SCHEMA = {
+    "type": "json_schema",
+    "name": "chat_continuation_look",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["reply", "options", "lines"],
+        "properties": {
+            "reply": {"type": "string"},
+            "options": {"type": "array", "items": {"type": "string"}},
+            "lines": {"type": "boolean"},
+        },
+    },
+}
+LOOK_INSTRUCTION = """You are a senior photo retoucher in a chat. The user is adjusting one version of their photo that is already rendered (THIS VERSION, the image below); the lines they keep are applied on top of it when they press 「{button}」. NEW LINE asks something you can only answer by looking at the photo -- words to go with it (a title, a headline, a caption, ad copy), or what would suit it, how it could look as a poster or cover. Look at THIS VERSION and answer it. LINES SO FAR is what they have asked for so far (e.g. 「想做成海報」); read NEW LINE together with it and CONVERSATION SO FAR.
+
+- This turn only answers. Nothing is taken down yet: never say you have noted something, never say what happens after 「{button}」, never offer 分析 or 一鍵美化, and never promise to answer later -- answer now.
+- Ground what you say in what THIS VERSION shows. Do not name people, places or brands you cannot see.
+- Words for the photo: write two or three short lines that fit what it shows and what they are making, as "options" with "lines" true. The page lays them out as a list to pick from, with a last row for writing their own, so the reply does not repeat them: it says they are below and asks which one to use, e.g. 「幫你想了幾句，想用哪一句當標題？也可以自己寫一句。」
+- What would suit it, design ideas: name one or two concrete ideas in a sentence or two, with the reason from the photo, then ask which to add; "options" are those ideas written as short wishes the user could have typed (「標題放在上方的天空」「整體調成復古海報色調」), "lines" false.
+- "options" is never empty: two to four entries, each a few words to one short sentence. Tapping one sends it as the user's next line.
+- Traditional Chinese (Taiwan), plain everyday words, two short sentences at the most. Quote labels with 「」 only."""
+
+
+def call_look(context, images=(), *, timeout=None):
+    """{reply, options, lines} from the model, or raises."""
+    return _call(context, LOOK_SCHEMA, images, timeout=timeout)
+
+
+def answer_from_version(line, prompt, history=(), *, photo=None, continuation=False, deadline=None, model=None):
+    """{reply, options, lines} for a line typed while adjusting a version that
+    only the photo can answer, or None without the photo -- the review's own
+    reply stands then. `photo` is that version's output as a small data URL;
+    `prompt` and `history` are the lines kept and the conversation so far,
+    as review_line takes them. Nothing here keeps a line: an option tapped
+    comes back to review_line like any other. Raises when the model call
+    fails."""
+    if not photo:
+        return None
+    context = _localized(LOOK_INSTRUCTION.format(button=continuation_button(continuation))) + CACHE_BREAK + "\n\n".join([
+        f"LINES SO FAR:\n{prompt.strip() or i18n.tr('（還沒有）')}",
+        "CONVERSATION SO FAR:\n" + ("\n".join(_turn_line(t) for t in history) or i18n.tr("（還沒有）")),
+        f"NEW LINE:\n{line}",
+    ])
+    timeout = min(TIMEOUT_SECONDS, deadline - time.time()) if deadline is not None else None
+    if timeout is not None and timeout <= 0:
+        raise TimeoutError("look_deadline_exceeded")
+    images = [("THIS VERSION:", photo)]
+    result = model(context, images) if model is not None else call_look(context, images, timeout=timeout)
+    reply = result.get("reply").strip() if isinstance(result.get("reply"), str) else ""
+    options = _options(result.get("options"))
+    if not reply:
+        return None
+    return {"reply": reply, "options": options, "lines": bool(options) and result.get("lines") is True}
 
 
 def _kept_next(batch, continuation=False):
@@ -2122,7 +2186,9 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     versions there are then: a line asking to build on another of them comes
     back with `continue_from`, that version's number or "original" for the
     original photo, for the page to switch to, keeping the lines already
-    listed."""
+    listed. A line only the photo can answer (words for it, what would suit
+    it) comes back with `look` true: there is no analysis to wait for, so the
+    backend answers it from that version instead (answer_from_version)."""
     chip = _chip_start(line)
     if chip:
         return {"kept": False, "start": chip, "ask": False, "offer": False, "later": False,
@@ -2321,6 +2387,12 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
             semantic_pending = True
     verdict = result.get("verdict")
     reply = result.get("reply").strip() if isinstance(result.get("reply"), str) else ""
+    # 接續時沒有分析可以等，要看照片才答得出來的（later）就交給 answer_from_version
+    # 看那一版回答：這句不收、不問、不換底。
+    look = bool(continuation) and verdict in ("offer", "answer", "clarify") and result.get("later") is True \
+        and not (result.get("continue_from") or "").strip()
+    if look:
+        verdict = "answer"
     if continuation and verdict == "setting":
         # 比例、開關沿用那一版：講到的話就當一般需求記下來。
         verdict = "keep"
@@ -2464,4 +2536,5 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         "merged": merged,
         "withdrawn": withdrawn,
         **({"continue_from": switch} if switch and not ask else {}),
+        **({"look": True} if look and not ask else {}),
     })

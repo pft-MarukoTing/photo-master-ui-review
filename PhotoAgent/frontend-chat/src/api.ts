@@ -176,10 +176,13 @@ export const api = {
   // `continuation`：「接續某一版修改」打的，帶那一版的 N；AI 只指向「接續第 N 版美化」，
   // 不提分析、不改比例設定。`versions` 是一共幾版：說「從第二版調」「改成基於原圖」這類
   // 換底的話，回 `continue_from`（版號，或原圖 "original"），頁面就切到那裡接著改。
+  // `source`：接續的是哪一版（session、照片、那一版的結果）。要看照片才答得出來的
+  // （推薦標題、文案），後端看那一版回答，標題這類回 `lines`，選項排成清單讓人挑。
   promptReview: (text: string, prompt: string, history: ReviewTurn[], people: string[],
     sections: { who: string; text: string }[] = [],
     batch?: { photos: number; unrendered: number; analyze: string; render: string; where: string },
-    continuation: number | false = false, versions = 0) =>
+    continuation: number | false = false, versions = 0,
+    source?: { session_id: string; photo_id: string; source_result: SourceResult }) =>
     request<{
       accepted: boolean;
       literal_texts?: string[];
@@ -205,11 +208,13 @@ export const api = {
       merged?: { section: number; text: string }[];
       withdrawn?: boolean;
       continue_from?: number | "original";
+      lines?: boolean;
     }>(
       `${CHAT}/prompt-review`,
       { ...json("POST", { text, prompt, history, people, sections,
         ...(batch ? {batch} : {}), ...(continuation ? {continuation} : {}),
-        ...(continuation && versions ? {versions} : {}) }), signal: AbortSignal.timeout(65000) },
+        ...(continuation && versions ? {versions} : {}), ...(continuation && source ? source : {}) }),
+        signal: AbortSignal.timeout(65000) },
     ),
 
   // batchId：多張上傳的同一批，最近照片會把它們合成一格。
