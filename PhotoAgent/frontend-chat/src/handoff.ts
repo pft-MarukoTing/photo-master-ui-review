@@ -55,6 +55,8 @@ export interface HandoffContinuation {
   run: number;
   text: string;
   style_options: Record<string, string>;
+  // 這一輪的輸出長寬比；沒有或 "original" 是維持那一版的。
+  aspect_ratio?: string;
 }
 
 // unsent 是 plan 裡還沒美化的欄位（unsentPlanKeys），null 是全部都算。其他

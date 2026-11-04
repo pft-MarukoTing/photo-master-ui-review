@@ -1392,8 +1392,8 @@ def continue_job(job_id):
 def continue_version():
     """面板模式's 接著這張調整: edit one finished version's output (source_result,
     checked against the case's history) with this round's request only --
-    user_prompt and style_options -- the way chat's /render base "version"
-    does (services/continuation). Only the technical choices (image_model,
+    user_prompt, style_options and aspect_ratio -- the way chat's /render base
+    "version" does (services/continuation). Only the technical choices (image_model,
     image_quality, output_scale) come from the body; the recipe is already in
     the source image. Recorded under the case like any other version, with
     based_on and source_result, so either mode reads it the same way.
@@ -1418,11 +1418,12 @@ def continue_version():
     if error:
         return jsonify({"error": error.replace("selections.options", "style_options")}), 400
     styles = {k: v for k, v in styles.items() if v not in (None, *capabilities.STYLE_UNSET_VALUES)}
-    if not text and not styles:
-        return jsonify({"error": "user_prompt or style_options is required"}), 400
+    ratio = continuation_svc.continuation_aspect_ratio(body.get("aspect_ratio"))
+    if not text and not styles and ratio == "original":
+        return jsonify({"error": "user_prompt, style_options or aspect_ratio is required"}), 400
 
     form = {k: body[k] for k in ("image_model", "image_quality", "output_scale") if k in body}
-    params, error = _parse_and_validate_params(continuation_svc.continuation_form(form, text))
+    params, error = _parse_and_validate_params(continuation_svc.continuation_form(form, text, ratio))
     if error:
         return jsonify({"error": error}), 400
     resolved = continuation_svc.resolve_source_result(user, case_id, source)

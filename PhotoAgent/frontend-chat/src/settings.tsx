@@ -180,12 +180,15 @@ export function AspectRatioField({
   onChange,
   disabled,
   class: cls,
+  noAuto,
 }: {
   caps: Capabilities;
   value?: string;
   onChange: (v: string) => void;
   disabled?: boolean;
   class?: string;
+  // 沒有分析可以依內容決定（接著某一版改）時不給 Auto。
+  noAuto?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const isOpen = open && !disabled;
@@ -195,7 +198,7 @@ export function AspectRatioField({
     addEventListener("keydown", esc);
     return () => removeEventListener("keydown", esc);
   }, [isOpen]);
-  const choices = caps.render.aspect_ratios;
+  const choices = caps.render.aspect_ratios.filter((a) => !(noAuto && a.value === "auto"));
   const current = choices.find((a) => a.value === value) || choices[0];
   const option = (a: (typeof choices)[number]) => {
     const fixed = FIXED_RATIO_RE.test(a.value);

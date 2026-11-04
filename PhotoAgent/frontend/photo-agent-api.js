@@ -421,9 +421,9 @@ window.PhotoAgentApi = (() => {
   }
 
   // 接著這張調整: edit one finished version's output with only this round's
-  // request and styles (backend services/continuation, shared with chat).
+  // request, styles and output shape (backend services/continuation, shared with chat).
   // Same {job_id} as continueJob, fetched the same way.
-  async function continueVersionJob({ caseId, sourceResult, userPrompt, styleOptions, imageQuality, imageModel, user, actionId, analysisJobId }) {
+  async function continueVersionJob({ caseId, sourceResult, userPrompt, styleOptions, aspectRatio, imageQuality, imageModel, user, actionId, analysisJobId }) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/continue-version`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -432,6 +432,7 @@ window.PhotoAgentApi = (() => {
         source_result: sourceResult,
         user_prompt: userPrompt || "",
         style_options: styleOptions || {},
+        aspect_ratio: aspectRatio || "original",
         image_quality: imageQuality,
         image_model: imageModel || "gpt-image-2",
         user: user || "",

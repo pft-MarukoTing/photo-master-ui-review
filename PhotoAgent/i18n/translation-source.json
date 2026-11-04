@@ -9145,6 +9145,12 @@
         "chat"
       ]
     },
+    "長寬比：{v}": {
+      "en": "Aspect ratio: {v}",
+      "where": [
+        "chat"
+      ]
+    },
     "閉眼": {
       "en": {
         "chat": "Eyes",

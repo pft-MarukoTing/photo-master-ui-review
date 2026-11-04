@@ -3,7 +3,7 @@
 import config
 from config import PRESET_PROMPTS
 from photo_agent.feature_resolver import build_compact_editor_prompt
-from prompts import build_framing_sections, build_style_override_block
+from prompts import FRAME_SHAPE_SOURCE_EXPAND, _canvas_shape_difference, build_framing_sections, build_style_override_block
 from photo_agent.text_overlay import editor_instruction
 from photo_agent.branch_skills import branch_named
 
@@ -32,14 +32,26 @@ def build_overwrite_baseline_block(preset_key):
     )
 
 
-def build_continuation_block(has_request=True, has_styles=False):
+def build_continuation_block(has_request=True, has_styles=False, reshaped=False):
     """What a 接著這張調整 edit must leave alone.
 
     The source is an already-retouched version, so any extra polish the editor adds
     stacks on top of the last one and drifts further from the photo with each round.
     Styles picked for this round are changes asked for, like the request: they may
-    relight, re-pose or reframe what they select.
+    relight, re-pose or reframe what they select. `reshaped`: the output canvas is a
+    different shape from the version, so its framing has to change with it.
     """
+    reshape_line = f"- The output canvas is a different shape from this photo. {FRAME_SHAPE_SOURCE_EXPAND}"
+    if not has_request and not has_styles:
+        return (
+            "This photo is already a finished, retouched version. Only its shape changes; treat everything in it "
+            "as final.\n"
+            "- Keep every face and identity, expression, eyes, skin texture, hair, body shape, pose, clothing, "
+            "background, and every object exactly as it is.\n"
+            "- Do not retouch: no smoothing, slimming, relighting, color grading, contrast, saturation, or "
+            "sharpening.\n"
+            + reshape_line
+        )
     if not has_styles:
         return (
             "This photo is already a finished, retouched version. Make only the change requested above and treat "
@@ -48,7 +60,8 @@ def build_continuation_block(has_request=True, has_styles=False):
             "eyes, skin texture, hair, body shape, pose, clothing, background, and every object.\n"
             "- Do not retouch any further: no extra smoothing, slimming, relighting, color grading, contrast, "
             "saturation, or sharpening beyond what the request asks for.\n"
-            "- Keep the same aspect ratio, framing, and crop; do not zoom, extend, shift, or reframe the scene."
+            + (reshape_line if reshaped
+               else "- Keep the same aspect ratio, framing, and crop; do not zoom, extend, shift, or reframe the scene.")
         )
     asked = "the request above and the selected styles" if has_request else "the selected styles above"
     return (
@@ -58,12 +71,13 @@ def build_continuation_block(has_request=True, has_styles=False):
         "skin texture, hair, body shape, pose, clothing, background, and every object.\n"
         "- Do not retouch any further: no extra smoothing, slimming, relighting, color grading, contrast, "
         f"saturation, or sharpening beyond what {asked} ask for.\n"
-        "- Keep the same aspect ratio. Keep the framing and crop too, unless a selected style changes the framing "
-        "size or camera angle."
+        + (reshape_line if reshaped
+           else "- Keep the same aspect ratio. Keep the framing and crop too, unless a selected style changes the "
+                "framing size or camera angle.")
     )
 
 
-def build_continuation_original_block(restore):
+def build_continuation_original_block(restore, reshaped=False):
     """Which image is which when a 接著這張調整 edit also gets the original.
 
     The original is only there for what the request brings back; anything else
@@ -72,8 +86,8 @@ def build_continuation_original_block(restore):
     """
     lines = [
         "Two images are attached.",
-        "- The first image is the retouched version to edit. The output is this image with the change above: "
-        "same framing, crop, and aspect ratio.",
+        "- The first image is the retouched version to edit. The output is this image with the change above"
+        + ("." if reshaped else ": same framing, crop, and aspect ratio."),
         "- The second image is the untouched original photo it was made from. Use it only as a reference for what "
         "the request wants brought back to how it was; take nothing else from it.",
     ]
@@ -95,16 +109,20 @@ def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio
     user_direction = user_instruction.get("normalized_user_direction") or ""
     continuation_styles = (build_style_override_block(framed_analysis, alongside_request=bool(user_direction.strip()))
                            if framed_analysis.get("_continuation") else "")
-    if framed_analysis.get("_continuation") and (user_direction.strip() or continuation_styles):
+    reshaped = (bool(framed_analysis.get("_continuation")) and aspect_ratio != "original"
+                and _canvas_shape_difference(framed_analysis.get("recommended_aspect_ratio"), source_size)
+                in ("narrower", "wider"))
+    if framed_analysis.get("_continuation") and (user_direction.strip() or continuation_styles or reshaped):
         # 接著這張調整: the source is already a finished version, so only this
-        # round's request and the styles picked for it apply -- never a baseline
-        # retouch again.
+        # round's request, the styles picked for it and its output shape apply --
+        # never a baseline retouch again.
         prompt_text = "\n\n".join(filter(None, (
             user_direction.strip(), continuation_styles,
-            build_continuation_block(bool(user_direction.strip()), bool(continuation_styles)))))
+            build_continuation_block(bool(user_direction.strip()), bool(continuation_styles), reshaped))))
         original = framed_analysis.get("_continuation_original")
         if original is not None:
-            prompt_text += "\n\n" + build_continuation_original_block((original.get("restore") or "").strip())
+            prompt_text += "\n\n" + build_continuation_original_block((original.get("restore") or "").strip(),
+                                                                        reshaped)
         return prompt_text + editor_instruction(framed_analysis), None, "continuation"
     if overwrites_prompt(user_instruction):
         style_block = build_style_override_block(framed_analysis, alongside_request=True)

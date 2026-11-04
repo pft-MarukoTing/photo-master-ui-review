@@ -1303,7 +1303,7 @@ class ChatRoutesTest(unittest.TestCase):
             self.assertEqual(saved.status_code, 200, saved.get_json())
             draft = saved.get_json()["photos"][0]["continuation_draft"]
             self.assertEqual(draft, {"source_result": source, "text": "remove the cup", "style_options": {},
-                                     "revision": 1})
+                                     "aspect_ratio": "original", "revision": 1})
             # A stale tab cannot overwrite it.
             self.assertEqual(self.save_draft(sid, photo, source, "older", revision=0).status_code, 409)
 

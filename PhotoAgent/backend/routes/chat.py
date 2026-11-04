@@ -516,7 +516,8 @@ def _panel_continuation(version):
     if params.get("base") != VERSION_BASE or not isinstance(params.get("source_result"), dict):
         return {}
     return {"base": VERSION_BASE, "source_result": params["source_result"], "prompt": params.get("user_prompt"),
-            "style_options": (params.get("analysis") or {}).get("style_options") or {}}
+            "style_options": (params.get("analysis") or {}).get("style_options") or {},
+            "aspect_ratio": params.get("aspect_ratio") or "original"}
 
 
 def _sync_from_history(user, session_id, session):
@@ -1511,7 +1512,8 @@ def save_continuation_draft(session_id, photo_id):
     photo: a different source starts a new one. `revision` is the one the
     client last saw (0 for none), so a stale tab cannot overwrite a newer
     draft. `style_options` are styles picked for this round, alone or beside
-    the text; no text and no style clears it."""
+    the text, and `aspect_ratio` its output shape ("original" keeps the
+    version's); none of the three clears it."""
     if not agent_config.ENABLE_CHAT_RENDER_FROM_VERSION:
         raise _RequestError("Not found", 404)
     body = _body()
@@ -1528,6 +1530,7 @@ def save_continuation_draft(session_id, photo_id):
     if error:
         raise _RequestError(error.replace("selections.options", "style_options"))
     styles = {k: v for k, v in styles.items() if v not in (None, *capabilities.STYLE_UNSET_VALUES)}
+    ratio = continuation_svc.continuation_aspect_ratio(body.get("aspect_ratio"))
     continuation_svc.resolve_source_result(user, photo["case_id"], source)
     draft = photo.get("continuation_draft")
     current = draft["revision"] if draft and continuation_svc.same_source(draft["source_result"], source) else 0
@@ -1535,7 +1538,8 @@ def save_continuation_draft(session_id, photo_id):
         return jsonify({"error": "draft_changed", "draft": draft}), 409
     text = text.strip()
     photo["continuation_draft"] = ({"source_result": source, "text": text, "style_options": styles,
-                                    "revision": current + 1} if text or styles else None)
+                                    "aspect_ratio": ratio, "revision": current + 1}
+                                   if text or styles or ratio != "original" else None)
     store.save_photo_state(user, session_id, photo)
     return jsonify(store.load_session(user, session_id))
 
@@ -1543,10 +1547,11 @@ def save_continuation_draft(session_id, photo_id):
 def _prepare_continuation(photo, draft):
     """_prepare_render for 接著這張調整: the plan's technical choices (model,
     quality, output size, run count) with the draft's text as the whole
-    request, plus the styles picked for this round. No recipe, selections,
-    preset polish, body reshape, crop or ratio change, and no eye-repair pass."""
+    request, plus the styles and output shape picked for this round. No recipe,
+    selections, preset polish, body reshape, crop, and no eye-repair pass."""
     plan = photo["plan"]
-    form = continuation_svc.continuation_form(build_render_form(plan, "finish"), draft["text"])
+    form = continuation_svc.continuation_form(build_render_form(plan, "finish"), draft["text"],
+                                              draft.get("aspect_ratio") or "original")
     params, error = _parse_and_validate_params(form)
     if error:
         raise _RequestError(error)
@@ -1571,7 +1576,7 @@ def _render_from_version(user, session_id, session, body):
         raise _RequestError(f"photo {photo['photo_id']} is {photo['status']}, not ready to render", 409)
     draft = photo.get("continuation_draft")
     if not draft or not continuation_svc.same_source(draft["source_result"], source) \
-            or not (draft["text"] or draft.get("style_options")):
+            or not (draft["text"] or draft.get("style_options") or (draft.get("aspect_ratio") or "original") != "original"):
         raise _RequestError("draft_missing", 409)
     revision = body.get("draft_revision")
     if revision is not None and revision != draft["revision"]:
@@ -1591,7 +1596,7 @@ def _render_from_version(user, session_id, session, body):
     store.append_messages(user, session_id, [store.make_message("user", card={
         "type": "render_requested", "base": VERSION_BASE, "renders": [rendered], "queued": [],
         "source_result": source, "prompt": draft["text"],
-        "style_options": draft.get("style_options") or {}})])
+        "style_options": draft.get("style_options") or {}, "aspect_ratio": draft.get("aspect_ratio") or "original"})])
     return jsonify({"renders": [rendered], "queued": []}), 202
 
 
@@ -2804,10 +2809,11 @@ def _advance_rendering(user, session_id, photo, statuses):
                 # Kept so the next version's note can tell what changed.
                 "plan": plan}
         if pending.get("base") == VERSION_BASE:
-            # With the styles too, so 再美化 on it can send the same request again.
+            # With the styles and shape too, so 再美化 on it can send the same request again.
             card.update({"base": VERSION_BASE, "source_result": pending["source_result"],
                          "prompt": (pending.get("draft") or {}).get("text"),
-                         "style_options": (pending.get("draft") or {}).get("style_options") or {}})
+                         "style_options": (pending.get("draft") or {}).get("style_options") or {},
+                         "aspect_ratio": (pending.get("draft") or {}).get("aspect_ratio") or "original"})
     else:
         failed = next((j for j in jobs.values() if j["error"]), {})
         photo["error"] = failed.get("error") or "render failed"

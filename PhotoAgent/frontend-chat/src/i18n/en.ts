@@ -830,6 +830,7 @@ export const EN: Record<string, string> = {
   "想照第 {n} 版當初的做法再做一版，按「再美化」。": " To make Version {n} again the way it was made, tap “Retouch Again”.",
   "還沒有要改的地方": "Nothing to change yet",
   "已選風格：{v}": "Styles picked: {v}",
+  "長寬比：{v}": "Aspect ratio: {v}",
   "輸入框裡的「{v1}」還沒送出，要加進需求一起{v2}嗎？": "You haven't sent “{v1}” yet. Add it to your request before you {v2}?",
   "加進需求": "Add to Request",
   "不用，直接開始": "No, Just Start",

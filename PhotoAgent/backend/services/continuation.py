@@ -69,10 +69,20 @@ def resolve_source_result(user, case_id, source):
     return {**source, "key": key}
 
 
-def continuation_form(form, text):
+def continuation_aspect_ratio(value):
+    """The output shape a continuation asks for: "original" keeps the version's own.
+    "auto" has no analysis to pick from, so it keeps it too. Raises on an unknown ratio."""
+    value = value or "original"
+    if value not in {c.value for c in capabilities.ASPECT_RATIOS}:
+        raise ContinuationError(f"aspect_ratio must be one of {[c.value for c in capabilities.ASPECT_RATIOS]}")
+    return "original" if value == "auto" else value
+
+
+def continuation_form(form, text, aspect_ratio="original"):
     """A finish render form turned into 接著這張調整's: `text` as the whole
-    request, and no ratio change, crop or eye-repair pass."""
-    form.update({"user_prompt": text, "overwrite_prompt": True, "aspect_ratio": "original",
+    request, and no crop or eye-repair pass. A different `aspect_ratio` only
+    changes the output canvas; nothing re-plans the composition."""
+    form.update({"user_prompt": text, "overwrite_prompt": True, "aspect_ratio": aspect_ratio,
                  "single_pass_edit": True,
                  "advanced_options": {o.key: False for o in capabilities.ADVANCED_OPTIONS if not o.choices}})
     form.pop("literal_texts", None)

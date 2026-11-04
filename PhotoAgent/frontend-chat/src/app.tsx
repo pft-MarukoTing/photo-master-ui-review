@@ -60,6 +60,7 @@ import {
   nameOf,
   OptionsCard,
   pickedStyles,
+  ContinueSettings,
   ContinueStyles,
   PROMPT_MAX,
   termOf,
@@ -2890,7 +2891,7 @@ export function App() {
 
   // 接著某一版調整：這一輪的需求先存成這張照片的草稿，再用存下的那份從那一版的成品產生。
   // 草稿被別的分頁改過（draft_changed）就拿伺服器現在的 revision 蓋一次。
-  function continuePhoto(v: Version, text: string, styles: Record<string, string>) {
+  function continuePhoto(v: Version, text: string, styles: Record<string, string>, ratio: string) {
     if (!session || !photo) return Promise.resolve(false);
     const id = session.session_id;
     const pid = photo.photo_id;
@@ -2901,10 +2902,10 @@ export function App() {
     return run(async () => {
       let saved: Session;
       try {
-        saved = await api.saveContinuationDraft(id, pid, source, text, styles, same ? held!.revision : 0);
+        saved = await api.saveContinuationDraft(id, pid, source, text, styles, ratio, same ? held!.revision : 0);
       } catch (e) {
         if (!(e instanceof ApiError && e.body?.error === "draft_changed")) throw e;
-        saved = await api.saveContinuationDraft(id, pid, source, text, styles, e.body.draft?.revision || 0);
+        saved = await api.saveContinuationDraft(id, pid, source, text, styles, ratio, e.body.draft?.revision || 0);
       }
       const draft = saved.photos.find((p) => p.photo_id === pid)?.continuation_draft;
       await api.renderFromVersion(id, pid, source, draft?.revision || 0);
@@ -5436,7 +5437,7 @@ export function SessionView(props: {
   onSelectVersion: (v: Version) => void;
   onRender: (label: string, icon: string, patch?: Plan) => void;
   // 接著某一版調整（render_from_version 開著才有）：text 是這一輪的需求。
-  onContinue?: (v: Version, text: string, styles: Record<string, string>) => Promise<boolean>;
+  onContinue?: (v: Version, text: string, styles: Record<string, string>, ratio: string) => Promise<boolean>;
   // 只剩拖放進畫布這條路會用到 -- 丟一張新的照片進來等於開一個新對話。
   onFile: (f: File) => void;
   // faces 只在沒有分析時用：指的人是本地偵測的框和位置，取代 subjectIndices 送出。
@@ -5651,7 +5652,8 @@ export function SessionView(props: {
     const from = versions.find((v) => v.version_id === c?.source_result?.version_id);
     const text: string = c?.prompt || "";
     const styles: Record<string, string> = c?.style_options || {};
-    return from && (text || Object.keys(styles).length) ? { from, text, styles } : null;
+    const ratio: string = c?.aspect_ratio || "original";
+    return from && (text || Object.keys(styles).length || ratio !== "original") ? { from, text, styles, ratio } : null;
   })();
   // 從原圖做的那一版，「再美化」把設定改回它當時的樣子，再從原圖做一次：每一版的設定可能不一樣，
   // 不拿現在的設定。設定記在完成那張卡上；面板做的那張沒有記，就不給這顆。
@@ -5669,6 +5671,10 @@ export function SessionView(props: {
   const [contStyles, setContStyles] = useState<Record<string, string>>({});
   const [contStyleOpen, setContStyleOpen] = useState(false);
   const contStyled = Object.keys(contStyles).length > 0;
+  // 這一輪的輸出長寬比，一樣只屬於這一輪；"original" 是維持接著的那一版。
+  const [contRatio, setContRatio] = useState("original");
+  const [contSettingsOpen, setContSettingsOpen] = useState(false);
+  const contReshaped = contRatio !== "original";
   // 打的每一句先給 AI 看過（跟上傳頁的個人化需求一樣），收下的累積在 contPrompt，
   // 可以直接改字；按「接續第 N 版美化」才連同風格一起送出。
   const [contTurns, setContTurnsState] = useState<ContTurn[]>([]);
@@ -5684,7 +5690,7 @@ export function SessionView(props: {
     setContPromptState(text);
   };
   // 打了需求或選了風格，下一步就是「接續第 N 版美化」；「再美化」只在什麼都還沒動時給。
-  const offerRerun = !!(rerun || remake) && !contPrompt.trim() && !contStyled;
+  const offerRerun = !!(rerun || remake) && !contPrompt.trim() && !contStyled && !contReshaped;
   const [contReviewing, setContReviewing] = useState(false);
   // 不調整了還在等的 review，回來就不算數。
   const contGen = useRef(0);
@@ -5692,6 +5698,8 @@ export function SessionView(props: {
     if (!continuing) {
       setContStyles({});
       setContStyleOpen(false);
+      setContRatio("original");
+      setContSettingsOpen(false);
       contGen.current++;
       setContTurns([]);
       setContPrompt("");
@@ -5711,9 +5719,9 @@ export function SessionView(props: {
       }
       // 接著調整還沒寫需求也帶底過去，那邊一樣接著這一版。
       const text = contPromptRef.current.trim();
-      const handOn = !!continuing && (!!text || contStyled);
+      const handOn = !!continuing && (!!text || contStyled || contReshaped);
       const base = continuing ? { version_id: continuing.version_id, job_id: versionJob(continuing), run: 1 } : undefined;
-      const handed = handOn ? { ...base!, text, style_options: contStyles } : undefined;
+      const handed = handOn ? { ...base!, text, style_options: contStyles, aspect_ratio: contRatio } : undefined;
       if (props.onPanelLeave) props.onPanelLeave(handed, current?.version_id, handOn ? undefined : base);
       else props.panelMode!.onLeave();
     },
@@ -5729,6 +5737,7 @@ export function SessionView(props: {
     setContinuing(v);
     setContPrompt(r.text || "");
     setContStyles(r.style_options || {});
+    setContRatio(r.aspect_ratio || "original");
   }, [props.resume, versions.length]);
   // AI 回「從第 N 版接著改」：切到那一版、打開「從第 N 版美化」，要改的地方先放進去，
   // 按「接續第 N 版美化」才產生。只認打開這串對話之後才來的那則，同一則只接一次。
@@ -6194,13 +6203,13 @@ export function SessionView(props: {
       return;
     }
     const text = contPromptRef.current.trim();
-    if (!text && !contStyled) return;
-    await continueRun({ from: continuing, text, styles: contStyles });
+    if (!text && !contStyled && !contReshaped) return;
+    await continueRun({ from: continuing, text, styles: contStyles, ratio: contRatio });
   }
 
   async function continueRun(r: ContRun) {
     const count = versions.length;
-    const ok = await props.onContinue!(r.from, r.text, r.styles);
+    const ok = await props.onContinue!(r.from, r.text, r.styles, r.ratio);
     if (!ok) return;
     following.current = { ...r, count, seen: false };
     setContinuing(null);
@@ -6218,7 +6227,7 @@ export function SessionView(props: {
       following.current = null;
       const v = versions[versions.length - 1];
       if (v.version_id !== current?.version_id) props.onSelectVersion(v);
-      setFollowed({ from: f.from, text: f.text, styles: f.styles, version_id: v.version_id });
+      setFollowed({ from: f.from, text: f.text, styles: f.styles, ratio: f.ratio, version_id: v.version_id });
       setContinuing(v);
       setComposerKey((k) => k + 1);
     } else if (f.seen) following.current = null;
@@ -7381,6 +7390,10 @@ export function SessionView(props: {
                             )} />
                         </div>
                       )}
+                      {contSettingsOpen && (
+                        <ContinueSettings caps={caps} plan={photo.plan} aspectRatio={contRatio} busy={busy}
+                          onPatch={(patch) => void props.onPatch(patch)} onAspectRatio={setContRatio} />
+                      )}
                       {contStyleOpen && (
                         <ContinueStyles analysis={styleAnalysis || ({} as Analysis)} caps={caps} picked={contStyles}
                           busy={busy} onPick={(styles) => {
@@ -7394,6 +7407,9 @@ export function SessionView(props: {
                         <Chip label={t("風格")} icon="wand" kind={contStyleOpen ? "picked" : undefined}
                           badge={contStyled ? t("已選風格：{v}", { v: pickedStyles(styleAnalysis, caps, { style_options: contStyles }).join(t("、")) }) : undefined}
                           disabled={busy} onClick={() => setContStyleOpen((o) => !o)} />
+                        <Chip label={t("設定")} icon="tune" kind={contSettingsOpen ? "picked" : undefined}
+                          badge={contReshaped ? t("長寬比：{v}", { v: aspectLabel(caps, contRatio) }) : undefined}
+                          disabled={busy} onClick={() => setContSettingsOpen((o) => !o)} />
                         {offerRerun && (
                           <Chip label={t("再美化")} icon="redo" kind="primary" disabled={busy}
                             onClick={() => {
@@ -7403,7 +7419,7 @@ export function SessionView(props: {
                               render("再美化", "redo", remake!);
                             }} />
                         )}
-                        {(!!contPrompt.trim() || contStyled) && (
+                        {(!!contPrompt.trim() || contStyled || contReshaped) && (
                           <Chip label={t("接續第 {n} 版美化", { n: continuing.ordinal })} icon="wand" kind="primary" disabled={busy}
                             onClick={() => withDraft(() => void continueNow())} />
                         )}
@@ -7523,7 +7539,7 @@ function AnswerList(props: {
 // ask：AI 這句在問、還沒回答。
 type ContTurn = { text: string; reply?: string; ask?: boolean; options?: string[]; lines?: boolean; picked?: boolean };
 // 一次接續美化：從哪一版、照什麼需求和風格。
-type ContRun = { from: Version; text: string; styles: Record<string, string> };
+type ContRun = { from: Version; text: string; styles: Record<string, string>; ratio: string };
 
 // 輸入框上方「下一次從 [原圖 ⌄] 美化」那句：中間的藥丸點了掀開選單換底，原圖或任一版。
 // 寫成一句話，才不會被當成「這張是從哪張做的」；藥丸裡只放名詞，不像另一顆美化鍵。

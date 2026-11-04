@@ -570,6 +570,44 @@ export function ContinueStyles(props: {
   );
 }
 
+// 接著某一版改的「設定」：引擎、輸出大小寫進照片的設定；長寬比只屬於這一輪，換了只改輸出的形狀。
+export function ContinueSettings(props: {
+  caps: Capabilities;
+  plan: Plan;
+  aspectRatio: string;
+  busy: boolean;
+  onPatch: (patch: Plan) => void;
+  onAspectRatio: (value: string) => void;
+}) {
+  const { caps, plan, busy } = props;
+  return (
+    <div class="chat-card chat-options">
+      <div class="chat-settings-editor">
+        <div class="chat-settings-fields">
+          <label class="chat-field">
+            <span class="chat-meta">{t("美化引擎")}</span>
+            <select class="quality-select" value={plan.render_option} disabled={busy}
+              onChange={(e) => props.onPatch({ render_option: (e.currentTarget as HTMLSelectElement).value })}>
+              {caps.render.options.map((o) => (
+                <option value={o.id}>{renderOptionLabel(caps, o.id)}</option>
+              ))}
+            </select>
+          </label>
+          <AspectRatioField caps={caps} value={props.aspectRatio} disabled={busy} noAuto onChange={props.onAspectRatio} />
+          <OutputScaleField
+            caps={caps}
+            renderOption={plan.render_option}
+            aspectRatio={props.aspectRatio}
+            value={plan.output_scale}
+            disabled={busy}
+            onChange={(output_scale) => props.onPatch({ output_scale })}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StyleOptions({ analysis, plan, caps, busy, hot, onPatch, plain }: Pick<Body, "analysis" | "plan" | "caps" | "busy" | "hot" | "onPatch"> & { plain?: boolean }) {
   const groups = styleGroups(analysis, caps);
   const [open, setOpen] = useState<string | null>(null);

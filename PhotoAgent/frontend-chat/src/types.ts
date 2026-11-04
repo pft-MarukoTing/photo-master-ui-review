@@ -76,6 +76,7 @@ export interface Photo {
     source_result: SourceResult;
     text: string;
     style_options?: Record<string, string>;
+    aspect_ratio?: string;
     revision: number;
   } | null;
   // 照片本身已經好了，AI 還在寫的開場摘要／這一版的說明（開了「詳細解說」才有）。

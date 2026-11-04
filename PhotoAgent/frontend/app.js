@@ -1285,8 +1285,8 @@
     const cont = activeContinuation();
     if (cont) {
       if (!isReviewDirty()) return write(cont.handed || isAdjusting() ? { idle: true, base: cont.source } : { idle: true });
-      const { text, style_options } = pendingContinuationRequest();
-      return write({ continuation: { ...cont.source, text, style_options } });
+      const { text, style_options, aspect_ratio } = pendingContinuationRequest();
+      return write({ continuation: { ...cont.source, text, style_options, aspect_ratio } });
     }
     const unapplied = pendingModeHandoff?.case_id === caseKey ? pendingModeHandoff : null;
     if (unapplied) return write(unapplied);
@@ -1329,7 +1329,8 @@
       const runs = singleRuns || [];
       const run = runs.find((r) => r.versionId === c.version_id && r.jobId === c.job_id && r.sourceRun === c.run)
         || runs.find((r) => r.versionId === c.version_id);
-      const prefill = { text: c.text || "", style_options: c.style_options || {} };
+      const prefill = { text: c.text || "", style_options: c.style_options || {},
+        aspect_ratio: continuationAspectRatio(c.aspect_ratio) };
       if (run) Promise.resolve().then(() => enterPanelContinuation(run, prefill));
       return;
     }
@@ -2389,8 +2390,17 @@
       applyAspectRatioChange(els.imageAspectRatioSelect.value));
   }
   if (els.apImageAspectRatioSelect) {
-    els.apImageAspectRatioSelect.addEventListener("change", () =>
-      handleUserAspectRatioPick(els.apImageAspectRatioSelect.value));
+    els.apImageAspectRatioSelect.addEventListener("change", () => {
+      // 接著這張調整: the pick is this round's output shape only, so it neither
+      // reframes nor becomes the case's ratio.
+      if (activeContinuation()) {
+        applyAspectRatioOption(findAspectRatioOption(continuationAspectRatio(els.apImageAspectRatioSelect.value)),
+          { fromUser: true });
+        updateInlineAnalysisContinueBtnState();
+        return;
+      }
+      handleUserAspectRatioPick(els.apImageAspectRatioSelect.value);
+    });
   }
 
   // Owner (batch record or singleFlowState) -> the ratio it is being reframed for.
@@ -2778,6 +2788,9 @@
     return Boolean(singleFlowState?.analysis?._skipped_analysis) && !historyCaseAnalysis;
   }
 
+  // #ap-image-aspect-ratio holds a 接著這張調整 round's shape, not the case's.
+  let apRatioShowsContinuation = false;
+
   function activeContinuation() {
     return panelContinuation && panelContinuation.owner === singleFlowState ? panelContinuation : null;
   }
@@ -2792,7 +2805,7 @@
       source: { version_id: run.versionId, job_id: run.jobId, run: run.sourceRun },
       versionNumber: run.versionNumber,
       thumbUrl: resultThumbnailUrl(run.jobId, { run: run.sourceRun }),
-      prefill: prefill || { text: "", style_options: {} },
+      prefill: prefill || { text: "", style_options: {}, aspect_ratio: "original" },
     };
   }
 
@@ -2828,7 +2841,8 @@
     const c = handoff.continuation;
     if (c && run && canContinueFromRun(run) && run.versionId === c.version_id) {
       pendingModeHandoff = null;
-      panelContinuation = { ...continuationOn(run, { text: c.text || "", style_options: c.style_options || {} }), handed: true };
+      panelContinuation = { ...continuationOn(run, { text: c.text || "", style_options: c.style_options || {},
+        aspect_ratio: continuationAspectRatio(c.aspect_ratio) }), handed: true };
       return;
     }
     panelContinuation = null;
@@ -2844,13 +2858,21 @@
     return panelBase.defaultRun ? !isContinuationSource(cont, panelBase.defaultRun) : !!cont;
   }
 
-  // What 接著這張調整 sends: the 補充指令 text, and only the styles moved off
-  // their default (one left out reads as default on the backend).
+  // A continuation's output shape: "original" keeps the version's own, and
+  // "auto" has no analysis to decide from, so it keeps it too.
+  function continuationAspectRatio(value) {
+    return !value || value === "auto" ? "original" : value;
+  }
+
+  // What 接著這張調整 sends: the 補充指令 text, only the styles moved off
+  // their default (one left out reads as default on the backend), and the
+  // output shape, which #ap-image-aspect-ratio holds while continuing.
   function continuationRequestFromDom() {
     const { options } = readStyleSelectionsFromDom();
     return {
       text: els.promptInput ? els.promptInput.value.trim() : "",
       style_options: Object.fromEntries(Object.entries(options).filter(([, v]) => v && v !== "default")),
+      aspect_ratio: continuationAspectRatio(els.apImageAspectRatioSelect?.value),
     };
   }
 
@@ -2860,16 +2882,19 @@
     return {
       text: (run?.versionParams?.user_prompt || "").trim(),
       style_options: Object.fromEntries(Object.entries(style).filter(([, v]) => v && v !== "default")),
+      aspect_ratio: continuationAspectRatio(run?.versionParams?.aspect_ratio),
     };
   }
 
   function continuationRequestKey(request) {
     const style = request?.style_options || {};
-    return JSON.stringify([(request?.text || "").trim(), Object.keys(style).sort().map((k) => [k, style[k]])]);
+    return JSON.stringify([(request?.text || "").trim(), Object.keys(style).sort().map((k) => [k, style[k]]),
+      continuationAspectRatio(request?.aspect_ratio)]);
   }
 
   function isEmptyContinuationRequest(request) {
-    return !request || (!request.text && !Object.keys(request.style_options || {}).length);
+    return !request || (!request.text && !Object.keys(request.style_options || {}).length
+      && continuationAspectRatio(request.aspect_ratio) === "original");
   }
 
   // The panel open: what is in it; closed by 取消: what was kept from it.
@@ -6591,6 +6616,7 @@
       sourceResult: cont.source,
       userPrompt: request.text,
       styleOptions: request.style_options,
+      aspectRatio: request.aspect_ratio,
       imageQuality,
       imageModel,
       user: getCurrentUser(),
@@ -7210,6 +7236,11 @@
     // in full (人像檢查/畫面建議 too). Without one, request-only as before.
     const origin = !continuing && singleFlowState.origin?.run === panelRun() ? singleFlowState.origin.selections : null;
     const selections = origin || lastSingleSelections;
+    if (!continuing && apRatioShowsContinuation) {
+      // Back from 接著這張調整, whose shape the picker was showing.
+      apRatioShowsContinuation = false;
+      applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio || "auto"), { fromUser: true });
+    }
     renderAnalysisPreview({ analysis: singleFlowState.analysis, preset: singleFlowState.preset, expanded: true,
       requestOnly: !!continuing || (!origin && isContinuationRun(panelRun())),
       versionCard: overviewOnVersion() });
@@ -7222,8 +7253,10 @@
       // The request only: the version's other settings are already in it.
       // On its default base that is what the version was made with
       // (ensurePanelBase), otherwise this round's.
-      const { text = "", style_options: style = {} } = continuing.prefill || {};
+      const { text = "", style_options: style = {}, aspect_ratio: ratio } = continuing.prefill || {};
       if (els.promptInput) els.promptInput.value = text;
+      applyAspectRatioOption(findAspectRatioOption(continuationAspectRatio(ratio)), { fromUser: true });
+      apRatioShowsContinuation = true;
       if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = false;
       applyStyleSelections({ options: Object.fromEntries(
         ["pose", "angle", "lighting", "size"].map((k) => [k, style[k] || "default"])), recipeChecked: null });

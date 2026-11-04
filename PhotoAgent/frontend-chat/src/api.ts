@@ -328,9 +328,9 @@ export const api = {
     ),
   // 接著某一版調整：先存這一輪的需求，再用存下的那份去產生。
   saveContinuationDraft: (id: string, photoId: string, source: SourceResult, text: string,
-    styles: Record<string, string>, revision: number) =>
+    styles: Record<string, string>, aspectRatio: string, revision: number) =>
     request<Session>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/continuation-draft`,
-      json("PUT", { source_result: source, text, style_options: styles, revision })),
+      json("PUT", { source_result: source, text, style_options: styles, aspect_ratio: aspectRatio, revision })),
   renderFromVersion: (id: string, photoId: string, source: SourceResult, draftRevision: number) =>
     request<{ renders: Dict[]; queued: string[] }>(
       `${sid(id)}/render`,
