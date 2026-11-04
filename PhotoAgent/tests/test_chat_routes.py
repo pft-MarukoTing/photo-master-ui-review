@@ -1756,6 +1756,36 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual([m["card"]["type"] for m in done["new_messages"]], ["analysis_ready", "render_started"])
         self.assertTrue(done["new_messages"][0]["card"]["skipped"])
 
+    def test_render_waits_for_an_analysis_landing_instead_of_losing_its_queue(self):
+        """A skipped analysis lands in about a second, often while the upload
+        page's render request is in flight. Both write the photo's whole state:
+        the render waits for the landing instead of having its queue written over."""
+        sid = self.new_session()
+        self.client.patch(self.url(sid, "/plan"), json={
+            "user": USER, "plan": {"user_prompt": "make it warmer", "overwrite_prompt": True}})
+        photo = self.add_photos(sid)[0]
+        self.analysis = {"_skipped_analysis": True, "_aspect_ratio_pref_at_analysis": "auto", "compatibility_version": 5}
+        self.status(sid)
+        lock = f"{chat_session._session_key(USER, sid)}:advancing"
+        self.redis.set(lock, "watcher")
+        waited = []
+
+        def land(seconds):
+            # The watcher, holding the lock, lands the analysis and lets go.
+            if not waited:
+                self.jobs[photo["analyze_job_id"]]["status"] = "success"
+                del self.redis.data[lock]
+                chat._advance_session(USER, sid)
+            waited.append(seconds)
+
+        with patch.object(chat.time, "sleep", land):
+            res = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [photo["photo_id"]]})
+        self.assertEqual(res.status_code, 202, res.get_json())
+        self.assertTrue(waited)
+        self.assertEqual(len(res.get_json()["renders"]), 1)
+        state = self.status(sid)["session"]["photos"][0]
+        self.assertEqual((state["status"], state["queued_render"]), ("rendering", None))
+
     def test_asking_for_the_analysis_runs_it_and_opens_the_check(self):
         sid = self.new_session()
         photo, _ = self.only_what_i_said(sid)

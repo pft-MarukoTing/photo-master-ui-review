@@ -23,6 +23,7 @@ never change again, so they are left out of both.
 """
 
 from photo_agent import chat_analysis
+import contextlib
 import contextvars
 import copy
 import json
@@ -1608,6 +1609,11 @@ def render(session_id):
     a request that fails has started nothing."""
     body = _body()
     user = _user(body.get("user"))
+    with _advance_held(user, session_id):
+        return _render(user, session_id, body)
+
+
+def _render(user, session_id, body):
     session = _session(user, session_id)
     base = body.get("base", "original")
     if base not in _render_bases():
@@ -2035,7 +2041,8 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
         _end_round(user, session_id, photo, history)
     if answer["render"]:
         # Re-read: a poll may have moved the photo on while the model thought.
-        messages += _ask_render(user, session_id, _photo(_session(user, session_id), photo_id))
+        with _advance_held(user, session_id):
+            messages += _ask_render(user, session_id, _photo(_session(user, session_id), photo_id))
     store.append_messages(user, session_id, messages)
     return jsonify({"messages": messages})
 
@@ -2871,6 +2878,32 @@ def _advance_session(user, session_id):
         return _advance_photos(user, session_id, _session(user, session_id))
     finally:
         store.unlock_advance(user, session_id, token)
+
+
+# How long a request waits for an advance in progress before going ahead anyway.
+ADVANCE_WAIT_SECONDS = 10.0
+
+
+@contextlib.contextmanager
+def _advance_held(user, session_id):
+    """Hold _advance_session's lock while a request reads a photo's state and
+    writes it back. Both write the whole state, so a job landing in between
+    writes over the request's change -- a render queued behind a skipped
+    analysis (done in about a second) was lost that way, the photo left
+    ready with nothing started. Past ADVANCE_WAIT_SECONDS it goes ahead
+    without the lock rather than fail the request."""
+    until = time.monotonic() + ADVANCE_WAIT_SECONDS
+    token = store.lock_advance(user, session_id)
+    while token is None and time.monotonic() < until:
+        time.sleep(0.05)
+        token = store.lock_advance(user, session_id)
+    if token is None:
+        current_app.logger.warning("advance lock busy for %s; going ahead without it", session_id)
+    try:
+        yield
+    finally:
+        if token is not None:
+            store.unlock_advance(user, session_id, token)
 
 
 # How often the watcher lands what active sessions' jobs finished.
