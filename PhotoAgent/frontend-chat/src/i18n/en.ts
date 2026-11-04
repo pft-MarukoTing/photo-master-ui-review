@@ -227,6 +227,7 @@ export const EN: Record<string, string> = {
   "就是{name}": "That's {name}",
   "就是這位": "This person",
   "改了{v1}，還沒美化": "{v1} changed, not yet retouched",
+  "改了，還沒美化": "Changed, not yet retouched",
   "上傳了 {v1} 張照片": "Uploaded {v1} {v1|photo|photos}",
   "分析完成。": "Analysis complete.",
   "已套用，開始新的一輪調整。": "Applied. Starting a new round of edits.",

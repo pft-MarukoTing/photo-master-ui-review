@@ -5600,6 +5600,11 @@ export function SessionView(props: {
     const touched = changedCats(parkedPlan, photo.plan);
     for (const c of Object.keys(CATEGORIES) as Category[]) if (touched.has(c)) parkedCats.push(c);
   }
+  // 外層的項目按鈕（人像、畫面、風格、設定）：裡面有改了還沒美化的，鍵上掛一顆點，
+  // 跟「看美化項目」「美化」上那顆同一個意思。卡片裡的選項不另外標 -- 那裡的點
+  // 已經是「看過原圖後建議調整」，兩種點放在一起分不出來。
+  const unsentCats = adjusting ? dirtyCats : parkedCats;
+  const unsentBadge = (c: Category) => (unsentCats.includes(c) ? t("改了，還沒美化") : undefined);
   const parkedNote = parkedCats.length ? t("改了{v1}，還沒美化", { v1: parkedCats.map((c) => nameOf(c)).join(t("、")) }) : undefined;
   // 沒開「看美化項目」也可能改了設定（從接續某一版換回原圖，打的需求寫進個人化需求）：
   // 跟上一次從原圖美化時的設定比，不一樣就是有東西要美化，「再美化」不用先問。面板做的
@@ -6067,7 +6072,7 @@ export function SessionView(props: {
     const chips = cats
       .filter((c) => !skip.includes(c))
       .map((c) => (
-        <Chip label={nameOf(c)} icon={CATEGORIES[c].icon} disabled={busy} onClick={() => openCategory(c)} />
+        <Chip label={nameOf(c)} icon={CATEGORIES[c].icon} badge={unsentBadge(c)} disabled={busy} onClick={() => openCategory(c)} />
       ));
     if (rendering !== endIdx || !endRow || placed) return chips;
     placed = true;
@@ -6102,6 +6107,7 @@ export function SessionView(props: {
           <Chip
             label={t("看{v1}", { v1: termOf(nextCat) })}
             icon={CATEGORIES[nextCat].icon}
+            badge={unsentBadge(nextCat)}
             disabled={busy}
             onClick={() => openCategory(nextCat)}
           />
@@ -6775,6 +6781,7 @@ export function SessionView(props: {
                         label={t("再看{v1}", { v1: termOf(cat) })}
                         icon={CATEGORIES[cat].icon}
                         kind="ghost"
+                        badge={unsentBadge(cat)}
                         disabled={busy}
                         onClick={() => openCategory(cat)}
                       />
