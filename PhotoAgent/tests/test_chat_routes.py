@@ -2207,6 +2207,18 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual([m["card"]["type"] for m in res.get_json()["messages"]], ["ask", "llm_reply", "render_failed"])
         self.assertEqual(res.get_json()["messages"][2]["card"]["reason"], "photo_busy")
 
+    def test_a_line_from_the_option_list_is_marked_picked(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        reply = {"reply": "好。", "action": "none"}
+        typed = self.ask(sid, photo, "再亮一點", reply)[0].get_json()["messages"][0]
+        self.assertNotIn("picked", typed["card"])
+        tapped = self.ask(sid, photo, "再亮一點", reply, picked=True)[0].get_json()["messages"][0]
+        self.assertIs(tapped["card"]["picked"], True)
+        # Only a real true counts.
+        odd = self.ask(sid, photo, "再亮一點", reply, picked="yes")[0].get_json()["messages"][0]
+        self.assertNotIn("picked", odd["card"])
+
     def test_ask_about_a_tapped_face(self):
         self.analysis.update({"subjects": [
             {"label": "left", "is_person": True, "blink_issue": {"blink_failure_confidence": 0.9, "should_fix": True}}],

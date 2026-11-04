@@ -298,11 +298,12 @@ export const api = {
   // screen: the buttons the user can press right now, so the reply can point at them.
   // faces: a photo with no analysis has no subjects to index, so the taps go
   // as the local detector's boxes and where each stands, as on the upload page.
-  ask: (id: string, photoId: string, text: string, subjectIndices: number[] = [], screen?: Screen, faces?: AskFace[], answerTo?: string) =>
+  // picked: the line came from a reply's option list, not the composer.
+  ask: (id: string, photoId: string, text: string, subjectIndices: number[] = [], screen?: Screen, faces?: AskFace[], answerTo?: string, picked = false) =>
     request<{ messages: Message[] }>(
       `${sid(id)}/photos/${encodeURIComponent(photoId)}/ask`,
       { ...json("POST", { text, ...(subjectIndices.length ? { subject_indices: subjectIndices } : {}),
-        ...(faces?.length ? { faces } : {}), ...(screen ? { screen } : {}), ...(answerTo ? { answer_to: answerTo } : {}) }),
+        ...(faces?.length ? { faces } : {}), ...(screen ? { screen } : {}), ...(answerTo ? { answer_to: answerTo } : {}), ...(picked ? { picked: true } : {}) }),
         signal: AbortSignal.timeout(65000) },
     ),
   // Answers a question that was posted as a waiting ask, once the photo is analyzed.

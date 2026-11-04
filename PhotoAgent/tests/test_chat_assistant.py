@@ -679,9 +679,12 @@ class ReviewLineTest(unittest.TestCase):
     def test_a_continuation_question_only_the_photo_can_answer_is_looked_at(self):
         for verdict in ("answer", "offer", "clarify"):
             with self.subTest(verdict=verdict):
-                result, _ = self.continuation_review({"verdict": verdict, "reply": "我看一下這張。", "line": "",
-                                                      "options": ["幫我分析"], "later": True}, line="推薦標題")
+                result, context = self.continuation_review({"verdict": verdict, "reply": "我看一下這張。", "line": "",
+                                                            "options": ["幫我分析"], "later": True}, line="場上有幾個人")
                 self.assertTrue(result["look"])
+                # 接續時沒有人物清單：不能讓模型以為是沒偵測到人臉，答成 0 位。
+                self.assertIn("（接續時不列人物）", context)
+                self.assertNotIn("（沒有偵測到人臉）", context)
                 self.assertEqual((result["kept"], result["options"], result["later"]), (False, [], False))
         # 換底、later 沒開、不是接續模式：都不看。
         for answer, continuation in (
@@ -710,6 +713,10 @@ class ReviewLineTest(unittest.TestCase):
         self.assertEqual(images, [("THIS VERSION:", "data:image/jpeg;base64,AAAA")])
         # 沒有選項就不是清單；沒有圖、沒有回覆都退回 review 原本的回答。
         self.assertFalse(self.look({"reply": "適合當海報。", "options": [], "lines": True})[0]["lines"])
+        # 問照片裡有什麼：答完要帶到調整，選項是改這張的建議，不是答案本身。
+        result, seen = self.look({"reply": "他們在踢足球。想調整什麼？", "options": ["讓球員更清楚"], "lines": False})
+        self.assertEqual((result["options"], result["lines"]), (["讓球員更清楚"], False))
+        self.assertIn("lead on to adjusting this photo", seen[0][0])
         self.assertIsNone(self.look({"reply": "x", "options": [], "lines": False}, photo=None)[0])
         self.assertIsNone(self.look({"reply": "", "options": ["a"], "lines": True})[0])
         with self.assertRaises(TimeoutError):

@@ -155,6 +155,9 @@ type Note = {
   // (「褲子也是」→「把男孩的褲子也換成白色」).
   // `text` stays what was typed -- that is what the bubble shows.
   wish?: string;
+  // Tapped or typed in the option list under the AI's question, not the
+  // composer: only then is it shown as that list's answer.
+  picked?: boolean;
 };
 
 // 點頭像回答「哪一位」、直接送出時 AI 回的那句。沒問模型，所以話是這裡寫好的。
@@ -447,7 +450,7 @@ export type OverviewTurn =
   // redo 是每張都美化過了才說的：發到每一張，要按「全部再美化」才看得到。
   // held 是說的當下每張都還在跑、沒有一張接得住：先排著（queued），跑完再發到每一張。
   | { id: number; kind: "wish"; text: string; count: number; skipped: number; redo?: boolean; held?: boolean; queued?: boolean;
-      pending?: boolean; kept?: boolean; reply?: string; options?: string[]; offer?: boolean; line?: string; gone?: boolean }
+      pending?: boolean; kept?: boolean; reply?: string; options?: string[]; offer?: boolean; line?: string; gone?: boolean; picked?: boolean }
   // from 是打開時的設定，之後跟 settings 比，講這一輪改了什麼。
   | { id: number; kind: "settings"; settings?: Settings; from?: Settings; model?: boolean; redo?: boolean }
   | { id: number; kind: "ask"; overwrite?: boolean; label?: string }
@@ -2198,11 +2201,12 @@ export function App() {
   // 總覽打的一句，跟上傳頁一樣先讓 AI 看過（/prompt-review）：是需求才發到每張還沒美化的照片，
   // 問題、閒聊、撤回只回話；「幫我美化」「幫我分析」照按那兩顆；說了比例就換總覽的長寬比。
   // AI 沒回應就照原句發出去，不讓一次失敗卡住整批。
-  async function overviewSay(text: string) {
+  // picked：這句是在上一則的選項清單裡點的或打的，不是從輸入框。
+  async function overviewSay(text: string, picked = false) {
     if (!batch) return;
     const id = nextDisplayOrder();
     const said = overview.filter((t): t is Extract<OverviewTurn, { kind: "wish" }> => t.kind === "wish" && !t.pending);
-    setOverview((t) => [...t, { id, kind: "wish", text, count: 0, skipped: 0, pending: true }]);
+    setOverview((t) => [...t, { id, kind: "wish", text, count: 0, skipped: 0, pending: true, ...(picked ? { picked } : {}) }]);
     setError("");
     const keptTurns = said.filter((t) => t.kept !== false && !t.gone);
     const kept = keptTurns.map((t) => t.line || t.text);
@@ -2592,7 +2596,7 @@ export function App() {
     const asking = openAsk(base);
     const picked = preRefs(subjectIndices);
     const note: Note = { order: nextDisplayOrder(), text, persons: picked.length ? picked : asking?.persons || [],
-      selectionSource: picked.length ? "user_selection" : asking?.selectionSource };
+      selectionSource: picked.length ? "user_selection" : asking?.selectionSource, ...(typed ? {} : { picked: true }) };
     // 要靠前一句才看得懂的話（回答追問的「棕色」、接著講的「褲子也是」），模型
     // 會補成完整的一句，連同它接過來的人；清單裡每一句才能單獨讀、單獨刪。回答
     // 追問回答必須由後端補成完整需求；未補全時繼續追問，不在前端拼接。
@@ -2923,14 +2927,14 @@ export function App() {
     });
   }
 
-  function askPhoto(text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string) {
+  function askPhoto(text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string, picked = false) {
     if (!session || !photo) return Promise.resolve(false);
     const id = session.session_id;
     const pid = photo.photo_id;
     setPendingAsk({ photoId: pid, text, subjectIndices });
     return run(async () => {
       try {
-        await api.ask(id, pid, text, faces ? [] : subjectIndices, screen, faces, answerTo);
+        await api.ask(id, pid, text, faces ? [] : subjectIndices, screen, faces, answerTo, picked);
         setSession(await api.getSession(id));
       } finally {
         setPendingAsk(null);
@@ -3660,9 +3664,9 @@ export function App() {
                     {!!ot.options?.length && (() => {
                       const nx = overview[i + 1];
                       return (
-                        <AnswerList options={ot.options} picked={!latest && nx?.kind === "wish" ? nx.text : null} open={latest} busy={overviewHeld}
-                          onPick={(o) => { const m = overviewStartOf(o); return m ? overviewStart(m) : void overviewSay(o); }}
-                          onOwn={(o) => void overviewSay(o)} />
+                        <AnswerList options={ot.options} picked={!latest && nx?.kind === "wish" && nx.picked ? nx.text : null} open={latest} busy={overviewHeld}
+                          onPick={(o) => { const m = overviewStartOf(o); return m ? overviewStart(m) : void overviewSay(o, true); }}
+                          onOwn={(o) => void overviewSay(o, true)} />
                       );
                     })()}
                     {/* 沒問什麼的（撤回、回答完）也照樣給現在按得到的鍵，不讓對話停在這裡。 */}
@@ -5181,7 +5185,9 @@ function PreChat(props: {
               <AssistantMsg>
                 <p class="chat-text">{said(turn.ask.reply || (turn.ask.kept !== false ? t("好，這些會當成個人化需求，美化時一起套用。") : t("好，那就先不加個人化需求。")), turn.ask.replyPeople || turn.ask.persons)}</p>
                 {options.length > 0 && (
-                  <AnswerList options={options} picked={open ? null : next?.text ?? null} open={open} busy={held} onPick={props.onAnswer} />
+                  // 從輸入框打的下一句不算這份清單的答案；舊紀錄沒有 picked，跟選項一字不差的照樣標起來。
+                  <AnswerList options={options} picked={!open && next && (next.picked || options.includes(next.text)) ? next.text : null}
+                    open={open} busy={held} onPick={props.onAnswer} />
                 )}
                 {who.length > 1 && (
                   <div class="chat-choices">
@@ -5434,7 +5440,7 @@ export function SessionView(props: {
   // 只剩拖放進畫布這條路會用到 -- 丟一張新的照片進來等於開一個新對話。
   onFile: (f: File) => void;
   // faces 只在沒有分析時用：指的人是本地偵測的框和位置，取代 subjectIndices 送出。
-  onAsk: (text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string) => Promise<boolean>;
+  onAsk: (text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string, picked?: boolean) => Promise<boolean>;
   onAnswerWaiting: (messageId: string, screen: Screen) => void;
   onPatch: (patch: Plan, turns?: { text: string; reply?: string }[]) => Promise<boolean>;
   onQuietPrompt: (text: string) => Promise<unknown>;
@@ -6130,8 +6136,9 @@ export function SessionView(props: {
   // 頭像已經排在 AI 那句底下可以直接點時，輸入框上面那排就先收起來，免得兩處都能選。
   const facesInline =
     !props.pendingAsk && (asksWho(lastCard) || (lastCard?.type === "llm_reply" && lastCard.question_kind === "person" && !lastCard.proposal && (lastCard.options || []).some((o: string) => !!faceOption(o))));
-  // go：框裡沒送出的字被要求一起美化，AI 收下了就直接開始。
-  async function reviewCont(line: string, go = false) {
+  // go：框裡沒送出的字被要求一起美化，AI 收下了就直接開始。picked：從上一則的選項點的（含「自己輸入」那列），
+  // 那則才標成選過；從輸入框打的另一句不算。
+  async function reviewCont(line: string, go = false, picked = false) {
     const gen = contGen.current;
     const before = contTurnsRef.current;
     const prompt = contPromptRef.current;
@@ -6139,7 +6146,7 @@ export function SessionView(props: {
       { role: "user", text: x.text },
       ...(x.reply ? [{ role: "assistant" as const, text: x.reply, ...(x.options ? { question: true, options: x.options } : {}) }] : []),
     ]);
-    setContTurns([...before, { text: line }]);
+    setContTurns([...before, { text: line, ...(picked ? { picked: true } : {}) }]);
     setContReviewing(true);
     let turn: ContTurn;
     let start = false;
@@ -6173,7 +6180,7 @@ export function SessionView(props: {
     } finally {
       if (gen === contGen.current) setContReviewing(false);
     }
-    setContTurns([...before, turn]);
+    setContTurns([...before, { ...turn, ...(picked ? { picked: true } : {}) }]);
     if (base !== undefined) continueFrom(base);
     // 「幫我美化」就是按「接續第 N 版美化」。
     else if (start) void continueNow();
@@ -6327,10 +6334,11 @@ export function SessionView(props: {
                 <AnswerList
                   options={c.options as string[]}
                   copy={!!c.lines}
-                  picked={next?.card?.type === "ask" ? next.text || "" : null}
+                  // 從輸入框打的下一句不算這份清單的答案；舊紀錄沒有 picked，跟選項一字不差的照樣標起來。
+                  picked={next?.card?.type === "ask" && (next.card.picked || (c.options as string[]).includes(next.text || "")) ? next.text || "" : null}
                   open={open}
                   busy={busy}
-                  onPick={(t) => props.onAsk(t, si, screen, sf, c.question_kind ? messages[idx].id : undefined)}
+                  onPick={(t) => props.onAsk(t, si, screen, sf, c.question_kind ? messages[idx].id : undefined, true)}
                 />
               );
             // 問的是哪一位時，答案就是那幾顆頭像：點一顆等於指著他說「這位」，
@@ -7329,8 +7337,8 @@ export function SessionView(props: {
                           <p class="chat-text">{x.reply}</p>
                           {!!x.options?.length && (
                             <AnswerList options={x.options} copy={x.lines} open={i === contTurns.length - 1}
-                              picked={i === contTurns.length - 1 ? null : contTurns[i + 1]?.text ?? null}
-                              busy={busy || contReviewing} onPick={(o) => void reviewCont(o)} />
+                              picked={contTurns[i + 1]?.picked ? contTurns[i + 1].text : null}
+                              busy={busy || contReviewing} onPick={(o) => void reviewCont(o, false, true)} />
                           )}
                         </AssistantMsg>
                       )}
@@ -7359,7 +7367,8 @@ export function SessionView(props: {
                           {offerRerun && t("想照第 {n} 版當初的做法再做一版，按「再美化」。", { n: continuing.ordinal })}
                         </p>
                       ))}
-                      {(!!contPrompt || contTurns.length > 0) && (
+                      {/* 還沒記下任何需求就不放空卡：只回答了問題時，突然冒一張「還沒有要改的地方」很怪。 */}
+                      {!!contPrompt && (
                         <div class="chat-card chat-notes">
                           <span class="chat-meta">{t("個人化需求")}</span>
                           <PromptEditor value={contPrompt} faces={{}} busy={busy} label={t("個人化需求")}
@@ -7512,7 +7521,7 @@ function AnswerList(props: {
 
 // 接續某一版時打的一句和 AI 的回覆；`options` 是 AI 追問時給的選項。
 // ask：AI 這句在問、還沒回答。
-type ContTurn = { text: string; reply?: string; ask?: boolean; options?: string[]; lines?: boolean };
+type ContTurn = { text: string; reply?: string; ask?: boolean; options?: string[]; lines?: boolean; picked?: boolean };
 // 一次接續美化：從哪一版、照什麼需求和風格。
 type ContRun = { from: Version; text: string; styles: Record<string, string> };
 

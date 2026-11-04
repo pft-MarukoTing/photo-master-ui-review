@@ -1814,6 +1814,10 @@ def ask_photo(session_id, photo_id):
         card["subject_indices"] = subject_indices
     if faces:
         card["faces"] = faces
+    # Tapped or typed in the reply's option list, not the composer: only
+    # then does the page show this line as that list's answer.
+    if body.get("picked") is True:
+        card["picked"] = True
     asked = store.make_message("user", text.strip(), card)
     # Filtered before the limit: in a session of several photos the others'
     # turns would otherwise use up this photo's history.

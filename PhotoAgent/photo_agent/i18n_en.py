@@ -170,6 +170,7 @@ TEXT = {
     "前面跟這句衝突的需求，已經照這句改掉了。": "I've updated the earlier request that conflicted with this one.",
     "未指定對象": "No specific person",
     "（沒有偵測到人臉）": "(no faces detected)",
+    "（接續時不列人物）": "(people are not listed while adjusting a version)",
     "（還沒有）": "(none yet)",
     "第 {n} 版": "Version {n}",
     "（正在調整）": "(being adjusted)",

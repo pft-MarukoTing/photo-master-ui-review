@@ -1745,9 +1745,11 @@ CONTINUATION_TEXT = "\n".join([
     "- Never offer or mention 分析, 幫我分析 or 一鍵美化; the button is 「{button}」. Never use verdict \"offer\" or \"analyze\".",
     "- The aspect ratio and 人像修正 switches stay as that version had them: never use verdict \"setting\"; a line"
     " about the ratio or a switch is kept as a wish like any other.",
-    "- There is no analysis to wait for, but this version can be looked at: a line only the photo can answer (words to"
-    " go with it, what would suit it) is verdict \"answer\" with later=true and options [], and the page answers it"
-    " from this version. Asking to make the photo into something (「想做成海報」) is still a wish to keep.",
+    "- There is no analysis to wait for, but this version can be looked at: a line only the photo can answer -- what it"
+    " shows (how many people, what they are doing, where it is), words to go with it, what would suit it -- is verdict"
+    " \"answer\" with later=true and options [], and the page answers it from this version. PEOPLE IN PHOTO is not"
+    " listed here, so never answer how many people there are yourself. Asking to make the photo into something"
+    " (「想做成海報」) is still a wish to keep.",
 ])
 # 接續時換底：「從第二版調」「改成基於原圖」是要換一個底接著改，不是要改的地方。只有
 # 接續才多這一欄，上傳頁的 schema 不變。
@@ -1797,12 +1799,13 @@ LOOK_SCHEMA = {
         },
     },
 }
-LOOK_INSTRUCTION = """You are a senior photo retoucher in a chat. The user is adjusting one version of their photo that is already rendered (THIS VERSION, the image below); the lines they keep are applied on top of it when they press 「{button}」. NEW LINE asks something you can only answer by looking at the photo -- words to go with it (a title, a headline, a caption, ad copy), or what would suit it, how it could look as a poster or cover. Look at THIS VERSION and answer it. LINES SO FAR is what they have asked for so far (e.g. 「想做成海報」); read NEW LINE together with it and CONVERSATION SO FAR.
+LOOK_INSTRUCTION = """You are a senior photo retoucher in a chat. The user is adjusting one version of their photo that is already rendered (THIS VERSION, the image below); the lines they keep are applied on top of it when they press 「{button}」. NEW LINE asks something you can only answer by looking at the photo -- what it shows (how many people, what they are doing, where it is), words to go with it (a title, a headline, a caption, ad copy), or what would suit it, how it could look as a poster or cover. Look at THIS VERSION and answer it. LINES SO FAR is what they have asked for so far (e.g. 「想做成海報」); read NEW LINE together with it and CONVERSATION SO FAR.
 
 - This turn only answers. Nothing is taken down yet: never say you have noted something, never say what happens after 「{button}」, never offer 分析 or 一鍵美化, and never promise to answer later -- answer now.
 - Ground what you say in what THIS VERSION shows. Do not name people, places or brands you cannot see.
 - Words for the photo: write two or three short lines that fit what it shows and what they are making, as "options" with "lines" true. The page lays them out as a list to pick from, with a last row for writing their own, so the reply does not repeat them: it says they are below and asks which one to use, e.g. 「幫你想了幾句，想用哪一句當標題？也可以自己寫一句。」
 - What would suit it, design ideas: name one or two concrete ideas in a sentence or two, with the reason from the photo, then ask which to add; "options" are those ideas written as short wishes the user could have typed (「標題放在上方的天空」「整體調成復古海報色調」), "lines" false.
+- What it shows: answer plainly from THIS VERSION in a sentence (「畫面裡有 5 個人，看起來在踢足球。」), then lead on to adjusting this photo in a short question (「想在這張上調整什麼？可以挑下面的，或直接打給我。」). "options" are two or three changes this photo could use, from what you see, written as short wishes the user could have typed (「讓踢球的球員更清楚」「草地顏色更鮮豔」), "lines" false -- never the facts themselves, which are not choices.
 - "options" is never empty: two to four entries, each a few words to one short sentence. Tapping one sends it as the user's next line.
 - Traditional Chinese (Taiwan), plain everyday words, two short sentences at the most. Quote labels with 「」 only."""
 
@@ -2235,7 +2238,8 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
            + ("\n" + CONTINUATION_SWITCH_TEXT if switchable else "")] if continuation else []),
         *(["VERSIONS:\n" + "\n".join([i18n.tr("原圖"), *(i18n.tr("第 {n} 版", n=n) + (i18n.tr("（正在調整）") if n == continuation else "")
                                                          for n in range(1, versions + 1))])] if switchable else []),
-        "PEOPLE IN PHOTO:\n" + ("\n".join(people) if people else i18n.tr("（總覽：好幾張照片，這裡不指定人物）") if batch else i18n.tr("（沒有偵測到人臉）")),
+        "PEOPLE IN PHOTO:\n" + ("\n".join(people) if people else i18n.tr("（總覽：好幾張照片，這裡不指定人物）") if batch
+                                else i18n.tr("（接續時不列人物）") if continuation else i18n.tr("（沒有偵測到人臉）")),
         f"LINES SO FAR:\n{_sections_text(sections) or i18n.tr('（還沒有）')}",
         answer_instruction(selected_context),
         "CONVERSATION SO FAR:\n" + ("\n".join(_turn_line(t) for t in history) or i18n.tr("（還沒有）")),
