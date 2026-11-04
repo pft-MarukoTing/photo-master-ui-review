@@ -259,6 +259,34 @@ STYLE_OPTION_INSTRUCTIONS = {
             "Let existing light sources create gentle highlights on the subject and surroundings so both share the same nighttime atmosphere. "
             "Keep the subject readable, skin complexion recognizable, and the original location and materials believable."
         ),
+        "stripes": (
+            "Transform the photo so low, warm sunlight enters through a window blind outside the frame and lands as one patch of a few broad parallel bands, separated by narrower shadows, across the subject and the surface right beside or behind them. "
+            "That patch is the only direct light in the photo: outside it the scene rests in its own quieter ambient light, so the image reads calm, with one clear area of striped light rather than stripes everywhere. "
+            "Every band shares one direction, angle and spacing and wraps over the form it crosses -- curving over a face, folding with fabric, lying flat on a wall or tabletop -- with the slightly soft edges a blind casts at a distance. "
+            "On a face, the bands cross cheek, jaw, neck or forehead, and each eye sits wholly in light or wholly in shade rather than split by a band edge. "
+            "Where the scene offers no plausible window, the same sun arrives through foliage or a nearby structure as one patch of slatted or dappled light. "
+            "Skin keeps that person's complexion in both light and shade, warmed only where the sun lands. "
+            "Keep the same subject, location, props, and scene structure. Avoid stripes spread over the whole frame, a pattern laid over the image, bands that ignore the surfaces they cross, an overall orange cast, or bands so bright they erase texture."
+        ),
+        "flash": (
+            "Transform the photo into an unmistakable direct-flash snapshot, the look of a compact camera or phone flash fired straight from the lens. "
+            "A hard, neutral-white burst lights whatever is nearest the camera head-on, far brighter than the scene's own light, and it falls off fast: "
+            "things a little farther back are clearly dimmer, and the background sinks one to two stops darker than before, so the subject pops forward from a deep, moody surround while distant lamps, signs and sky keep their own glow and color. "
+            "The flash leaves its signatures: crisp specular highlights and a bright sheen on skin, eyes, hair and glossy materials, a sharp catchlight in each eye, vivid clean colors on the subject, "
+            "and a hard-edged dark shadow offset just behind the subject wherever a wall, seat or surface sits close behind it. "
+            "A face is lit flat from the front yet keeps its features, true complexion and skin texture, with highlights stopping just short of clipping. "
+            "For food, drinks, products or objects, the flash gives a punchy, glossy, high-contrast look with sharp highlights on sauces, glazes, glass and metal. "
+            "Keep the same subject, location, props, and scene structure. Avoid a ring-light glow, red-eye, or a face blown out to white."
+        ),
+        "backlight": (
+            "Transform the photo with a clearly visible backlit lighting style, not just a warmer sky or a brighter background. "
+            "A strong sun, bright sky, window or lamp -- whichever fits the scene -- sits behind the subject, slightly off-axis, shining toward the camera, so the space behind the subject is the brightest part of the frame and blooms into a soft flare where it meets the lens. "
+            "That light draws a bright, warm rim that clearly outlines the subject's hair, head and shoulders on the side facing it, strongest where an edge faces the source and fading around the form, and glows through translucent edges such as loose hair. "
+            "The side facing the camera receives only soft light bouncing back from the surroundings, so it sits visibly darker than the rim and the background: a face stays readable, with open eyes, natural complexion and gentle modeling, "
+            "and that contrast between bright edges and a softer front is what makes the photo read as backlit. "
+            "For food, drinks, products or objects, the light passes through or skims their edges, so liquids, steam, glass, garnish and textured surfaces glow with crisp edge highlights while the front stays readable. "
+            "Keep the same subject, location, props, and scene structure. Avoid a cut-out halo of even thickness, or a face lost to a silhouette."
+        ),
     },
     "size": {
         "wide": (
@@ -343,7 +371,10 @@ STYLE_OPTION_VALUE_LABELS = {
         "vsign": "V-Sign", "cheer": "Cheer",
     },
     "angle": {"high": "High Shot", "low": "Low Shot", "eye": "Eye Level", "side": "Side Shot"},
-    "lighting": {"gold": "Gold Tone", "soft": "Soft Glow", "cool": "Blue Hour", "night": "Night"},
+    "lighting": {
+        "gold": "Gold Tone", "soft": "Soft Glow", "cool": "Blue Hour", "night": "Night",
+        "stripes": "Sun Stripes", "flash": "Flash", "backlight": "Backlight",
+    },
     "size": {"wide": "Wide", "wider": "Wider", "close": "Close", "closer": "Closer"},
 }
 

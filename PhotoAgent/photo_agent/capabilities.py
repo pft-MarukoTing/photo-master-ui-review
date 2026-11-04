@@ -180,6 +180,7 @@ STYLE_GROUPS: Tuple[StyleGroup, ...] = (
     )),
     StyleGroup("lighting", "光線", (
         Choice("gold", "金色光調"), Choice("soft", "柔光"), Choice("cool", "藍調光線"), Choice("night", "夜色"),
+        Choice("stripes", "窗影光線"), Choice("flash", "閃光燈"), Choice("backlight", "逆光暈"),
     )),
     StyleGroup("size", "取景範圍", (
         Choice("wide", "遠景"), Choice("wider", "廣角"), Choice("close", "近景"), Choice("closer", "特寫"),

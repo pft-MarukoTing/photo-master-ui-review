@@ -36,7 +36,10 @@ window.PhotoAgentResults = (() => {
     { value: "gold", label: tr("金色光調") },
     { value: "soft", label: tr("柔光") },
     { value: "cool", label: tr("藍調光線") },
-    { value: "night", label: tr("夜色") }
+    { value: "night", label: tr("夜色") },
+    { value: "stripes", label: tr("窗影光線") },
+    { value: "flash", label: tr("閃光燈") },
+    { value: "backlight", label: tr("逆光暈") }
   ];
   const SIZE_OPTIONS = [
     DEFAULT_OPTION,
@@ -58,7 +61,10 @@ window.PhotoAgentResults = (() => {
       vsign: "pose-vsing.png", cheer: "pose-cheer.png"
     },
     angle: { high: "angle-highshot.png", low: "angle-lowshot.png", eye: "angle-eyelevel.png" },
-    lighting: { gold: "lighting-goldtone.png", soft: "lighting-soft.png", cool: "lighting-cool.png", night: "lighting-night.png" },
+    lighting: {
+      gold: "lighting-goldtone.png", soft: "lighting-soft.png", cool: "lighting-cool.png", night: "lighting-night.png",
+      stripes: "lighting-stripes.png", flash: "lighting-flash.png", backlight: "lighting-backlight.png"
+    },
     size: { wide: "size-wide.png", wider: "size-wider.png", close: "size-close.png", closer: "size-closer.png" }
   };
 

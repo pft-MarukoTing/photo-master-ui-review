@@ -6981,6 +6981,13 @@
         "chat"
       ]
     },
+    "窗影光線": {
+      "en": "Window Light",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
     "立即美化": {
       "en": "Retouch Now",
       "where": [
@@ -8253,6 +8260,13 @@
         "panel"
       ]
     },
+    "逆光暈": {
+      "en": "Backlight Glow",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
     "這 {n} 張再美化時都會照這樣修。": {
       "en": "These {n} photos will follow this when they're retouched again.",
       "where": [
@@ -9149,6 +9163,13 @@
       "en": "Aspect ratio: {v}",
       "where": [
         "chat"
+      ]
+    },
+    "閃光燈": {
+      "en": "Flash",
+      "where": [
+        "panel",
+        "backend text"
       ]
     },
     "閉眼": {
