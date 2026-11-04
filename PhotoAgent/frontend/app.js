@@ -3084,6 +3084,17 @@
     return continuationRequestKey(pendingContinuationRequest()) !== continuationRequestKey(madeWithRequest(base));
   }
 
+  // 美化 on a 接著這張調整 version with the request it was made with, unchanged,
+  // is the chat's 再美化: that request again from the version it was made
+  // from, for another take -- not the same request a second time on top of
+  // it. The version to send from then; null when the request was changed or
+  // is empty, or that version is gone.
+  function continuationRedoSource(cont) {
+    const from = singleRuns?.find((run) => isContinuationSource(cont, run))?.versionParams?.source_result;
+    if (!from || continuationRequestDirty(cont) || isEmptyContinuationRequest(pendingContinuationRequest())) return null;
+    return singleRuns.some((run) => run.versionId === from.version_id) ? from : null;
+  }
+
   // A 設定 change is asked for too: the engine or 輸出尺寸 美化 would use,
   // against what the base version was made with. A version with no params
   // on record has nothing to tell against, so it reads as unchanged.
@@ -3316,6 +3327,7 @@
   // Shown only while 美化 is offered, with a version to pick besides 原圖.
   function syncApContinueBase() {
     if (!els.apContinueBase || panelBaseSwitching) return;
+    syncRedoLabel();
     const runVisible = !!(els.inlineAnalysisContinueBtn && !els.inlineAnalysisContinueBtn.hidden);
     const show = runVisible && apContinueRuns().length > 0;
     els.apContinueBase.hidden = !show;
@@ -5041,8 +5053,24 @@
   function updateInlineAnalysisContinueBtnState() {
     syncPromptOverwriteState();
     syncAdjustingTile();
+    syncRedoLabel();
     if (!els.inlineAnalysisContinueBtn) return;
     els.inlineAnalysisContinueBtn.classList.toggle("is-blocked", inlineReviseHasNoChanges());
+  }
+
+  // The run button says 再美化, as the chat's does, while it would redo the
+  // version on the panel from its source (continuationRedoSource); its
+  // tooltip names that version, since the base pill still shows this one.
+  function syncRedoLabel() {
+    const btn = els.inlineAnalysisContinueBtn;
+    const label = btn?.querySelector("span");
+    if (!label) return;
+    const cont = activeContinuation();
+    const redo = cont && continuationRedoSource(cont);
+    const from = redo && singleRuns.find((run) => run.versionId === redo.version_id)?.versionNumber;
+    label.textContent = redo ? tr("再美化") : tr("美化");
+    if (redo && from != null) btn.title = tr("需求沒改，會從第 {n} 版照一樣的需求再做一版", { n: from });
+    else btn.removeAttribute("title");
   }
 
   // 僅依需求修改 (#prompt-overwrite) only means something with a request
@@ -6916,6 +6944,7 @@
     const cont = activeContinuation();
     const request = continuationRequestFromDom();
     cont.prefill = request;
+    const redoFrom = continuationRedoSource(cont);
     const { imageModel, imageQuality } = singleFlowState;
     markCurrentCaseModified();
     setAnalysisPreviewDisabled(true);
@@ -6926,7 +6955,7 @@
 
     const jobId = await continueVersionJob({
       caseId: currentCaseHistoryImageKey,
-      sourceResult: cont.source,
+      sourceResult: redoFrom || cont.source,
       userPrompt: request.text,
       styleOptions: request.style_options,
       aspectRatio: request.aspect_ratio,

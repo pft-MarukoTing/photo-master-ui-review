@@ -33,6 +33,8 @@ window.PHOTOAGENT_CATALOGS.en = {
   "上傳": "Upload",
   "分析": "Analyze",
   "美化": "Retouch",
+  "再美化": "Retouch Again",
+  "需求沒改，會從第 {n} 版照一樣的需求再做一版": "Request unchanged: makes another version from version {n} with the same request",
   "完成": "Done",
   "檢視方式": "View",
   "對話": "Chat",
