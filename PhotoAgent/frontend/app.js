@@ -1871,6 +1871,23 @@
     return JSON.stringify(apCaseSettingsValues());
   }
 
+  // While 接著這張調整, #ap-image-aspect-ratio holds the round's output shape
+  // (apRatioShowsContinuation), not the case's the baseline has: a shape is
+  // a change only when it is neither "original" (keep the base's) nor the
+  // one a continued base was made with.
+  function apCaseSettingsDirty() {
+    if (!apCaseSettingsBaseline) return false;
+    const baseline = JSON.parse(apCaseSettingsBaseline);
+    const cont = apRatioShowsContinuation && activeContinuation();
+    if (cont) {
+      const base = singleRuns?.find((run) => isContinuationSource(cont, run));
+      const madeWith = isContinuationRun(base) ? continuationAspectRatio(madeWithRequest(base).aspect_ratio) : null;
+      const shown = els.apImageAspectRatioSelect?.value || "";
+      baseline.aspectRatio = shown === "original" || shown === madeWith ? shown : "original";
+    }
+    return JSON.stringify(baseline) !== snapshotApCaseSettings();
+  }
+
   function apCaseSettingsSummaryText() {
     const model = findModelQualityOption(els.apImageModelQualitySelect?.value);
     const parts = [model?.displayLabel || model?.label].filter(Boolean);
@@ -1912,7 +1929,7 @@
     if (els.apSkipAnalyzeBtn) {
       els.apSkipAnalyzeBtn.hidden = !(runVisible && caseUnanalyzed());
     }
-    const dirty = !!apCaseSettingsBaseline && apCaseSettingsBaseline !== snapshotApCaseSettings();
+    const dirty = apCaseSettingsDirty();
     if (els.apCaseSettingsDirty) els.apCaseSettingsDirty.hidden = !dirty;
     // The tooltip carries what the button used to say on its face. It can
     // afford to name which of the two things it means -- the version on
