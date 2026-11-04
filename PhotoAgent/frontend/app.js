@@ -328,6 +328,10 @@
   // Set by enterPanelContinuation while it steps to the version picked as the
   // base: that step is not 調整中's look-only one, the panel goes with it.
   let panelFollowsStep = false;
+  // While the base is being switched (switchPanelBase): the steps on the way
+  // -- the version's own default base, 原圖 before its edits are put back --
+  // are not painted on #ap-continue-base or #ap-editing-hint.
+  let panelBaseSwitching = false;
   // The review controls as this case first showed them, to tell whether
   // leaving the page would throw away edits not yet sent with 美化
   // (isReviewDirty). Tied to the singleFlowState it was taken for; dropped
@@ -2849,12 +2853,14 @@
   }
 
   // 調整中: something unsent in the panel, or, while it is open, a base
-  // picked other than its default.
+  // picked other than its default. Looking at 原圖 with it as the base is
+  // not: that is the default base of what is on screen (pickOriginAsBase).
   function isAdjusting() {
     if (isReviewDirty()) return true;
     if (panelBase?.owner !== singleFlowState) return false;
     if (!els.resultsCanvasRow?.classList.contains("showing-analysis")) return false;
     const cont = activeContinuation();
+    if (!cont && versionStripOriginPicked) return false;
     return panelBase.defaultRun ? !isContinuationSource(cont, panelBase.defaultRun) : !!cont;
   }
 
@@ -2909,9 +2915,23 @@
     return renderFromVersionEnabled && !currentDetailBatchRecord() && !!run?.versionId && isSelectableRun(run);
   }
 
+  async function switchPanelBase(fn) {
+    panelBaseSwitching = true;
+    try {
+      await fn();
+    } finally {
+      panelBaseSwitching = false;
+      syncApContinueBase();
+    }
+  }
+
   // Puts the revise panel into 接著這張調整 on `run`, stepping to it first
   // when it is not the one on screen (a chat handoff can name any version).
-  async function enterPanelContinuation(run, prefill = null) {
+  function enterPanelContinuation(run, prefill = null) {
+    return switchPanelBase(() => stepIntoContinuation(run, prefill));
+  }
+
+  async function stepIntoContinuation(run, prefill) {
     if (!singleRuns || !canContinueFromRun(run)) return;
     // From one version to another (#ap-continue-base): the request goes
     // along unchanged, as the chat's does when its base is switched.
@@ -2954,6 +2974,10 @@
   }
 
   function exitPanelContinuation() {
+    return switchPanelBase(stepOutOfContinuation);
+  }
+
+  function stepOutOfContinuation() {
     const cont = activeContinuation();
     if (!cont) return;
     const request = pendingContinuationRequest();
@@ -3062,7 +3086,7 @@
 
   // Shown only while 美化 is offered, with a version to pick besides 原圖.
   function syncApContinueBase() {
-    if (!els.apContinueBase) return;
+    if (!els.apContinueBase || panelBaseSwitching) return;
     const runVisible = !!(els.inlineAnalysisContinueBtn && !els.inlineAnalysisContinueBtn.hidden);
     const show = runVisible && apContinueRuns().length > 0;
     els.apContinueBase.hidden = !show;
@@ -3070,6 +3094,9 @@
       closeApContinueMenu();
       return;
     }
+    // A version just stepped to, before ensurePanelBase put its default base
+    // on it: no base to show yet, which is not 原圖.
+    if (panelBase?.owner !== singleFlowState) return;
     const cont = activeContinuation();
     els.apContinueShot.src = cont ? cont.thumbUrl : apContinueOriginThumb();
     els.apContinueLabel.textContent = cont ? tr("第 {n} 版", { n: cont.versionNumber }) : tr("原圖");
@@ -3082,16 +3109,66 @@
     syncApContinueExit();
   }
 
+  // The X and #ap-editing-hint (編輯中, with 返回) show together.
   function syncApContinueExit() {
-    if (!els.apContinueExit) return;
-    els.apContinueExit.hidden = !(els.apContinueBase && !els.apContinueBase.hidden
+    if (panelBaseSwitching) return;
+    const show = !!(els.apContinueBase && !els.apContinueBase.hidden
       && singleRuns?.[singleMirrorIndex]?.versionId && isAdjusting());
+    if (els.apContinueExit) els.apContinueExit.hidden = !show;
+    if (els.apEditingHint) els.apEditingHint.hidden = !show;
   }
 
-  if (els.apContinueExit) els.apContinueExit.addEventListener("click", () => {
-    closeApContinueMenu();
-    leaveAdjusting();
-  });
+  for (const btn of [els.apContinueExit, els.apEditingBack]) {
+    if (btn) btn.addEventListener("click", () => {
+      closeApContinueMenu();
+      leaveAdjusting();
+    });
+  }
+
+  // A photo picked on the strip or in the photo viewer while the panel is
+  // open takes the base along, as the chat's preview does (pickPreview):
+  // 調整中, the picked one becomes the base, with what is unsent; otherwise
+  // the base is the default of what is now on screen -- 原圖 for 原圖.
+  function panelBaseFollowsPick() {
+    return versionStripRuns === singleRuns && !currentDetailBatchRecord()
+      && !!els.resultsCanvasRow?.classList.contains("showing-analysis");
+  }
+
+  // 原圖 picked: false when it is only looked at.
+  function pickOriginAsBase() {
+    if (!panelBaseFollowsPick() || !activeContinuation()) return false;
+    if (isAdjusting()) {
+      exitPanelContinuation();
+      return true;
+    }
+    // Not exitPanelContinuation: nothing is being carried, so the version's
+    // own request must not turn into unsent edits on 原圖.
+    panelContinuation = null;
+    panelContinuationStash = null;
+    pickVersionStripOrigin();
+    openInlineAnalysisForCurrentContext(true);
+    return true;
+  }
+
+  // Version `idx` picked: a promise when the base went with it, else false.
+  function pickRunAsBase(idx) {
+    if (!panelBaseFollowsPick()) return false;
+    const run = singleRuns[idx];
+    if (isAdjusting()) {
+      if (!canContinueFromRun(run) || isContinuationSource(activeContinuation(), run)) return false;
+      return enterPanelContinuation(run);
+    }
+    // Off 原圖 back onto the version on screen: its default base again.
+    if (versionStripOriginPicked && idx === currentRunIndex && !activeContinuation()
+      && panelBase?.owner === singleFlowState && panelBase.defaultRun === run) {
+      panelContinuation = continuationOn(run, madeWithRequest(run));
+      clearVersionStripOriginPick();
+      setCompareView(true);
+      openInlineAnalysisForCurrentContext(true);
+      return Promise.resolve();
+    }
+    return false;
+  }
 
   if (els.apContinuePick && els.apContinueMenu) {
     els.apContinuePick.addEventListener("click", () => {
@@ -12910,6 +12987,8 @@
     if (els.downloadMenuWrap) els.downloadMenuWrap.hidden = true;
     syncVersionStripCurrent();
     syncOverviewCard();
+    // On 原圖 with nothing as the base, nothing is being adjusted (isAdjusting).
+    syncAdjustingTile();
   }
 
   function clearVersionStripOriginPick() {
@@ -12919,6 +12998,7 @@
     if (els.downloadMenuWrap) els.downloadMenuWrap.hidden = false;
     syncVersionStripCurrent();
     syncOverviewCard();
+    syncAdjustingTile();
   }
 
   // Positions #version-tile-preview over whichever tile the pointer is on,
@@ -13011,7 +13091,9 @@
       originTile.setAttribute("role", "tab");
       originTile.title = tr("原圖");
       originTile.setAttribute("aria-label", tr("原圖"));
-      originTile.addEventListener("click", pickVersionStripOrigin);
+      originTile.addEventListener("click", () => {
+        if (!pickOriginAsBase()) pickVersionStripOrigin();
+      });
       const originImg = document.createElement("img");
       // originalImgThumbUrl mirrors whatever #original-img is showing (a local blob
       // for a fresh upload, sourceThumbnailUrl when opened from history) and
@@ -13087,6 +13169,7 @@
         tile.title = runSwitcherLabel(runs, idx);
         tile.setAttribute("aria-label", tile.title);
         tile.addEventListener("click", () => {
+          if (pickRunAsBase(idx)) return;
           // The run already on screen: selectRunAt would no-op, so leaving
           // the 原圖 pick and flipping back to After happens here instead.
           if (versionStripOriginPicked && idx === currentRunIndex) {
@@ -13291,6 +13374,18 @@
 
   async function pickPhotoViewerRun(idx) {
     if (photoViewerBusy) return;
+    const base = pickRunAsBase(idx);
+    if (base) {
+      photoViewerBusy = true;
+      renderPhotoViewer();
+      try {
+        await base;
+      } finally {
+        photoViewerBusy = false;
+        syncPhotoViewer();
+      }
+      return;
+    }
     // 畫面上就是這張：selectRunAt 不會動，從原圖切回結果在這裡做（同美化紀錄條）。
     if (idx === currentRunIndex) {
       if (versionStripOriginPicked) clearVersionStripOriginPick();
@@ -13353,7 +13448,7 @@
     const originThumb = els.versionStripTrack?.querySelector(".version-origin-tile img")?.getAttribute("src")
       || originalImgThumbUrl || originalSrc;
     track.append(buildPhotoViewerTile(originThumb, tr("原圖"), showOriginal, () => {
-      if (!photoViewerShowingOriginal()) pickVersionStripOrigin();
+      if (!pickOriginAsBase() && !photoViewerShowingOriginal()) pickVersionStripOrigin();
       renderPhotoViewer();
     }));
     runs.forEach((r, idx) => {

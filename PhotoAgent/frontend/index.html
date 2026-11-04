@@ -856,6 +856,30 @@
     body.side-panel-layout #results-analysis-slot:has(#ap-analysis-shell:not([open])) .ap-skip-analyze-btn {
       display: none;
     }
+    /* #ap-editing-hint up: the overview cards step aside (whatever
+       renderAnalysisPreview left their `hidden` at). 返回 is the tonal
+       accent pill, as #ap-skip-analyze-btn. */
+    #ap-options-card-inline:has(#ap-editing-hint:not([hidden])) :is(#ap-skip-hint, #ap-photo-summary) {
+      display: none;
+    }
+    .ap-editing-back {
+      flex-shrink: 0;
+      padding: 4px 14px;
+      border: 1px solid rgba(var(--accent-rgb),.25);
+      border-radius: 999px;
+      background: rgba(var(--accent-rgb),.12);
+      color: var(--accent);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .ap-editing-back:hover {
+      background: rgba(var(--accent-rgb),.18);
+      border-color: rgba(var(--accent-rgb),.4);
+    }
+    .ap-editing-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .ap-photo-summary-toggle[hidden] { display: none; }
     .ap-photo-summary-toggle {
       position: absolute;
@@ -5774,6 +5798,19 @@
                      case (renderAnalysisPreview, results.js): no analysis to
                      summarize, so it says why and points at 個人化需求 below
                      and #ap-skip-analyze-btn beside 美化. -->
+                <!-- 調整中 (syncApContinueExit, app.js): takes the place of the
+                     two overview cards below, saying how to switch the base
+                     and offering 返回, the same as #ap-continue-exit. -->
+                <div class="ap-photo-summary ap-skip-hint" id="ap-editing-hint" hidden>
+                  <div class="ap-photo-summary-header">
+                    <span class="ap-photo-summary-label">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M13.5 6.5l4 4" stroke="currentColor" stroke-width="2"/></svg>
+                      編輯中
+                    </span>
+                    <button type="button" class="ap-editing-back" id="ap-editing-back">返回</button>
+                  </div>
+                  <p class="ap-photo-summary-text">要換底的話，可以從下方挑一張，或直接點美化紀錄裡的照片，底會跟著換。按「返回」就不調整了，還沒美化的調整會清掉。</p>
+                </div>
                 <div class="ap-photo-summary ap-skip-hint" id="ap-skip-hint" hidden>
                   <span class="ap-photo-summary-label">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L4 11l6.8-2.2L12 2z" fill="currentColor"/></svg>

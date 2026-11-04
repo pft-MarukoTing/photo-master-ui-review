@@ -5632,8 +5632,8 @@ export function SessionView(props: {
   // message or change drops the question.
   const [confirmRerun, setConfirmRerun] = useState(false);
   // 輸入框上方換成某一版（或 AI 帶進來）：之後打的字是要在這一版上改的地方，按「接續第 N 版美化」
-  // 才產生。沒在調整時，左邊點了別的版本，底跟著換成那一版預設的底（pickPreview）；調整中就不動，
-  // 要換底用輸入框上面那顆。
+  // 才產生。左邊點了別的版本也會換底（pickPreview）：沒在調整時換成那一版預設的底；調整中就換成
+  // 點的那一版（點原圖就是原圖），跟輸入框上面那顆一樣，打好的字和風格一起帶過去。
   const [continuing, setContinuing] = useState<Version | null>(null);
   // 接續某一版美化出來的那版，底自動換成它、留在接續模式；記著這次是從哪一版、照什麼
   // 改的，「再美化」就照一樣的再產生一版。following：已經送出、新的一版還沒出來。
@@ -6212,9 +6212,12 @@ export function SessionView(props: {
   // 風格），底就換成那張預設的底，跟剛美化完一樣：接著別版做的那版用它自己，從原圖做的那版和
   // 原圖本身用原圖。調整中就只換左邊看的那張，底不動，打好的不會不見。
   function pickPreview(v: Version | null) {
+    const same = (v?.version_id ?? null) === (continuing?.version_id ?? null);
+    const editing = adjusting || parkedCats.length > 0
+      || (!!continuing && !!(contPromptRef.current.trim() || contStyled || contTurnsRef.current.length));
+    if (props.onContinue && !busy && !contReviewing && photo.status === "ready" && editing && !same) return continueFrom(v);
     if (v) props.onSelectVersion(v);
-    if (!props.onContinue || busy || adjusting || parkedCats.length) return;
-    if (continuing && (contPromptRef.current.trim() || contStyled || contTurnsRef.current.length || contReviewing)) return;
+    if (!props.onContinue || busy || contReviewing || editing) return;
     const base = v?.from ? v : null;
     if ((base?.version_id ?? null) === (continuing?.version_id ?? null)) return;
     setContinuing(base);
