@@ -51,7 +51,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, isGuestUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, closePersonalizePopover, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, syncReframingRatioLock, restoreCompositionState, applyCompositionToRender, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFindingsCardsShown, setReviewSuggestionsHeld, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, closePersonalizePopover, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, syncReframingRatioLock, restoreCompositionState, applyCompositionToRender, isReviewSkipped, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFindingsCardsShown, setReviewSuggestionsHeld, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -325,6 +325,9 @@
   // While 調整中 the panel stays on it, whatever version is stepped to
   // (renderSingleRunSwitcher). { owner, run, defaultRun }.
   let panelBase = null;
+  // Set by enterPanelContinuation while it steps to the version picked as the
+  // base: that step is not 調整中's look-only one, the panel goes with it.
+  let panelFollowsStep = false;
   // The review controls as this case first showed them, to tell whether
   // leaving the page would throw away edits not yet sent with 美化
   // (isReviewDirty). Tied to the singleFlowState it was taken for; dropped
@@ -2718,7 +2721,7 @@
     setCurrentCaseAnalysisVersion(analysis);
     lastSingleSelections = { ...(lastSingleSelections || {}), userPrompt, overwritePrompt: false };
     renderAnalysisPreview({ analysis, preset: singleFlowState.preset, expanded: true,
-      requestOnly: isContinuationRun(singleRuns?.[singleMirrorIndex]), versionCard: madeWithoutAnalysis(panelRun()) });
+      requestOnly: isContinuationRun(singleRuns?.[singleMirrorIndex]), versionCard: overviewOnVersion() });
     applyAdvancedOptionsOption(recordAdvancedOptions(singleFlowState.advancedOptions, analysis), "ap");
     applyStyleSelections({ options: styleOptions, recipeChecked: null });
     if (els.promptInput) els.promptInput.value = userPrompt;
@@ -2746,6 +2749,31 @@
 
   // The case has nothing but 「只照需求改」's stub analysis: not this version
   // alone, which keeps its stub even once another version was analyzed.
+  // The photo pinned to 原圖 with the next 美化 from it too: the overview is
+  // the original's -- 照片總覽 once analyzed, else #ap-skip-hint saying so --
+  // not the card of the version stepped off. Picked on the strip with a
+  // version as the base, the card stays that version's.
+  function overviewOnOrigin() {
+    return versionStripOriginPicked && !activeContinuation();
+  }
+
+  function overviewOnVersion() {
+    return madeWithoutAnalysis(panelRun()) && !overviewOnOrigin();
+  }
+
+  // On a 原圖 pick or leaving one, without rebuilding the panel (which would
+  // drop what is unsent): which of the two cards is up, and its words.
+  function syncOverviewCard() {
+    // A batch photo's panel has no versions: its card is renderAnalysisPreview's.
+    if (currentDetailBatchRecord()) return;
+    if (els.apSkipHint && els.apPhotoSummary && !isReviewSkipped()) {
+      const version = overviewOnVersion();
+      els.apSkipHint.hidden = !version;
+      els.apPhotoSummary.hidden = version;
+    }
+    paintSkipHint();
+  }
+
   function caseUnanalyzed() {
     return Boolean(singleFlowState?.analysis?._skipped_analysis) && !historyCaseAnalysis;
   }
@@ -2874,7 +2902,15 @@
     const idx = singleRuns.indexOf(run);
     if (idx < 0) return;
     if (idx !== singleMirrorIndex) {
-      await selectRunAt(idx);
+      // Picked as the base, not just looked at: the panel moves onto it even
+      // while 調整中 (renderSingleRunSwitcher), its card naming that version.
+      // What is unsent came along above (prefill, panelOriginStash).
+      panelFollowsStep = true;
+      try {
+        await selectRunAt(idx);
+      } finally {
+        panelFollowsStep = false;
+      }
       if (singleRuns[singleMirrorIndex] !== run || run.status !== "done") return;
     }
     const stash = panelContinuationStash;
@@ -2882,7 +2918,12 @@
     if (!prefill && !isEmptyContinuationRequest(carried)) prefill = carried;
     if (!prefill && stash?.owner === singleFlowState && stash.versionId === run.versionId) prefill = stash.prefill;
     panelContinuation = continuationOn(run, prefill);
-    clearVersionStripOriginPick();
+    // Off 原圖 onto the version already on screen: no step to put the photo
+    // back on its After side, so that happens here (as the strip's tile does).
+    if (versionStripOriginPicked) {
+      clearVersionStripOriginPick();
+      setCompareView(true);
+    }
     syncVersionStripCurrent();
     openInlineAnalysisForCurrentContext(true);
   }
@@ -2894,7 +2935,9 @@
     panelContinuationStash = isEmptyContinuationRequest(request) ? null
       : { owner: singleFlowState, versionId: cont.source.version_id, prefill: request };
     panelContinuation = null;
-    syncVersionStripCurrent();
+    // The next 美化 starts from the original, so the photo shows it, as the
+    // strip's 原圖 tile does.
+    pickVersionStripOrigin();
     openInlineAnalysisForCurrentContext(true);
   }
 
@@ -3058,6 +3101,13 @@
     const continuation = isContinuationRun(run);
     const skipped = Boolean(run?.result?.analysis?._skipped_analysis);
     const named = run?.versionNumber != null && (continuation || skipped || !!activeContinuation());
+    if (overviewOnOrigin()) {
+      if (els.apSkipHintTitle) els.apSkipHintTitle.textContent = tr("原圖");
+      if (els.apSkipHintText) paintSkipHintText(caseUnanalyzed()
+        ? tr("{text}這張照片還沒分析過。想先看 AI 的修圖建議，請按「幫我分析」；或取消勾選「僅依需求修改」，按「美化」時會一起分析。", { text: "" }).trim()
+        : SKIP_HINT_TEXT);
+      return;
+    }
     if (els.apSkipHintTitle) {
       els.apSkipHintTitle.textContent = !named ? tr("這張照片沒有做分析")
         : run.versionFrom ? tr("第 {n} 版完成・由第 {m} 版調整", { n: run.versionNumber, m: run.versionFrom })
@@ -7162,7 +7212,7 @@
     const selections = origin || lastSingleSelections;
     renderAnalysisPreview({ analysis: singleFlowState.analysis, preset: singleFlowState.preset, expanded: true,
       requestOnly: !!continuing || (!origin && isContinuationRun(panelRun())),
-      versionCard: madeWithoutAnalysis(panelRun()) });
+      versionCard: overviewOnVersion() });
     paintSkipHint();
     // Paint this record's global 人像修正設定 independently before restoring any
     // per-person choices. Pose below changes only the latter.
@@ -12826,6 +12876,7 @@
     if (els.compareToggleBtn) els.compareToggleBtn.disabled = true;
     if (els.downloadMenuWrap) els.downloadMenuWrap.hidden = true;
     syncVersionStripCurrent();
+    syncOverviewCard();
   }
 
   function clearVersionStripOriginPick() {
@@ -12834,6 +12885,7 @@
     if (els.compareToggleBtn) els.compareToggleBtn.disabled = false;
     if (els.downloadMenuWrap) els.downloadMenuWrap.hidden = false;
     syncVersionStripCurrent();
+    syncOverviewCard();
   }
 
   // Positions #version-tile-preview over whichever tile the pointer is on,
@@ -13493,7 +13545,7 @@
       // 調整中, the version stepped to is only looked at: the settings
       // button, the revise panel and singleFlowState stay on the version
       // being adjusted.
-      const adjusting = isAdjusting();
+      const adjusting = !panelFollowsStep && isAdjusting();
       singleMirrorIndex = idx;
       // Crossing into a different version makes the settings button, the
       // revise panel and singleFlowState describe THAT version. Stepping

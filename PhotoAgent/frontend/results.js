@@ -3685,6 +3685,7 @@ window.PhotoAgentResults = (() => {
     syncStylePicks, clearStylePick, setCompareView, renderTags,
     closePersonalizePopover,
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio, syncReframingRatioLock,
+    isReviewSkipped: () => reviewSkipped,
     restoreCompositionState, applyCompositionToRender,
     getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock, resetFaceReviewState,
     buildPlannedEditMessages,
