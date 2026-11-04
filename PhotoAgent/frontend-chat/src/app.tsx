@@ -1159,12 +1159,16 @@ export function App() {
         const own = (s.messages || []).filter((m) => cardAbout(m.card, p.photo_id));
         const round = unsentRound(own);
         const keys = (round && unsentPlanKeys(own, p.plan)) || [];
-        // 那邊接著某一版：接著改用的引擎是那邊選的，這邊 plan 的引擎跟著換。
+        // 那邊接著某一版：接著改用的引擎、輸出尺寸是那邊選的，這邊 plan 跟著換。
         const engine = h.base
           ? c.render.options.find((o) => o.image_model === h.image_model && o.quality === h.image_quality)?.id
           : undefined;
+        const scale = h.base && h.output_scale && (c.render.output_scales || []).some((o) => o.value === h.output_scale)
+          ? h.output_scale
+          : undefined;
         const patch: Plan = round && keys.length ? revertPlanPatch(round.start, p.plan, keys) : {};
         if (engine && engine !== (patch.render_option ?? p.plan.render_option)) patch.render_option = engine;
+        if (scale && scale !== (patch.output_scale ?? p.plan.output_scale)) patch.output_scale = scale;
         if (!round?.open && !Object.keys(patch).length) return { session: s, version_id };
         if (round?.open) {
           await api.postMessage(s.session_id, { type: "adjust_cancelled", photo_id: p.photo_id, kept: [], auto: true }, "", true);
