@@ -136,6 +136,8 @@ interface CanvasProps {
   // 兩邊才不會各講各的（也不會各自跑一套輪播）。
   busy?: { title: string } | null;
   onSelect: (v: Version) => void;
+  // 點了原圖那格（只換左邊看的那張，不改 current）。
+  onOrigin?: () => void;
   // 手機和直拿的平板：右上角那顆「第 N 版 ⌄」和點照片本身，都開大圖檢視切版本。桌機用不到，
   // 那邊有下面的美化紀錄；按鈕一直都在，只是桌機的 CSS 把它收起來。
   onViewer?: () => void;
@@ -154,7 +156,7 @@ function useDownload(): [(job: string, base: string) => void, VNode | null] {
   return [start, el];
 }
 
-export function ResultsCanvas({ caps, photo, versions, current, pending, busy, onSelect, onViewer, debugUi }: CanvasProps) {
+export function ResultsCanvas({ caps, photo, versions, current, pending, busy, onSelect, onOrigin, onViewer, debugUi }: CanvasProps) {
   const [showGenerated, setShowGenerated] = useState(true);
   const [download, downloadNotice] = useDownload();
   // 在美化紀錄點了「原圖」：大圖停在原圖，Before/After 比較這時沒有對象，
@@ -616,7 +618,10 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                       role="tab"
                       aria-selected={originPicked}
                       title={t("原圖")}
-                      onClick={() => setOriginPicked(true)}
+                      onClick={() => {
+                        setOriginPicked(true);
+                        onOrigin?.();
+                      }}
                       onMouseEnter={(e) => showPreview(e.currentTarget, urls.sourceThumb(photo.analyze_job_id))}
                       onMouseLeave={hidePreview}
                     >
@@ -694,13 +699,14 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
 // 手機和直拿的平板沒有左邊那張比較卡，點照片列或對話裡的成品就開這個：整頁深色、
 // 只有照片。按住「按住看原圖」換成原圖、放開回來；底下一排是美化紀錄，點了就切到
 // 那一版（跟桌機點紀錄一樣，會記成目前這版）。看原圖時下載收起來，跟比較卡同一個道理。
-export function VersionViewer({ photo, versions, current, open, onClose, onSelect }: {
+export function VersionViewer({ photo, versions, current, open, onClose, onSelect, onOrigin }: {
   photo: Photo;
   versions: Version[];
   current: Version | null;
   open: boolean;
   onClose: () => void;
   onSelect: (v: Version) => void;
+  onOrigin?: () => void;
 }) {
   const [originPicked, setOriginPicked] = useState(false);
   const [holding, setHolding] = useState(false);
@@ -792,7 +798,10 @@ export function VersionViewer({ photo, versions, current, open, onClose, onSelec
               class={`version-viewer-tile${!job ? " is-current" : ""}`}
               role="tab"
               aria-selected={!job}
-              onClick={() => setOriginPicked(true)}
+              onClick={() => {
+                setOriginPicked(true);
+                onOrigin?.();
+              }}
             >
               <img src={urls.sourceThumb(photo.analyze_job_id)} alt="" />
               <span>{t("原圖")}</span>

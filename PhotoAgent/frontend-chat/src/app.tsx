@@ -5632,7 +5632,8 @@ export function SessionView(props: {
   // message or change drops the question.
   const [confirmRerun, setConfirmRerun] = useState(false);
   // 輸入框上方換成某一版（或 AI 帶進來）：之後打的字是要在這一版上改的地方，按「接續第 N 版美化」
-  // 才產生。底是哪一版只看這裡，左邊點了別的版本也不跟著換；要換底用輸入框上面那顆。
+  // 才產生。沒在調整時，左邊點了別的版本，底跟著換成那一版預設的底（pickPreview）；調整中就不動，
+  // 要換底用輸入框上面那顆。
   const [continuing, setContinuing] = useState<Version | null>(null);
   // 接續某一版美化出來的那版，底自動換成它、留在接續模式；記著這次是從哪一版、照什麼
   // 改的，「再美化」就照一樣的再產生一版。following：已經送出、新的一版還沒出來。
@@ -6205,6 +6206,19 @@ export function SessionView(props: {
     const text = contPromptRef.current.trim();
     if (!text && !contStyled && !contReshaped) return;
     await continueRun({ from: continuing, text, styles: contStyles, ratio: contRatio });
+  }
+
+  // 左邊點了別的版本或原圖：沒在調整（沒開著的一輪、沒有返回後留著還沒美化的、接續裡還沒打字挑
+  // 風格），底就換成那張預設的底，跟剛美化完一樣：接著別版做的那版用它自己，從原圖做的那版和
+  // 原圖本身用原圖。調整中就只換左邊看的那張，底不動，打好的不會不見。
+  function pickPreview(v: Version | null) {
+    if (v) props.onSelectVersion(v);
+    if (!props.onContinue || busy || adjusting || parkedCats.length) return;
+    if (continuing && (contPromptRef.current.trim() || contStyled || contTurnsRef.current.length || contReviewing)) return;
+    const base = v?.from ? v : null;
+    if ((base?.version_id ?? null) === (continuing?.version_id ?? null)) return;
+    setContinuing(base);
+    if (base) setComposerKey((k) => k + 1);
   }
 
   async function continueRun(r: ContRun) {
@@ -7285,7 +7299,8 @@ export function SessionView(props: {
                 // （app.js 的 syncAdjustingTile）。
                 pending={adjusting || !!continuing || parkedCats.length > 0}
                 busy={busyCopy}
-                onSelect={props.onSelectVersion}
+                onSelect={pickPreview}
+                onOrigin={() => pickPreview(null)}
                 onViewer={() => setViewing(true)}
                 debugUi={props.debugUi}
               />
@@ -7451,7 +7466,8 @@ export function SessionView(props: {
         current={current}
         open={viewing}
         onClose={closeViewer}
-        onSelect={props.onSelectVersion}
+        onSelect={pickPreview}
+        onOrigin={() => pickPreview(null)}
       />
     </>
   );
