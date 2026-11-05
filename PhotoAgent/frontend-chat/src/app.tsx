@@ -2975,17 +2975,19 @@ export function App() {
   }
 
   // turns：接續時的對話，改回原圖結束接續時留進時間軸（那段對話本來只在頁面上）。
-  function patchFromChat(patch: Plan, turns: { text: string; reply?: string }[] = []) {
+  // tail：接在這些話後面的一張卡（從接續某一版換回原圖時留的紀錄），要排在帶過來的話之後。
+  function patchFromChat(patch: Plan, turns: { text: string; reply?: string }[] = [], tail?: Dict) {
     if (!session || !photo) return Promise.resolve(false);
     const id = session.session_id;
     const pid = photo.photo_id;
     return run(async () => {
       if (Object.keys(patch).length) await api.patchPhotoPlan(id, pid, patch);
-      // 一次最多送 100 則（MESSAGES_POST_MAX），一句兩則。
-      const carried = turns.slice(-50).flatMap((x) => [
+      // 一次最多送 100 則（MESSAGES_POST_MAX），一句兩則，開一輪的話再一則。
+      const carried: { role: "user" | "assistant"; text?: string; card: Dict }[] = turns.slice(tail ? -49 : -50).flatMap((x) => [
         { role: "user" as const, text: x.text, card: { type: "ask", photo_id: pid } },
         ...(x.reply ? [{ role: "assistant" as const, card: { type: "llm_reply", photo_id: pid, text: x.reply } }] : []),
       ]);
+      if (tail) carried.push({ role: "user" as const, card: { ...tail, photo_id: pid } });
       if (carried.length) await api.postMessages(id, carried);
       setSession(await api.getSession(id));
     });
@@ -5457,7 +5459,7 @@ export function SessionView(props: {
   // faces 只在沒有分析時用：指的人是本地偵測的框和位置，取代 subjectIndices 送出。
   onAsk: (text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string, picked?: boolean) => Promise<boolean>;
   onAnswerWaiting: (messageId: string, screen: Screen) => void;
-  onPatch: (patch: Plan, turns?: { text: string; reply?: string }[]) => Promise<boolean>;
+  onPatch: (patch: Plan, turns?: { text: string; reply?: string }[], tail?: Dict) => Promise<boolean>;
   onQuietPrompt: (text: string) => Promise<unknown>;
   onPost: (card: Dict, patch?: Plan, merge?: boolean) => Promise<boolean>;
   onAnalyze: () => Promise<boolean>;
@@ -5805,14 +5807,15 @@ export function SessionView(props: {
   // 還沒美化的那一輪收起來，plan 改回這輪開始時的樣子（dropPlan）：接著改只照這裡
   // 寫的字和挑的風格，那一輪的設定留著會像是也要一起套上去。AI 的回覆是在問的那一
   // 下還沒結束時進來的，那時 busy、送不出去，等它結束再送。auto：不是使用者按的
-  // 返回，不畫那顆。
+  // 返回，不畫那顆。plan：收起時的設定，這一輪收起來的卡片照它講當時挑了什麼，
+  // 不然 plan 改回去之後，卡片會說成什麼都沒挑。
   const dropPlan = useRef<Plan | null>(null);
   useEffect(() => {
     if (!closeRound.current || busy) return;
     closeRound.current = false;
     const patch = dropPlan.current && Object.keys(dropPlan.current).length ? dropPlan.current : undefined;
     dropPlan.current = null;
-    if (adjusting) props.onPost({ type: "adjust_cancelled", kept: [], auto: true }, patch);
+    if (adjusting) props.onPost({ type: "adjust_cancelled", kept: [], auto: true, plan: snapshotOf(photo.plan) }, patch);
     else if (patch) void props.onPatch(patch);
   }, [busy, adjusting, continuing?.version_id]);
   // 輸入框上方那顆換底，美化過就一直在，預設是原圖。換到某一版就接著那版改，左邊也
@@ -5849,19 +5852,26 @@ export function SessionView(props: {
       // 接續時挑的長寬比也是原圖要的；"original"（維持那一版的）原圖沒有對應，就不動。
       ...(contReshaped && caps.render.aspect_ratios.some((a) => a.value === contRatio) ? { aspect_ratio: contRatio } : {}),
     };
-    // 改回原圖就是回到一般的樣子（換底那顆預設就是原圖）：需求、風格寫進去，
-    // 不開「看美化項目」那一輪；接續裡打的字跟 AI 的回答留在對話裡。
+    // 改回原圖：需求、風格寫進原圖的設定。有帶東西過來就是改了還沒美化，開一輪調整
+    // （開始的設定是帶過來之前的），項目上有點、有「美化」跟「返回」；沒帶東西就回到
+    // 一般的樣子，也留一則換回原圖。接續裡打的字跟 AI 的回答留在對話裡。
     const turns = contTurnsRef.current.map(({ text, reply }) => ({ text, reply }));
+    const tail = Object.keys(patch).length
+      ? { type: "adjust_opened", via: "base", plan: snapshotOf(photo.plan) }
+      : { type: "continue_cancelled", via: "base", ordinal: continuing?.ordinal };
     setContinuing(null);
     setContTurns([]);
-    if (Object.keys(patch).length || turns.length) void props.onPatch(patch, turns);
+    if (continuing) void props.onPatch(patch, turns, tail);
   }
   // 叉叉不接續了：跟面板的「不調整了」一樣，有還沒美化的調整先問，按了才清掉。
   // 引擎、輸出尺寸改在照片的 plan 上，叉叉不會動到，不算在內。
   function stopContinuing(sure = false) {
     const lost = !!contPromptRef.current.trim() || contStyled || contReshaped || contTurnsRef.current.length > 0;
     if (lost && !sure) return void setLeaveAsk(true);
+    const ordinal = continuing?.ordinal;
     setContinuing(null);
+    // 接續卡只在接續中才畫，收掉就什麼都沒留：補一則紀錄，看得出切過、又取消了。
+    if (ordinal) void props.onPost({ type: "continue_cancelled", ordinal });
   }
   // 這一輪寫了（或改了）個人化需求，美化前先問：只照需求改，還是順便整張美化。
   // 記著按的是哪顆美化，問完照那顆的字送出去。
@@ -6549,7 +6559,7 @@ export function SessionView(props: {
   // 回覆才指得出現在能按什麼。
   const enterAdjust = () => props.onPost({ type: "adjust_opened", plan: parkedPlan || snapshotOf(photo.plan) });
   // 返回：回到美化完那排，這輪改的都留著（kept 記下是哪幾項，回話照著講）。
-  const leaveAdjust = () => { setConfirmRerun(false); props.onPost({ type: "adjust_cancelled", kept: dirtyCats }); };
+  const leaveAdjust = () => { setConfirmRerun(false); props.onPost({ type: "adjust_cancelled", kept: dirtyCats, plan: snapshotOf(photo.plan) }); };
   let bar: string[] = [];
   let actionChips: ComponentChildren = null;
   // 只照需求改的那一版（或這一輪）：除了改需求、美化，每一步都把「幫我分析」
@@ -6825,8 +6835,11 @@ export function SessionView(props: {
         // 開，問句沒了對象，話就收回成單純的一句交代。
         const showChips = live && !opened.length;
         const check = c.via === "check";
+        const base = c.via === "base";
         const openLine =
-          c.via === "proposal"
+          base
+            ? t("好，接續時改的地方都帶到原圖上了，還沒美化。")
+            : c.via === "proposal"
             ? showChips
               ? t("已套用，想直接美化，還是再調下面這幾項？")
               : t("已套用，開始新的一輪調整。")
@@ -6838,7 +6851,7 @@ export function SessionView(props: {
             {/* requested：補跑分析等出來的，按「幫我分析」那一下在 analysis_requested 卡上了。 */}
             {c.via !== "proposal" && !c.requested && (
               <UserMsg meta={clockLabel(m.created_at)}>
-                <ClickBubble icon={check ? "search" : "pencil"} label={check ? t("幫我分析") : t("看美化項目")} />
+                <ClickBubble icon={check ? "search" : base ? "image" : "pencil"} label={check ? t("幫我分析") : base ? t("換回原圖") : t("看美化項目")} />
               </UserMsg>
             )}
             <AssistantMsg>
@@ -6927,6 +6940,19 @@ export function SessionView(props: {
                 : m.card.kept.length
                   ? t("好，{v1}的改動先幫你留著，還沒美化。", { v1: (m.card.kept as Category[]).map((c) => nameOf(c)).join(t("、")) })
                   : t("好，回到上一步。")}</p>
+              {endActions(idx)}
+            </AssistantMsg>
+          </>
+        );
+      case "continue_cancelled":
+        return (
+          <>
+            <UserMsg meta={clockLabel(m.created_at)}>
+              {/* via base：從輸入框上方換回原圖，不是按叉叉。 */}
+              <ClickBubble icon={c.via === "base" ? "image" : "x"} label={c.via === "base" ? t("換回原圖") : t("不接著第 {n} 版改了", { n: c.ordinal })} />
+            </UserMsg>
+            <AssistantMsg>
+              <p class="chat-text">{t("好，第 {n} 版先不接著改了。之後想接著改，在輸入框上方換就可以。", { n: c.ordinal })}</p>
               {endActions(idx)}
             </AssistantMsg>
           </>
