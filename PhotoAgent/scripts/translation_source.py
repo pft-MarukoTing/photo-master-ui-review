@@ -13,14 +13,17 @@ have hand-written fields, kept as they are on every sync:
   python scripts/translation_source.py          # refresh the file
   python scripts/translation_source.py --check  # exit 1 if it is out of step
 
-Run from PhotoAgent/. Needs node for the two JavaScript catalogs.
+Run from PhotoAgent/. Needs node for the two JavaScript catalogs: the one on
+PATH, else the one under ~/.vscode-server (as scripts/build_chat_bundle.sh does).
 """
 
 import argparse
 import collections
 import importlib.util
 import json
+import os
 import pathlib
+import shutil
 import subprocess
 import sys
 
@@ -48,9 +51,22 @@ process.stdout.write(JSON.stringify({panel: window.PHOTOAGENT_CATALOGS.en, chat:
 """
 
 
+def find_node():
+    found = shutil.which("node")
+    if found:
+        return found
+    base = pathlib.Path.home() / ".vscode-server"
+    for root, dirs, files in os.walk(base):
+        if len(pathlib.Path(root).relative_to(base).parts) >= 6:
+            dirs.clear()
+        if "node" in files and os.access(os.path.join(root, "node"), os.X_OK):
+            return os.path.join(root, "node")
+    sys.exit("node not found on PATH or under ~/.vscode-server; install Node.js 20 or later.")
+
+
 def load_catalogs():
     js = subprocess.run(
-        ["node", "-e", JS_LOADER, str(ROOT / "frontend/i18n-en.js"), str(ROOT / "frontend-chat/src/i18n/en.ts")],
+        [find_node(), "-e", JS_LOADER, str(ROOT / "frontend/i18n-en.js"), str(ROOT / "frontend-chat/src/i18n/en.ts")],
         capture_output=True, check=True)
     found = json.loads(js.stdout.decode("utf-8"))
     spec = importlib.util.spec_from_file_location("i18n_en", ROOT / "photo_agent/i18n_en.py")

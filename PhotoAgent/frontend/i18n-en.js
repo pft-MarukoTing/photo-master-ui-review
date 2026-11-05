@@ -1,6 +1,6 @@
 // English for panel mode (see i18n.js), keyed by the Chinese. The button and
 // panel names match the chat page's frontend-chat/src/i18n/en.ts and the
-// backend's photo_agent/i18n_en.py.
+// backend's photo_agent/i18n_en.py. After changing it, run scripts/translation_source.py.
 window.PHOTOAGENT_CATALOGS = window.PHOTOAGENT_CATALOGS || {};
 window.PHOTOAGENT_CATALOGS.en = {
   // Some labels are shorter than a literal translation: they sit in columns

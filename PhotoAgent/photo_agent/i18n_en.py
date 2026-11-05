@@ -4,6 +4,7 @@ LABELS are the names of the page's buttons and panels; the chat page's
 frontend-chat/src/i18n.ts uses the same English for them, so a reply that
 names a button names the one on screen. TEXT is every other fixed sentence,
 keyed by its Chinese. FORMAT and PATTERNS are described in i18n.
+After changing LABELS or TEXT, run scripts/translation_source.py.
 """
 
 import re

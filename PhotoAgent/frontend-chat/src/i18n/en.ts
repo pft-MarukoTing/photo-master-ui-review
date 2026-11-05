@@ -2,6 +2,7 @@
 // Button and panel names are the same as the backend's photo_agent/i18n_en.py
 // LABELS, so a reply that names a button names the one on screen. Pieces that
 // the page puts next to each other keep their own spaces.
+// After changing this catalog, run scripts/translation_source.py.
 
 export const EN: Record<string, string> = {
   "照片也美化完成了，以下是這次的結果：": "Your photo has also been enhanced. Here is the result:",

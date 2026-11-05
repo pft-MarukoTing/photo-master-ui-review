@@ -570,6 +570,18 @@
         "chat"
       ]
     },
+    "{text}這張照片還沒分析過。「幫我分析」會分析原圖並整理修圖建議，完成後會換成從原圖美化。": {
+      "en": "{text} This photo hasn't been analyzed yet. “Analyze for Me” analyzes the original photo for retouch suggestions, then switches to retouching from the original.",
+      "where": [
+        "panel"
+      ]
+    },
+    "{text}這張照片還沒分析過。想先看 AI 的修圖建議，請按「幫我分析」；或取消勾選「僅依需求修改」，按「美化」時會一起分析。": {
+      "en": "{text} This photo hasn't been analyzed yet. To see AI suggestions first, tap “Analyze for Me”; or uncheck “Only My Requests” and it will be analyzed when you tap “Retouch”.",
+      "where": [
+        "panel"
+      ]
+    },
     "{timePart}輸入 文字{text}/圖片{image}｜輸出 文字{v4}/圖片{v5}｜共 {total} tokens ｜ ${v7}": {
       "en": "{timePart}Input: text {text} / image {image} | Output: text {v4} / image {v5} | {total} tokens total | ${v7}",
       "where": [
@@ -720,7 +732,15 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Full stop the page puts between pieces it joins; keeps a trailing space so the next sentence can follow."
+    },
+    "。@@句尾": {
+      "en": ".",
+      "where": [
+        "panel"
+      ],
+      "note": "Full stop added to a sentence that has no ending punctuation, right before the page appends the next sentence to it."
     },
     "。排定的美化也一併取消了。": {
       "en": ". The scheduled retouch was also canceled.",
@@ -869,6 +889,13 @@
       "en": "Next",
       "where": [
         "panel"
+      ]
+    },
+    "下一次從 {base} 美化": {
+      "en": "Next retouch from {base}",
+      "where": [
+        "panel",
+        "chat"
       ]
     },
     "下次裁切（預覽）": {
@@ -1039,6 +1066,12 @@
         "backend text"
       ]
     },
+    "不接著第 {n} 版改了": {
+      "en": "Stop building on Version {n}",
+      "where": [
+        "chat"
+      ]
+    },
     "不改變照片長寬": {
       "en": "Keeps the original dimensions",
       "where": [
@@ -1078,10 +1111,16 @@
         "backend text"
       ]
     },
+    "不調整了": {
+      "en": "Stop Adjusting",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
     "不調整這版了": {
       "en": "Stop adjusting this version",
       "where": [
-        "panel",
         "chat"
       ]
     },
@@ -1117,6 +1156,12 @@
       "en": "Subject extent",
       "where": [
         "panel"
+      ]
+    },
+    "主體細節清楚。": {
+      "en": "The subject's details are clear.",
+      "where": [
+        "backend text"
       ]
     },
     "主體與身分保留": {
@@ -1419,18 +1464,6 @@
         "panel"
       ]
     },
-    "以第 {n} 版為底，只改你在下方寫的地方或挑的風格，其他保持原樣。": {
-      "en": "Starts from version {n} and changes only what you write or pick below; everything else stays as it is.",
-      "where": [
-        "panel"
-      ]
-    },
-    "以第 {n} 版為底，只改你接下來說的地方": {
-      "en": "Starts from version {n} and changes only what you ask next",
-      "where": [
-        "panel"
-      ]
-    },
     "仰拍": {
       "en": "Low Angle",
       "where": [
@@ -1552,6 +1585,12 @@
       "en": "e.g. Clean up the background a bit",
       "where": [
         "chat"
+      ]
+    },
+    "依 AI 分析的建議美化。": {
+      "en": "Retouched from the AI analysis's suggestions.",
+      "where": [
+        "panel"
       ]
     },
     "依 {pref} 重新構圖中…": {
@@ -1809,10 +1848,28 @@
         "backend text"
       ]
     },
+    "修飾{who}外緣，讓畫面份量更均衡": {
+      "en": "Refine {who}'s outline to balance the visual weight in the frame",
+      "where": [
+        "backend text"
+      ]
+    },
+    "修飾上臂線條，讓袖口至手肘更清楚": {
+      "en": "Refine the upper-arm line so the sleeve-to-elbow edge reads more clearly",
+      "where": [
+        "backend text"
+      ]
+    },
     "修飾主體的質感與邊緣": {
       "en": "Refining the subject's texture and edges",
       "where": [
         "panel"
+      ]
+    },
+    "修飾腿部外緣，讓下身線條更修長": {
+      "en": "Refine the leg outline for a longer lower-body line",
+      "where": [
+        "backend text"
       ]
     },
     "俯拍": {
@@ -1838,10 +1895,10 @@
         "backend labels"
       ]
     },
-    "個人化需求和風格會帶過去，其他還沒美化的調整會清掉。確定要接著這張調整嗎？": {
-      "en": "Your request and styles come along; other unretouched changes will be cleared. Adjust this one anyway?",
+    "個人化需求和風格會帶過去，{v1}還沒美化的調整會清掉。確定要接著第 {n} 版調整嗎？": {
+      "en": "Your request and styles come along; your unretouched {v1} changes will be cleared. Adjust version {n} anyway?",
       "where": [
-        "panel"
+        "chat"
       ]
     },
     "個人化需求（當時內容）": {
@@ -1907,6 +1964,7 @@
     "僅依需求修改": {
       "en": "Only My Requests",
       "where": [
+        "panel",
         "chat",
         "backend labels"
       ]
@@ -2025,6 +2083,18 @@
       "en": "Lighting and contrast could have more depth.",
       "where": [
         "panel"
+      ]
+    },
+    "光線或色彩還有可以改善的地方。": {
+      "en": "The light or color could be improved.",
+      "where": [
+        "backend text"
+      ]
+    },
+    "光線與色彩表現自然。": {
+      "en": "The light and color look natural.",
+      "where": [
+        "backend text"
       ]
     },
     "光線色彩": {
@@ -2204,6 +2274,7 @@
     "再美化": {
       "en": "Retouch Again",
       "where": [
+        "panel",
         "chat",
         "backend labels"
       ]
@@ -2369,12 +2440,6 @@
       "en": "The composition was planned for the chosen output ratio “{label}”. ",
       "where": [
         "backend text"
-      ]
-    },
-    "分析時另外把美化項目整理成光線色彩、背景、人像、清晰度、構圖的評等卡片（app 審閱畫面用），會多一次分析呼叫。": {
-      "en": "Also sorts the retouch items into rated Light & Color, Background, Portrait, Clarity, and Composition cards (for the app's review screen). Adds one more analysis call.",
-      "where": [
-        "panel"
       ]
     },
     "分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換引擎或長寬比，先按設定。": {
@@ -2699,12 +2764,6 @@
         "chat"
       ]
     },
-    "取代 AI 原本規劃的美化方式": {
-      "en": "Replaces the AI's planned retouch",
-      "where": [
-        "panel"
-      ]
-    },
     "取得分析結果": {
       "en": "Retrieving the analysis",
       "where": [
@@ -2814,6 +2873,12 @@
       "en": "{n} more {n|photo hasn't|photos haven't} been analyzed yet. ",
       "where": [
         "chat"
+      ]
+    },
+    "只動你寫到的地方（加上你挑的風格），其他保持原樣。": {
+      "en": "Changes only what you described (plus the styles you picked) and leaves the rest as is.",
+      "where": [
+        "panel"
       ]
     },
     "只動你寫到的地方，其他保持原樣。": {
@@ -3100,6 +3165,12 @@
       "en": "Show in panel",
       "where": [
         "chat"
+      ]
+    },
+    "在面板模式顯示「分析卡片」分頁：美化項目依光線色彩、背景、人像、清晰度、構圖整理成評等卡片（app 審閱畫面用）。": {
+      "en": "Shows the Findings Cards tab in panel mode: the retouch items sorted into rated Light & Color, Background, Portrait, Clarity, and Composition cards (for the app's review screen).",
+      "where": [
+        "panel"
       ]
     },
     "執行方向：{normalized_user_direction}。": {
@@ -3447,7 +3518,13 @@
         "backend text"
       ]
     },
-    "好，改回從原圖調整，剛剛記下的需求都留著。想再加什麼直接打在下面，好了就按「再美化」。": {
+    "好，接續時改的地方都帶到原圖上了，還沒美化。": {
+      "en": "OK, the changes you made while building on that version now apply to the original photo. They haven’t been retouched yet.",
+      "where": [
+        "chat"
+      ]
+    },
+    "好，改回從原圖美化，剛剛記下的需求都留著。想再加什麼直接打在下面，好了就按「再美化」。": {
       "en": "OK, switching back to the original photo. Everything noted so far is kept. Type anything else below, and tap “Retouch Again” when you're ready.",
       "where": [
         "backend text"
@@ -3463,6 +3540,12 @@
       "en": "OK, I'll let the AI pick the ratio, and I've noted the rest.",
       "where": [
         "backend text"
+      ]
+    },
+    "好，第 {n} 版先不接著改了。之後想接著改，在輸入框上方換就可以。": {
+      "en": "OK, no longer building on Version {n}. To build on a version later, switch it above the message box.",
+      "where": [
+        "chat"
       ]
     },
     "好，記下了：{echo}。": {
@@ -3872,6 +3955,12 @@
         "chat"
       ]
     },
+    "已勾選「僅依需求修改」，這裡的建議這次不會套用。": {
+      "en": "“Only My Requests” is on, so these suggestions won't be applied this time.",
+      "where": [
+        "panel"
+      ]
+    },
     "已取消 {previousPoseLabel} 的自動調整": {
       "en": "Removed automatic adjustments for {previousPoseLabel}",
       "where": [
@@ -4258,29 +4347,25 @@
       ]
     },
     "從原圖美化": {
-      "en": {
-        "panel": "From Original",
-        "chat": "Retouch from Original",
-        "backend labels": "Retouch from Original"
-      },
+      "en": "Retouch from Original",
       "where": [
-        "panel",
         "chat",
         "backend labels"
       ],
-      "note": "Button: retouch from the original photo instead of the latest version. The panel shortens it to fit."
+      "note": "Button: retouch from the original photo instead of the latest version."
     },
-    "從原圖調整": {
-      "en": "Adjusting the original",
-      "where": [
-        "chat"
-      ]
-    },
-    "從原圖重新產生，不沿用這張的結果": {
-      "en": "Generates again from the original photo, not from this one",
+    "從原圖美化會從原圖重做一版，這裡的需求會一起套用，要調整的話可以先編輯。": {
+      "en": "Retouching from the original makes a new version from the original photo with all the requests here; edit them first if you want changes.",
       "where": [
         "panel"
       ]
+    },
+    "從第 {n} 版美化": {
+      "en": "Retouch from Version {n}",
+      "where": [
+        "chat"
+      ],
+      "note": "Caption under a request in the chat history: this retouch was made on top of version {n} (past, descriptive)."
     },
     "從範例照片挑選": {
       "en": "Choose a Sample Photo",
@@ -4427,6 +4512,12 @@
     },
     "想改的地方可以一句一句打在下面，我會先幫你看過、記下來；也可以按「風格」換光線、角度這類效果。都好了再按「接續第 {n} 版美化」。": {
       "en": "Type what you'd like changed below, one thing at a time, and I'll check each one and note it down. You can also tap “Style” to change things like lighting or angle. Tap “Retouch from Version {n}” when you're ready.",
+      "where": [
+        "chat"
+      ]
+    },
+    "想照第 {n} 版當初的做法再做一版，按「再美化」。": {
+      "en": " To make Version {n} again the way it was made, tap “Retouch Again”.",
       "where": [
         "chat"
       ]
@@ -4739,8 +4830,8 @@
         "chat"
       ]
     },
-    "按「從原圖美化」會從原圖重新做一版，這裡每一條都會套用。": {
-      "en": "Tapping “Retouch from Original” makes a new version from the original photo, with every request here applied.",
+    "按「從原圖美化」會從原圖重做一版，這裡的需求會一起套用，要調整的話可以先編輯。": {
+      "en": "Tapping “Retouch from Original” makes a new version from the original photo with all the requests here; edit them first if you want changes.",
       "where": [
         "chat"
       ]
@@ -4787,7 +4878,8 @@
       "where": [
         "chat",
         "backend text"
-      ]
+      ],
+      "note": "Button that starts retouching on top of version {n} (an action to tap)."
     },
     "接著是這張照片的美化建議：": {
       "en": "Next, here are my suggestions for enhancing this photo:",
@@ -4804,7 +4896,6 @@
     "接著這張調整": {
       "en": "Adjust This One",
       "where": [
-        "panel",
         "chat"
       ]
     },
@@ -4871,6 +4962,7 @@
     "換一張當底": {
       "en": "Start from a different image",
       "where": [
+        "panel",
         "chat"
       ]
     },
@@ -4884,6 +4976,12 @@
       "en": "Changing the analysis engine requires reanalyzing this photo, which will replace the current analysis and suggestions. Continue?",
       "where": [
         "panel"
+      ]
+    },
+    "換回原圖": {
+      "en": "Back to Original",
+      "where": [
+        "chat"
       ]
     },
     "換成 {ratio}": {
@@ -4958,6 +5056,12 @@
         "panel"
       ]
     },
+    "收整腰腹外緣，讓衣著側線更貼合": {
+      "en": "Tidy the waist edge so the garment's side line fits more closely",
+      "where": [
+        "backend text"
+      ]
+    },
     "收起照片列表": {
       "en": "Hide the photo list",
       "where": [
@@ -4966,6 +5070,12 @@
     },
     "改了{v1}，還沒美化": {
       "en": "{v1} changed, not yet retouched",
+      "where": [
+        "chat"
+      ]
+    },
+    "改了，還沒美化": {
+      "en": "Changed, not yet retouched",
       "where": [
         "chat"
       ]
@@ -5271,6 +5381,7 @@
     "有幾版是接著別版調整的，其他皆由原圖重新產生": {
       "en": "Some versions adjust another version; the rest are regenerated from the original",
       "where": [
+        "panel",
         "chat"
       ]
     },
@@ -5507,6 +5618,12 @@
         "panel"
       ]
     },
+    "構圖平衡穩定。": {
+      "en": "The composition is balanced and steady.",
+      "where": [
+        "backend text"
+      ]
+    },
     "構圖必須完整保留。": {
       "en": "Must stay whole in the composition.",
       "where": [
@@ -5517,6 +5634,12 @@
       "en": "Matches composition method",
       "where": [
         "panel"
+      ]
+    },
+    "構圖還可以更好。": {
+      "en": "The composition could be better.",
+      "where": [
+        "backend text"
       ]
     },
     "模型未判定此項目需要修正，無需操作": {
@@ -5761,6 +5884,12 @@
         "chat"
       ]
     },
+    "正在整理這版的修圖說明…": {
+      "en": "Writing up the notes on this version…",
+      "where": [
+        "panel"
+      ]
+    },
     "正在校正白平衡與色彩…": {
       "en": "Correcting white balance and color…",
       "where": [
@@ -5907,6 +6036,12 @@
         "chat"
       ]
     },
+    "正在讀取 {n} 張照片…": {
+      "en": "Reading {n} {n|photo|photos}…",
+      "where": [
+        "chat"
+      ]
+    },
     "正在讓改過的地方跟周圍自然接上…": {
       "en": "Blending the edits seamlessly with their surroundings…",
       "where": [
@@ -5971,6 +6106,7 @@
     "每張美化結果皆由原圖重新產生": {
       "en": "Each result is generated from the original photo",
       "where": [
+        "panel",
         "chat"
       ]
     },
@@ -6078,6 +6214,18 @@
     },
     "決定是否將身形調整指令送給 Editor": {
       "en": "Choose whether to send body-shape instructions to the Editor",
+      "where": [
+        "panel"
+      ]
+    },
+    "沒勾的話會整體美化：先分析整張照片，再依照分析結果和你的需求一起修圖。": {
+      "en": "Unchecked, it's a full retouch: the whole photo is analyzed first, then retouched with those findings and your requests.",
+      "where": [
+        "panel"
+      ]
+    },
+    "沒勾的話會整體美化：照你的需求修改，光線、人像、構圖也一起調整。": {
+      "en": "Unchecked, it's a full retouch: your changes, plus the lighting, people and composition.",
       "where": [
         "panel"
       ]
@@ -7061,6 +7209,12 @@
         "backend text"
       ]
     },
+    "第 {n} 版好了，接下來從這一版接著改。想改的地方可以告訴我，也可以按下方的「風格」調整；想看原圖的美化項目，在輸入框上方換回「原圖」。": {
+      "en": "Version {n} is ready, and changes from here build on it. Tell me what to change, or tap “Style” below; to see the original photo’s settings, switch back to “Original” above the message box.",
+      "where": [
+        "chat"
+      ]
+    },
     "第 {n} 版好了，接下來從這一版接著改。想改的地方可以告訴我，也可以按下方的「風格」調整；照一樣的需求再來一版，按「再美化」；想看原圖的美化項目，在輸入框上方換回「原圖」。": {
       "en": "Version {n} is ready, and changes from here build on it. Tell me what to change, or tap “Style” below; tap “Retouch Again” for another take with the same requests; to see the original photo’s settings, switch back to “Original” above the message box.",
       "where": [
@@ -7237,6 +7391,12 @@
         "panel"
       ]
     },
+    "細節還可以更清楚。": {
+      "en": "The details could be clearer.",
+      "where": [
+        "backend text"
+      ]
+    },
     "維持冷靜、俐落的姿態氛圍": {
       "en": "keeps the calm, polished feel of the pose",
       "where": [
@@ -7275,6 +7435,13 @@
         "panel",
         "chat"
       ]
+    },
+    "編輯中": {
+      "en": "Editing",
+      "where": [
+        "panel"
+      ],
+      "note": "Panel card title shown while the user edits on top of a chosen version, next to the 返回 (Back) button."
     },
     "總覽": {
       "en": "Overview",
@@ -7406,12 +7573,6 @@
         "chat"
       ]
     },
-    "美化方式": {
-      "en": "Retouch from",
-      "where": [
-        "panel"
-      ]
-    },
     "美化流程": {
       "en": "Retouching steps",
       "where": [
@@ -7445,12 +7606,6 @@
         "panel"
       ]
     },
-    "美化項目的改動這次不會用到，會先留著": {
-      "en": "Your edit changes won’t be used here; they’re kept for later",
-      "where": [
-        "chat"
-      ]
-    },
     "美化風格": {
       "en": "Style",
       "where": [
@@ -7474,6 +7629,18 @@
       "en": "Background and edge distractions could be reduced further.",
       "where": [
         "panel"
+      ]
+    },
+    "背景有分散注意力的元素。": {
+      "en": "Something in the background draws attention away.",
+      "where": [
+        "backend text"
+      ]
+    },
+    "背景沒有搶走主體的元素。": {
+      "en": "Nothing in the background pulls attention from the subject.",
+      "where": [
+        "backend text"
       ]
     },
     "膚色": {
@@ -7774,6 +7941,12 @@
         "chat"
       ]
     },
+    "要換底的話，可以從下方挑一張，或直接點美化紀錄裡的照片，底會跟著換。按「返回」就不調整了，還沒美化的調整會清掉。": {
+      "en": "To start from another photo, pick one below or tap a photo in your history. Tap “Back” to stop editing; changes you haven't retouched yet will be cleared.",
+      "where": [
+        "panel"
+      ]
+    },
     "要整體美化，還是僅依你的需求修改？": {
       "en": "Retouch the whole photo, or only make the changes you asked for?",
       "where": [
@@ -7890,7 +8063,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Label under the placeholder tile in the version history for the version being edited and not retouched yet."
     },
     "調整好後，可以接著看其他項目，或按下面的「美化」我就開始": {
       "en": "When you're ready, review another item or tap “Retouch” below to start",
@@ -7928,17 +8102,16 @@
         "backend text"
       ]
     },
-    "調整第 {n} 版": {
-      "en": "Adjusting version {n}",
-      "where": [
-        "panel",
-        "chat"
-      ]
-    },
     "調整背景與主體的層次關係": {
       "en": "Adjusting depth between subject and background",
       "where": [
         "panel"
+      ]
+    },
+    "調整頭肩外緣，讓整體比例更協調": {
+      "en": "Adjust the head-and-shoulder outline for more balanced proportions",
+      "where": [
+        "backend text"
       ]
     },
     "請人工快速比對原圖與輸出圖。": {
@@ -8093,6 +8266,12 @@
         "panel"
       ]
     },
+    "身形": {
+      "en": "the figure",
+      "where": [
+        "backend text"
+      ]
+    },
     "身形調整": {
       "en": "Body Shape",
       "where": [
@@ -8195,6 +8374,7 @@
     "返回": {
       "en": "Back",
       "where": [
+        "panel",
         "chat"
       ]
     },
@@ -8956,10 +9136,11 @@
         "chat"
       ]
     },
-    "還沒美化的調整會換成這一版的設定。確定要切換嗎？": {
-      "en": "Changes that haven't been retouched will be replaced by this version's settings. Switch anyway?",
+    "還沒美化的調整會清掉。確定不調整了嗎？": {
+      "en": "Changes that haven't been retouched will be lost. Stop adjusting?",
       "where": [
-        "panel"
+        "panel",
+        "chat"
       ]
     },
     "還沒美化的這幾張想怎麼修？": {
@@ -8978,12 +9159,6 @@
       "en": "Sends every photo that hasn't been retouched yet: unanalyzed photos are analyzed first, and analyzed or in-progress ones go on to retouching. Photos already retouched or in progress won't be sent again.",
       "where": [
         "chat"
-      ]
-    },
-    "還沒送出的「接著這張調整」會取消。確定要切換嗎？": {
-      "en": "Your unsent “Adjust This One” will be cancelled. Switch anyway?",
-      "where": [
-        "panel"
       ]
     },
     "還沒開始的每張照它自己的需求和設定分析，開始過的不重送": {
@@ -9367,12 +9542,6 @@
         "panel"
       ]
     },
-    "除了「接著這張調整」，每張美化結果皆由原圖重新產生": {
-      "en": "Each result is generated from the original photo, except “Adjust This One”",
-      "where": [
-        "panel"
-      ]
-    },
     "雜誌 editorial": {
       "en": "Magazine Editorial",
       "where": [
@@ -9391,6 +9560,12 @@
       "where": [
         "panel",
         "chat"
+      ]
+    },
+    "需求沒改，會從第 {n} 版照一樣的需求再做一版": {
+      "en": "Request unchanged: makes another version from version {n} with the same request",
+      "where": [
+        "panel"
       ]
     },
     "需求與調整": {
@@ -9689,6 +9864,12 @@
       "en": " (outdated; we recommend reprocessing)",
       "where": [
         "panel"
+      ]
+    },
+    "（接續時不列人物）": {
+      "en": "(people are not listed while adjusting a version)",
+      "where": [
+        "backend text"
       ]
     },
     "（正在調整）": {
