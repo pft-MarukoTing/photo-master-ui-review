@@ -12757,8 +12757,9 @@
   function setCompareFullscreenBtnState(isFullscreen) {
     if (!els.compareFullscreenBtn) return;
     els.compareFullscreenBtn.innerHTML = isFullscreen ? COMPARE_FULLSCREEN_RESTORE_ICON : COMPARE_FULLSCREEN_EXPAND_ICON;
-    els.compareFullscreenBtn.title = isFullscreen ? "back to original window" : "full screen";
-    els.compareFullscreenBtn.setAttribute("aria-label", isFullscreen ? tr("返回原視窗") : tr("全螢幕檢視比較"));
+    const label = isFullscreen ? tr("返回原視窗") : tr("全螢幕檢視比較");
+    els.compareFullscreenBtn.title = label;
+    els.compareFullscreenBtn.setAttribute("aria-label", label);
   }
 
   function isCompareFullscreen() {

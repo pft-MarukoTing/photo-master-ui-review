@@ -410,7 +410,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                       class="canvas-btn"
                       type="button"
                       disabled={originPicked}
-                      title="compare"
+                      title={generated ? t("查看原始照片") : t("查看美化結果")}
                       aria-label={generated ? t("查看原始照片") : t("查看美化結果")}
                       onClick={() => setShowGenerated(!showGenerated)}
                     >
@@ -425,7 +425,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                     id="compare-fullscreen-btn"
                     class="canvas-btn"
                     type="button"
-                    title={fullscreen ? "back to original window" : "full screen"}
+                    title={fullscreen ? t("返回原視窗") : t("全螢幕檢視比較")}
                     aria-label={fullscreen ? t("返回原視窗") : t("全螢幕檢視比較")}
                     onClick={() => setFullscreen(!fullscreen)}
                   >

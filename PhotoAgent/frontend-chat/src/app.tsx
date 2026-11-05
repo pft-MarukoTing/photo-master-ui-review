@@ -2251,7 +2251,7 @@ export function App() {
       };
     let r: Awaited<ReturnType<typeof api.promptReview>>;
     try {
-      r = await api.promptReview(text, kept.join("；"), history, [], [], scope);
+      r = await api.promptReview(text, kept.join(t("；")), history, [], [], scope);
     } catch {
       done(spreadWish(text));
       return;
@@ -2260,7 +2260,7 @@ export function App() {
     // 已經發到每張的那幾句，不在裡面的就從每張拿掉；只剩一部分的，剩下那部分重新發一次。
     // 撤回卻沒給剩下的樣子：只當成撤回最近那一句，不把前面講過的全部拿掉。
     if (r.merged?.length || r.withdrawn) {
-      const left = r.merged?.length ? r.merged[0].text?.trim() || "" : kept.slice(0, -1).join("；");
+      const left = r.merged?.length ? r.merged[0].text?.trim() || "" : kept.slice(0, -1).join(t("；"));
       const stay = new Set(keptTurns.filter((t) => left.includes(t.line || t.text)).map((t) => t.id));
       const gone = keptTurns.filter((t) => !stay.has(t.id));
       for (const t of gone) unspreadWish(t.line || t.text);
@@ -3212,7 +3212,7 @@ export function App() {
   const readingEl = readingFirst > 0 && (
     <div class="photo-reading" role="status">
       <span class="chat-typing" aria-hidden="true"><span /><span /><span /></span>
-      正在讀取 {readingFirst} 張照片…
+      {t("正在讀取 {n} 張照片…", { n: readingFirst })}
     </div>
   );
 
@@ -5639,7 +5639,7 @@ export function SessionView(props: {
     // 這輪改的長寬比（可能已經重新構圖過）接著那一版也要，當這一輪的長寬比；"auto" 接續沒有。
     const ratio = photo.plan.aspect_ratio;
     return {
-      text: parts(photo.plan.user_prompt).filter((x) => !before.has(x)).join("；"),
+      text: parts(photo.plan.user_prompt).filter((x) => !before.has(x)).join(t("；")),
       styles,
       ratio: ratio && ratio !== start.aspect_ratio && ratio !== "auto" ? ratio : "original",
       lost: pending.filter((c) => lost.has(c)),
@@ -5849,7 +5849,7 @@ export function SessionView(props: {
     }
     const parts = (x: string) => x.split(/[；;\n]/).map((y) => y.trim()).filter(Boolean);
     const have = new Set(parts(promptNow || ""));
-    const text = parts(contPromptRef.current).filter((x) => !have.has(x)).join("；");
+    const text = parts(contPromptRef.current).filter((x) => !have.has(x)).join(t("；"));
     const patch: Plan = {
       ...(text ? { user_prompt: promptNow ? `${promptNow}\n${text}` : text } : {}),
       ...(contStyled ? { style_options: contStyles } : {}),
@@ -7308,7 +7308,7 @@ export function SessionView(props: {
     if (!adjusting || !roundPlan) return "";
     const parts = (text?: string) => (text || "").split(/[；;\n]/).map((x) => x.trim()).filter(Boolean);
     const before = new Set(parts(roundPlan.user_prompt));
-    return parts(photo.plan.user_prompt).filter((x) => !before.has(x)).join("；");
+    return parts(photo.plan.user_prompt).filter((x) => !before.has(x)).join(t("；"));
   })();
   // 輸入框上方：美化過就有換底那顆（預設原圖）；人不只一個時有點人的那排。
   const baseShown = !!props.onContinue && versions.length > 0 && photo.status === "ready";

@@ -3206,7 +3206,10 @@ window.PhotoAgentResults = (() => {
     if (!showGenerated) closePersonalizePopover();
     if (els.compareCard) els.compareCard.classList.toggle("showing-generated", showGenerated);
     const label = showGenerated ? tr("查看原始照片") : tr("查看輸出結果");
-    if (els.compareToggleBtn) els.compareToggleBtn.setAttribute("aria-label", label);
+    if (els.compareToggleBtn) {
+      els.compareToggleBtn.title = label;
+      els.compareToggleBtn.setAttribute("aria-label", label);
+    }
     if (els.compareHint) els.compareHint.textContent = showGenerated ? "After" : "Before";
     drawAnalysisBoxes();
   }
