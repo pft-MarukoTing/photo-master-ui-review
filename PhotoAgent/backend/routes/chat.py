@@ -1486,8 +1486,9 @@ def _start_render(user, session_id, photo, prepared, base, source=None, draft=No
     source_result = {k: source[k] for k in ("version_id", "job_id", "run")} if source else None
     for job_id in job_ids:
         engine_params = get_engine_params_template()
-        # A continuation that needs the original carries it second; the worker
-        # edits the first and hands the second to the editor as a reference.
+        # A continuation that may need the original carries it second; the
+        # worker edits the first and decides whether the editor gets the
+        # second as a reference.
         engine_params["srcKeys"] = ([source["key"]] + ([prepared["reference_key"]] if prepared.get("reference_key") else [])
                                     if source else list(photo["src_keys"]))
         engine_params["acts"][0]["params"] = prepared["params"]
@@ -1567,7 +1568,7 @@ def _prepare_continuation(photo, draft):
         raise _RequestError(error)
     params["stage"] = "finish"
     analysis = continuation_svc.continuation_analysis(draft["text"], draft.get("style_options"), params["image_model"])
-    reference_key = photo["src_keys"][0] if "_continuation_original" in analysis else None
+    reference_key = photo["src_keys"][0] if analysis.get("_continuation_reference") else None
     run_limit = capabilities.MAX_RUN_COUNT if _debug() else capabilities.GENERAL_MAX_RUN_COUNT
     return {"params": {**params, "analysis": analysis}, "selections": {},
             "run_count": min(plan["run_count"], run_limit),

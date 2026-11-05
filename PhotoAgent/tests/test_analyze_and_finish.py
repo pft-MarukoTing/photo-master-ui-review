@@ -63,6 +63,78 @@ class WorkerAppliesSelectionsTest(unittest.TestCase):
         self.assertEqual(self.run_job({"stage": "full"}), {"style_options": {}})
 
 
+class WorkerReadsContinuationTest(unittest.TestCase):
+    """A 接著這張調整 that may need the original carries it second; the worker
+    reads the request and decides whether the editor gets it."""
+
+    def run_finish(self, analysis, read=None, sources=2):
+        queue = types.ModuleType("aiserver_utils.queue")
+        queue.set_job_info = MagicMock()
+        queue.get_job_info = MagicMock()
+        with patch.dict(sys.modules, {"aiserver_utils.queue": queue}):
+            import job_processor
+        finished, asked, downloaded = [], [], []
+
+        def call(context):
+            asked.append(context)
+            if isinstance(read, Exception):
+                raise read
+            return read
+
+        params = {"stage": "finish", "user_prompt": "嘴巴不要動到", "overwrite_prompt": True, "analysis": analysis}
+        task_info = {"effect": "photoAgent", "srcKeys": ["version.jpg", "original.jpg"][:sources],
+                     "dstKeys": ["result/job/result.png"], "acts": [{"id": 0, "params": params}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = []
+            for name in ("version.jpg", "original.jpg")[:sources]:
+                (Path(tmp) / name).write_bytes(name.encode())
+                paths.append(str(Path(tmp) / name))
+            worker = job_processor.PhotoAgentJobProcessor(MagicMock(), MagicMock(), monitor_dst_dir=tmp)
+            by_key = dict(zip(task_info["srcKeys"], paths))
+            fetch = lambda task_id, keys, session_dir: downloaded.extend(keys) or [by_key[k] for k in keys]
+            with patch.object(worker, "download_sources", side_effect=fetch), \
+                 patch.object(job_processor.chat_assistant, "call_continuation", call), \
+                 patch.object(job_processor, "finish_stage",
+                              side_effect=lambda **k: finished.append(k) or (_ for _ in ()).throw(RuntimeError("stop"))):
+                with self.assertRaises(RuntimeError):
+                    worker.process_for_api("job", task_info)
+        return finished[0], asked, downloaded
+
+    def stub(self, **extra):
+        return {"_skipped_analysis": True, "_continuation": True, **extra}
+
+    def test_a_request_that_wants_something_back_gets_the_original(self):
+        finish, asked, downloaded = self.run_finish(self.stub(_continuation_reference=True),
+                                        read={"needs_original": True, "restore": " the mouth "})
+        self.assertIn("REQUEST: 嘴巴不要動到", asked[0])
+        self.assertEqual(finish["reference_image_bytes"], b"original.jpg")
+        self.assertEqual(finish["analysis"]["_continuation_original"], {"restore": "the mouth"})
+        self.assertEqual(downloaded, ["version.jpg", "original.jpg"])
+
+    def test_a_new_change_goes_alone(self):
+        finish, _, downloaded = self.run_finish(self.stub(_continuation_reference=True),
+                                    read={"needs_original": False, "restore": ""})
+        self.assertNotIn("reference_image_bytes", finish)
+        self.assertNotIn("_continuation_original", finish["analysis"])
+        # The original is never fetched when the editor does not get it.
+        self.assertEqual(downloaded, ["version.jpg"])
+
+    def test_a_failed_read_sends_the_original(self):
+        finish, _, downloaded = self.run_finish(self.stub(_continuation_reference=True), read=RuntimeError("timeout"))
+        self.assertEqual(finish["reference_image_bytes"], b"original.jpg")
+        self.assertEqual(finish["analysis"]["_continuation_original"], {"restore": ""})
+
+    def test_a_job_queued_with_the_read_already_done_is_not_read_again(self):
+        finish, asked, downloaded = self.run_finish(self.stub(_continuation_original={"restore": "the mouth"}))
+        self.assertEqual(asked, [])
+        self.assertEqual(finish["reference_image_bytes"], b"original.jpg")
+
+    def test_without_the_original_nothing_is_read(self):
+        finish, asked, downloaded = self.run_finish(self.stub(_continuation_reference=True), sources=1)
+        self.assertEqual(asked, [])
+        self.assertNotIn("reference_image_bytes", finish)
+
+
 class AnalyzeAndFinishRouteTest(unittest.TestCase):
     def setUp(self):
         self.enqueued, self.history, self.attached = [], [], []

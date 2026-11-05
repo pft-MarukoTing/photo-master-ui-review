@@ -9,7 +9,7 @@ import time
 from aiserver_utils.queue import set_job_info, get_job_info
 from engine_result_code import RESULT_INVALID_PARAMETER, RESULT_UNKNOWN_INTERNAL_ERROR
 from image_tools import ensure_jpeg_bytes, RESULT_JPEG_QUALITY
-from photo_agent import EFFECT_NAME, i18n, validate_photo_agent_request
+from photo_agent import EFFECT_NAME, chat_assistant, i18n, validate_photo_agent_request
 from photo_agent.selections import apply_selections
 from pipeline import (
     analyze_preview_stage, analyze_stage, skipped_analysis_stage,
@@ -140,6 +140,43 @@ class PhotoAgentJobProcessor:
             self.logger.info(task_id, f'[{EFFECT_NAME}] Upload artifact: {local_path} -> {dst_keys[i]}')
             self.artifact_store.upload_file(local_path, dst_keys[i])
 
+    def _continuation_reference(self, task_id, params, src_keys, session_dir):
+        """The original photo's bytes when a 接著這張調整's editor also gets
+        it as a reference, else None.
+
+        A continuation that may need it (continuation.continuation_analysis's
+        _continuation_reference) carries the original as the second source.
+        Only the request decides: a new change on the version goes alone, so
+        the editor is not pulled back toward the original; a request that
+        wants something as it was gets the original beside it. The read is
+        recorded as analysis["_continuation_original"], which edit_prompt
+        turns into the editor's note about the reference. A failed read sends
+        the original -- the editor is told it is a reference only, so that
+        costs little. A job queued before the read moved here already carries
+        _continuation_original, and is taken as it is.
+
+        The original is downloaded only here, once the editor is getting it:
+        a new change that goes alone never fetches it."""
+        analysis = params.get("analysis") or {}
+        if len(src_keys) < 2:
+            return None
+        if analysis.get("_continuation_reference") and "_continuation_original" not in analysis:
+            started = time.perf_counter()
+            try:
+                read = chat_assistant.read_continuation(params.get("user_prompt") or "")
+            except Exception as exc:
+                self.logger.info(task_id, f'[{EFFECT_NAME}] Continuation request read failed, sending the original: {exc}')
+                read = {"needs_original": True, "restore": ""}
+            self.logger.info(task_id, f'[{EFFECT_NAME}] Continuation request read in {time.perf_counter() - started:.2f}s: '
+                                      f'needs_original={read["needs_original"]} restore={read["restore"]!r}')
+            if read["needs_original"]:
+                analysis["_continuation_original"] = {"restore": read["restore"]}
+        if not analysis.get("_continuation_original"):
+            return None
+        (reference_path,) = self.download_sources(task_id, [src_keys[1]], session_dir)
+        with open(reference_path, 'rb') as f:
+            return f.read()
+
     def process_for_api(self, task_id, task_info):
         # The language the job's user-visible text is written in (i18n); the
         # job's params carry it only when it is not Chinese.
@@ -166,8 +203,10 @@ class PhotoAgentJobProcessor:
 
         stage = params.get("stage", "full")
         try:
-            src_paths = self.download_sources(task_id, request["src_keys"], session_dir)
-            image_path = src_paths[0]
+            # Only the image the job works on. A second source is a
+            # continuation's original, which _continuation_reference fetches
+            # if the editor ends up getting it.
+            image_path, = self.download_sources(task_id, request["src_keys"][:1], session_dir)
 
             with open(image_path, 'rb') as f:
                 image_bytes = f.read()
@@ -272,12 +311,7 @@ class PhotoAgentJobProcessor:
 
             if stage == "finish":
                 self.logger.info(task_id, f'[{EFFECT_NAME}] Running finish_stage ({len(image_bytes)} bytes)')
-                # A 接著這張調整 that needs the original (chat._continuation_original)
-                # carries it as the second source; the editor gets it as a reference.
-                reference_image_bytes = None
-                if (params["analysis"] or {}).get("_continuation_original") and len(src_paths) > 1:
-                    with open(src_paths[1], 'rb') as f:
-                        reference_image_bytes = f.read()
+                reference_image_bytes = self._continuation_reference(task_id, params, request["src_keys"], session_dir)
                 result = finish_stage(
                     image_bytes=image_bytes,
                     **({'reference_image_bytes': reference_image_bytes} if reference_image_bytes else {}),

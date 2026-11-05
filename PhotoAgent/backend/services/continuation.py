@@ -7,13 +7,11 @@ modes record it in the case's own history with based_on and source_result, so
 either one reads a version the other made the same way.
 """
 
-from flask import current_app
-
 from aiserver_utils.queue import get_job_info
 from backend.services.account import get_history_entry
 from backend.services.put_job import lost_job_error
 from compatibility_version import CURRENT_COMPATIBILITY_VERSION
-from photo_agent import capabilities, chat_assistant
+from photo_agent import capabilities
 
 
 class ContinuationError(Exception):
@@ -92,30 +90,18 @@ def continuation_form(form, text, aspect_ratio="original"):
 def continuation_analysis(text, styles, image_model):
     """The analysis a continuation runs with: a skipped-analysis stub marked
     _continuation, which edit_prompt reads as request-only, plus the styles
-    picked for this round. _continuation_original is set when the editor also
-    gets the original photo (the caller then sends it second in srcKeys)."""
+    picked for this round.
+
+    _continuation_reference is set when the editor may also get the original
+    photo: a typed request, on the OpenAI editor (the only one that takes a
+    second image). The caller then sends the original second in srcKeys, and
+    the worker reads the request to decide whether the editor gets it
+    (job_processor._continuation_reference) -- the model call belongs with
+    the job, not in this request."""
     analysis = {"_skipped_analysis": True, "_continuation": True, "_aspect_ratio_pref_at_analysis": "original",
                 "prompts": {}, "timings": {}, "usage": {}, "compatibility_version": CURRENT_COMPATIBILITY_VERSION}
     if styles:
         analysis["style_options"] = dict(styles)
-    original = _continuation_original(text, image_model) if text else None
-    if original is not None:
-        analysis["_continuation_original"] = original
+    if text and capabilities.image_model(image_model).provider == "openai":
+        analysis["_continuation_reference"] = True
     return analysis
-
-
-def _continuation_original(text, image_model):
-    """{"restore": ...} when this continuation's editor also gets the original
-    photo, else None. Only the request decides: a new change on the version
-    goes alone, so the editor is not pulled back toward the original; a
-    request that wants something as it was gets the original beside it. Only
-    the OpenAI editor takes a second image. A failed read sends the original
-    -- the editor is told it is a reference only, so that costs little."""
-    if capabilities.image_model(image_model).provider != "openai":
-        return None
-    try:
-        read = chat_assistant.read_continuation(text)
-    except Exception as exc:
-        current_app.logger.warning("Continuation request read failed, sending the original: %s", exc)
-        read = {"needs_original": True, "restore": ""}
-    return {"restore": read["restore"]} if read["needs_original"] else None

@@ -1296,9 +1296,7 @@ class ChatRoutesTest(unittest.TestCase):
         self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"),
                           json={"user": USER, "plan": {"user_prompt": "warmer"}})
         source = self.finished_version(sid, photo)
-        new_change = lambda context: {"needs_original": False, "restore": ""}
-        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True), \
-                patch.object(chat.chat_assistant, "call_continuation", new_change):
+        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True):
             saved = self.save_draft(sid, photo, source, "  remove the cup  ")
             self.assertEqual(saved.status_code, 200, saved.get_json())
             draft = saved.get_json()["photos"][0]["continuation_draft"]
@@ -1312,14 +1310,16 @@ class ChatRoutesTest(unittest.TestCase):
             self.assertEqual(res.status_code, 202, res.get_json())
             render = res.get_json()["renders"][0]
             (job_id, engine_params), = [(j, p) for j, p in self.enqueued if j in render["job_ids"]]
-            # The chosen version's output, not the original.
-            self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json"])
+            # The chosen version's output first -- it is what gets edited --
+            # then the original, for the worker to decide on.
+            self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json", photo["src_keys"][0]])
             params = engine_params["acts"][0]["params"]
             self.assertEqual(params["user_prompt"], "remove the cup")
             self.assertTrue(params["overwrite_prompt"])
             self.assertEqual(params["aspect_ratio"], "original")
             self.assertFalse(any(v is True for v in params["advanced_options"].values()))
             self.assertTrue(params["analysis"]["_continuation"])
+            self.assertTrue(params["analysis"]["_continuation_reference"])
             self.assertNotIn("_continuation_original", params["analysis"])
             self.assertNotIn("rejected_corrections", params["analysis"])
             self.assertEqual(self.history[0]["case_id"], photo["case_id"])
@@ -1548,7 +1548,6 @@ class ChatRoutesTest(unittest.TestCase):
         source = self.finished_version(sid, photo)
         self.history.clear()
         with patch.object(api.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True), \
-                patch.object(chat.chat_assistant, "call_continuation", lambda context: {"needs_original": False, "restore": ""}), \
                 patch.object(api, "attach_case_analysis") as attach:
             res = self.continue_version(photo, source, user_prompt="  remove the cup  ",
                                         style_options={"lighting": "gold", "angle": "default"},
@@ -1557,7 +1556,7 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(res.status_code, 202, res.get_json())
         job_id = res.get_json()["job_id"]
         (engine_params,) = [p for j, p in self.enqueued if j == job_id]
-        self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json"])
+        self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json", photo["case_id"]])
         params = engine_params["acts"][0]["params"]
         self.assertEqual((params["user_prompt"], params["overwrite_prompt"], params["aspect_ratio"], params["image_quality"]),
                          ("remove the cup", True, "original", "high"))
@@ -1569,15 +1568,16 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual((recorded["params"]["base"], recorded["params"]["source_result"]), ("version", source))
         attach.assert_called_once_with(USER, photo["case_id"], photo["analyze_job_id"])
 
-    def test_the_panel_sends_the_original_when_the_request_wants_something_back(self):
+    def test_the_panel_sends_no_original_with_only_styles(self):
         sid = self.new_session()
         photo = self.ready_photo(sid)
         source = self.finished_version(sid, photo)
-        with patch.object(api.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True), \
-                patch.object(chat.chat_assistant, "call_continuation", lambda context: {"needs_original": True, "restore": "the mouth"}):
-            job_id = self.continue_version(photo, source, user_prompt="嘴巴不要動到").get_json()["job_id"]
+        with patch.object(api.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True):
+            job_id = self.continue_version(photo, source, user_prompt=" ",
+                                           style_options={"lighting": "gold"}).get_json()["job_id"]
         (engine_params,) = [p for j, p in self.enqueued if j == job_id]
-        self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json", photo["case_id"]])
+        self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json"])
+        self.assertNotIn("_continuation_reference", engine_params["acts"][0]["params"]["analysis"])
 
     def test_the_panel_cannot_continue_a_version_that_is_not_the_cases(self):
         sid = self.new_session()
@@ -1601,29 +1601,21 @@ class ChatRoutesTest(unittest.TestCase):
         (engine_params,) = [p for j, p in self.enqueued if j in render["job_ids"]]
         return engine_params
 
-    def test_a_continuation_that_wants_something_back_also_sends_the_original(self):
+    def test_a_typed_continuation_leaves_the_read_to_the_worker(self):
         sid = self.new_session()
         photo = self.ready_photo(sid)
         source = self.finished_version(sid, photo)
-        seen = []
-        restore = lambda context: seen.append(context) or {"needs_original": True, "restore": " the mouth "}
+        asked = []
         with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True), \
-                patch.object(chat.chat_assistant, "call_continuation", restore):
+                patch.object(chat.chat_assistant, "call_continuation", lambda context: asked.append(context) or {}):
             engine_params = self.continuation_job(sid, photo, source, "嘴巴不要動到")
-        # The version first -- it is what gets edited -- then the original.
+        # No model call in the request: the original rides along, and the
+        # worker reads the request to decide whether the editor gets it.
+        self.assertEqual(asked, [])
         self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json", photo["src_keys"][0]])
-        self.assertEqual(engine_params["acts"][0]["params"]["analysis"]["_continuation_original"],
-                         {"restore": "the mouth"})
-        self.assertIn("REQUEST: 嘴巴不要動到", seen[0])
-
-    def test_a_continuation_whose_request_cannot_be_read_sends_the_original(self):
-        sid = self.new_session()
-        photo = self.ready_photo(sid)
-        source = self.finished_version(sid, photo)
-        with patch.object(chat.agent_config, "ENABLE_CHAT_RENDER_FROM_VERSION", True):
-            engine_params = self.continuation_job(sid, photo, source, "remove the cup")
-        self.assertEqual(engine_params["srcKeys"][1:], [photo["src_keys"][0]])
-        self.assertEqual(engine_params["acts"][0]["params"]["analysis"]["_continuation_original"], {"restore": ""})
+        analysis = engine_params["acts"][0]["params"]["analysis"]
+        self.assertTrue(analysis["_continuation_reference"])
+        self.assertNotIn("_continuation_original", analysis)
 
     def test_a_continuation_on_an_editor_without_a_second_image_is_not_read(self):
         sid = self.new_session()
@@ -1634,7 +1626,7 @@ class ChatRoutesTest(unittest.TestCase):
                 patch.object(chat.capabilities, "image_model", lambda model_id: gemini):
             engine_params = self.continuation_job(sid, photo, source, "嘴巴不要動到")
         self.assertEqual(engine_params["srcKeys"], [f"{source['job_id']}/analysis.json"])
-        self.assertNotIn("_continuation_original", engine_params["acts"][0]["params"]["analysis"])
+        self.assertNotIn("_continuation_reference", engine_params["acts"][0]["params"]["analysis"])
 
     def test_render_from_a_version_refuses_a_source_it_cannot_vouch_for(self):
         sid = self.new_session()

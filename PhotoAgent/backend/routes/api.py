@@ -1431,9 +1431,10 @@ def continue_version():
     params["analysis"] = continuation_svc.continuation_analysis(text, styles, params["image_model"])
 
     engine_params = get_engine_params_template()
-    # A continuation that needs the original carries it second; the worker
-    # edits the first and hands the second to the editor as a reference.
-    engine_params["srcKeys"] = [resolved["key"]] + ([case_id] if "_continuation_original" in params["analysis"] else [])
+    # A continuation that may need the original carries it second; the worker
+    # edits the first and decides whether the editor gets the second as a
+    # reference.
+    engine_params["srcKeys"] = [resolved["key"]] + ([case_id] if params["analysis"].get("_continuation_reference") else [])
     engine_params["acts"][0]["params"] = params
     new_job_id = enqueue(engine_params, src_content=None)
     action_id = body.get("action_id") or new_job_id
