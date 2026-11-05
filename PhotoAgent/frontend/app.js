@@ -7606,7 +7606,10 @@
     const continuing = readOnly ? null : activeContinuation();
     // On 原圖 off a continuation version: the analysis it traces back to,
     // in full (人像檢查/畫面建議 too). Without one, request-only as before.
-    const origin = !continuing && singleFlowState.origin?.run === panelRun() ? singleFlowState.origin.selections : null;
+    // Guard origin itself: with no origin stash and no panel run (single-RUN
+    // 美化 off 待美化 nulls singleRuns), undefined === undefined would match.
+    const originStash = singleFlowState.origin;
+    const origin = !continuing && originStash && originStash.run === panelRun() ? originStash.selections : null;
     const selections = origin || lastSingleSelections;
     if (!continuing && apRatioShowsContinuation) {
       // Back from 接著這張調整, whose shape the picker was showing.
