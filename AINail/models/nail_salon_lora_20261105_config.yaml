@@ -1,0 +1,357 @@
+job: extension
+config:
+  name: nail_exp_20261103
+  process:
+  - type: diffusion_trainer
+    training_folder: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/output
+    sqlite_db_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/aitk_db.db
+    device: cuda
+    trigger_word: null
+    performance_log_every: 10
+    network:
+      type: lora
+      linear: 16
+      linear_alpha: 16
+      conv: 16
+      conv_alpha: 16
+      lokr_full_rank: true
+      lokr_factor: -1
+      network_kwargs:
+        ignore_if_contains: []
+      pretrained_lora_path: output/nail_exp_20261028/nail_exp_20261028_000000200.safetensors
+    save:
+      dtype: bf16
+      save_every: 100
+      max_step_saves_to_keep: 40
+      save_format: diffusers
+      push_to_hub: false
+    datasets:
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_target
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+        s shape, color and art style from Image 2 to the corresponding nail in Image\
+        \ 1."
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 1
+      dataset_augmentations: []
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_1
+      control_path_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_2
+      control_path_3: null
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_matte
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+        s shape, color and art style from Image 2 to the corresponding nail in Image\
+        \ 1."
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 2
+      dataset_augmentations: []
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_1
+      control_path_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_2
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_fuzzy
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+        s shape, color and art style from Image 2 to the corresponding nail in Image\
+        \ 1."
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 2
+      dataset_augmentations: []
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_1
+      control_path_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_2
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_texture_enhance
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+        s shape, color and art style from Image 2 to the corresponding nail in Image\
+        \ 1."
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 2
+      dataset_augmentations: []
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_1
+      control_path_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_2
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_thumb_enhance
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+        s shape, color and art style from Image 2 to the corresponding nail in Image\
+        \ 1."
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 2
+      dataset_augmentations: []
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_1
+      control_path_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_2
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_hard
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+        s shape, color and art style from Image 2 to the corresponding nail in Image\
+        \ 1."
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 10
+      dataset_augmentations: []
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_1
+      control_path_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_2
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/gemini_data_target
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+        s shape, color and art style from Image 2 to the corresponding nail in Image\
+        \ 1."
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 2
+      dataset_augmentations: []
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/gemini_data_control_1
+      control_path_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/gemini_data_control_2
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/gemini_data_matte
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+        s shape, color and art style from Image 2 to the corresponding nail in Image\
+        \ 1."
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 5
+      dataset_augmentations: []
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/gemini_data_control_1
+      control_path_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/gemini_data_control_2
+    train:
+      batch_size: 1
+      balanced_dataset_sampling: false
+      bypass_guidance_embedding: false
+      steps: 4000
+      gradient_accumulation: 1
+      train_unet: true
+      train_text_encoder: false
+      gradient_checkpointing: true
+      noise_scheduler: flowmatch
+      optimizer: adamw8bit
+      timestep_type: weighted
+      content_or_style: balanced
+      optimizer_params:
+        weight_decay: 0.0001
+      unload_text_encoder: false
+      cache_text_embeddings: true
+      lr: 0.0001
+      ema_config:
+        use_ema: true
+        ema_decay: 0.99
+      skip_first_sample: false
+      force_first_sample: false
+      disable_sampling: false
+      dtype: bf16
+      diff_output_preservation: false
+      diff_output_preservation_multiplier: 1
+      diff_output_preservation_class: person
+      switch_boundary_every: 1
+      loss_type: mse
+    logging:
+      log_every: 1
+      use_ui_logger: true
+    model:
+      name_or_path: Qwen/Qwen-Image-Edit-2509
+      quantize: true
+      qtype: qfloat8
+      quantize_te: true
+      qtype_te: qfloat8
+      arch: qwen_image_edit_plus
+      low_vram: true
+      model_kwargs:
+        match_target_res: false
+      layer_offloading: false
+      layer_offloading_text_encoder_percent: 1
+      layer_offloading_transformer_percent: 1
+    sample:
+      sampler: flowmatch
+      sample_every: 100
+      width: 1024
+      height: 1024
+      samples:
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/a59a215d-cd04-4e5d-818f-d8cee19eecaa.jpg
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/7f3b0c83-8502-490d-8f91-0c6256c4773f.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/c60de362-d9ed-4961-aec0-bf08af762ba4.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/e50e52ef-3f9d-4d34-a8b4-e6c41f1791e8.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/5cd081d3-dce7-495d-878b-2621976c031b.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/9ebf4713-8346-468b-a7b9-7ea5aae35a50.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/ab072437-b29e-4d6d-9df6-1f3a6b5e6186.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/867980d5-46a6-4fff-a5dd-a6de5390e51e.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/7d104f2c-d393-4903-94e2-edb880e44f88.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/d0bfa419-9d5e-4993-8cbd-59bb6241bcb2.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/c3aba7f0-f3d3-45e9-a7af-1e994577447a.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/1c58ee04-e1ad-4444-8a22-ac6282ee8473.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/45439411-35e4-4359-a012-ec1d1c275425.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/b13bb858-d9c0-48ad-8548-39b3ea844285.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/18dbf3cd-6798-45d3-a53c-77034314486a.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/286ba167-0d46-49ba-801e-b7a25c821a90.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/30710f50-0da9-4206-a534-de47d8973d8a.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/655131e7-7fba-4356-b0ca-0bf9717bf7bf.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/4386a02c-b71e-454b-9650-1649c701818d.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/d4ec0b97-db18-481a-a5ed-51700d36942b.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/8531f999-6028-4713-a5b1-049641af8059.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/a8f00eef-543a-4b64-be6a-b7cde281315b.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/63ac2405-6414-4ad5-b8aa-95b318922907.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/6af8ab8b-3eab-4067-b705-ecc8f14243ab.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/c9faf61f-337c-4e1d-94ae-2f12edd5c150.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/a2c57465-bdcb-415c-aa90-99107b12ae18.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/a866f289-9e2f-46a2-a1ca-09f49cb0226c.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/f54e76e6-fc06-4d88-ad25-a10bd3a330de.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/bbbc37d8-5431-4ad8-8f17-e7186a638d34.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/cb080641-2007-4d89-a055-28b6d626687b.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/670c55ed-375a-423f-9511-d7174dbe4f46.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/ee5d2859-2b3b-4306-b2b1-daf1dacaaf6a.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/3127d590-037e-4885-b5bd-db01ba98795e.jpg
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/c2b5a2d1-17f8-4aaa-b99c-06797eb1cf2b.jpg
+      - prompt: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+          s shape, color and art style from Image 2 to the corresponding nail in Image\
+          \ 1."
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/abf4ae43-376e-44e1-bae8-a7a96b7258ea.jpg
+        ctrl_img_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/500fc22d-4e92-4cd4-8ea9-0ed34bbf9d07.jpg
+      neg: ''
+      seed: 42
+      walk_seed: false
+      guidance_scale: 4
+      sample_steps: 10
+      num_frames: 1
+      fps: 1
+meta:
+  name: nail_exp_20261103
+  version: '1.0'
