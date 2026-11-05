@@ -338,6 +338,13 @@ TEXT = {
     "重新構圖：": "Reframe: ",
     # The lens-correction review item (analysis_skills/portrait/decisions.py)
     "修正廣角造成的邊緣人臉變形": "Correct wide-angle stretch on faces near the frame edge",
+    # Body-shape sentences when the planner wrote none (prompts.body_reshape_prompt_display_fallback)
+    "修飾上臂線條，讓袖口至手肘更清楚": "Refine the upper-arm line so the sleeve-to-elbow edge reads more clearly",
+    "收整腰腹外緣，讓衣著側線更貼合": "Tidy the waist edge so the garment's side line fits more closely",
+    "修飾腿部外緣，讓下身線條更修長": "Refine the leg outline for a longer lower-body line",
+    "調整頭肩外緣，讓整體比例更協調": "Adjust the head-and-shoulder outline for more balanced proportions",
+    "修飾{who}外緣，讓畫面份量更均衡": "Refine {who}'s outline to balance the visual weight in the frame",
+    "身形": "the figure",
 }
 
 

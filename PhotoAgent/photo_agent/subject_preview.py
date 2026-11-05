@@ -4,6 +4,8 @@ import copy
 import json
 import math
 
+from photo_agent import i18n
+
 KINDS = {"person", "group", "non_person", "unmatched_person", "uncertain"}
 ROLES = {"included", "bystander", "not_real_face", "uncertain"}
 COORDINATE_SPACE = "exif_transposed_original_normalized"
@@ -469,7 +471,7 @@ def build_preview_people(preview, crops):
             "source": "detector", "detection_index": index,
             "box": copy.deepcopy(crop["box"]), "face_box": copy.deepcopy(crop["face_box"]),
             "sent_to_model": crop.get("bytes") is not None,
-            "label": item.get("label", "人物 " + str(index)),
+            "label": item.get("label", i18n.tr("人物 {n}", n=index)),
             "role": item.get("role", "uncertain"), "face_readable": item.get("face_readable")})
     for proposal in preview.get("additional_people", []):
         people.append({**copy.deepcopy(proposal), "preview_person_id": "pp_" + uuid4().hex,

@@ -1606,7 +1606,7 @@ def _ratio_rest(said, left, run):
     if not left.strip():
         return ""
     try:
-        result = run(f"{RATIO_REST_INSTRUCTION}\n\nSAID: {said.strip()}\nLEFT: {left.strip()}")
+        result = run(f"{_localized(RATIO_REST_INSTRUCTION)}\n\nSAID: {said.strip()}\nLEFT: {left.strip()}")
     except Exception as exc:
         logger.warning("Chat ratio rest unavailable; keeping what is left: %s", type(exc).__name__)
         return left.strip()

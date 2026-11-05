@@ -15,6 +15,7 @@ from functools import lru_cache
 from dataclasses import dataclass
 import config
 
+from photo_agent import i18n
 from photo_agent.subject_preview import COORDINATE_SPACE, _valid_subject_box, validate_subject_preview
 
 FORMAT_VERSION = 3
@@ -234,7 +235,8 @@ def _validate_preview_people(people, crops, preview):
             decision = classifications.get(index, {})
             if (any(person[k] != crop[k] for k in ("box", "face_box", "sent_to_model"))
                     or person["role"] != decision.get("role", "uncertain")
-                    or person["label"] != decision.get("label", "人物 " + str(index))
+                    or (person["label"] != decision["label"] if "label" in decision
+                        else person["label"] not in {t.format(n=index) for t in i18n.translations("人物 {n}")})
                     or person["face_readable"] != decision.get("face_readable")):
                 raise ValueError("preview_person_detector_mismatch")
             detectors.add(index)

@@ -5,6 +5,7 @@ import re
 import traceback
 from datetime import datetime, timezone
 
+from photo_agent import i18n
 from photo_agent.utils import bounded_debug_value
 
 from prompts import (
@@ -27,6 +28,10 @@ from .instructions import _person_list_text
 
 logger = logging.getLogger(__name__)
 
+PROMPT_DISPLAY_CHINESE_ONLY = "prompt_display 必須只使用繁體中文漢字與中文標點，不得出現任何英文字母或英文術語；例如 silhouette、contour、outline 一律改寫為「輪廓」，sleeve silhouette 一律寫成「袖型輪廓」。若模型草稿含有英文，請先轉成自然繁體中文再輸出。"
+# Outside Chinese the edit_prompt still has to pass the 「將{label}」 prefix check in merge_body_reshape_plans.
+EDIT_PROMPT_STAYS_CHINESE = "edit_prompt is an Editor command, not user-visible text: keep writing it in 繁體中文, beginning exactly with「將{exact supplied person label}」."
+
 
 def build_body_reshape_planning_instruction(persons=None):
     """Ask for one body-reshape plan per person, including head/neck outer-contour assessment."""
@@ -40,7 +45,7 @@ def build_body_reshape_planning_instruction(persons=None):
         else "No separately identified person."
     )
 
-    return f"""You are a professional portrait retoucher planning Body Reshape edits.
+    instruction = f"""You are a professional portrait retoucher planning Body Reshape edits.
 
 Inspect the attached original photograph and analyze every listed person independently. Never transfer a body observation, region, amount, or instruction from one person to another. Return one plan for every supplied person, in the same order, using the supplied subject_index and local_detection_index unchanged. For each plan, the first sentence of report must contain that plan's exact supplied person label; the report may begin with the aesthetic reason, but identify the correct person before giving evidence. When should_edit=true, edit_prompt must begin exactly with「將{{exact supplied person label}}」. The user-facing prompt_display must describe only that same person's approved change. Do not substitute another person's label even when scanning the photograph in a different spatial order.
 
@@ -77,7 +82,7 @@ Choose the explanation from the actual photograph instead of a fixed template, a
 
 For should_edit=true, prompt_display is one short Traditional-Chinese sentence (roughly 12–50 characters) for the user. It must name only the approved visible region and tell the user what visual difference to expect, using concrete photographic language rather than a generic compliment. Choose the wording from the image and vary it across regions or people; do not reuse「更俐落自然」、「俐落和諧」、「更自然」or「更和諧」as a stock ending. Examples of the intended specificity are：「收整腰側外緣，讓坐姿上衣側線貼合身形。」、「減輕短袖下方的上臂份量，讓袖口到手肘的線條更清楚。」、「整理外套前襟與腰側銜接，平衡軀幹的視覺重量。」、「調整腹部外緣與肩線份量，讓人物在畫面中更修長。」These are examples, not templates. Do not include percentages, engineering terms, Editor commands, garment-preservation rules, unsupported promises, or extra body/face/pose changes. Do not copy the full edit_prompt or report. For should_edit=false, set prompt_display="". This field is shown in the UI only and is never an Editor instruction.
 Prompt-display variation rule: choose the benefit that matches the named region—sleeve-to-elbow continuity for an arm, waist-to-garment fit for the middle body, leg flow for the lower body, shoulder-to-head balance for a substantial upper-body change, or subject-to-background spacing for a general contour. Two people must not receive the same adjective pair when their visible evidence differs.
-prompt_display 必須只使用繁體中文漢字與中文標點，不得出現任何英文字母或英文術語；例如 silhouette、contour、outline 一律改寫為「輪廓」，sleeve silhouette 一律寫成「袖型輪廓」。若模型草稿含有英文，請先轉成自然繁體中文再輸出。
+{PROMPT_DISPLAY_CHINESE_ONLY}
 
 Report construction rule: before writing the prose, choose one dominant photographic cue from the supplied image—sleeve-to-elbow continuity, shoulder-to-sleeve transition, jacket front or side seam, waist/abdomen against the garment and nearby negative space, trouser or skirt flow, head-to-shoulder balance, or subject-to-background spacing. The report must name that cue and explain why it affects this frame; do not replace the explanation with a generic judgement such as「好看」、「自然」、「和諧」or「俐落」. Exact percentage and measurement language belongs only in edit_prompt; report may describe magnitude as「小幅」or「明顯」only when that helps the photographic explanation.
 
@@ -97,6 +102,12 @@ Return exactly this JSON object:
 People visible in the source:
 {people_text}
 """.strip()
+    if i18n.is_source():
+        return instruction
+    instruction = instruction.replace(PROMPT_DISPLAY_CHINESE_ONLY, EDIT_PROMPT_STAYS_CHINESE).replace(
+        "one short Traditional-Chinese sentence", "one short sentence in Traditional Chinese").replace(
+        "a concise Traditional-Chinese explanation", "a concise explanation in Traditional Chinese")
+    return i18n.localize_analysis(instruction)
 
 
 _BODY_RESHAPE_PLAN_SCHEMA = _schema_object({

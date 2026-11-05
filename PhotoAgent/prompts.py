@@ -223,14 +223,14 @@ def body_reshape_prompt_display_fallback(edit_prompt="", subject_label=""):
     """Build a region-aware UI sentence when a planner omits prompt_display."""
     source = str(edit_prompt or "")
     if re.search(r"上臂|手臂|袖", source):
-        return "修飾上臂線條，讓袖口至手肘更清楚"
+        return i18n.tr("修飾上臂線條，讓袖口至手肘更清楚")
     if re.search(r"腰|腹|肚|下腹|側腹", source):
-        return "收整腰腹外緣，讓衣著側線更貼合"
+        return i18n.tr("收整腰腹外緣，讓衣著側線更貼合")
     if re.search(r"腿|大腿|小腿|臀|髖", source):
-        return "修飾腿部外緣，讓下身線條更修長"
+        return i18n.tr("修飾腿部外緣，讓下身線條更修長")
     if re.search(r"頭|頸|肩", source):
-        return "調整頭肩外緣，讓整體比例更協調"
-    return f"修飾{subject_label or '身形'}外緣，讓畫面份量更均衡"
+        return i18n.tr("調整頭肩外緣，讓整體比例更協調")
+    return i18n.tr("修飾{who}外緣，讓畫面份量更均衡", who=subject_label or i18n.tr("身形"))
 
 
 def normalize_body_reshape_report(value, *, subject_label="", should_edit=True):
