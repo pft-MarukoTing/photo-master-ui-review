@@ -1240,6 +1240,10 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
 .chat-composer-who-x{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;flex-shrink:0;
   padding:0;border:0;border-radius:50%;background:none;color:inherit;opacity:.65;cursor:pointer}
 .chat-composer-who-x:hover{opacity:1;background:rgba(var(--accent-rgb),.16)}
+.chat-composer-who-x:disabled{opacity:.35;cursor:default;background:none}
+/* 照片處理中，美化紀錄先不給切（results.tsx 的 locked）：樣子不變，只拿掉可以點的暗示。 */
+.version-strip-track.is-locked .version-tile,
+.version-strip-track.is-locked button.version-origin-tile{cursor:default;transform:none}
 .chat-ask{display:inline-flex;align-items:center;gap:var(--sp-2);white-space:pre-wrap;word-break:break-word}
 
 /* AI replies */

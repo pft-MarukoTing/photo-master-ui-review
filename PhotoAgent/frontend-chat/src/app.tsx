@@ -5485,6 +5485,10 @@ export function SessionView(props: {
 }) {
   const { caps, session, photo, analysis, busy } = props;
   const pid = photo.photo_id;
+  // 照片正在分析、構圖、美化：左邊不能切版本、輸入框上方不能換底、也不能打字，
+  // 等這一輪做完再動，不然會以為切過去的那張就是正在做的。安靜的重新構圖畫面上
+  // 不講在處理，也就不鎖。
+  const photoBusy = isBusy(photo) && !quietReframe(photo);
   const messages = (session.messages || []).filter((m) => cardAbout(m.card, pid));
   // 打開這串對話時最新的那則；之後才有比它新的訊息，才是 AI 這次回的話（打字動畫）。
   const newest = (session.messages || []).reduce((t, m) => Math.max(t, m.created_at), 0);
@@ -5503,7 +5507,7 @@ export function SessionView(props: {
   const [viewing, setViewing] = useState(false);
   const closeViewer = () => setViewing(false);
   const openVersion = (v: Version) => {
-    if (v.version_id !== current?.version_id) props.onSelectVersion(v);
+    if (!photoBusy && v.version_id !== current?.version_id) props.onSelectVersion(v);
     setViewing(true);
   };
 
@@ -6275,6 +6279,7 @@ export function SessionView(props: {
   // 風格），底就換成那張預設的底，跟剛美化完一樣：接著別版做的那版用它自己，從原圖做的那版和
   // 原圖本身用原圖。調整中就只換左邊看的那張，底不動，打好的不會不見。
   function pickPreview(v: Version | null) {
+    if (photoBusy) return;
     const same = (v?.version_id ?? null) === (continuing?.version_id ?? null);
     const editing = adjusting || parkedCats.length > 0
       || (!!continuing && !!(contPromptRef.current.trim() || contStyled || contEngineChanged || contTurnsRef.current.length));
@@ -7414,19 +7419,19 @@ export function SessionView(props: {
                         faces={
                           continuing ? (
                             <>
-                            <ContinueBase versions={versions} from={continuing} original={thumb} disabled={busy || contReviewing}
+                            <ContinueBase versions={versions} from={continuing} original={thumb} disabled={busy || photoBusy || contReviewing}
                               onPick={continueFrom} onClose={() => stopContinuing()} />
                             </>
                           ) : (baseShown || facesShown) && (
                             <>
-                            {baseShown && <ContinueBase versions={versions} from={null} original={thumb} disabled={busy} onPick={continueFrom} />}
+                            {baseShown && <ContinueBase versions={versions} from={null} original={thumb} disabled={busy || photoBusy} onPick={continueFrom} />}
                             {facesShown && <FacePicker people={pickable} pointed={pointed} onPoint={setPointed} />}
                             </>
                           )
                         }
                       />
                       <Composer
-                        disabled={busy || photo.status === "failed" || contReviewing}
+                        disabled={busy || photoBusy || photo.status === "failed" || contReviewing}
                         onSend={send}
                         placeholder={continuing
                           ? [t("想在第 {n} 版上改什麼？", { n: continuing.ordinal }), t("想改什麼？")]
@@ -7698,7 +7703,7 @@ function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
           <span class={`chat-opt-caret${open ? " is-open" : ""}`} />
         </button>
         {from && onClose && (
-          <button type="button" class="chat-composer-who-x" title={t("不調整這版了")} aria-label={t("不調整這版了")} onClick={onClose}>
+          <button type="button" class="chat-composer-who-x" title={t("不調整這版了")} aria-label={t("不調整這版了")} disabled={disabled} onClick={onClose}>
             <Icon name="x" size={12} />
           </button>
         )}

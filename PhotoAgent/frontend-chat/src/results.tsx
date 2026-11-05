@@ -192,6 +192,9 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   // 剛進來、這一版的成果還沒到齊，手上也沒有上一版可以先擺：原圖先藏著（位置留著），
   // 不然會先看到原圖、再跳成成果，像是畫面換了一張。
   const arriving = !!job && !shownJob && showGenerated && !busy && !originPicked;
+  // 處理中美化紀錄先不給切：大圖這時停在原圖，切了也看不到，還會讓人以為換了要做的那張。
+  // 不用 disabled -- .version-tile:disabled 是「這版的結果已經不在」的半透明樣式。
+  const locked = !!busy;
 
   // A new version always opens on the After side.
   useEffect(() => {
@@ -609,7 +612,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                   </span>
                 )}
               </div>
-              <div id="version-strip-track" class="version-strip-track" role="tablist" aria-label={t("這張照片的美化紀錄")}>
+              <div id="version-strip-track" class={`version-strip-track${locked ? " is-locked" : ""}`} role="tablist" aria-label={t("這張照片的美化紀錄")}>
                 <div class="version-strip-origin">
                   <div class="version-origin">
                     <button
@@ -618,7 +621,9 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                       role="tab"
                       aria-selected={originPicked}
                       title={t("原圖")}
+                      aria-disabled={locked || undefined}
                       onClick={() => {
+                        if (locked) return;
                         setOriginPicked(true);
                         onOrigin?.();
                       }}
@@ -643,7 +648,9 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                             role="tab"
                             aria-selected={on}
                             title={v.from ? t("第 {ordinal} 版・由第 {from} 版調整", { ordinal: v.ordinal, from: v.from }) : t("第 {ordinal} 版", { ordinal: v.ordinal })}
+                            aria-disabled={locked || undefined}
                             onClick={() => {
+                              if (locked) return;
                               // 點的若是同一版，version_id 沒變、上面的 effect 不會跑，這裡自己切回 After。
                               setOriginPicked(false);
                               setShowGenerated(true);
