@@ -1525,13 +1525,10 @@ window.PhotoAgentResults = (() => {
   }
   window.addEventListener("resize", syncPhotoSummaryCompactState);
 
-  function formatCandidate(candidate, validation) {
-    const selected = validation?.selected_candidate_id === candidate.id;
-    const score = (validation?.candidate_scores || []).find((item) => item.id === candidate.id);
+  function formatCandidate(candidate) {
     const label = candidate.label || candidate.label_en || candidate.id;
-    const verdict = selected ? tr("最終選擇") : score ? tr("候選評分 {score}/10", { score: score.score }) : tr("候選方案");
-    const comment = score?.comment || candidate.compositionIntent || candidate.tradeoffs || "";
-    return `${verdict} - ${label}${comment ? `${tr("：")}${comment}` : ""}`;
+    const comment = candidate.compositionIntent || candidate.tradeoffs || "";
+    return `${tr("候選方案")} - ${label}${comment ? `${tr("：")}${comment}` : ""}`;
   }
 
   function checksToList(qa) {
@@ -3232,7 +3229,6 @@ window.PhotoAgentResults = (() => {
     // a photo-view optimization; the analysis object may still be new.
     setBodyReshapeReviewAnalysis(analysis, { resetState: false });
     const qa = data.qualityCheck || null;
-    const validation = analysis.crop_validation || null;
     // previewAspectRatio re-rendered this result under an aspect-ratio choice
     // the photo on screen was NOT made with -- so the ratio, the crop and the
     // lines quoting them describe the next run, and have to say so.
@@ -3406,16 +3402,12 @@ window.PhotoAgentResults = (() => {
     const cropApplied = cropBox
       ? `${ratioIsPreview ? tr("下次裁切（預覽）") : tr("已套用裁切")}${cropBox.aspectRatio ? tr("，比例 {ratio}", { ratio: cropBox.aspectRatio }) : ""}${tr("：")}x:${cropBox.x.toFixed(2)} y:${cropBox.y.toFixed(2)} w:${cropBox.w.toFixed(2)} h:${cropBox.h.toFixed(2)}${tr("。")}`
       : tr("保留原始構圖。");
-    const validationText = validation
-      ? tr("AI 最終選擇：{v1}。{v2}", { v1: validation.selected_candidate_label || validation.selected_candidate_id || tr("最佳候選"), v2: validation.reason || "" })
-      : "";
     els.cropText.textContent = joinParts([
       analysis.recommended_aspect_ratio
         ? tr("{what}：{ratio}", { what: ratioIsPreview ? tr("下次輸出比例（預覽）") : tr("輸出比例"), ratio: aspectRatioDisplayValue(analysis.recommended_aspect_ratio) }) + (!ratioIsPreview && analysis.aspect_ratio_reason ? tr("（{reason}）", { reason: analysis.aspect_ratio_reason }) : "") + tr("。")
         : "",
       analysis.crop_recommendation || tr("未提供裁切建議。"),
-      cropApplied,
-      validationText
+      cropApplied
     ]);
 
     els.qualityText.textContent = qa
@@ -3436,8 +3428,8 @@ window.PhotoAgentResults = (() => {
     const candidates = Array.isArray(analysis.crop_candidates) ? analysis.crop_candidates.slice(0, 5) : [];
     fillList(
       els.cropCandidatesList,
-      candidates.map((c) => formatCandidate(c, validation)),
-      [validationText || cropApplied]
+      candidates.map(formatCandidate),
+      [cropApplied]
     );
 
     fillList(els.recipeList, analysis.retouch_recipe || [], [
@@ -3478,7 +3470,6 @@ window.PhotoAgentResults = (() => {
     };
     setPrompt(els.promptAnalysis, prompts.photo_analysis);
     setPrompt(els.promptReview, prompts.user_instruction_review);
-    setPrompt(els.promptCrop, prompts.crop_validation);
     const resolution = prompts.image_edit_resolution;
     setPrompt(els.promptEdit, prompts.image_edit);
     setPrompt(

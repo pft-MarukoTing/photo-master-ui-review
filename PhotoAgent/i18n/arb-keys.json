@@ -6283,12 +6283,6 @@
         "panel"
       ]
     },
-    "panel_ai_candidate": {
-      "zh": "AI 候選 {v1}",
-      "where": [
-        "panel"
-      ]
-    },
     "panel_ai_retouch": {
       "zh": "AI 修圖",
       "where": [
@@ -6327,18 +6321,6 @@
     },
     "panel_aipoc_doesnt_support_viewing_the": {
       "zh": "（AIPoC 尚不支援查看第一階段中間圖）",
-      "where": [
-        "panel"
-      ]
-    },
-    "panel_ais_final_choice": {
-      "zh": "AI 最終選擇：{v1}。{v2}",
-      "where": [
-        "panel"
-      ]
-    },
-    "panel_ais_initial_crop_suggestion": {
-      "zh": "AI 初始裁切建議",
       "where": [
         "panel"
       ]
@@ -6547,12 +6529,6 @@
         "panel"
       ]
     },
-    "panel_best_candidate": {
-      "zh": "最佳候選",
-      "where": [
-        "panel"
-      ]
-    },
     "panel_body_shape": {
       "zh": "身形調整：{bodyPrompt}",
       "where": [
@@ -6585,12 +6561,6 @@
     },
     "panel_candidate": {
       "zh": "候選方案",
-      "where": [
-        "panel"
-      ]
-    },
-    "panel_candidate_score_10": {
-      "zh": "候選評分 {score}/10",
       "where": [
         "panel"
       ]
@@ -7153,12 +7123,6 @@
         "panel"
       ]
     },
-    "panel_crop_validation": {
-      "zh": "裁切驗證",
-      "where": [
-        "panel"
-      ]
-    },
     "panel_current_version_v": {
       "zh": "系統版本 v{currentCompatibilityVersion}",
       "where": [
@@ -7411,12 +7375,6 @@
         "panel"
       ]
     },
-    "panel_final_choice": {
-      "zh": "最終選擇",
-      "where": [
-        "panel"
-      ]
-    },
     "panel_findings_cards": {
       "zh": "分析卡片",
       "where": [
@@ -7633,12 +7591,6 @@
         "panel"
       ]
     },
-    "panel_keep_the_original_composition": {
-      "zh": "保留原始構圖",
-      "where": [
-        "panel"
-      ]
-    },
     "panel_keeps_the_full_original_at": {
       "zh": "此比例下維持完整原圖（沒有有效裁切）",
       "where": [
@@ -7851,12 +7803,6 @@
     },
     "panel_no_analysis_yet": {
       "zh": "（尚無分析結果）",
-      "where": [
-        "panel"
-      ]
-    },
-    "panel_no_crop_retouching_and_color": {
-      "zh": "不做構圖裁切，只進行美化與色彩整理",
       "where": [
         "panel"
       ]
@@ -8217,12 +8163,6 @@
     },
     "panel_preserves_identity_expression_skin_tone": {
       "zh": "保留身分、表情、膚色與姿態，改善光線與皮膚質感。",
-      "where": [
-        "panel"
-      ]
-    },
-    "panel_preserves_the_full_original_and": {
-      "zh": "保留完整原圖與原始場景脈絡",
       "where": [
         "panel"
       ]
@@ -9003,12 +8943,6 @@
     },
     "panel_step_3_additional_user_instructions": {
       "zh": "Step 3：使用者補充指令",
-      "where": [
-        "panel"
-      ]
-    },
-    "panel_step_4_crop_validation": {
-      "zh": "Step 4：裁切驗證",
       "where": [
         "panel"
       ]

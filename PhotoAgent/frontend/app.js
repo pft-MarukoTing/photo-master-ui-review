@@ -4677,7 +4677,7 @@
     }
     // Same debug-only gate revealResultsIfNeeded applies once the edit stage
     // finishes -- the analyze-stage prompts (photo_analysis/
-    // user_instruction_review/crop_validation) are already in the DOM via
+    // user_instruction_review) are already in the DOM via
     // renderResult's renderPrompts call above, so there's no reason to make
     // debug users wait for the edit stage just to read those.
     if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
@@ -5626,7 +5626,7 @@
   const PROMPT_KEYS = [
     "photo_analysis", "photo_analysis_portrait_qc", "photo_analysis_eye_repair_planning",
     "photo_analysis_body_reshape",
-    "user_instruction_review", "crop_validation",
+    "user_instruction_review",
     "image_edit",
     "image_edit_resolution", "image_edit_strategy",
     "gaze_repair_pass", "quality_check"
@@ -7207,7 +7207,6 @@
               { label: tr("分析並美化"), duration: Date.now() - stepStart, children: [
                 { label: tr("Step 2：照片分析"), duration: secToMs(t["Step 2 - photo_analysis"]) },
                 { label: tr("Step 3：使用者補充指令"), duration: secToMs(t["Step 3 - user_instruction_review"]) },
-                { label: tr("Step 4：裁切驗證"), duration: secToMs(t["Step 4 - crop_validation"]) },
                 { label: tr("Step 5：美化執行"), duration: secToMs(t["Step 5 - image_edit"]) },
                 { label: tr("Step 5b：眼部修正"), duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
                 { label: tr("Step 6：品質檢查"), duration: secToMs(t["Step 6 - quality_check"]) }
@@ -7293,7 +7292,6 @@
       const t = (result["extra-info"] || {}).timings || {};
       if (isCurrent()) addTiming(tr("AI 美化中"), finishWaitDuration, [
         { label: tr("Step 3：使用者補充指令"), duration: secToMs(t["Step 3 - user_instruction_review"]) },
-        { label: tr("Step 4：裁切驗證"), duration: secToMs(t["Step 4 - crop_validation"]) },
         { label: tr("Step 5：美化執行"), duration: secToMs(t["Step 5 - image_edit"]) },
         { label: tr("Step 5b：眼部修正"), duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
         { label: tr("Step 6：品質檢查"), duration: secToMs(t["Step 6 - quality_check"]) }
@@ -7452,7 +7450,6 @@
         { label: tr("提交後續處理"), duration: submitMs },
         { label: tr("AI 美化中"), duration: pollMs, children: [
           { label: tr("Step 3：使用者補充指令"), duration: secToMs(t["Step 3 - user_instruction_review"]) },
-          { label: tr("Step 4：裁切驗證"), duration: secToMs(t["Step 4 - crop_validation"]) },
           { label: tr("Step 5：美化執行"), duration: secToMs(t["Step 5 - image_edit"]) },
           { label: tr("Step 5b：眼部修正"), duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
           { label: tr("Step 6：品質檢查"), duration: secToMs(t["Step 6 - quality_check"]) }
@@ -8052,7 +8049,6 @@
             { label: tr("分析並美化"), duration: Date.now() - stepStart, children: [
               { label: tr("Step 2：照片分析"), duration: secToMs(t["Step 2 - photo_analysis"]) },
               { label: tr("Step 3：使用者補充指令"), duration: secToMs(t["Step 3 - user_instruction_review"]) },
-              { label: tr("Step 4：裁切驗證"), duration: secToMs(t["Step 4 - crop_validation"]) },
               { label: tr("Step 5：美化執行"), duration: secToMs(t["Step 5 - image_edit"]) },
               { label: tr("Step 5b：眼部修正"), duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
               { label: tr("Step 6：品質檢查"), duration: secToMs(t["Step 6 - quality_check"]) }
@@ -8323,7 +8319,6 @@
         { label: tr("提交後續處理"), duration: submitMs },
         { label: tr("AI 美化中"), duration: pollMs, children: [
           { label: tr("Step 3：使用者補充指令"), duration: secToMs(t["Step 3 - user_instruction_review"]) },
-          { label: tr("Step 4：裁切驗證"), duration: secToMs(t["Step 4 - crop_validation"]) },
           { label: tr("Step 5：美化執行"), duration: secToMs(t["Step 5 - image_edit"]) },
           { label: tr("Step 5b：眼部修正"), duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
           { label: tr("Step 6：品質檢查"), duration: secToMs(t["Step 6 - quality_check"]) }
@@ -14480,7 +14475,6 @@
   const PROMPT_MODAL_STAGES = [
     { label: tr("照片分析"), el: () => els.promptAnalysis },
     { label: tr("使用者補充指令"), el: () => els.promptReview },
-    { label: tr("裁切驗證"), el: () => els.promptCrop },
     { label: tr("修圖（送給 Editor）"), el: () => els.promptEdit },
     { label: tr("Feature Resolver 結果"), el: () => els.promptEditResolution, omitWhenEmpty: true },
     { label: tr("眼部修正（第二段）"), el: () => els.promptGazeRepair },
@@ -14736,8 +14730,7 @@
   // pipeline.py's own stage names (verbatim, see its "Step N - ..." usage[]
   // keys) bucketed into 分析 (understanding/planning the photo, before any
   // pixel is touched) vs 修圖 (the actual edit call plus its repair/QA
-  // follow-ups) for #cost-modal. Step 4 (crop_validation) never appears here
-  // -- it's deterministic geometry with no model call, so it never has usage.
+  // follow-ups) for #cost-modal.
   const ANALYSIS_COST_STAGES = ["Step 2.0 - photo_route", "Step 2 - photo_analysis", "Step 2b - photo_reframe", "Step 3 - user_instruction_review"];
   const EDIT_COST_STAGES = ["Step 5 - image_edit", "Step 5b - gaze_repair_pass", "Step 6 - quality_check"];
 

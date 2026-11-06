@@ -99,12 +99,6 @@
         "chat"
       ]
     },
-    "AI 候選 {v1}": {
-      "en": "AI candidate {v1}",
-      "where": [
-        "panel"
-      ]
-    },
     "AI 先判讀人物、光線、構圖與畫面細節，": {
       "en": "Our AI looks at the people, lighting, composition and details,",
       "where": [
@@ -119,12 +113,6 @@
     },
     "AI 全面分析": {
       "en": "In-Depth AI Analysis",
-      "where": [
-        "panel"
-      ]
-    },
-    "AI 初始裁切建議": {
-      "en": "AI's initial crop suggestion",
       "where": [
         "panel"
       ]
@@ -153,12 +141,6 @@
       "en": "The AI can't respond right now, but you can still adjust the options directly.",
       "where": [
         "chat"
-      ]
-    },
-    "AI 最終選擇：{v1}。{v2}": {
-      "en": "AI's final choice: {v1}. {v2}",
-      "where": [
-        "panel"
       ]
     },
     "AI 會分析整張照片，整理出修圖建議；你寫的個人化需求會保留。要繼續嗎？": {
@@ -322,12 +304,6 @@
     },
     "Step 3：使用者補充指令": {
       "en": "Step 3: Additional user instructions",
-      "where": [
-        "panel"
-      ]
-    },
-    "Step 4：裁切驗證": {
-      "en": "Step 4: Crop validation",
       "where": [
         "panel"
       ]
@@ -1035,12 +1011,6 @@
       ],
       "note": "Value of a portrait-fix setting shown in a change summary: the issue will be left as is."
     },
-    "不做構圖裁切，只進行美化與色彩整理": {
-      "en": "No crop; retouching and color correction only",
-      "where": [
-        "panel"
-      ]
-    },
     "不套用": {
       "en": "Don't apply",
       "where": [
@@ -1737,12 +1707,6 @@
         "panel"
       ]
     },
-    "保留原始構圖": {
-      "en": "Keep the original composition",
-      "where": [
-        "panel"
-      ]
-    },
     "保留原始構圖。": {
       "en": "Original composition kept.",
       "where": [
@@ -1773,12 +1737,6 @@
         "chat"
       ],
       "note": "Dialog button: keep each photo's own settings instead of applying the shared batch settings."
-    },
-    "保留完整原圖與原始場景脈絡": {
-      "en": "Preserves the full original and its scene context",
-      "where": [
-        "panel"
-      ]
     },
     "保留真實": {
       "en": "True to life",
@@ -1950,12 +1908,6 @@
     },
     "候選方案": {
       "en": "Candidate",
-      "where": [
-        "panel"
-      ]
-    },
-    "候選評分 {score}/10": {
-      "en": "Candidate score: {score}/10",
       "where": [
         "panel"
       ]
@@ -5338,12 +5290,6 @@
         "panel"
       ]
     },
-    "最佳候選": {
-      "en": "best candidate",
-      "where": [
-        "panel"
-      ]
-    },
     "最多只能選 {MAX_BATCH} 張，先加前 {length} 張。": {
       "en": "You can choose up to {MAX_BATCH}, so only the first {length} were added.",
       "where": [
@@ -5366,12 +5312,6 @@
       "en": "Finally, style: {names} can give the photo a different mood. Leave them blank to keep its original look. Want to take a look?",
       "where": [
         "chat"
-      ]
-    },
-    "最終選擇": {
-      "en": "Final choice",
-      "where": [
-        "panel"
       ]
     },
     "最近照片": {
@@ -7909,12 +7849,6 @@
     },
     "裁切評選": {
       "en": "Crop selection",
-      "where": [
-        "panel"
-      ]
-    },
-    "裁切驗證": {
-      "en": "Crop validation",
       "where": [
         "panel"
       ]

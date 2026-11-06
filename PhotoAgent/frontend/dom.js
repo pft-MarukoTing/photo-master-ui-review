@@ -383,7 +383,6 @@ window.PhotoAgentDom = (() => {
     preserveList: document.querySelector("#preserve-list"),
     promptAnalysis: document.querySelector("#prompt-analysis"),
     promptReview: document.querySelector("#prompt-review"),
-    promptCrop: document.querySelector("#prompt-crop"),
     promptEdit: document.querySelector("#prompt-edit"),
     promptEditResolution: document.querySelector("#prompt-edit-resolution"),
     promptGazeRepair: document.querySelector("#prompt-gaze-repair"),

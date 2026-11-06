@@ -238,101 +238,6 @@ window.PhotoAgentImageTools = (() => {
     return { enabled: true, x, y, w, h, aspect_ratio: cleanAspectRatio(cropBox?.aspect_ratio || recommendedAspectRatio(context)) };
   }
 
-  function cropCandidateKey(cropBox) {
-    if (!cropBox?.enabled) return "original-frame";
-    return [
-      cropBox.aspect_ratio || "",
-      Number(cropBox.x).toFixed(2),
-      Number(cropBox.y).toFixed(2),
-      Number(cropBox.w).toFixed(2),
-      Number(cropBox.h).toFixed(2)
-    ].join(":");
-  }
-
-  function addCropCandidate(candidates, seen, candidate) {
-    const key = cropCandidateKey(candidate.cropBox);
-    if (seen.has(key)) return;
-    seen.add(key);
-    candidates.push(candidate);
-  }
-
-  function cropValidationRisk(analysis) {
-    const normalized = normalizeCropBox(analysis?.crop_box, analysis);
-    if (!normalized) return { shouldValidate: false, level: "none", reasons: [] };
-
-    const reasons = [];
-    const area = normalized.w * normalized.h;
-    const roi = normalizeRoiBox(analysis?.roi_box);
-    const intent = analysis?.crop_intent || {};
-
-    if (analysis?.crop_risk?.needs_validation === true) reasons.push("analysis-risk");
-    if (area < 0.72) reasons.push("large-crop");
-    if (normalized.x > 0.08 || normalized.y > 0.08 || normalized.w < 0.86 || normalized.h < 0.86) reasons.push("meaningful-reframe");
-    if (intent.trim_left || intent.trim_right || intent.trim_top || intent.trim_bottom) reasons.push("edge-trim");
-
-    protectedBoxes(analysis).forEach((box) => {
-      const nearEdge = box.x < 0.08 || box.y < 0.08 || box.x + box.w > 0.92 || box.y + box.h > 0.92;
-      if (nearEdge) reasons.push(`${box.kind}-near-edge`);
-    });
-
-    return {
-      shouldValidate: reasons.length > 0,
-      level: reasons.length >= 2 ? "high" : reasons.length === 1 ? "medium" : "low",
-      reasons
-    };
-  }
-
-  function buildCropCandidates(analysis, options = {}) {
-    const candidates = [];
-    const seen = new Set();
-    const base = analysis?.crop_box?.enabled === true ? clampRawCropBox(analysis.crop_box, analysis) : null;
-
-    (Array.isArray(analysis?.crop_candidates) ? analysis.crop_candidates : []).forEach((candidate, index) => {
-      const sourceCrop = candidate?.crop_box || candidate?.cropBox;
-      if (!sourceCrop) return;
-      const cropBox = sourceCrop?.enabled === false
-        ? { enabled: false, x: 0, y: 0, w: 1, h: 1, aspect_ratio: "" }
-        : clampRawCropBox(sourceCrop, analysis);
-      addCropCandidate(candidates, seen, {
-        id: candidate?.id || `ai-candidate-${index + 1}`,
-        label: candidate?.label || tr("AI 候選 {v1}", { v1: index + 1 }),
-        cropBox,
-        compositionIntent: candidate?.composition_intent || candidate?.compositionIntent || "",
-        tradeoffs: candidate?.tradeoffs || ""
-      });
-    });
-
-    if (base) {
-      addCropCandidate(candidates, seen, {
-        id: "ai-plan",
-        label: tr("AI 初始裁切建議"),
-        cropBox: base,
-        compositionIntent: analysis?.composition_intent || "",
-        tradeoffs: analysis?.crop_recommendation || ""
-      });
-    }
-
-    addCropCandidate(candidates, seen, {
-      id: "original-frame",
-      label: tr("保留原始構圖"),
-      cropBox: { enabled: false, x: 0, y: 0, w: 1, h: 1, aspect_ratio: "" },
-      compositionIntent: tr("保留完整原圖與原始場景脈絡"),
-      tradeoffs: tr("不做構圖裁切，只進行美化與色彩整理")
-    });
-
-    const limit = options.highRisk === true ? 6 : 4;
-    if (candidates.length <= limit) return candidates;
-
-    const original = candidates.find((candidate) => candidate.id === "original-frame");
-    if (!original) return candidates.slice(0, limit);
-
-    const selected = candidates
-      .filter((candidate) => candidate.id !== "original-frame")
-      .slice(0, Math.max(0, limit - 1));
-    selected.push(original);
-    return selected;
-  }
-
   async function createCroppedFile(file, cropBox, context) {
     const normalized = normalizeCropBox(cropBox, context);
     if (!normalized) return file;
@@ -414,8 +319,6 @@ window.PhotoAgentImageTools = (() => {
     normalizeCropBox,
     resolveCropBoxForDisplay,
     resolveCropBoxWithReport,
-    cropValidationRisk,
-    buildCropCandidates,
     createCroppedFile,
     createLocalEnhancedDataUrl
   };

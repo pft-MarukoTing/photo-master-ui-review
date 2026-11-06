@@ -539,7 +539,6 @@ def finish_stage(
 
     Returns: {
         result_image: str,          # base64 PNG (no data-URL prefix)
-        result_image_data_url: str, # data:image/png;base64,...
         result_text: dict,          # analysis + quality_check + token_usage
         pre_edit_image: Optional[str], # base64 PNG, Step 5 output before Step 5b
                                      # overwrites it -- None unless Step 5b
@@ -603,9 +602,6 @@ def finish_stage(
     prompts["user_instruction_review"] = review["prompt"]
     usage["Step 3 - user_instruction_review"] = review["usage"]
     timings["Step 3 - user_instruction_review"] = review["duration"]
-
-    prompts["crop_validation"] = None
-    timings["Step 4 - crop_validation"] = None
 
     # Populated only when Step 5b actually runs (below) -- Step 5's own
     # output before that pass overwrites it, kept around so callers can
@@ -780,7 +776,6 @@ def finish_stage(
 
     return {
         "result_image": image_b64,
-        "result_image_data_url": f"data:image/png;base64,{image_b64}",
         "pre_edit_image": pre_edit_image_b64,
         "result_text": {
             "analysis": analysis,

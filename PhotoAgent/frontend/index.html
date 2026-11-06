@@ -3331,9 +3331,8 @@
       background: var(--card);
       box-shadow: inset 3px 0 0 var(--accent);
     }
-    /* A stage the pipeline never called GPT for (e.g. crop_validation, which
-       no longer exists as a separate call at all -- see pipeline.py) still
-       gets a tab (so its absence is visible, not just missing), just muted. */
+    /* A stage the pipeline never called GPT for still gets a tab (so its
+       absence is visible, not just missing), just muted. */
     .prompts-modal-tab.is-empty { opacity: .5; }
     .prompts-modal-content {
       flex: 1;
@@ -6688,7 +6687,6 @@
       <div hidden>
         <pre id="prompt-analysis">–</pre>
         <pre id="prompt-review">–</pre>
-        <pre id="prompt-crop">–</pre>
         <pre id="prompt-edit">–</pre>
         <pre id="prompt-edit-resolution">–</pre>
         <pre id="prompt-gaze-repair">–</pre>
