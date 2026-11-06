@@ -723,7 +723,7 @@ def _start_early_skill_passes(image_bytes, fixed_context, face_crops, ctx):
     running after Call A, which only adds a wait (portrait: Call B; Call C waits for Call A)."""
     import contextvars
     from concurrent.futures import ThreadPoolExecutor
-    if not fixed_context["preview_people"]:
+    if not ANALYSIS_SKILLS or not fixed_context["preview_people"]:
         return {}
     roster = _early_skill_roster(image_bytes, fixed_context, face_crops)
     pool = ThreadPoolExecutor(max_workers=len(ANALYSIS_SKILLS), thread_name_prefix="early-skill")

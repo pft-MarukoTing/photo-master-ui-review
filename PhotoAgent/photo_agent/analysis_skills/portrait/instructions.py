@@ -292,11 +292,12 @@ def portrait_qc_persons(analysis):
 
 
 def build_portrait_qc_instruction(persons):
-    """Call B of the analysis split: given Call A's already-
-    finalized, ordered list of is_person=true subjects (label + box), judge
-    each one's blink/hair/gaze/smile independently. Build persons with
+    """Call B of the analysis split: given an ordered list of is_person=true
+    subjects (label + box), judge each one's blink/hair/gaze/smile/lens
+    independently. The list is usually the Stage 2.0 roster (run_early, with
+    head-level boxes) and otherwise Call A's subjects. Build persons with
     portrait_qc_persons(analysis), so every item carries its immutable
-    subject_index from Call A. Results are merged by subject_index, never by
+    subject_index. Results are merged by subject_index, never by
     response-array position.
     """
     return i18n.localize_analysis(
