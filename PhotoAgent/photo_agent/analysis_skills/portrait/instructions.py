@@ -93,18 +93,18 @@ _HAIR_CORRECTION_HANDOFF_SECTION = """## Per-person candidate hair correction pl
 
 
 _PORTRAIT_QC_FACE_CROP_EVIDENCE_SECTION = """## Face-crop evidence for portrait QC
-Intent: Use the supplied full photo for photographic context and each zoomed face crop for local facial evidence, without repeating subject discovery or changing the subject list finalized by Call A.
+Intent: Use the supplied full photo for photographic context and each zoomed face crop for local facial evidence, without repeating subject discovery or changing the list of people given below.
 
 - The people to review are authoritative. Do not create, remove, reorder, merge, split, or relabel people.
-- Each listed person has an immutable subject_index from Call A. Echo that exact subject_index in the corresponding output item.
-- Also echo local_detection_index exactly as listed. It identifies the matching Face crop N when its value is greater than or equal to 1; -1 means no detector-backed crop is available.
-- Match a Face crop N only to the listed person whose local_detection_index equals N. Do not associate crops by visual similarity, list position, prominence, or guesswork.
+- Each listed person has an immutable subject_index. Echo that exact subject_index in the corresponding output item.
+- Also echo local_detection_index exactly as listed; it is an identifier to return, not a sign of whether this person has a crop.
+- Each face crop's caption names whose it is. A crop captioned "for subject_index=K" belongs only to the listed person with that subject_index; a crop captioned "Face crop N" belongs only to the listed person whose local_detection_index equals N. Do not associate crops by visual similarity, list position, prominence, or guesswork.
 - Use the matched face crop as primary evidence for the physical reading of a face: physical_eye_state, blink/closure, pupil/iris detail, smile_intensity and the mouth-corner, lip, and cheek structure behind it, and strand-level hair detail -- the fringe's root band, strand thickness and spacing, forehead showing between clumps, oily sheen, and strands resting on a feature.
-- The crop is one person enlarged, never the evidence for which person this is: the listed box and label identify them in the full photo, and the crop stops at the head. So the hairstyle as a whole is read from the full photo -- whether the front strands continue into the lengths (a side sweep or long front hair) or stop as a shorter band (a fringe), whether the disorder is even across the whole head (style) or a single local contradiction (accident), whether wind shows elsewhere in the frame on clothing, foliage, or other people's hair, and which part of the same head is still undisturbed enough to define what a settle returns to.
+- The crop is one person enlarged, never the evidence for which person this is: the listed label and location identify them in the full photo. The crop stops at the head, and so does a location listed as a head location, so follow this same person down from the head in the full photo to read the hairstyle as a whole -- whether the front strands continue into the lengths (a side sweep or long front hair) or stop as a shorter band (a fringe), whether the disorder is even across the whole head (style) or a single local contradiction (accident), whether wind shows elsewhere in the frame on clothing, foliage, or other people's hair, and which part of the same head is still undisturbed enough to define what a settle returns to.
 - For gaze, use the crop and full photo together: the crop resolves pupil/iris placement, while both views establish head yaw/pitch, facial geometry, and the current camera viewpoint. Never treat the crop center as the lens position.
 - Use the full photo for what that reading means and for everything outside the face: expression intent, gesture, body posture, group-photo readiness, visible gaze targets, sleep/activity context, and the relationship between people.
 - A crop is the same person and same shutter moment as the full photo, not a separate image.
-- If local_detection_index=-1 or the matching crop is unavailable, judge from the full photo and mark a field unclear only when the relevant visual evidence is genuinely unreadable.
+- If no crop's caption names a listed person, judge that person from the full photo and mark a field unclear only when the relevant visual evidence is genuinely unreadable.
 - Return exactly one result for every listed subject_index. Never output an issue result for a person not listed here.
 """
 
@@ -243,7 +243,7 @@ _ANALYSIS_RESPONSIBILITIES_PORTRAIT_QC = """- Hair analysis is observation-only:
 """
 
 
-_PORTRAIT_QC_PERSONA_HEADER = """You are a meticulous portrait quality-control reviewer. A separate photography-direction pass has already analyzed this photo's composition, color, and crop, and has identified the people listed below. Your only job is to inspect each of them, independently, for blink/eye closure, gaze direction, hair disruption, smile intensity, and wide-angle edge stretch of the face. You are not judging composition, color, or crop. For hair, author only the nested per-person candidate hair_issue.correction_plan required by the observed state; Python decides whether that candidate is enabled.
+_PORTRAIT_QC_PERSONA_HEADER = """You are a meticulous portrait quality-control reviewer. The people listed below have already been selected for review, and a separate pass handles this photo's composition, color, and crop. Your only job is to inspect each of them, independently, for blink/eye closure, gaze direction, hair disruption, smile intensity, and wide-angle edge stretch of the face. You are not judging composition, color, or crop. For hair, author only the nested per-person candidate hair_issue.correction_plan required by the observed state; Python decides whether that candidate is enabled.
 
 Return only valid JSON. Keep the JSON keys in English. Every user-visible string value (e.g. each issue's "reason") must be Traditional Chinese.
 
@@ -258,9 +258,11 @@ def _person_list_text(persons):
         subject_index = p.get("subject_index", p.get("_subject_index", i))
         local_detection_index = p.get("local_detection_index", -1)
         position = p.get("_face_position")
+        # A Stage 2.0 roster (run_early) has only head-level boxes; say so instead of implying a body box.
+        box_name = "head location" if p.get("_box_is_head") else "box"
         entries.append(
-            "subject_index={} | local_detection_index={} | {} -- box x={:.3f}, y={:.3f}, w={:.3f}, h={:.3f}".format(
-                subject_index, local_detection_index, p.get("label") or "person",
+            "subject_index={} | local_detection_index={} | {} -- {} x={:.3f}, y={:.3f}, w={:.3f}, h={:.3f}".format(
+                subject_index, local_detection_index, p.get("label") or "person", box_name,
                 box.get("x", 0), box.get("y", 0), box.get("w", 0), box.get("h", 0),
             )
             + (" | face center {:.2f} of the way from frame center to corner, toward the {}".format(*position[:2])
@@ -363,10 +365,10 @@ def build_eye_repair_planning_instruction(targets):
 
 Their blink and/or gaze detection is final and was already gated by deterministic Python. Do not reclassify it, remove a target, add another person, or change should_fix. Return exactly one repair plan per listed subject_index. Each plan must include both gaze_repair_strategy and blink_repair_strategy. For whichever of the two a target's needs_gaze_repair/needs_blink_repair is false, fill that one with its "not applicable" placeholder shape (strategy_type/target_eye_state "not_safe_to_repair"/"不適用", every other field "不適用" or an empty list) instead of omitting it.
 
-Every free-text field you write (edit_instruction, target_eye_state, target_gaze_read, success_condition, preservation rules, failure modes, etc.) will be copied verbatim into a separate prompt for a different model later -- one that sees only the full photo plus this same target's label and box, and nothing else about this analysis. So each field must stand on its own: describe the person only by their label wording or frame position (e.g. "the person on the left", the label given below), and describe the required change only in terms visible in the final photo. Never reference "Face crop N", subject_index, local_detection_index, detection_index, or any other identifier, numbering, or artifact of this analysis session -- that other model has never seen any of them and will not know what they mean.
+Every free-text field you write (edit_instruction, target_eye_state, target_gaze_read, success_condition, preservation rules, failure modes, etc.) will be copied verbatim into a separate prompt for a different model later -- one that sees only the full photo plus this same target's label and box, and nothing else about this analysis. So each field must stand on its own: describe the person only by their label wording or frame position (e.g. "the person on the left", the label given below), and describe the required change only in terms visible in the final photo. Never reference a face crop, "Face crop N", subject_index, local_detection_index, detection_index, or any other identifier, numbering, or artifact of this analysis session -- that other model has never seen any of them and will not know what they mean.
 
 Gaze repair (only for a target with needs_gaze_repair true):
-Use the full photo and matching Face crop N to choose an anatomically plausible method that produces an unmistakable, normally visible correction to the exact current lens. The correction must be obvious at normal photo-viewing size, not only when the face is highly enlarged:
+Use the full photo and the face crop whose caption names this person (by subject_index, or as Face crop N for its local_detection_index) to choose an anatomically plausible method that produces an unmistakable, normally visible correction to the exact current lens. The correction must be obvious at normal photo-viewing size, not only when the face is highly enlarged:
 - eyes_plus_head_face_alignment is used only when the captured head yaw/pitch or face orientation itself materially prevents natural direct lens contact. Require a visible but bounded head/face alignment together with the iris/pupil correction;
 - eyes_only is the correct method whenever the head and face are already naturally aligned to the current lens and both visible eyes can reach exact lens contact without side-eye, strain, crossed axes, or excessive sclera. The miss need not be tiny: a frontal face looking sideways may still need a clearly visible iris/pupil movement while its eyelids, eye shape, head pose, and facial projection remain fixed;
 - not_safe_to_repair only when the pixels or geometry cannot support a reliable correction. In that case write a conservative plan and explicitly name the limitation.

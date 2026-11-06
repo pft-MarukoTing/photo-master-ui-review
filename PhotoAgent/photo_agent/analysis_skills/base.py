@@ -44,9 +44,10 @@ class AnalysisSkill:
         local_detection_index). Return (roster, usages), or None to wait for Call A."""
         return None
 
-    def adopt_early(self, analysis, early):
+    def adopt_early(self, analysis, early, ctx):
         """Return (analysis, usages) with run_early's result applied to Call A's
-        analysis, or None when it no longer fits and run must be used instead."""
+        analysis -- running any remaining passes that need Call A's own fields --
+        or None when it no longer fits and run must be used instead."""
         return None
 
     def prompt_records(self, analysis):

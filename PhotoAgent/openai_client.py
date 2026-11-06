@@ -571,8 +571,12 @@ def _analyze_overall_fixed(content, analysis_model, context, *, photo_facts=None
     return overall, usages, diagnostics, bindings
 
 
-def _fixed_person_crop_items(image_bytes, context, crops):
-    """Readonly person-captioned evidence; B zooms do not acquire A IDs."""
+def _fixed_person_crop_items(image_bytes, context, crops, *, for_skills=False):
+    """Readonly person-captioned evidence; B zooms do not acquire A IDs.
+
+    for_skills captions the same crops for the analysis skills' passes (Call B,
+    Call C, Body Reshape), which already have their people listed: each crop only
+    says whose it is, without Call A's membership and body-extent instructions."""
     import config
     candidates = {c['candidate_id']: c for c in context['low_confidence_candidates']}
     items, b_count = [], 0
@@ -585,6 +589,16 @@ def _fixed_person_crop_items(image_bytes, context, crops):
             zoom = b_count < config.SUBJECT_PREVIEW_MAX_LOW_CONFIDENCE_ZOOMS
             crop = restore_face_crops(image_bytes, [{**candidate, 'sent_to_model': zoom}])[0]
             b_count += 1
+        if for_skills:
+            located = f"; face location={json.dumps(crop['face_box'])}" if crop else ''
+            if crop and crop.get('bytes') is not None:
+                items.append({'type': 'input_text', 'text': f"Face crop for subject_index={index}{located}. "
+                              "It is the same person at the same shutter moment as the full photo, zoomed on the head."})
+                items.append({'type': 'input_image', 'image_url': image_to_data_url(crop['bytes'], 'image/jpeg')})
+            else:
+                items.append({'type': 'input_text', 'text':
+                              f"No face crop for subject_index={index}{located}; judge this person from the full photo."})
+            continue
         items.append({'type': 'input_text', 'text':
             f"Fixed preview_person_id={person['preview_person_id']}; subject_index={index}; "
             f"Stage 2.0 location reference={json.dumps(person['box'])}; "
@@ -692,7 +706,8 @@ def _early_skill_roster(image_bytes, fixed_context, face_crops):
     is_person follows Stage 2.0's face_readable, which uses Call A's is_person
     standard, so the early passes see the same people Call A would normally pick."""
     people = fixed_context["preview_people"]
-    subjects = [{"label": p["label"], "box": copy.deepcopy(p["box"]), "is_person": p.get("face_readable") is True,
+    subjects = [{"label": p["label"], "box": copy.deepcopy(p["box"]), "_box_is_head": True,
+                 "is_person": p.get("face_readable") is True,
                  "preview_person_id": p["preview_person_id"],
                  "local_detection_index": p["detection_index"] if p["source"] == "detector" else -1}
                 for p in people]
@@ -705,7 +720,7 @@ def _early_skill_roster(image_bytes, fixed_context, face_crops):
 def _start_early_skill_passes(image_bytes, fixed_context, face_crops, ctx):
     """Start each skill's people-only passes (run_early) in the background while
     Call A runs; returns {skill name: Future}. They cost the same calls as
-    running after Call A, which only adds a wait (portrait: Call B then Call C)."""
+    running after Call A, which only adds a wait (portrait: Call B; Call C waits for Call A)."""
     import contextvars
     from concurrent.futures import ThreadPoolExecutor
     if not fixed_context["preview_people"]:
@@ -719,13 +734,13 @@ def _start_early_skill_passes(image_bytes, fixed_context, face_crops, ctx):
     return futures
 
 
-def _adopt_early_skill_passes(skill, analysis, future):
+def _adopt_early_skill_passes(skill, analysis, future, ctx):
     """The skill's early result applied to Call A's analysis, or None to run it now."""
     if future is None:
         return None
     try:
         early = future.result()
-        adopted = skill.adopt_early(analysis, early) if early is not None else None
+        adopted = skill.adopt_early(analysis, early, ctx) if early is not None else None
     except Exception as exc:
         logger.warning("Early %s passes unusable, running them after Call A: %s", skill.name, exc)
         return None
@@ -760,13 +775,16 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
         and precomputed_preview['subject_preview']['state'] == 'ready' else None)
     face_crop_items = (_fixed_person_crop_items(image_bytes, fixed_context, face_crops)
                        if fixed_context is not None else _face_crop_content_items(face_crops))
+    # The skills' passes get the same crops captioned for them (see for_skills).
+    skill_crop_items = (_fixed_person_crop_items(image_bytes, fixed_context, face_crops, for_skills=True)
+                        if fixed_context is not None else face_crop_items)
     from photo_agent import chat_analysis
     requests = chat_analysis.validate(analysis_user_requests,
         source_sha256=hashlib.sha256(image_bytes).hexdigest(), analysis_model=analysis_model,
         known_ids=[p['preview_person_id'] for p in fixed_context['preview_people']] if fixed_context else None) if analysis_user_requests else None
     intent_context = chat_analysis.context(requests)
     def request_with_intent(instruction, text_format, label, **kwargs):
-        return _analysis_request(analysis_model, data_url, face_crop_items,
+        return _analysis_request(analysis_model, data_url, skill_crop_items,
                                 instruction + intent_context, text_format, label, **kwargs)
     ctx = AnalysisContext(
         request=request_with_intent,
@@ -813,7 +831,7 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
     selected = select_analysis_skills(analysis)
     for skill in ANALYSIS_SKILLS:
         if skill in selected:
-            adopted = _adopt_early_skill_passes(skill, analysis, early.get(skill.name))
+            adopted = _adopt_early_skill_passes(skill, analysis, early.get(skill.name), ctx)
             analysis, skill_usages = adopted if adopted is not None else skill.run(analysis, ctx)
             usages.extend(skill_usages)
         else:
