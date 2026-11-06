@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+# Local runtime configuration; copy .env.example to .env.default.
+.env.default
+*.jpg
+*.jpeg
+*.png
+*.webp
+log/
+output/
+tmp/
+/c2pa/
+
+PROJECT-RULES.md
+AGENTS.md
