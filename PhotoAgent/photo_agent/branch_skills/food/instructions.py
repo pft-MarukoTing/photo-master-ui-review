@@ -56,7 +56,7 @@ _STEP_SHADOWS = """6. Shadows: judge every shadow and dark area by what it does 
 
 _STEP_REVIEW = """7. review_items: a reframe item when the frame changes, an alignment item when step 4 calls for one, distraction items for removals, and a shadow item for shadows. Each has plan (the editor's instruction, written as the finished state), recipe (the one-line user-facing version, starting with its kind's prefix: 重新構圖：／水平／透視校正：／移除干擾物：／改善陰影：), and inverse (what stays exactly as captured if the user declines this item: that region and property). Fewer, coherent changes look more natural than many patches; leave out what the photo does not need. issues then names, most important first, the two to six problems in the capture this plan fixes, the look included: each one short sentence saying what is wrong and where."""
 
-_STEP_FINDINGS = """8. review_findings, written last, summarises the settled plan for the photo's owner and never adds, drops, or changes an item. Write one entry for each of the four aspects; each aspect holds these items: light_color the finished look and the shadow item, background the distraction items, clarity none (focus, sharpness, and fine detail), composition the reframe and alignment items. An aspect with no item is good, and its finding names what already works there. For an aspect with items, rating judges how much the capture holds the photo back in that aspect, not how large the edit is: could_be_better for a weakness noticed on a closer look, needs_work for a problem that hurts the photo at first glance; its finding names that problem and where it is. Each finding is one short plain sentence, with no numbers or editing terms, and does not say what will be done."""
+_STEP_FINDINGS = """8. review_findings, written last, summarises the settled plan for the photo's owner and never adds, drops, or changes an item. Write one entry for each of the four aspects; each aspect holds these items: light_color the finished look and the shadow item, background the distraction items, clarity none (focus, sharpness, and fine detail), composition the reframe and alignment items. For an aspect with no item, its finding names what already works there; for an aspect with items, it names the problem in the capture and where it is. Each finding is one short plain sentence, with no numbers or editing terms, and does not say what will be done."""
 
 ANALYSIS_INSTRUCTION = (
     _PERSONA + "\n\n" + _OUTPUT_RULES + "\n\n## How to decide\n\n"
@@ -167,7 +167,6 @@ def analysis_schema(labels):
             "issues": _schema_array_of(_schema_string()),
             "review_findings": _schema_array_of(_schema_object({
                 "aspect": _schema_enum(list(REVIEW_ASPECTS)),
-                "rating": _schema_enum(["good", "could_be_better", "needs_work"]),
                 "finding": _schema_string(),
             })),
         }),

@@ -2990,13 +2990,6 @@
         "chat"
       ]
     },
-    "可以更好": {
-      "en": "Could Be Better",
-      "where": [
-        "panel"
-      ],
-      "note": "Rating on an analysis card: this aspect of the photo could be improved (middle level)."
-    },
     "可以調整": {
       "en": "Adjustable",
       "where": [
@@ -3220,8 +3213,8 @@
         "chat"
       ]
     },
-    "在面板模式顯示「分析卡片」分頁：美化項目依光線色彩、背景、人像、清晰度、構圖整理成評等卡片（app 審閱畫面用）。": {
-      "en": "Shows the Findings Cards tab in panel mode: the retouch items sorted into rated Light & Color, Background, Portrait, Clarity, and Composition cards (for the app's review screen).",
+    "在面板模式顯示「分析卡片」分頁：美化項目依光線色彩、背景、人像、清晰度、構圖整理成分析卡片（app 審閱畫面用）。": {
+      "en": "Shows the Findings Cards tab in panel mode: the retouch items sorted into Light & Color, Background, Portrait, Clarity, and Composition cards (for the app's review screen).",
       "where": [
         "panel"
       ]
@@ -7798,13 +7791,6 @@
         "panel"
       ]
     },
-    "良好": {
-      "en": "Good",
-      "where": [
-        "panel"
-      ],
-      "note": "Rating on an analysis card: this aspect of the photo is fine (top level)."
-    },
     "色彩": {
       "en": "Color",
       "where": [
@@ -9674,13 +9660,6 @@
       "where": [
         "panel"
       ]
-    },
-    "需要處理": {
-      "en": "Needs Work",
-      "where": [
-        "panel"
-      ],
-      "note": "Rating on an analysis card (scale: needs work / could be better / good): this aspect needs fixing."
     },
     "面板": {
       "en": "Panel",

@@ -708,8 +708,7 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   "review_findings": [
     {
       "aspect": "light_color、background、clarity、composition 各一筆，依此順序。",
-      "rating": "good / could_be_better / needs_work：correction_aspect 沒有出現這個面向就是 good；有出現時依原圖在這個面向拖累照片的程度判斷，不是依修圖會改變多少。could_be_better＝仔細看才會注意到的不足；needs_work＝第一眼就看得出、明顯拖累照片的問題。",
-      "finding": "一句短句，用照片主人聽得懂的白話：good 寫原圖在這個面向已經做得好的地方；其他寫原圖在這個面向的問題與位置。不寫數字或修圖術語，也不寫要怎麼修。"
+      "finding": "一句短句，用照片主人聽得懂的白話：correction_aspect 沒有出現這個面向時，寫原圖在這個面向已經做得好的地方；有出現時，寫原圖在這個面向的問題與位置。不寫數字或修圖術語，也不寫要怎麼修。"
     }
   ]
 }
@@ -729,7 +728,7 @@ _OUTPUT_ALIGNMENT_RULES_OVERALL = f"""## Execution contract
 - Write retouch_recipe as the user-facing version of the same item, retaining its region, main action, and useful strength.
 - Write correction_inverse for the exact same region and properties as its correction_plan item.
 - correction_aspect names, for each correction_plan item in the same order, the one aspect of the photo a viewer would notice it improving most: light_color (brightness, shadows, highlights, contrast, depth, white balance, color cast, saturation, skin tone), background (elements that compete with the subject: clutter, passers-by, objects to remove or tone down), clarity (focus, sharpness, noise, fine detail), or composition (crop, framing, output aspect ratio, tilt, perspective). Crop-tagged and alignment-tagged items are composition.
-- review_findings summarizes the settled correction_plan for the photo's owner and never adds, drops, or changes a review item: one entry for each of the four aspects. An aspect that does not appear in correction_aspect is good, and its finding names what already works there. For an aspect that does appear, the rating judges how much the original holds the photo back in that aspect, not how large the edit is.
+- review_findings summarizes the settled correction_plan for the photo's owner and never adds, drops, or changes a review item: one entry for each of the four aspects. For an aspect that does not appear in correction_aspect, its finding names what already works there; for one that does, it names what holds the original back in that aspect and where.
 - Treat reframing and its output aspect ratio as one reviewable decision. When reframing is beneficial, write exactly one crop-tagged correction_plan item containing every composition crop/trim/frame-relative subject repositioning or scale action; never split output shape into another item.
 - The matching retouch_recipe item must start with "重新構圖：" and describe only the semantic crop result, for example "重新構圖：收窄左右空間，讓家庭更集中。"
 - Do not put a numeric aspect ratio in correction_plan, retouch_recipe, crop_recommendation, or other user-facing prose. Local deterministic geometry resolves the executable ratio from crop_box and inserts the result into the review text afterward.
@@ -1126,7 +1125,6 @@ ANALYSIS_RESPONSE_SCHEMA_OVERALL = {
         "preserve_rules": _schema_string_array(),
         "review_findings": _schema_array_of(_schema_object({
             "aspect": _schema_enum(REVIEW_ASPECTS),
-            "rating": _schema_enum(("good", "could_be_better", "needs_work")),
             "finding": _schema_string(),
         })),
     }),

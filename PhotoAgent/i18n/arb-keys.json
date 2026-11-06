@@ -6895,12 +6895,6 @@
         "panel"
       ]
     },
-    "panel_could_be_better": {
-      "zh": "可以更好",
-      "where": [
-        "panel"
-      ]
-    },
     "panel_couldnt_capture_a_preview_but": {
       "zh": "無法擷取畫面預覽，回報仍可送出。",
       "where": [
@@ -7477,12 +7471,6 @@
         "panel"
       ]
     },
-    "panel_good": {
-      "zh": "良好",
-      "where": [
-        "panel"
-      ]
-    },
     "panel_gpt_wasnt_called_in_this": {
       "zh": "（此步驟未呼叫 GPT）",
       "where": [
@@ -7821,12 +7809,6 @@
     },
     "panel_needs_review": {
       "zh": "需複查",
-      "where": [
-        "panel"
-      ]
-    },
-    "panel_needs_work": {
-      "zh": "需要處理",
       "where": [
         "panel"
       ]
@@ -8870,7 +8852,7 @@
       ]
     },
     "panel_shows_the_findings_cards_tab": {
-      "zh": "在面板模式顯示「分析卡片」分頁：美化項目依光線色彩、背景、人像、清晰度、構圖整理成評等卡片（app 審閱畫面用）。",
+      "zh": "在面板模式顯示「分析卡片」分頁：美化項目依光線色彩、背景、人像、清晰度、構圖整理成分析卡片（app 審閱畫面用）。",
       "where": [
         "panel"
       ]

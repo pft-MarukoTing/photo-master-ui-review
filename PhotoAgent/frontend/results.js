@@ -3621,7 +3621,6 @@ window.PhotoAgentResults = (() => {
     light_color: "光線色彩", light: "光線", color: "色彩", background: "背景",
     portrait: "人像", clarity: "清晰度", composition: "構圖"
   };
-  const FINDING_RATING_LABELS = { needs_work: "需要處理", could_be_better: "可以更好", good: "良好" };
 
   // The 分析卡片 tab (debug only): analysis.findings as the app's review screen groups it. Shown only while the
   // 分析卡片 switch is on and the analysis has cards.
@@ -3649,16 +3648,12 @@ window.PhotoAgentResults = (() => {
     cards.forEach((card) => {
       const box = document.createElement("section");
       box.className = "ap-finding-card";
-      box.dataset.rating = card.rating;
       const head = document.createElement("div");
       head.className = "ap-finding-head";
       const name = document.createElement("span");
       name.className = "ap-finding-name";
       name.textContent = tr(FINDING_CATEGORY_LABELS[card.category] || card.category);
-      const rating = document.createElement("span");
-      rating.className = "ap-finding-rating";
-      rating.textContent = tr(FINDING_RATING_LABELS[card.rating] || card.rating);
-      head.append(name, rating);
+      head.append(name);
       box.appendChild(head);
       if (card.finding) {
         const finding = document.createElement("p");

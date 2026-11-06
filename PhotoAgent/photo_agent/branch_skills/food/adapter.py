@@ -140,13 +140,10 @@ def to_analysis(result, photo_facts, image_size):
         **framing_fields({**result["framing"], "keep_in_frame": keep}, hero, image_size),
     )
     analysis["subject_extent_box"] = None
-    written = result.get("review_findings") or []
-    analysis["_review_findings"] = {
-        "cards": {entry["aspect"]: {"rating": entry["rating"], "finding": entry["finding"]} for entry in reversed(written)},
-        "plans": {result["edit_brief"]: "light_color",
-                  **{item["plan"]: ITEM_ASPECT[item["kind"]] for item in result["review_items"]}},
-        "written": [{"aspect": entry["aspect"], "rating": entry["rating"]} for entry in written],
-    }
+    from photo_agent.findings import review_summary
+
+    analysis["_review_findings"] = review_summary(result.get("review_findings") or [], {
+        result["edit_brief"]: "light_color", **{item["plan"]: ITEM_ASPECT[item["kind"]] for item in result["review_items"]}})
     analysis["analysis_branch"] = BRANCH
     analysis["food_branch"] = result
     return analysis
