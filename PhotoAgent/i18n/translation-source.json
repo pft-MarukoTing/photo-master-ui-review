@@ -439,13 +439,6 @@
         "chat"
       ]
     },
-    "{length} 張": {
-      "en": "{length} {length|photo|photos}",
-      "where": [
-        "panel"
-      ],
-      "note": "Photo count."
-    },
     "{length} 張照片": {
       "en": "{length} {length|photo|photos}",
       "where": [
@@ -1803,13 +1796,6 @@
       "where": [
         "chat"
       ]
-    },
-    "修圖花費": {
-      "en": "Retouch cost",
-      "where": [
-        "panel"
-      ],
-      "note": "Cost of the retouch, in the cost report."
     },
     "修圖（送給 Editor）": {
       "en": "Retouch (sent to Editor)",
@@ -3281,13 +3267,6 @@
         "chat"
       ]
     },
-    "好，@@接句": {
-      "en": "OK. ",
-      "where": [
-        "chat"
-      ],
-      "note": "'OK, ' starting a reply, joined to the next sentence: keep the trailing space."
-    },
     "好，{changed}。": {
       "en": "OK, {changed}.",
       "where": [
@@ -4388,12 +4367,6 @@
         "backend text"
       ]
     },
-    "快分析好了，再等一下…": {
-      "en": "Almost done with the analysis…",
-      "where": [
-        "chat"
-      ]
-    },
     "快完成了，再等一下…": {
       "en": "Almost done…",
       "where": [
@@ -5117,12 +5090,6 @@
         "chat"
       ]
     },
-    "改好按下面的「美化」我就開始": {
-      "en": "When you're ready, tap “Retouch” below to start",
-      "where": [
-        "chat"
-      ]
-    },
     "改變長寬比需要依新比例重新構圖，會再呼叫一次分析模型並產生額外費用；畫面建議的其他項目維持不變。要繼續嗎？": {
       "en": "Changing the aspect ratio reframes the photo, which runs the analysis model again at an additional cost. Other scene suggestions stay the same. Continue?",
       "where": [
@@ -5815,13 +5782,6 @@
         "backend text"
       ]
     },
-    "正在判斷照片的類型與場景…": {
-      "en": "Determining the photo type and scene…",
-      "where": [
-        "chat"
-      ],
-      "note": "Progress text. Wording variant; same meaning as the other texts with this English."
-    },
     "正在判斷照片類型與拍攝場景…": {
       "en": "Determining the photo type and scene…",
       "where": [
@@ -5853,19 +5813,6 @@
       ],
       "note": "Progress text. Wording variant; same meaning as the other texts with this English."
     },
-    "正在找出畫面目前不夠精緻的地方…": {
-      "en": "Spotting areas that could look more polished…",
-      "where": [
-        "chat"
-      ]
-    },
-    "正在找出背景裡可能干擾的元素…": {
-      "en": "Looking for distracting elements in the background…",
-      "where": [
-        "chat"
-      ],
-      "note": "Progress text. Wording variant; same meaning as the other texts with this English."
-    },
     "正在整理分析重點…": {
       "en": "Summarizing the analysis…",
       "where": [
@@ -5874,12 +5821,6 @@
     },
     "正在整理回覆…": {
       "en": "Preparing your answer…",
-      "where": [
-        "chat"
-      ]
-    },
-    "正在整理建議調整的項目…": {
-      "en": "Compiling suggested adjustments…",
       "where": [
         "chat"
       ]
@@ -5896,13 +5837,6 @@
         "chat"
       ]
     },
-    "正在檢查曝光、白平衡與色彩…": {
-      "en": "Checking exposure, white balance and color…",
-      "where": [
-        "chat"
-      ],
-      "note": "Progress text. Wording variant; same meaning as the other texts with this English."
-    },
     "正在檢查曝光、白平衡與色彩表現…": {
       "en": "Checking exposure, white balance and color…",
       "where": [
@@ -5911,18 +5845,6 @@
     },
     "正在檢查水平線傾斜與透視變形…": {
       "en": "Checking for a tilted horizon and perspective distortion…",
-      "where": [
-        "chat"
-      ]
-    },
-    "正在檢查水平線與透視有沒有歪…": {
-      "en": "Checking that the horizon and perspective are straight…",
-      "where": [
-        "chat"
-      ]
-    },
-    "正在決定成品的光影與色彩方向…": {
-      "en": "Choosing a direction for lighting and color…",
       "where": [
         "chat"
       ]
@@ -6000,12 +5922,6 @@
       ],
       "note": "Progress text. Wording variant; same meaning as the other texts with this English."
     },
-    "正在評估構圖與取景方式…": {
-      "en": "Evaluating the composition and framing…",
-      "where": [
-        "chat"
-      ]
-    },
     "正在評估清晰度與雜訊…": {
       "en": "Checking sharpness and noise…",
       "where": [
@@ -6047,13 +5963,6 @@
       "where": [
         "chat"
       ]
-    },
-    "正在辨識照片中的主體、光線與構圖{then}…": {
-      "en": "Identifying the subject, lighting and composition{then}…",
-      "where": [
-        "chat"
-      ],
-      "note": "Progress text. Wording variant; same meaning as the other texts with this English."
     },
     "正在辨識畫面主體、光線與構圖{then}…": {
       "en": "Identifying the subject, lighting and composition{then}…",
@@ -6424,12 +6333,6 @@
         "panel"
       ],
       "note": "Check result: nothing to fix."
-    },
-    "無須修正": {
-      "en": "No fix needed",
-      "where": [
-        "panel"
-      ]
     },
     "照你需求修的版本都還在，可以再試一次分析。": {
       "en": "The versions based on your requests are still here. You can try the analysis again.",
@@ -7269,12 +7172,6 @@
         "panel"
       ],
       "note": "Photo N of M within one version; the other key only differs in the slash."
-    },
-    "第 {runInVersion}／{runsInVersion} 張": {
-      "en": "{runInVersion} / {runsInVersion}",
-      "where": [
-        "panel"
-      ]
     },
     "第 {v1} 張": {
       "en": "Photo {v1}",

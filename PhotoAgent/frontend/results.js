@@ -1591,7 +1591,7 @@ window.PhotoAgentResults = (() => {
     { field: "gaze_issue", label: tr("眼神對焦"), flagField: "should_fix", flagWhen: true, flagText: tr("需要修正"), okText: tr("無需修正") },
     { field: "hair_issue", label: tr("亂髮偵測"), flagField: "should_fix", flagWhen: true, flagText: tr("需要修正"), okText: tr("無需修正") },
     { field: "smile_issue", label: tr("笑容調整@@人像檢查"), flagField: "adjust_safe", flagWhen: true, flagText: tr("建議微笑"), okText: tr("不建議調整") },
-    { field: "body_reshape", label: tr("身形調整"), flagField: "should_edit", flagWhen: true, flagText: tr("可以調整"), okText: tr("無須修正") }
+    { field: "body_reshape", label: tr("身形調整"), flagField: "should_edit", flagWhen: true, flagText: tr("可以調整"), okText: tr("無需修正") }
   ];
 
   // Every category the user can manually switch on even when the analyzer

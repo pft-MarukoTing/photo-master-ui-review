@@ -13734,7 +13734,7 @@
     const title = showOriginal ? tr("原圖") : run && run.versionTotal ? tr("第 {versionNumber} 版", { versionNumber: run.versionNumber }) : tr("美化結果");
     els.photoViewerTitle.textContent = photoViewerHolding ? tr("原圖") : title;
     const notes = [];
-    if (!showOriginal && run && run.runsInVersion > 1) notes.push(tr("第 {runInVersion}／{runsInVersion} 張", { runInVersion: run.runInVersion, runsInVersion: run.runsInVersion }));
+    if (!showOriginal && run && run.runsInVersion > 1) notes.push(tr("第 {runInVersion} / {runsInVersion} 張", { runInVersion: run.runInVersion, runsInVersion: run.runsInVersion }));
     if (run && run.versionTotal) notes.push(tr("共 {versionTotal} 版", { versionTotal: run.versionTotal }));
     if (notes.length) {
       const small = document.createElement("small");

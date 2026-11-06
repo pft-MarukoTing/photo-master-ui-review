@@ -3700,7 +3700,7 @@ export function App() {
                       : t("好，這幾張還在美化，等美化好我會把這句套用到每一張，到時按「全部再美化」就會照這樣重新美化。")}
                     </> : ot.count && ot.reply ? ot.reply : <>
                     {ot.line && t("好，記下了：{line}。", { line: ot.line })}
-                    {(ot.line ? "" : t("好，@@接句")) + (ot.count && ot.redo
+                    {(ot.line ? "" : t("好，")) + (ot.count && ot.redo
                       ? t("這句會套用在 {n} 張上，按{redo}就照這樣重新美化。只想改某一張，從{where}選取那張調整。",
                         { n: ot.count, redo: t("「{v1}」", { v1: shownLabel(ot.count >= batch.length ? "全部再美化" : `再美化 ${ot.count} 張`) }), where })
                       : ot.count
@@ -6909,7 +6909,7 @@ export function SessionView(props: {
                   )}
                   {/* 「美化」跟著項目那排一起出來，這句要排在按鈕上面才對得上「下面」；問句留在最後，緊接著按鈕。 */}
                   <p class="chat-text chat-muted">
-                    {t("改好按下面的「美化」我就開始")}{n ? t("，之前的版本會留在美化紀錄") : ""}{t("。")}
+                    {t("改好後按下面的「美化」我就開始")}{n ? t("，之前的版本會留在美化紀錄") : ""}{t("。")}
                   </p>
                   {showChips && c.via !== "proposal" && (
                     <p class="chat-text">
