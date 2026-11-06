@@ -3,3 +3,7 @@ __pycache__
 .baseline_manifest.json
 # Chat UI build output; built from PhotoAgent/frontend-chat/ by run_backend.py.
 PhotoAgent/frontend/chat/
+# Other languages' catalogs, made from the doc repo by PhotoAgent/scripts/l10n_prepare.py.
+PhotoAgent/frontend/generated/
+PhotoAgent/frontend-chat/src/generated/
+PhotoAgent/photo_agent/generated/

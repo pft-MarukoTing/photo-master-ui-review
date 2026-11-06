@@ -43,8 +43,8 @@ ABOUT = [
     "`where`: panel = frontend/i18n-en.js, chat = frontend-chat/src/i18n/en.ts, backend = photo_agent/i18n_en.py (labels = LABELS, text = TEXT). When the catalogs disagree, `en` holds each one's English.",
     "A key ending in @@something is the same Chinese used for a different meaning; the part after @@ says which and is not shown.",
     "Keep {placeholders}, quotes and leading/trailing spaces as they are: the page joins pieces.",
-    "Not in this file and written by hand for each language: FORMAT and PATTERNS in photo_agent/i18n_en.py (punctuation, and the regular expressions that read the AI's replies).",
-    "The Localization Hub reads ARB files with English ids (i18n/arb-keys.json), made from this file by scripts/l10n_doc.py push.",
+    "Not in this file and written by hand for each language: the punctuation (FORMAT and the letter-free text, in photo_agent/i18n_en.py for English and i18n/locales.json for the others) and English's PATTERNS (the regular expressions that read the AI's replies).",
+    "The Localization Hub reads ARB files with English ids (i18n/arb-keys.json), made from this file by scripts/l10n_doc.py push; scripts/l10n_prepare.py turns its translations into catalogs.",
     "Refresh with `python scripts/translation_source.py`; hand-written fields are kept.",
 ]
 

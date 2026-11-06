@@ -1,9 +1,11 @@
 // The language panel mode is shown in: Traditional Chinese (the source), or a
-// language with a catalog (i18n-en.js). The same choice as the chat page
+// language with a catalog (i18n-en.js, and generated/l10n.js made by
+// scripts/l10n_prepare.py). The same choice as the chat page
 // (frontend-chat/src/i18n.ts): ?lang= (remembered) or the remembered choice.
 //
 // The Chinese text is the key: tr() returns it as it is in Chinese, so the
-// Chinese page never goes through a catalog. Loaded before every other script
+// Chinese page never goes through a catalog; text a language has not
+// translated shows in English, then in Chinese. Loaded before every other script
 // of index.html, so they can call tr() while they load. It also:
 // - sends the language with every request to the backend (X-PhotoAgent-Lang),
 //   which writes its errors and the analyses it starts in that language;
@@ -15,11 +17,14 @@
 // row is found by REFRAME_LABEL_RE whichever it shows.
 (function () {
   const SOURCE = "zh-TW";
+  const L10N = window.PHOTOAGENT_L10N || { languages: [], catalogs: {} };
   const LANGS = [
     { code: SOURCE, name: "繁體中文" },
     { code: "en", name: "English" },
+    ...L10N.languages,
   ];
-  const CATALOGS = window.PHOTOAGENT_CATALOGS || {};
+  const CATALOGS = { ...(window.PHOTOAGENT_CATALOGS || {}), ...L10N.catalogs };
+  const ENGLISH = CATALOGS.en || {};
   const KEY = "photoagent.lang";
 
   function normalize(value) {
@@ -42,6 +47,7 @@
 
   const lang = resolve();
   const catalog = CATALOGS[lang] || null;
+  const lookup = (key) => (catalog ? catalog[key] || ENGLISH[key] : undefined);
   document.documentElement.lang = lang === SOURCE ? "zh-Hant" : lang;
 
   const PLURAL_RULES = new Intl.PluralRules(lang === SOURCE ? "zh-Hant" : lang);
@@ -78,7 +84,7 @@
   // A key may end in "@@context" when the same Chinese means two things; a
   // catalog's text may hold ICU plurals (fillPlurals).
   function tr(text, values) {
-    const out = (catalog && catalog[text]) || String(text).split("@@")[0];
+    const out = lookup(text) || String(text).split("@@")[0];
     if (!values) return out;
     return fillPlurals(out, values).replace(/\{(\w+)\}/g, (m, k) => (k in values ? String(values[k]) : m));
   }
@@ -133,12 +139,12 @@
       // whitespace runs as single spaces.
       const raw = node.nodeValue;
       const key = raw.trim().replace(/\s+/g, " ");
-      if (key && catalog[key]) node.nodeValue = raw.match(/^\s*/)[0] + catalog[key] + raw.match(/\s*$/)[0];
+      if (key && lookup(key)) node.nodeValue = raw.match(/^\s*/)[0] + lookup(key) + raw.match(/\s*$/)[0];
     }
     for (const el of root.querySelectorAll("*")) {
       for (const attr of ATTRS) {
         const value = (el.getAttribute(attr) || "").trim().replace(/\s+/g, " ");
-        if (value && catalog[value]) el.setAttribute(attr, catalog[value]);
+        if (value && lookup(value)) el.setAttribute(attr, lookup(value));
       }
     }
   }

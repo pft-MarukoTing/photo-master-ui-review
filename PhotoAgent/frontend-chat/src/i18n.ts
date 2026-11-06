@@ -1,14 +1,15 @@
 // The language the page is shown in: Traditional Chinese (the source), or a
-// language with a catalog in ./i18n/. The Chinese text is the key: t() returns
-// it as it is in Chinese, so the Chinese page never goes through a catalog.
+// language with a catalog in ./i18n/ or ./generated/ (scripts/l10n_prepare.py).
+// The Chinese text is the key: t() returns it as it is in Chinese, so the
+// Chinese page never goes through a catalog; text a language has not
+// translated shows in English, then in Chinese.
 //
 // Chosen by ?lang= (remembered), else the remembered choice, else Chinese.
 // Changing it reloads the page. The backend gets it with every request
 // (X-PhotoAgent-Lang) and writes its replies and analyses in it; what was
 // written before stays in the language it was written in.
 //
-// Adding a language: a catalog in ./i18n/ shaped like en.ts, listed in
-// CATALOGS and LANGS, plus the backend's photo_agent/i18n catalog.
+// Adding a language: enable it in i18n/locales.json (see scripts/l10n_prepare.py).
 //
 // Values the page sends back as they are -- the buttons named in Screen, a
 // tapped chip's text the backend compares against -- stay Chinese: show them
@@ -16,13 +17,19 @@
 
 import { EN } from "./i18n/en";
 
+type Made = { languages: { code: string; name: string }[]; catalogs: Record<string, Record<string, string>> };
+// Absent until scripts/l10n_prepare.py runs: then Chinese and English only.
+const MADE: Made = Object.values(import.meta.glob<Made>("./generated/l10n.json", { eager: true, import: "default" }))[0]
+  || { languages: [], catalogs: {} };
+
 export const SOURCE = "zh-TW";
 // What the language picker offers, each named in its own language.
 export const LANGS: { code: string; name: string }[] = [
   { code: SOURCE, name: "繁體中文" },
   { code: "en", name: "English" },
+  ...MADE.languages,
 ];
-const CATALOGS: Record<string, Record<string, string>> = { en: EN };
+const CATALOGS: Record<string, Record<string, string>> = { en: EN, ...MADE.catalogs };
 const KEY = "photoagent.lang";
 
 function normalize(value: string | null | undefined): string {
@@ -56,7 +63,7 @@ function resolve(): string {
 export const lang = resolve();
 document.documentElement.lang = lang === SOURCE ? "zh-Hant" : lang;
 const catalog = CATALOGS[lang];
-if (catalog) document.title = document.title.replace("對話", catalog["對話"] || "對話");
+if (catalog) document.title = document.title.replace("對話", catalog["對話"] || EN["對話"] || "對話");
 
 const pluralRules = new Intl.PluralRules(lang === SOURCE ? "zh-Hant" : lang);
 
@@ -99,7 +106,7 @@ function fillPlurals(text: string, values: Record<string, string | number>): str
  *  the close button, and a switch's off state); the context is never shown.
  *  A catalog's text may hold ICU plurals (fillPlurals). */
 export function t(text: string, values?: Record<string, string | number>): string {
-  const out = (catalog && catalog[text]) || text.split("@@")[0];
+  const out = (catalog && (catalog[text] || EN[text])) || text.split("@@")[0];
   if (!values) return out;
   return fillPlurals(out, values).replace(/\{(\w+)\}/g, (m, k) => (k in values ? String(values[k]) : m));
 }

@@ -1,0 +1,52 @@
+{
+  "_about": [
+    "The languages PhotoAgent offers besides Traditional Chinese (the source, zh-TW, ARB zh_Hant) and English (en, written in the code).",
+    "scripts/l10n_prepare.py makes each enabled language's catalogs from the doc repo's intl_<arb_locale>.arb; a language not listed here, or not enabled, is never offered, whatever ARB the doc repo has.",
+    "The key is the code the pages and the backend use (BCP 47, e.g. ja, pt-BR); arb_locale is the ARB file's locale (e.g. ja, pt_BR).",
+    "Required: arb_locale, name (the picker shows it, written in that language), prompt_name (what the model prompts call the language, in English) and format (every field of photo_agent/i18n.py SOURCE_FORMAT).",
+    "manual: the text with no letters that the Hub does not translate (arb-keys.json `manual`), keyed by the Chinese; a missing one falls back to English, then Chinese."
+  ],
+  "languages": {
+    "ja": {
+      "enabled": true,
+      "arb_locale": "ja",
+      "name": "日本語",
+      "prompt_name": "Japanese",
+      "format": {
+        "list": "、",
+        "sentence": "",
+        "quote": ["「", "」"],
+        "sentence_end": "。！!？?",
+        "wish_marks": ["；", "、", "，、,:： "],
+        "name_mark": "：",
+        "echo_scale": 2
+      },
+      "manual": {
+        "{a}{b}": "{a}{b}",
+        "{label}（{note}）": "{label}（{note}）",
+        "{label}：": "{label}：",
+        "{label}：{text}。": "{label}：{text}。",
+        "{label}：{v2}": "{label}：{v2}",
+        "{name}（{where}）": "{name}（{where}）",
+        "{summary}。": "{summary}。",
+        "{v1}。": "{v1}。",
+        "{v1}，{text}": "{v1}、{text}",
+        "{v1}：": "{v1}：",
+        "{v1}：{v2}": "{v1}：{v2}",
+        "{v1}：{v2}（{reason}）": "{v1}：{v2}（{reason}）",
+        "{what}：{ratio}": "{what}：{ratio}",
+        "、": "、",
+        "。": "。",
+        "。@@句尾": "。",
+        "「{v1}」": "「{v1}」",
+        "（": "（",
+        "（{level}）": "（{level}）",
+        "（{reason}）": "（{reason}）",
+        "）": "）",
+        "，": "、",
+        "：": "：",
+        "；": "；"
+      }
+    }
+  }
+}

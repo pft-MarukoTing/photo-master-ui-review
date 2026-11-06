@@ -1,8 +1,8 @@
 {
   "_about": [
-    "The English id each Chinese key has in the ARB files (i18n/arb/). Ids are kept once given: the Hub stores translations by id.",
+    "The English id each Chinese key has in the ARB files of the doc repo. Ids are kept once given: the Hub stores translations by id.",
     "`where` is the catalog the id's text goes back into: panel = frontend/i18n-*.js, chat = frontend-chat/src/i18n/*.ts, backend = photo_agent LABELS / TEXT.",
-    "`manual`: text with no letters, written by hand for each language instead of being translated.",
+    "`manual`: text with no letters, written by hand for each language (i18n/locales.json) instead of being translated.",
     "Refreshed by scripts/translation_source.py; do not edit by hand."
   ],
   "keys": {

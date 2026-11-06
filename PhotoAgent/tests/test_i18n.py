@@ -36,7 +36,7 @@ class SourceLanguageTest(unittest.TestCase):
         self.assertEqual(i18n.localized_prompt("Use Traditional Chinese (Taiwan)."), "Use Traditional Chinese (Taiwan).")
 
     def test_unknown_language_falls_back_to_chinese(self):
-        for value in (None, "", "ja", "zh-TW", "fr-FR"):
+        for value in (None, "", "xx", "zh-TW", "fr-FR"):
             self.assertEqual(i18n.normalize(value), i18n.SOURCE)
         self.assertEqual(i18n.normalize("en-US"), "en")
 

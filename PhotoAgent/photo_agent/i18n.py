@@ -1,10 +1,11 @@
-"""The language the user reads: Traditional Chinese (the source), or one of
-the languages that has a catalog here (English, i18n_en).
+"""The language the user reads: Traditional Chinese (the source), English
+(i18n_en), or a language scripts/l10n_prepare.py made a catalog for
+(generated/l10n.json, from the Localization Hub).
 
 The Chinese text is the source and the key. tr() returns it as it is when the
 language is Chinese, so the Chinese pages never go through a catalog, and its
-translation from the current language's catalog otherwise (the Chinese again
-when the catalog has none).
+translation from the current language's catalog otherwise (the English when
+the catalog has none, then the Chinese).
 
 The language travels with the work: the backend sets it per request from the
 page's X-PhotoAgent-Lang header, put_job.enqueue writes it into a job's params
@@ -12,22 +13,42 @@ page's X-PhotoAgent-Lang header, put_job.enqueue writes it into a job's params
 worker sets it again for that job. Text is written in the language of the
 moment it was made: an analysis or a chat line made in Chinese stays Chinese.
 
-Adding a language is adding a catalog module shaped like i18n_en and listing
-it in CATALOGS: its CODE and NAME, LABELS (the page's button and panel names,
-the same as the chat page's frontend-chat/src/i18n.ts), TEXT (every other
-fixed sentence), FORMAT (how a sentence lists items, quotes a button, joins
+A catalog has CODE and NAME, LABELS (the page's button and panel names, the
+same as the chat page's frontend-chat/src/i18n.ts), TEXT (every other fixed
+sentence), FORMAT (how a sentence lists items, quotes a button, joins
 sentences) and PATTERNS (how the code reads the model's replies in that
-language; a pattern a catalog leaves out is simply not looked for).
+language; a pattern a catalog leaves out is simply not looked for). A made
+catalog takes FORMAT from i18n/locales.json and has no PATTERNS.
 """
 
 import contextlib
 import contextvars
+import json
+import pathlib
 import re
+import types
 
 from photo_agent import i18n_en
 
+MADE = pathlib.Path(__file__).with_name("generated") / "l10n.json"
+
+
+def _made():
+    """(catalogs, the doc commit they came from) in MADE; none before l10n_prepare.py runs."""
+    try:
+        data = json.loads(MADE.read_text("utf-8"))
+    except FileNotFoundError:
+        return [], None
+    catalogs = [types.SimpleNamespace(
+        CODE=lang["code"], NAME=lang["name"], LABELS=lang["labels"], TEXT=lang["text"], PATTERNS={},
+        FORMAT={key: tuple(value) if isinstance(value, list) else value for key, value in lang["format"].items()})
+        for lang in data["languages"]]
+    return catalogs, data["version"]
+
+
+_MADE_CATALOGS, MADE_VERSION = _made()
 SOURCE = "zh-TW"
-CATALOGS = {catalog.CODE: catalog for catalog in (i18n_en,)}
+CATALOGS = {catalog.CODE: catalog for catalog in (i18n_en, *_MADE_CATALOGS)}
 LANGS = (SOURCE, *CATALOGS)
 HEADER = "X-PhotoAgent-Lang"
 
@@ -94,7 +115,7 @@ def tr(text, **values):
     """`text` in the current language, with {name} filled from `values`."""
     catalog = _catalog()
     if catalog:
-        text = catalog.TEXT.get(text, text)
+        text = catalog.TEXT.get(text) or i18n_en.TEXT.get(text, text)
     return text.format(**values) if values else text
 
 
@@ -102,7 +123,8 @@ def label(text):
     """A button or panel name as the user sees it."""
     catalog = _catalog()
     if catalog:
-        return catalog.LABELS.get(text, catalog.TEXT.get(text, text))
+        return (catalog.LABELS.get(text) or catalog.TEXT.get(text)
+                or i18n_en.LABELS.get(text, i18n_en.TEXT.get(text, text)))
     return text
 
 
