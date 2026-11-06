@@ -428,25 +428,25 @@
       ]
     },
     "{length} 位": {
-      "en": "{length} {length|person|people}",
+      "en": "{length} {length, plural, =1{person} other{people}}",
       "where": [
         "chat"
       ]
     },
     "{length} 個版本": {
-      "en": "{length} {length|version|versions}",
+      "en": "{length} {length, plural, =1{version} other{versions}}",
       "where": [
         "chat"
       ]
     },
     "{length} 張照片": {
-      "en": "{length} {length|photo|photos}",
+      "en": "{length} {length, plural, =1{photo} other{photos}}",
       "where": [
         "chat"
       ]
     },
     "{length} 項值得調整": {
-      "en": "{length} {length|item|items}",
+      "en": "{length} {length, plural, =1{item} other{items}}",
       "where": [
         "panel"
       ]
@@ -477,7 +477,7 @@
       ]
     },
     "{n} 張": {
-      "en": "{n} {n|photo|photos}",
+      "en": "{n} {n, plural, =1{photo} other{photos}}",
       "where": [
         "panel",
         "chat"
@@ -538,7 +538,7 @@
       ]
     },
     "{running} 張還在處理，{n} 張分析好了，還沒美化，按{btn}的{render}就會接著美化，也可以從{where}選取照片個別調整。": {
-      "en": "{running} {running|photo is|photos are} still in progress, and {n} {n|has|have} been analyzed but not retouched. Tap {render} {btn} to retouch them next, or select a photo {where} to adjust it individually.",
+      "en": "{running} {running, plural, =1{photo is} other{photos are}} still in progress, and {n} {n, plural, =1{has} other{have}} been analyzed but not retouched. Tap {render} {btn} to retouch them next, or select a photo {where} to adjust it individually.",
       "where": [
         "chat"
       ]
@@ -799,13 +799,13 @@
       ]
     },
     "上傳了 {n} 張照片": {
-      "en": "Uploaded {n} {n|photo|photos}",
+      "en": "Uploaded {n} {n, plural, =1{photo} other{photos}}",
       "where": [
         "chat"
       ]
     },
     "上傳了 {v1} 張照片": {
-      "en": "Uploaded {v1} {v1|photo|photos}",
+      "en": "Uploaded {v1} {v1, plural, =1{photo} other{photos}}",
       "where": [
         "chat"
       ]
@@ -1515,7 +1515,7 @@
       ]
     },
     "使用所選照片 ({count})": {
-      "en": "Use Selected {count|Photo|Photos} ({count})",
+      "en": "Use Selected {count, plural, =1{Photo} other{Photos}} ({count})",
       "where": [
         "panel"
       ]
@@ -2221,13 +2221,13 @@
       ]
     },
     "共 {n} 版": {
-      "en": "{n} {n|version|versions}",
+      "en": "{n} {n, plural, =1{version} other{versions}}",
       "where": [
         "chat"
       ]
     },
     "共 {versionTotal} 版": {
-      "en": "{versionTotal} {versionTotal|version|versions}",
+      "en": "{versionTotal} {versionTotal, plural, =1{version} other{versions}}",
       "where": [
         "panel"
       ]
@@ -2832,13 +2832,13 @@
       ]
     },
     "另外 {n} 張分析好了，還沒美化，按{btn}的{render}就會接著美化，也可以從{where}選取照片個別調整。": {
-      "en": "{n} more {n|photo has|photos have} been analyzed but not retouched. Tap {render} {btn} to retouch them next, or select a photo {where} to adjust it individually.",
+      "en": "{n} more {n, plural, =1{photo has} other{photos have}} been analyzed but not retouched. Tap {render} {btn} to retouch them next, or select a photo {where} to adjust it individually.",
       "where": [
         "chat"
       ]
     },
     "另外 {n} 張分析好了，還沒美化，按上面的「全部一鍵美化」就會接著美化，也可以點上面的照片個別調整。": {
-      "en": "{n} more {n|photo has|photos have} been analyzed but not retouched. Tap “Retouch All” above to retouch them, or tap a photo to adjust it individually.",
+      "en": "{n} more {n, plural, =1{photo has} other{photos have}} been analyzed but not retouched. Tap “Retouch All” above to retouch them, or tap a photo to adjust it individually.",
       "where": [
         "chat"
       ]
@@ -2850,13 +2850,13 @@
       ]
     },
     "另外有 {n} 張沒有成功，選取那張可以看原因。": {
-      "en": "{n} {n|photo|photos} failed; select one to see why.",
+      "en": "{n} {n, plural, =1{photo} other{photos}} failed; select one to see why.",
       "where": [
         "chat"
       ]
     },
     "另外還有 {n} 張還沒分析。": {
-      "en": "{n} more {n|photo hasn't|photos haven't} been analyzed yet. ",
+      "en": "{n} more {n, plural, =1{photo hasn't} other{photos haven't}} been analyzed yet. ",
       "where": [
         "chat"
       ]
@@ -3298,49 +3298,49 @@
       ]
     },
     "好，{n} 張開始分析了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。": {
-      "en": "OK, analyzing {n} {n|photo|photos}. I'll let you know here when they're all done. To check a photo's progress, select it {where}.",
+      "en": "OK, analyzing {n} {n, plural, =1{photo} other{photos}}. I'll let you know here when they're all done. To check a photo's progress, select it {where}.",
       "where": [
         "chat"
       ]
     },
     "好，{n} 張開始分析了，全部完成後我會在這裡說；想看哪張的進度，點上面那張。": {
-      "en": "OK, analyzing {n} {n|photo|photos}. I'll let you know here when they're all done. To check a photo's progress, tap it above.",
+      "en": "OK, analyzing {n} {n, plural, =1{photo} other{photos}}. I'll let you know here when they're all done. To check a photo's progress, tap it above.",
       "where": [
         "chat"
       ]
     },
     "好，{n} 張開始照原本的需求和設定重新美化了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。": {
-      "en": "OK, retouching {n} {n|photo|photos} again with the same requests and settings. I'll let you know here when they're all done. To check a photo's progress, select it {where}.",
+      "en": "OK, retouching {n} {n, plural, =1{photo} other{photos}} again with the same requests and settings. I'll let you know here when they're all done. To check a photo's progress, select it {where}.",
       "where": [
         "chat"
       ]
     },
     "好，{n} 張開始美化了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。": {
-      "en": "OK, retouching {n} {n|photo|photos}. I'll let you know here when they're all done. To check a photo's progress, select it {where}.",
+      "en": "OK, retouching {n} {n, plural, =1{photo} other{photos}}. I'll let you know here when they're all done. To check a photo's progress, select it {where}.",
       "where": [
         "chat"
       ]
     },
     "好，{n} 張開始美化了，全部完成後我會在這裡說；想看哪張的進度，點上面那張。": {
-      "en": "OK, retouching {n} {n|photo|photos}. I'll let you know here when they're all done. To check a photo's progress, tap it above.",
+      "en": "OK, retouching {n} {n, plural, =1{photo} other{photos}}. I'll let you know here when they're all done. To check a photo's progress, tap it above.",
       "where": [
         "chat"
       ]
     },
     "好，{n} 張開始調整了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。": {
-      "en": "OK, editing {n} {n|photo|photos}. I'll let you know here when they're all done. To check a photo's progress, select it {where}.",
+      "en": "OK, editing {n} {n, plural, =1{photo} other{photos}}. I'll let you know here when they're all done. To check a photo's progress, select it {where}.",
       "where": [
         "chat"
       ]
     },
     "好，{n} 張開始調整了，全部完成後我會在這裡說；想看哪張的進度，點上面那張。": {
-      "en": "OK, editing {n} {n|photo|photos}. I'll let you know here when they're all done. To check a photo's progress, tap it above.",
+      "en": "OK, editing {n} {n, plural, =1{photo} other{photos}}. I'll let you know here when they're all done. To check a photo's progress, tap it above.",
       "where": [
         "chat"
       ]
     },
     "好，{n} 張開始重新美化了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。": {
-      "en": "OK, retouching {n} {n|photo|photos} again. I'll let you know here when they're all done. To check a photo's progress, select it {where}.",
+      "en": "OK, retouching {n} {n, plural, =1{photo} other{photos}} again. I'll let you know here when they're all done. To check a photo's progress, select it {where}.",
       "where": [
         "chat"
       ]
@@ -3608,7 +3608,7 @@
       ]
     },
     "好，這句會套用在 {n} 張照片上。": {
-      "en": "OK, this will apply to {n} {n|photo|photos}. ",
+      "en": "OK, this will apply to {n} {n, plural, =1{photo} other{photos}}. ",
       "where": [
         "chat"
       ]
@@ -4045,7 +4045,7 @@
       ]
     },
     "已略過 {length} 個無法讀取的子資料夾：{v2}{v3}": {
-      "en": "Skipped {length} unreadable {length|subfolder|subfolders}: {v2}{v3}",
+      "en": "Skipped {length} unreadable {length, plural, =1{subfolder} other{subfolders}}: {v2}{v3}",
       "where": [
         "panel"
       ]
@@ -5012,13 +5012,13 @@
       ]
     },
     "收到你上傳的 {n} 張照片了。": {
-      "en": "Got your {n} {n|photo|photos}.",
+      "en": "Got your {n} {n, plural, =1{photo} other{photos}}.",
       "where": [
         "chat"
       ]
     },
     "收到你選的 {total} 張照片，正在上傳…": {
-      "en": "Got your {total} {total|photo|photos}. Uploading…",
+      "en": "Got your {total} {total, plural, =1{photo} other{photos}}. Uploading…",
       "where": [
         "chat"
       ]
@@ -5146,7 +5146,7 @@
       ]
     },
     "新增了 {n} 張照片": {
-      "en": "Added {n} {n|photo|photos}",
+      "en": "Added {n} {n, plural, =1{photo} other{photos}}",
       "where": [
         "chat"
       ]
@@ -5286,49 +5286,49 @@
       ]
     },
     "有 {failed} 張沒有成功，已略過。": {
-      "en": "{failed} failed and {failed|was|were} skipped. ",
+      "en": "{failed} failed and {failed, plural, =1{was} other{were}} skipped. ",
       "where": [
         "chat"
       ]
     },
     "有 {n} 張開始分析了，完成後我會在這裡說；想看哪張的進度，從{where}選取那張。": {
-      "en": "{n} {n|photo is|photos are} now being analyzed. I'll let you know here when they're done. To check a photo's progress, select it {where}.",
+      "en": "{n} {n, plural, =1{photo is} other{photos are}} now being analyzed. I'll let you know here when they're done. To check a photo's progress, select it {where}.",
       "where": [
         "chat"
       ]
     },
     "有 {n} 張開始分析了，完成後我會在這裡說；想看哪張的進度，點上面那張。": {
-      "en": "{n} {n|photo is|photos are} now being analyzed. I'll let you know here when they're done. To check a photo's progress, tap it above.",
+      "en": "{n} {n, plural, =1{photo is} other{photos are}} now being analyzed. I'll let you know here when they're done. To check a photo's progress, tap it above.",
       "where": [
         "chat"
       ]
     },
     "有 {n} 張開始美化了，完成後我會在這裡說；想看哪張的進度，從{where}選取那張。": {
-      "en": "{n} {n|photo is|photos are} now being retouched. I'll let you know here when they're done. To check a photo's progress, select it {where}.",
+      "en": "{n} {n, plural, =1{photo is} other{photos are}} now being retouched. I'll let you know here when they're done. To check a photo's progress, select it {where}.",
       "where": [
         "chat"
       ]
     },
     "有 {n} 張開始美化了，完成後我會在這裡說；想看哪張的進度，點上面那張。": {
-      "en": "{n} {n|photo is|photos are} now being retouched. I'll let you know here when they're done. To check a photo's progress, tap it above.",
+      "en": "{n} {n, plural, =1{photo is} other{photos are}} now being retouched. I'll let you know here when they're done. To check a photo's progress, tap it above.",
       "where": [
         "chat"
       ]
     },
     "有 {n} 張開始處理了，完成後我會在這裡說；想看哪張的進度，從{where}選取那張。": {
-      "en": "{n} {n|photo is|photos are} now being processed. I'll let you know here when they're done. To check a photo's progress, select it {where}.",
+      "en": "{n} {n, plural, =1{photo is} other{photos are}} now being processed. I'll let you know here when they're done. To check a photo's progress, select it {where}.",
       "where": [
         "chat"
       ]
     },
     "有 {n} 張開始處理了，完成後我會在這裡說；想看哪張的進度，點上面那張。": {
-      "en": "{n} {n|photo is|photos are} now being processed. I'll let you know here when they're done. To check a photo's progress, tap it above.",
+      "en": "{n} {n, plural, =1{photo is} other{photos are}} now being processed. I'll let you know here when they're done. To check a photo's progress, tap it above.",
       "where": [
         "chat"
       ]
     },
     "有 {v1} 個檔案不是圖片，先略過。": {
-      "en": "{v1} {v1|file isn't an image and was|files aren't images and were} skipped.",
+      "en": "{v1} {v1, plural, =1{file isn't an image and was} other{files aren't images and were}} skipped.",
       "where": [
         "chat"
       ]
@@ -5953,7 +5953,7 @@
       ]
     },
     "正在讀取 {n} 張照片…": {
-      "en": "Reading {n} {n|photo|photos}…",
+      "en": "Reading {n} {n, plural, =1{photo} other{photos}}…",
       "where": [
         "chat"
       ]
@@ -6652,7 +6652,7 @@
       "note": "Scene suggestions. The panel tab is short ('Scene'); chat and the AI's replies name it inside sentences."
     },
     "畫面建議會套用 {n} 項。": {
-      "en": "{n} scene {n|suggestion|suggestions} will be applied.",
+      "en": "{n} scene {n, plural, =1{suggestion} other{suggestions}} will be applied.",
       "where": [
         "chat"
       ]
@@ -6952,7 +6952,7 @@
       ]
     },
     "確定要刪除這 {length} 筆處理紀錄嗎？": {
-      "en": "Delete these {length} {length|item|items}?",
+      "en": "Delete these {length} {length, plural, =1{item} other{items}}?",
       "where": [
         "panel",
         "chat"
@@ -6973,13 +6973,13 @@
       "en_full": "Delete this processing record?"
     },
     "確定要刪除這組 {photo_count} 張照片的處理紀錄嗎？": {
-      "en": "Delete the history for this group of {photo_count} {photo_count|photo|photos}?",
+      "en": "Delete the history for this group of {photo_count} {photo_count, plural, =1{photo} other{photos}}?",
       "where": [
         "panel"
       ]
     },
     "確定要清除這 {n} 張照片嗎？": {
-      "en": "Clear {n} {n|photo|photos}?",
+      "en": "Clear {n} {n, plural, =1{photo} other{photos}}?",
       "where": [
         "chat"
       ]
@@ -7009,7 +7009,7 @@
       ]
     },
     "移除了 {count} 張，現在一共 {left} 張。": {
-      "en": "Removed {count} {count|photo|photos}. {left} left.",
+      "en": "Removed {count} {count, plural, =1{photo} other{photos}}. {left} left.",
       "where": [
         "chat"
       ]
@@ -8467,13 +8467,13 @@
       ]
     },
     "這句會套用在 {n} 張上，按{redo}就照這樣重新美化。只想改某一張，從{where}選取那張調整。": {
-      "en": "This applies to {n} {n|photo|photos}. Tap {redo} to retouch them with it. To change just one, select it {where}.",
+      "en": "This applies to {n} {n, plural, =1{photo} other{photos}}. Tap {redo} to retouch them with it. To change just one, select it {where}.",
       "where": [
         "chat"
       ]
     },
     "這句會套用在 {n} 張還沒美化的照片上。": {
-      "en": "This applies to {n} {n|photo|photos} that {n|hasn't|haven't} been retouched yet. ",
+      "en": "This applies to {n} {n, plural, =1{photo} other{photos}} that {n, plural, =1{hasn't} other{haven't}} been retouched yet. ",
       "where": [
         "chat"
       ]
@@ -8648,7 +8648,7 @@
       ]
     },
     "這批照片 · {n} 張": {
-      "en": "This batch · {n} {n|photo|photos}",
+      "en": "This batch · {n} {n, plural, =1{photo} other{photos}}",
       "where": [
         "chat"
       ]
@@ -8938,25 +8938,25 @@
       ]
     },
     "還有 {n} 張沒開始，可以按{btn}的{analyze}先看我打算怎麼修，或按{btn}的{render}直接美化，也可以從{where}選取照片個別調整。": {
-      "en": "{n} {n|photo hasn't|photos haven't} started yet. Tap {analyze} {btn} to see what I'd change first, or {render} to retouch right away. You can also select a photo {where} to adjust it individually.",
+      "en": "{n} {n, plural, =1{photo hasn't} other{photos haven't}} started yet. Tap {analyze} {btn} to see what I'd change first, or {render} to retouch right away. You can also select a photo {where} to adjust it individually.",
       "where": [
         "chat"
       ]
     },
     "還有 {n} 張沒開始，可以按上面的「全部分析」先看我打算怎麼修，或按上面的「全部一鍵美化」直接美化，也可以點上面的照片個別調整。": {
-      "en": "{n} {n|photo hasn't|photos haven't} started yet. Tap “Analyze All” above to see what I'd change first, “Retouch All” to retouch right away, or tap a photo to adjust it individually.",
+      "en": "{n} {n, plural, =1{photo hasn't} other{photos haven't}} started yet. Tap “Analyze All” above to see what I'd change first, “Retouch All” to retouch right away, or tap a photo to adjust it individually.",
       "where": [
         "chat"
       ]
     },
     "還有 {n} 張處理中，完成後我會在這裡說；想看哪張的進度，從{where}選取那張。": {
-      "en": "{n} {n|photo is|photos are} still in progress. I'll let you know here when they're done. To check a photo's progress, select it {where}.",
+      "en": "{n} {n, plural, =1{photo is} other{photos are}} still in progress. I'll let you know here when they're done. To check a photo's progress, select it {where}.",
       "where": [
         "chat"
       ]
     },
     "還有 {n} 張處理中，完成後我會在這裡說；想看哪張的進度，點上面那張。": {
-      "en": "{n} {n|photo is|photos are} still in progress. I'll let you know here when they're done. To check a photo's progress, tap it above.",
+      "en": "{n} {n, plural, =1{photo is} other{photos are}} still in progress. I'll let you know here when they're done. To check a photo's progress, tap it above.",
       "where": [
         "chat"
       ]

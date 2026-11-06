@@ -44,14 +44,43 @@
   const catalog = CATALOGS[lang] || null;
   document.documentElement.lang = lang === SOURCE ? "zh-Hant" : lang;
 
+  const PLURAL_RULES = new Intl.PluralRules(lang === SOURCE ? "zh-Hant" : lang);
+
+  // ICU plurals in `text`: {name, plural, =1{…} one{…} other{…}}, the form
+  // picked by values[name] (an exact =N first, then the language's category).
+  function fillPlurals(text, values) {
+    const head = /\{(\w+),\s*plural\s*,/y;
+    const form = /\s*(=\d+|zero|one|two|few|many|other)\s*\{/y;
+    const end = /\s*\}/y;
+    let out = "";
+    for (let i = 0; i < text.length;) {
+      head.lastIndex = i;
+      const m = head.exec(text);
+      if (!m || !(m[1] in values)) { out += text[i++]; continue; }
+      const forms = {};
+      let j = head.lastIndex;
+      for (let f; (form.lastIndex = j), (f = form.exec(text));) {
+        let k = form.lastIndex;
+        for (let depth = 1; k < text.length && depth; k++) depth += text[k] === "{" ? 1 : text[k] === "}" ? -1 : 0;
+        forms[f[1]] = text.slice(form.lastIndex, k - 1);
+        j = k;
+      }
+      end.lastIndex = j;
+      if (!end.exec(text)) { out += text[i++]; continue; }
+      const n = Number(values[m[1]]);
+      out += fillPlurals((forms[`=${n}`] ?? forms[PLURAL_RULES.select(n)] ?? forms.other ?? "").replace(/#/g, String(n)), values);
+      i = end.lastIndex;
+    }
+    return out;
+  }
+
   // `text` (Chinese) in the page's language, with {name} filled from `values`.
   // A key may end in "@@context" when the same Chinese means two things; a
-  // catalog's text may write {name|one|other}, "one" when values[name] is 1.
+  // catalog's text may hold ICU plurals (fillPlurals).
   function tr(text, values) {
     const out = (catalog && catalog[text]) || String(text).split("@@")[0];
     if (!values) return out;
-    return out.replace(/\{(\w+)(?:\|([^|}]*)\|([^}]*))?\}/g, (m, k, one, other) =>
-      !(k in values) ? m : one === undefined ? String(values[k]) : Number(values[k]) === 1 ? one : other);
+    return fillPlurals(out, values).replace(/\{(\w+)\}/g, (m, k) => (k in values ? String(values[k]) : m));
   }
 
   // A reframing recipe row's label, in the source or the page's language.
