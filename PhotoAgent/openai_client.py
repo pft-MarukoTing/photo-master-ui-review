@@ -686,6 +686,54 @@ def _analyze_overall_with_roster(content, analysis_model, roster=None, *, previe
     return overall, usages, diagnostics, bindings
 
 
+def _early_skill_roster(image_bytes, fixed_context, face_crops):
+    """Stage 2.0's fixed people in Call A's subjects shape: Call A keeps them first, in this order.
+
+    is_person follows Stage 2.0's face_readable, which uses Call A's is_person
+    standard, so the early passes see the same people Call A would normally pick."""
+    people = fixed_context["preview_people"]
+    subjects = [{"label": p["label"], "box": copy.deepcopy(p["box"]), "is_person": p.get("face_readable") is True,
+                 "preview_person_id": p["preview_person_id"],
+                 "local_detection_index": p["detection_index"] if p["source"] == "detector" else -1}
+                for p in people]
+    bindings = {p["detection_index"]: i for i, p in enumerate(people) if p["source"] == "detector"}
+    roster = _stamp_local_face_debug_fields({"subjects": subjects}, face_crops, bindings=bindings)
+    roster["_source_size"] = list(get_image_dimensions(image_bytes))
+    return roster
+
+
+def _start_early_skill_passes(image_bytes, fixed_context, face_crops, ctx):
+    """Start each skill's people-only passes (run_early) in the background while
+    Call A runs; returns {skill name: Future}. They cost the same calls as
+    running after Call A, which only adds a wait (portrait: Call B then Call C)."""
+    import contextvars
+    from concurrent.futures import ThreadPoolExecutor
+    if not fixed_context["preview_people"]:
+        return {}
+    roster = _early_skill_roster(image_bytes, fixed_context, face_crops)
+    pool = ThreadPoolExecutor(max_workers=len(ANALYSIS_SKILLS), thread_name_prefix="early-skill")
+    # copy_context: the pool's threads must see this job's language (i18n's ContextVar).
+    futures = {skill.name: pool.submit(contextvars.copy_context().run, skill.run_early, copy.deepcopy(roster), ctx)
+               for skill in ANALYSIS_SKILLS}
+    pool.shutdown(wait=False)  # a failed Call A must not wait for these
+    return futures
+
+
+def _adopt_early_skill_passes(skill, analysis, future):
+    """The skill's early result applied to Call A's analysis, or None to run it now."""
+    if future is None:
+        return None
+    try:
+        early = future.result()
+        adopted = skill.adopt_early(analysis, early) if early is not None else None
+    except Exception as exc:
+        logger.warning("Early %s passes unusable, running them after Call A: %s", skill.name, exc)
+        return None
+    if adopted is None:
+        logger.info("Early %s passes did not fit Call A's people; running them after Call A", skill.name)
+    return adopted
+
+
 def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL, *, precomputed_preview=None, analysis_user_requests=None, photo_facts=None):
     """The analysis flow for every analysis model. Call A does overall photo
     direction and subject identification; each analysis skill the router
@@ -725,6 +773,8 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
         parse=_parse_response_json,
     )
 
+    early = _start_early_skill_passes(image_bytes, fixed_context, face_crops, ctx) if fixed_context is not None else {}
+
     content_a = [
         {"type": "input_text", "text": build_overall_analysis_instruction(
             aspect_ratio, source_size=get_image_dimensions(image_bytes),
@@ -763,7 +813,8 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
     selected = select_analysis_skills(analysis)
     for skill in ANALYSIS_SKILLS:
         if skill in selected:
-            analysis, skill_usages = skill.run(analysis, ctx)
+            adopted = _adopt_early_skill_passes(skill, analysis, early.get(skill.name))
+            analysis, skill_usages = adopted if adopted is not None else skill.run(analysis, ctx)
             usages.extend(skill_usages)
         else:
             analysis = skill.skip(analysis)

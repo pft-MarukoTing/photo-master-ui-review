@@ -1,4 +1,7 @@
-"""The portrait analysis skill: runs Call B, the Body Reshape pass and Call C in order."""
+"""The portrait analysis skill: runs Call B, Call C and then the Body Reshape pass.
+
+Call B and Call C need only the people, so with a Stage 2.0 fixed roster they
+start alongside Call A (run_early) and are applied to its result (adopt_early)."""
 
 import logging
 
@@ -54,7 +57,51 @@ class PortraitAnalysisSkill(AnalysisSkill):
     def applies_to(self, analysis):
         return bool(portrait_qc_persons(analysis))
 
+    # The fields the people passes (Call B, Call C) write on each person.
+    PEOPLE_FIELDS = ("blink_issue", "gaze_issue", "hair_issue", "smile_issue", "lens_issue")
+
     def run(self, analysis, ctx):
+        # The body pass is given the people as Call A wrote them, before Call B's fields.
+        persons = portrait_qc_persons(analysis)
+        analysis, usages = self._run_people_passes(analysis, ctx)
+        return self._run_body_pass(analysis, persons, ctx, usages)
+
+    def run_early(self, roster, ctx):
+        # Call B and Call C read only each person's label, box and face, which
+        # Stage 2.0's fixed roster already has, so they can run alongside Call A.
+        # The Body Reshape pass needs Call A's body boxes; with it on, the whole skill waits.
+        if body_reshape_enabled():
+            return None
+        if not portrait_qc_persons(roster):
+            return roster, []  # no readable face: nobody to review, now or after Call A
+        return self._run_people_passes(roster, ctx)
+
+    def adopt_early(self, analysis, early):
+        roster, usages = early
+        early_subjects = roster.get("subjects") or []
+        subjects = [dict(subject) for subject in (analysis.get("subjects") or [])]
+        for index, subject in enumerate(subjects):
+            if not isinstance(subject, dict) or not subject.get("is_person"):
+                continue
+            source = early_subjects[index] if index < len(early_subjects) else None
+            # Call A keeps Stage 2.0's people first and in order; anything else means the roster moved.
+            if (not isinstance(source, dict)
+                    or source.get("preview_person_id") != subject.get("preview_person_id")
+                    or source.get("local_detection_index") != subject.get("local_detection_index")):
+                return None
+            # A face Stage 2.0 judged unreadable was not reviewed early. Such a face is a
+            # borderline case, so it keeps the no-repair defaults instead of a second review.
+            if not source.get("is_person"):
+                continue
+            for key in self.PEOPLE_FIELDS:
+                if key in source:
+                    subject[key] = source[key]
+        analysis = {**analysis, "subjects": subjects}
+        _apply_default_person_issues(analysis.get("subjects"))
+        return strip_body_reshape(analysis), list(usages)
+
+    def _run_people_passes(self, analysis, ctx):
+        """Call B (portrait QC) then Call C (eye repair planning)."""
         persons = portrait_qc_persons(analysis)
         usages = []
 
@@ -82,12 +129,6 @@ class PortraitAnalysisSkill(AnalysisSkill):
             merged = analysis
         analysis = merged
 
-        if body_reshape_enabled():
-            analysis, usage_body = _run_body_reshape_pass_or_fallback(analysis, persons, ctx)
-            usages.append(usage_body)
-        else:
-            analysis = strip_body_reshape(analysis)
-
         repair_targets = eye_repair_targets(analysis)
         if repair_targets:
             try:
@@ -103,6 +144,15 @@ class PortraitAnalysisSkill(AnalysisSkill):
                 logger.warning(
                     "Eye repair-planning pass failed; keeping deterministic fallback strategies: %s", exc,
                 )
+        return analysis, usages
+
+    def _run_body_pass(self, analysis, persons, ctx, usages):
+        """The Body Reshape pass needs Call A's own body boxes, so it always runs after Call A."""
+        if body_reshape_enabled():
+            analysis, usage_body = _run_body_reshape_pass_or_fallback(analysis, persons, ctx)
+            usages.append(usage_body)
+        else:
+            analysis = strip_body_reshape(analysis)
         return analysis, usages
 
     def skip(self, analysis):

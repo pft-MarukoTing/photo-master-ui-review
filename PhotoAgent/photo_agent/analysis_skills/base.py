@@ -38,6 +38,17 @@ class AnalysisSkill:
         """Return the analysis with this skill's fields in their not-applicable shape."""
         raise NotImplementedError
 
+    def run_early(self, roster, ctx):
+        """Optional: run the passes that need only the people, on a roster built
+        before Call A (subjects carry label, box, is_person, preview_person_id and
+        local_detection_index). Return (roster, usages), or None to wait for Call A."""
+        return None
+
+    def adopt_early(self, analysis, early):
+        """Return (analysis, usages) with run_early's result applied to Call A's
+        analysis, or None when it no longer fits and run must be used instead."""
+        return None
+
     def prompt_records(self, analysis):
         """analysis["prompts"] entries for this skill's passes, None where a pass did not apply."""
         raise NotImplementedError
