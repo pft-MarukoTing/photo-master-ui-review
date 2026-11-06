@@ -15,8 +15,6 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env.default"), override=True)
 load_dotenv(os.path.join(os.path.dirname(__file__), "backend", ".env.backend"), override=True)
 
-from backend.app import create_app  # noqa: E402  (must import after env is loaded)
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -30,16 +28,36 @@ if __name__ == "__main__":
         action="store_true",
         help="Serve frontend/chat/ as-is instead of rebuilding it from frontend-chat/ first.",
     )
+    l10n = parser.add_mutually_exclusive_group()
+    l10n.add_argument(
+        "--skip-l10n",
+        action="store_true",
+        help="Offer Chinese and English only, without reading the translation doc repo.",
+    )
+    l10n.add_argument(
+        "--l10n-offline",
+        action="store_true",
+        help="Keep the other languages' catalogs made last time instead of reading the doc repo.",
+    )
     args = parser.parse_args()
+    scripts = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts")
+
+    # The other languages' catalogs come from the doc repo (scripts/l10n_prepare.py);
+    # made before the chat build bundles them and before photo_agent.i18n loads them.
+    if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        mode = ["--none"] if args.skip_l10n else ["--offline"] if args.l10n_offline else []
+        if subprocess.run([sys.executable, os.path.join(scripts, "l10n_prepare.py"), *mode]).returncode != 0:
+            sys.exit("Preparing the other languages failed; fix it, or pass --skip-l10n / --l10n-offline.")
 
     # frontend/chat/ is a build output and isn't tracked in git, so build it
     # from the checked-out source before serving. Skip it in the reloader's
     # child process (DEBUG=true), which re-runs this file after the parent
     # has already built.
     if not args.skip_chat_build and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
-        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "build_chat_bundle.sh")
-        if subprocess.run(["bash", script]).returncode != 0:
+        if subprocess.run(["bash", os.path.join(scripts, "build_chat_bundle.sh")]).returncode != 0:
             sys.exit("Building the chat bundle failed; fix it, or pass --skip-chat-build to serve the existing one.")
+
+    from backend.app import create_app
 
     app = create_app(config={"DEBUG_UI": args.debug_ui})
     host = os.environ.get("HOST", "0.0.0.0")
