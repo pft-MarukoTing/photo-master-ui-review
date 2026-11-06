@@ -10,8 +10,12 @@ have hand-written fields, kept as they are on every sync:
   note     what the text means and where it sits.
   max      how much room it has on the page.
 
-  python scripts/translation_source.py          # refresh the file
-  python scripts/translation_source.py --check  # exit 1 if it is out of step
+It also refreshes i18n/arb-keys.json, the English id each key has in the
+ARB files the Localization Hub reads (scripts/l10n_arb.py); the ARB files
+themselves are made when they are sent (scripts/l10n_doc.py push).
+
+  python scripts/translation_source.py          # refresh the files
+  python scripts/translation_source.py --check  # exit 1 if any is out of step
 
 Run from PhotoAgent/. Needs node for the two JavaScript catalogs: the one on
 PATH, else the one under ~/.vscode-server (as scripts/build_chat_bundle.sh does).
@@ -27,6 +31,8 @@ import shutil
 import subprocess
 import sys
 
+import l10n_arb
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "i18n" / "translation-source.json"
 HAND = ("en_full", "note", "max")
@@ -38,6 +44,7 @@ ABOUT = [
     "A key ending in @@something is the same Chinese used for a different meaning; the part after @@ says which and is not shown.",
     "Keep {placeholders}, quotes and leading/trailing spaces as they are: the page joins pieces.",
     "Not in this file and written by hand for each language: FORMAT and PATTERNS in photo_agent/i18n_en.py (punctuation, and the regular expressions that read the AI's replies).",
+    "The Localization Hub reads ARB files with English ids (i18n/arb-keys.json), made from this file by scripts/l10n_doc.py push.",
     "Refresh with `python scripts/translation_source.py`; hand-written fields are kept.",
 ]
 
@@ -118,6 +125,12 @@ def main():
     for title, keys in (("new", added), ("removed", gone), ("English changed", changed)):
         if keys:
             print(f"{title} ({len(keys)}):", *keys[:20], sep="\n  ")
+    unexplained = [zh for zh in added if not l10n_arb.is_manual(zh) and not any(f in entries[zh] for f in HAND)
+                   and any(l10n_arb.is_short(e) for e in ([entries[zh]["en"]] if isinstance(entries[zh]["en"], str)
+                                                            else entries[zh]["en"].values()))]
+    if unexplained:
+        print("new short text without a note: add one if the English alone can be read two ways",
+              *unexplained, sep="\n  ")
     for zh in changed:
         if any(field in entries[zh] for field in HAND):
             print(f"  check the hand-written fields of 「{zh}」: its English changed")
@@ -127,12 +140,17 @@ def main():
         for en, keys in lonely.items():
             print(f"  {en!r} <= {keys}")
 
+    files = {OUT: text, l10n_arb.KEYS: l10n_arb.keys_file(entries)}
     if args.check:
-        current = OUT.read_text("utf-8") if OUT.exists() else ""
-        sys.exit(0 if current == text else 1)
-    OUT.parent.mkdir(exist_ok=True)
-    OUT.write_text(text, "utf-8", newline="\n")
-    print(f"wrote {OUT.relative_to(ROOT)}: {len(entries)} entries")
+        stale = [path for path, body in files.items() if not path.exists() or path.read_text("utf-8") != body]
+        for path in stale:
+            print(f"out of step: {path.relative_to(ROOT)}")
+        sys.exit(1 if stale else 0)
+    for path, body in files.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, "utf-8", newline="\n")
+        print(f"wrote {path.relative_to(ROOT)}")
+    print(f"{len(entries)} entries")
 
 
 if __name__ == "__main__":

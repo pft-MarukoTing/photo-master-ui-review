@@ -6,6 +6,7 @@
     "A key ending in @@something is the same Chinese used for a different meaning; the part after @@ says which and is not shown.",
     "Keep {placeholders}, quotes and leading/trailing spaces as they are: the page joins pieces.",
     "Not in this file and written by hand for each language: FORMAT and PATTERNS in photo_agent/i18n_en.py (punctuation, and the regular expressions that read the AI's replies).",
+    "The Localization Hub reads ARB files with English ids (i18n/arb-keys.json), made from this file by scripts/l10n_doc.py push.",
     "Refresh with `python scripts/translation_source.py`; hand-written fields are kept."
   ],
   "entries": {
@@ -37,13 +38,15 @@
       "en": "1K (Standard)",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Output-resolution option: about 1,000 pixels on the long side, the standard size."
     },
     "2:3（人像）": {
       "en": "2:3 (Portrait)",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Aspect-ratio option: a tall frame typical of portrait photos of people."
     },
     "3:2（相機）": {
       "en": "3:2 (Camera)",
@@ -73,13 +76,15 @@
       "en": "5:4 (Landscape)",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Aspect-ratio option: a slightly wide, horizontal frame (landscape orientation, not scenery)."
     },
     "9:16（限動）": {
       "en": "9:16 (Stories)",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Aspect-ratio option: tall vertical frame used for social-media Stories posts."
     },
     "AI 修圖": {
       "en": "AI Retouch",
@@ -135,7 +140,8 @@
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Aspect-ratio option letting the AI choose the ratio from the photo's content."
     },
     "AI 智能美化": {
       "en": "AI Smart Retouch",
@@ -257,7 +263,8 @@
       "en": "Instagram",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Hint beside the 4:5 aspect ratio: the Instagram post size."
     },
     "Local Worker：走本機 Redis 隊列與 docker worker。AIPoC：直接呼叫共用推論閘道。": {
       "en": "Local Worker: uses the local Redis queue and Docker worker. AIPoC: calls the shared inference gateway directly.",
@@ -487,7 +494,8 @@
       "en": "{n} analyzed",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Count of photos whose analysis is finished, in a batch progress summary."
     },
     "{n} 張分析好了，還沒美化": {
       "en": "{n} analyzed, not yet retouched",
@@ -499,7 +507,8 @@
       "en": "{n} failed",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Count of photos that failed processing, in a batch progress summary."
     },
     "{n} 張沒有成功，可以再送一次": {
       "en": "{n} failed (can be resent)",
@@ -511,19 +520,22 @@
       "en": "{n} retouched",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Count of photos that have been retouched, in a batch progress summary."
     },
     "{n} 張還沒分析": {
       "en": "{n} not analyzed yet",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Count of photos not analyzed yet, in a batch progress summary."
     },
     "{n}位人物": {
       "en": "{n} people",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Fills a slot naming who a portrait fix applies to: a number of people in the photo."
     },
     "{only}：只動你寫到的地方，其他保持原樣。{full}：照你的需求修改，光線、人像、構圖也一起調整。": {
       "en": "{only}: changes only what you described and leaves the rest as is. {full}: makes your changes and also improves the lighting, people and composition.",
@@ -561,7 +573,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Screen-reader label: the retouch adjustment named {tag} has been completed."
     },
     "{text}這張照片還沒分析過。「幫我分析」會分析原圖並整理修圖建議，完成後會換成從原圖美化。": {
       "en": "{text} This photo hasn't been analyzed yet. “Analyze for Me” analyzes the original photo for retouch suggestions, then switches to retouching from the original.",
@@ -593,7 +606,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Image alt text: the retouched version of the photo named {title}."
     },
     "{user}｜查看處理紀錄": {
       "en": "{user} | View History",
@@ -636,7 +650,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Short date shown as month/day; use the local month-day format."
     },
     "{v1}月{v2}日 {v3}:{v4}": {
       "en": "{v1}/{v2} {v3}:{v4}",
@@ -703,7 +718,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Left end of the aspect-ratio scale: taller, portrait-orientation shapes (not a person's portrait)."
     },
     "　x {v1} · y {v2} · w {v3} · h {v4}": {
       "en": " x {v1} · y {v2} · w {v3} · h {v4}",
@@ -751,7 +767,8 @@
       "en": "One photo, ",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "First half of the home-page headline; the next line completes the sentence."
     },
     "一張照片，開啟專屬美化體驗": {
       "en": "One photo, retouched just for you",
@@ -790,7 +807,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Name of the first step in a progress indicator (Upload, Analyze, Retouch, Done); a noun-like step name."
     },
     "上傳中": {
       "en": "Uploading",
@@ -838,7 +856,8 @@
       "en": "Uploaded",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Label for the date and time the photo was uploaded."
     },
     "上傳照片": {
       "en": "Upload Photo",
@@ -870,13 +889,15 @@
       "en": "above",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Inserted into a sentence saying where the photo list is on screen: above the chat."
     },
     "上面的照片": {
       "en": "the photos above",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Sentence fragment pointing the user to the photo grid shown above the chat."
     },
     "下一張": {
       "en": "Next",
@@ -889,13 +910,15 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Selector label; {base} is the version or original photo that the next retouch starts from."
     },
     "下次裁切（預覽）": {
       "en": "Next crop (preview)",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Label before crop coordinates: the crop that will be applied on the next retouch, shown as a preview."
     },
     "下次輸出比例（預覽）": {
       "en": "Next output ratio (preview)",
@@ -995,19 +1018,22 @@
       "en": "below",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Inserted into a sentence saying where the buttons are on screen: below this message."
     },
     "不修": {
       "en": "No change",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Summary for a person: no portrait fixes will be applied to them."
     },
     "不修正": {
       "en": "Don't fix",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Value of a portrait-fix setting shown in a change summary: the issue will be left as is."
     },
     "不做構圖裁切，只進行美化與色彩整理": {
       "en": "No crop; retouching and color correction only",
@@ -1019,7 +1045,8 @@
       "en": "Don't apply",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Value of a suggested edit step shown in a change summary: the step will be skipped."
     },
     "不好意思，這個我幫不上忙。想怎麼修這張照片，再跟我說說看喔！": {
       "en": "Sorry, I can't help with that. Tell me how you'd like this photo retouched!",
@@ -1031,7 +1058,8 @@
       "en": "Not recommended",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Verdict on a portrait check such as smile: adjusting it is not advised for this photo."
     },
     "不想一項一項看的話，按下面的「{label}」我就直接開始修。": {
       "en": "If you'd rather not review them one by one, tap “{label}” below and I'll get started.",
@@ -1057,7 +1085,8 @@
         "panel",
         "chat",
         "backend text"
-      ]
+      ],
+      "note": "Default option in a style picker meaning no preference (not an error or missing value)."
     },
     "不接著第 {n} 版改了": {
       "en": "Stop building on Version {n}",
@@ -1088,7 +1117,8 @@
       "en": "Skip the Rest",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Chip that stops reviewing the remaining suggestion topics one by one."
     },
     "不用，直接開始": {
       "en": "No, Just Start",
@@ -1102,14 +1132,16 @@
         "panel",
         "chat",
         "backend text"
-      ]
+      ],
+      "note": "Smile-strength option: neutral expression with no smile."
     },
     "不調整了": {
       "en": "Stop Adjusting",
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Button that leaves continue-editing mode and drops further adjustments to this photo."
     },
     "不調整這版了": {
       "en": "Stop adjusting this version",
@@ -1143,13 +1175,15 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Label for the photo's main subject (the person or thing it is about), not a topic."
     },
     "主體範圍": {
       "en": "Subject extent",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Label for a box marking the area the main subject occupies in the photo."
     },
     "主體細節清楚。": {
       "en": "The subject's details are clear.",
@@ -1198,13 +1232,15 @@
       "en": "Clean",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Short style tag describing a clean, uncluttered look (adjective, not the verb)."
     },
     "亂髮偵測": {
       "en": "Hair",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Label for stray or flyaway hair detection and tidying; a very short label, keep it short."
     },
     "亂髮偵測：保留髮絲動態": {
       "en": "Hair: Natural",
@@ -1237,7 +1273,8 @@
       "en": "Scattered",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Gallery layout option showing photo cards staggered and scattered, as opposed to a grid."
     },
     "人像": {
       "en": "Portrait",
@@ -1295,7 +1332,8 @@
       "en": "Portrait",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Tab label for the portrait checks (eyes, gaze, smile, stray hair); keep short."
     },
     "人像目前都不修。": {
       "en": "No portrait adjustments for now.",
@@ -1596,7 +1634,8 @@
       "en": "to {ratio}",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Phrase inserted into sentences like 'Planned the new framing to 4:5'; {ratio} is an aspect ratio."
     },
     "依你挑的風格調整。": {
       "en": "Adjusted with the style you picked.",
@@ -1732,7 +1771,8 @@
       "en": "Keep Their Own",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Dialog button: keep each photo's own settings instead of applying the shared batch settings."
     },
     "保留完整原圖與原始場景脈絡": {
       "en": "Preserves the full original and its scene context",
@@ -1814,7 +1854,8 @@
       "en": "Fix",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Value of a portrait-fix setting shown in a change summary: the issue will be corrected."
     },
     "修正廣角造成的邊緣人臉變形": {
       "en": "Correct wide-angle stretch on faces near the frame edge",
@@ -1832,7 +1873,8 @@
       "en": "Fix ({level})",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Value of a portrait-fix setting: the issue will be corrected at the given strength level."
     },
     "修飾{who}外緣，讓畫面份量更均衡": {
       "en": "Refine {who}'s outline to balance the visual weight in the frame",
@@ -1879,7 +1921,8 @@
         "panel",
         "chat",
         "backend labels"
-      ]
+      ],
+      "note": "Section or field holding the user's own written retouching requests."
     },
     "個人化需求和風格會帶過去，{v1}還沒美化的調整會清掉。確定要接著第 {n} 版調整嗎？": {
       "en": "Your request and styles come along; your unretouched {v1} changes will be cleared. Adjust version {n} anyway?",
@@ -1921,7 +1964,8 @@
       "en": "Side",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Camera-angle style option: photo taken from the subject's side (side view)."
     },
     "偵測到有人物{problems}。": {
       "en": "Detected: {problems}.",
@@ -1953,13 +1997,15 @@
         "panel",
         "chat",
         "backend labels"
-      ]
+      ],
+      "note": "Option to edit only what the user asked for, skipping the AI's own suggestions."
     },
     "優先改善": {
       "en": "To Improve",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Heading for the list of the photo's main problems to fix first."
     },
     "優先遵守使用者目標：{v1}。": {
       "en": "The user's goal takes priority: {v1}.",
@@ -2008,7 +2054,8 @@
       "en": "Let Me Choose",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Dialog button: go back and choose how each photo should be retouched first."
     },
     "先寫下想調整的地方，或挑一個風格。": {
       "en": "Write what you'd like to change, or pick a style first.",
@@ -2106,7 +2153,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Field-name word the AI may prefix to a photo description; used to detect and strip that prefix."
     },
     "全螢幕檢視比較": {
       "en": "Compare in full screen",
@@ -2125,14 +2173,16 @@
       "en": "All",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Link that opens the full photo gallery (show all), not a filter."
     },
     "全部 {n}": {
       "en": "All {n}",
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Filter tab showing all photos, followed by their count."
     },
     "全部一鍵美化": {
       "en": "Retouch All",
@@ -2255,7 +2305,8 @@
       "en": "See {v1} Again",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Button to view the suggestions for {v1}, an edit category, once more."
     },
     "再美化": {
       "en": "Retouch Again",
@@ -2523,7 +2574,8 @@
       "en": "Switch",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Confirm button that switches to chat mode (verb)."
     },
     "切換到對話模式": {
       "en": "Switch to chat mode",
@@ -2682,13 +2734,15 @@
       "en": "Add the first {room}",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Dialog button: add only the first {room} of the selected photos, since the limit was reached."
     },
     "加進需求": {
       "en": "Add to Request",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Dialog button: add the unsent text in the input box to the retouching requests."
     },
     "動感": {
       "en": "Dynamic",
@@ -2735,7 +2789,8 @@
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Aspect-ratio option: keep the photo's original width-to-height ratio."
     },
     "原圖觀察": {
       "en": "Original photo notes",
@@ -2809,7 +2864,8 @@
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Heading of a style group choosing shot size, i.e. how wide or tight the shot is."
     },
     "取消": {
       "en": "Cancel",
@@ -2829,7 +2885,8 @@
       "en": "Deselect {v1}",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Tooltip on a face: stop aiming the request at {v1}, a person's name."
     },
     "另外 {n} 張分析好了，還沒美化，按{btn}的{render}就會接著美化，也可以從{where}選取照片個別調整。": {
       "en": "{n} more {n, plural, =1{photo has} other{photos have}} been analyzed but not retouched. Tap {render} {btn} to retouch them next, or select a photo {where} to adjust it individually.",
@@ -2937,13 +2994,15 @@
       "en": "Could Be Better",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Rating on an analysis card: this aspect of the photo could be improved (middle level)."
     },
     "可以調整": {
       "en": "Adjustable",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Status of a portrait-fix item: an adjustment is available/suggested (opposite of turned off)."
     },
     "可以調整{v1}，想先看哪一項？": {
       "en": "You can adjust {v1}. Which would you like to look at first?",
@@ -2962,19 +3021,22 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Quality-check status: the retouched result passed review and is fine to show."
     },
     "可控": {
       "en": "Controlled",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Short style tag: the edit stays controlled and predictable, following the user's instructions."
     },
     "可更新": {
       "en": "Update available",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Badge on a history photo processed with an older app version; reprocessing gives better results."
     },
     "合計": {
       "en": "Total",
@@ -2999,14 +3061,16 @@
       "en": "Product",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Short tag on the product-photo style preset: product photography."
     },
     "商業": {
       "en": "Commercial",
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Tag or scene category for commercial/product photography (not a TV advertisement)."
     },
     "商業產品照": {
       "en": "Commercial Product",
@@ -3076,7 +3140,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Toolbar button that opens the form for reporting a problem; used as a verb."
     },
     "回報問題": {
       "en": "Report a Problem",
@@ -3127,7 +3192,8 @@
       "en": "Report List",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Title of the list of feedback or bug reports the user has submitted."
     },
     "回報狀態：{v1}（點擊切換）": {
       "en": "Report status: {v1} (click to change)",
@@ -3139,7 +3205,8 @@
       "en": "Reports",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Title of the user's submitted feedback or bug reports."
     },
     "回報說明：{note}": {
       "en": "Report notes: {note}",
@@ -3163,7 +3230,8 @@
       "en": "Direction: {normalized_user_direction}.",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Label for the editing direction the user asked for, not a physical direction."
     },
     "場景": {
       "en": "Scene",
@@ -3204,14 +3272,16 @@
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Lighting style option: a night-time look."
     },
     "夜霞": {
       "en": "Dusk",
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Name of a dark colour theme for the app interface; keep it short."
     },
     "大笑": {
       "en": "Laughing",
@@ -3234,7 +3304,8 @@
         "chat",
         "backend labels",
         "backend text"
-      ]
+      ],
+      "note": "Button to apply a change; also shown as a setting value meaning the item will be applied."
     },
     "套用並美化": {
       "en": "Apply and Retouch",
@@ -3754,7 +3825,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "View-switch tab that shows the chat conversation (as opposed to the panel view)."
     },
     "對話帳號：{owner}": {
       "en": "Chat account: {owner}",
@@ -3815,7 +3887,8 @@
       "en": "This person",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Tooltip on a face button answering 'which person?': it is this one."
     },
     "展開": {
       "en": "Expand",
@@ -3827,7 +3900,8 @@
       "en": "Depth",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Short style tag: tonal depth and layering in light and contrast."
     },
     "左上角": {
       "en": "at the top left",
@@ -3845,7 +3919,8 @@
       "en": "on the left",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Inserted into a sentence saying where the photo list is on screen: on the left side."
     },
     "左邊@@按鈕位置": {
       "en": "on the left",
@@ -3908,7 +3983,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Status badge on a photo: analysis finished, not yet retouched."
     },
     "已分析完成，按「美化」就會產生這一組": {
       "en": "Analysis complete. Tap “Retouch” to generate this set",
@@ -4098,7 +4174,8 @@
       "en": "Resolved",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Status of a submitted bug report: the issue has been fixed."
     },
     "已設定不修正": {
       "en": "Set to no fix",
@@ -4110,13 +4187,15 @@
       "en": "Adjusted",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Badge on a person's row: their portrait-fix settings were changed from the suggested ones."
     },
     "已選 {length} 張": {
       "en": "{length} selected",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Count of photos currently selected."
     },
     "已選 {length} 張（最多 {max} 張）": {
       "en": "{length} selected (up to {max})",
@@ -4158,19 +4237,22 @@
       "en": "Started",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Status badge on a photo in the list: processing has begun."
     },
     "已關閉": {
       "en": "Off",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Status shown when the body-shape adjustment has been switched off."
     },
     "布局方法": {
       "en": "Layout",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Analysis label for how the photo's composition is arranged, not page layout."
     },
     "幫我分析": {
       "en": "Analyze for Me",
@@ -4184,13 +4266,15 @@
       "en": "Tablet",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Hint under the 4:3 aspect-ratio option: the typical tablet screen shape; keep very short."
     },
     "平衡": {
       "en": "Balance",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Analysis heading for the photo's visual balance in composition, not white balance."
     },
     "平衡亮部與暗部的細節": {
       "en": "Balancing highlight and shadow detail",
@@ -4210,7 +4294,8 @@
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Framing option: a very wide shot showing even more surroundings than a wide shot."
     },
     "建立帳號": {
       "en": "Create Account",
@@ -4235,7 +4320,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Photo category tag for architecture/buildings photos."
     },
     "建議取景": {
       "en": "Suggested framing",
@@ -4278,7 +4364,8 @@
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Pose style option: a strong, confident, assertive pose."
     },
     "強化產品形狀、材質、色準與背景秩序。": {
       "en": "Enhances the product's shape, materials and color accuracy, with a clean, orderly background.",
@@ -4303,7 +4390,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Status badge on a photo: analyzed but not yet retouched."
     },
     "待美化的照片": {
       "en": "Photo to retouch",
@@ -4316,7 +4404,8 @@
       "en": "Open",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Status of a submitted bug report: read but not resolved yet (not the verb 'open')."
     },
     "後端處理伺服器已更新，執行中的工作可能已中斷，請立即重新整理頁面。": {
       "en": "The processing server has been updated, and any work in progress may have stopped. Please refresh the page now.",
@@ -4617,13 +4706,15 @@
       "en": "everyone",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Fills a slot naming who a portrait fix applies to: all people in the photo."
     },
     "手機": {
       "en": "Phone",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Hint under the 3:4 aspect-ratio option: the typical phone photo shape; keep very short."
     },
     "打不開這筆回報：可能沒有管理者權限，或回報已經刪掉了。": {
       "en": "Couldn't open this report. You may not have admin access, or the report has been deleted.",
@@ -4654,7 +4745,8 @@
       "en": "Preparing",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Download button state: the photos are being packed into a ZIP file."
     },
     "打包中…": {
       "en": "Preparing…",
@@ -4680,19 +4772,22 @@
       "en": "turned on “{name}”",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Fragment completing 'OK, …': the retouching switch {name} was turned on."
     },
     "打開另一張": {
       "en": "Open Another",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Action of opening another photo's session; also quoted in a warning about losing unsent photos."
     },
     "打開回報": {
       "en": "opening the report",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Action quoted in a warning: opening a submitted problem report, which clears unsent photos."
     },
     "批次圖片": {
       "en": "Batch images",
@@ -4729,7 +4824,8 @@
       "en": "Select {v1}",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Tooltip on a face: aim the typed request at {v1}, a person's name."
     },
     "指定人物尚未確認，請重新指定或清除該需求。": {
       "en": "The selected person isn't confirmed. Please choose again or clear the request.",
@@ -4759,13 +4855,15 @@
       "en": "Requested Text",
       "where": [
         "backend labels"
-      ]
+      ],
+      "note": "Setting name: exact text the user wants written into the photo."
     },
     "指定對象": {
       "en": "Choose People",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Button and panel for choosing which people in the photo a typed request applies to."
     },
     "指定對象，共 {length} 位": {
       "en": "Choose people ({length} total)",
@@ -4864,13 +4962,15 @@
       "en": "Adjusting",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Label on a result: made by further adjusting the previous version (not an in-progress status)."
     },
     "接著這張調整": {
       "en": "Adjust This One",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Button to keep editing, starting from this retouched version of the photo."
     },
     "控制背景干擾並保留自然質感。": {
       "en": "Minimize background distractions while keeping a natural texture.",
@@ -4906,19 +5006,22 @@
       "en": "Note: {v1}",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Prefix for a warning or reminder message shown to the user."
     },
     "提醒：{warning}": {
       "en": "Note: {warning}",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Prefix for a warning or reminder message shown to the user."
     },
     "提醒：{w}": {
       "en": "Note: {w}",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Prefix for a warning or reminder message shown to the user."
     },
     "換{label}的程度": {
       "en": "Adjust {label} intensity",
@@ -4955,7 +5058,8 @@
       "en": "Back to Original",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Choice to base further edits on the original photo instead of a retouched version."
     },
     "換成 {ratio}": {
       "en": "Use {ratio}",
@@ -4967,7 +5071,8 @@
       "en": "Use Overview Settings",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Confirm button: replace each photo's own settings with the batch overview's settings."
     },
     "換成這張照片的話，剛剛打的需求和選的設定都會清掉。確定要換嗎？": {
       "en": "Switching to this photo clears the requests you typed and the settings you chose. Switch anyway?",
@@ -5131,7 +5236,8 @@
       "where": [
         "chat",
         "backend labels"
-      ]
+      ],
+      "note": "Option to retouch everything the AI suggests plus the user's requests, versus requests only."
     },
     "整體風格：": {
       "en": "Overall Look: ",
@@ -5180,7 +5286,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Aspect-ratio option for a square (1:1) frame shape."
     },
     "旅行": {
       "en": "Travel",
@@ -5194,7 +5301,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Scene category tag for everyday, daily-life photos."
     },
     "昨天": {
       "en": "Yesterday",
@@ -5214,7 +5322,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Name of a warm orange colour theme for the app UI, not a lighting setting."
     },
     "更多選項": {
       "en": "More options",
@@ -5356,25 +5465,29 @@
       "en": "Has requests",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Status badge on a photo: the user has typed retouching requests but not started yet."
     },
     "未執行": {
       "en": "Not run",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Shown instead of a duration when this processing step was skipped."
     },
     "未定": {
       "en": "Undecided",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Quality-check result when the check could neither confirm a pass nor flag a problem."
     },
     "未指定對象": {
       "en": "No specific person",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Heading for retouching requests not aimed at any particular person in the photo."
     },
     "未提供裁切建議。": {
       "en": "No crop suggestion provided.",
@@ -5392,7 +5505,8 @@
       "en": "Unread",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Status of a submitted bug report: not yet read by the team."
     },
     "未過度美化": {
       "en": "Not over-retouched",
@@ -5458,26 +5572,30 @@
       "en": "Local processing",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Shown in place of the image-model name when the photo was processed locally without AI image generation."
     },
     "本機預覽": {
       "en": "Local preview",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Quality-check status when the app ran in offline local mode, so no AI check was done."
     },
     "材質": {
       "en": "Material",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Short tag on the product-photo style preset: emphasises how surface materials and textures look."
     },
     "柔光": {
       "en": "Soft Light",
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Lighting style option: soft, diffused light (not the layer blend mode)."
     },
     "查看原始照片": {
       "en": "View the original",
@@ -5544,13 +5662,15 @@
       "en": "Grid",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Gallery layout option: show photos in an even grid."
     },
     "桌布": {
       "en": "Wallpaper",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Hint under the 16:9 aspect-ratio option: desktop wallpaper shape; keep very short."
     },
     "梳整俐落": {
       "en": {
@@ -5571,7 +5691,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Name of a colour theme for the app interface; keep it short."
     },
     "構圖": {
       "en": "Composition",
@@ -5643,7 +5764,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Right end of the aspect-ratio scale: wider, landscape-orientation shapes (not scenery)."
     },
     "檢查整體畫面的協調與完整": {
       "en": "Checking overall balance and cohesion",
@@ -5680,7 +5802,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Label for the switch between panel mode and chat mode (noun, the viewing mode)."
     },
     "檢視構圖中的空間與視覺平衡": {
       "en": "Reviewing spatial and visual balance",
@@ -5731,7 +5854,8 @@
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Pose style option: cheering pose with arms raised."
     },
     "正在上傳照片…": {
       "en": "Uploading the photo…",
@@ -5986,7 +6110,8 @@
       "en": "Reframing",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Progress status: recropping or recomposing the photo's framing."
     },
     "此人像沒有可顯示的分析結果。": {
       "en": "No analysis available for this person.",
@@ -6076,7 +6201,8 @@
       "en": "Ratio: Original",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Aspect ratio shown as the same as the original photo's."
     },
     "比例改成 {ratio}": {
       "en": "Change the aspect ratio to {ratio}",
@@ -6155,7 +6281,8 @@
       "en": "Caution",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Result of one quality check: did not pass, needs attention (opposite of 'Pass')."
     },
     "清晰度": {
       "en": "Clarity",
@@ -6167,7 +6294,8 @@
       "en": "Crisp",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Short style tag for product photos: clear, sharp detail."
     },
     "清除": {
       "en": "Clear",
@@ -6179,25 +6307,29 @@
       "en": "Clear {label}",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Button label that removes the selected {label} option (verb 'clear')."
     },
     "清除光線": {
       "en": "Clear lighting",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Button that removes the selected lighting style (verb), not 'clear/bright lighting'."
     },
     "清除取景範圍": {
       "en": "Clear framing",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Button that removes the selected framing option (verb 'clear')."
     },
     "清除姿勢": {
       "en": "Clear pose",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Button that removes the selected pose option (verb 'clear')."
     },
     "清除所有照片": {
       "en": "Clear all photos",
@@ -6216,7 +6348,8 @@
       "en": "Clear camera angle",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Button that removes the selected camera-angle option (verb), not 'clear/bright angle'."
     },
     "準備中…": {
       "en": "Preparing…",
@@ -6381,7 +6514,8 @@
       "en": "Highlights",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Heading for the photo's best points (mood and focal point), not bright tones."
     },
     "照片傳好了，準備開始分析…": {
       "en": "Photo uploaded. Preparing the analysis…",
@@ -6406,7 +6540,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Field-name label the AI may prefix to a photo description; used to detect and strip that prefix."
     },
     "照片分析": {
       "en": "Photo analysis",
@@ -6478,7 +6613,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Field-name label the AI may prefix to a photo summary; used to detect and strip that prefix."
     },
     "照片總覽": {
       "en": "Photo Overview",
@@ -6515,7 +6651,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Name of a dark orange colour theme for the app interface; keep it short."
     },
     "版本紀錄": {
       "en": "Release Notes",
@@ -6585,7 +6722,8 @@
       "en": "Use This",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Button that uses the line of text the user typed as the wording to put in the photo."
     },
     "由 AI 選擇比例並重新構圖中…": {
       "en": "Reframing with an AI-selected ratio…",
@@ -6610,7 +6748,8 @@
       "en": "Negative space",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Photography term: the empty area around the subject in the composition."
     },
     "留白有功能": {
       "en": "Negative space is purposeful",
@@ -6679,7 +6818,8 @@
       "en": "Mood",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Label for the photo's overall atmosphere or feel, shown among the photo's strong points."
     },
     "畫面的部分（光線、色調、構圖這些），我有 {v1} 項建議，預設都會套用。要看一下嗎？": {
       "en": "For the overall image (lighting, tone, composition), I have {v1} suggestions, all applied by default. Want to take a look?",
@@ -6692,7 +6832,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Tab name for light, colour and framing adjustments to the whole image; short tab label."
     },
     "當時的設定": {
       "en": "Settings at the time",
@@ -6801,7 +6942,8 @@
       "en": "Now: {level}",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Shows the smile level currently detected in the photo, e.g. 'Now: Gentle Smile'."
     },
     "目前無法取得處理紀錄。": {
       "en": "History isn't available right now.",
@@ -6852,13 +6994,15 @@
       "en": "Camera",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Hint beside the 3:2 aspect ratio: the standard camera photo shape."
     },
     "看{v1}": {
       "en": "See {v1}",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Button to view the suggestions for {v1}, an edit category such as lighting or composition."
     },
     "看大圖": {
       "en": "Enlarge",
@@ -6891,7 +7035,8 @@
       "where": [
         "chat",
         "backend labels"
-      ]
+      ],
+      "note": "Button that reopens the list of planned retouching items so the user can review or change them."
     },
     "看過原圖後建議調整": {
       "en": "Suggested after reviewing the original",
@@ -6930,7 +7075,8 @@
       "en": "Gaze Focus: Off",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Setting state: gaze correction (making eyes look toward the camera) is turned off."
     },
     "眼部修正（第二段）": {
       "en": "Eye correction (stage 2)",
@@ -7006,7 +7152,8 @@
       "en": "Remove",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Tooltip on a photo thumbnail: remove this photo from the batch (not object removal)."
     },
     "移除了 {count} 張，現在一共 {left} 張。": {
       "en": "Removed {count} {count, plural, =1{photo} other{photos}}. {left} left.",
@@ -7037,7 +7184,8 @@
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Lighting style option: light through a window casting striped shadows on the subject."
     },
     "立即美化": {
       "en": "Retouch Now",
@@ -7050,7 +7198,8 @@
       "where": [
         "chat",
         "backend text"
-      ]
+      ],
+      "note": "Name of the smile-adjustment portrait fix (noun), not an instruction to smile."
     },
     "笑容可以調整": {
       "en": "Smile Can Be Adjusted",
@@ -7201,7 +7350,8 @@
       "en": "{v1} / {length}",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Counter showing which retouched version is displayed out of the total versions."
     },
     "第 {versionNumber} 版": {
       "en": "Version {versionNumber}",
@@ -7250,7 +7400,8 @@
       "en": "Refined",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Short style tag meaning detailed, fine retouching (adjective)."
     },
     "系統回應逾時": {
       "en": "The request timed out",
@@ -7344,7 +7495,8 @@
       "en": "Overview",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Name of the chat thread covering all uploaded photos together (batch overview)."
     },
     "總覽 · {n} 張": {
       "en": "Overview",
@@ -7364,7 +7516,8 @@
       "en": "Total",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Total cost row in the cost breakdown."
     },
     "繼續": {
       "en": "Continue",
@@ -7391,7 +7544,8 @@
         "panel",
         "chat",
         "backend labels"
-      ]
+      ],
+      "note": "Main button that starts retouching the photo; also a step name in the progress bar."
     },
     "美化中": {
       "en": "Retouching",
@@ -7442,7 +7596,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Status badge on a photo: retouching is finished (not a past-tense action)."
     },
     "美化完成（{doneCount}/{length}）": {
       "en": "Retouched ({doneCount}/{length})",
@@ -7462,7 +7617,8 @@
         "panel",
         "chat",
         "backend labels"
-      ]
+      ],
+      "note": "Settings label for the AI image model and quality level used to retouch photos."
     },
     "美化引擎換成 {v1}": {
       "en": "retouch engine set to {v1}",
@@ -7508,7 +7664,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Tab name for the chosen retouching style options (pose, angle, lighting, framing); short tab label."
     },
     "聊天模式": {
       "en": "Chat mode",
@@ -7564,13 +7721,15 @@
         "panel",
         "chat",
         "backend text"
-      ]
+      ],
+      "note": "Smile-strength option: let the AI decide the smile level."
     },
     "自己寫一句": {
       "en": "Write your own",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Placeholder inviting the user to write their own line of text for the photo instead of a suggestion."
     },
     "自己寫一句文案": {
       "en": "Write your own caption",
@@ -7588,7 +7747,8 @@
       "en": "Natural",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Short tag describing a style preset as natural-looking (adjective)."
     },
     "自然抓拍": {
       "en": "Candid",
@@ -7608,7 +7768,8 @@
       "en": "Natural Premium",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Name of a retouching style preset: natural-looking, high-end enhancement."
     },
     "自行上傳照片": {
       "en": "Upload a Photo",
@@ -7628,7 +7789,8 @@
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Retouching preset that follows the user's own custom style instructions."
     },
     "與原圖比較": {
       "en": "Compare with original",
@@ -7640,7 +7802,8 @@
       "en": "Good",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Rating on an analysis card: this aspect of the photo is fine (top level)."
     },
     "色彩": {
       "en": "Color",
@@ -7678,7 +7841,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Name of a light lilac colour theme for the app interface; keep it short."
     },
     "處理中": {
       "en": "In progress",
@@ -7715,7 +7879,8 @@
       "en": "Processing path",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Developer setting choosing which backend runs the job (local worker or shared gateway)."
     },
     "處理逾時，請稍後再試。（Job ID: {jobId}）": {
       "en": "The request timed out. Please try again later. (Job ID: {jobId})",
@@ -7734,13 +7899,15 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Photo scene category: street photography."
     },
     "裁切安全": {
       "en": "Safe crop",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Quality-check item: the crop does not cut off important parts of the subject."
     },
     "裁切後重新評估干擾": {
       "en": "Distractions re-evaluated after crop",
@@ -7879,7 +8046,8 @@
       "where": [
         "chat",
         "backend text"
-      ]
+      ],
+      "note": "Portrait-fix toggle that makes the person look into the camera; a very short label."
     },
     "視線修正": {
       "en": "Fix Gaze",
@@ -7891,7 +8059,8 @@
       "en": "Focus",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Label for the photo's visual focal point, not camera focus."
     },
     "解析帳號失敗：HTTP {status}": {
       "en": "Couldn't parse the account: HTTP {status}",
@@ -7941,7 +8110,8 @@
       "en": "Detailed Explanations",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Settings switch: the assistant explains its analysis and each version in more detail."
     },
     "詳細解說：{v}": {
       "en": "Detailed explanations: {v}",
@@ -7991,13 +8161,15 @@
       "en": "change to {ratioLabel}. {detail}",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Continues after 'Reframe:': change the aspect ratio to {ratioLabel}, then a detail sentence; keep lowercase start."
     },
     "調整為{ratio}，{detail}": {
       "en": "change to {ratio}. {detail}",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Continues a 'Reframe:' edit step: the new aspect ratio, then how the photo will be cropped."
     },
     "調整背景與主體的層次關係": {
       "en": "Adjusting depth between subject and background",
@@ -8167,7 +8339,8 @@
       "en": "the figure",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Fills the slot in 'Refine the outline of …': the person's body silhouette."
     },
     "身形調整": {
       "en": "Body Shape",
@@ -8175,7 +8348,8 @@
         "panel",
         "chat",
         "backend text"
-      ]
+      ],
+      "note": "Portrait-fix toggle that reshapes the person's body figure."
     },
     "身形調整分析失敗，已停用；請重新分析": {
       "en": "Body-shape analysis failed, so it's been turned off. Please reanalyze.",
@@ -8253,7 +8427,8 @@
       "en": "Quality review",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Label before the AI quality-check verdict on a retouched result."
     },
     "辨識人物、光線、構圖與畫面細節": {
       "en": "Reviews the people, lighting, composition and details",
@@ -8410,13 +8585,15 @@
       "en": "this person",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Fills a slot naming who a portrait fix applies to: the one person it concerns."
     },
     "這個人": {
       "en": "this person",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Fallback name for a detected person who has no name or position label."
     },
     "這個對話沒有照片": {
       "en": "This chat has no photos",
@@ -8488,7 +8665,8 @@
       "en": "These people",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "User's chat reply after picking several faces in answer to 'who?'; means 'these people here'."
     },
     "這幾張要先分析看看，還是直接一鍵美化？": {
       "en": "Want me to analyze these first, or retouch them right away?",
@@ -8813,7 +8991,8 @@
       "en": "Pass",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Result of a quality-check item: passed (status, not the verb)."
     },
     "連不上伺服器，請確認網路後再試一次。": {
       "en": "Can't connect to the server. Please check your connection and try again.",
@@ -8832,7 +9011,8 @@
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Framing option: a wide/long shot that shows the subject small within the surroundings."
     },
     "選一張照片，剩下的用聊的": {
       "en": "Pick a photo, then just chat about the rest",
@@ -9087,7 +9267,8 @@
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Pose style option: a cool, confident attitude (not a colder colour temperature)."
     },
     "重新一鍵美化": {
       "en": "One-Tap Retouch Again",
@@ -9105,7 +9286,8 @@
       "en": "Capture Again",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Button that takes the bug-report screenshot again, not a camera photo."
     },
     "重新整理": {
       "en": "Refresh",
@@ -9118,7 +9300,8 @@
       "en": "Reframe",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Feature that changes the photo's composition and framing, by cropping or extending it."
     },
     "重新構圖中…": {
       "en": "Reframing…",
@@ -9154,7 +9337,8 @@
         "panel",
         "chat",
         "backend text"
-      ]
+      ],
+      "note": "Prefix of an edit step that recrops or recomposes the photo's framing."
     },
     "重新處理失敗，請稍後再試。": {
       "en": "Reprocessing failed. Please try again later.",
@@ -9190,7 +9374,8 @@
       "en": "Key area",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Fallback name for an area of the photo that the edit must protect."
     },
     "金色光調": {
       "en": "Golden Hour",
@@ -9242,7 +9427,8 @@
       "where": [
         "panel",
         "backend text"
-      ]
+      ],
+      "note": "Lighting style option: the look of a camera flash (noun, not the verb)."
     },
     "閉眼": {
       "en": {
@@ -9268,7 +9454,8 @@
       "en": "Eyes",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Label for closed-eye detection and repair; a very short label, keep it to one short word."
     },
     "開": {
       "en": "On",
@@ -9287,7 +9474,8 @@
       "en": "On",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Status of a portrait-fix setting: turned on (not the verb)."
     },
     "開啟後，助理會更詳細地說明分析、建議與每一版的成果。": {
       "en": "When on, the assistant explains the analysis, suggestions and each version in more detail.",
@@ -9388,7 +9576,8 @@
       "en": "turned off “{name}”",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "Fragment completing 'OK, …': the retouching switch {name} was turned off."
     },
     "關閉": {
       "en": "Close",
@@ -9401,7 +9590,8 @@
       "en": "Off",
       "where": [
         "chat"
-      ]
+      ],
+      "note": "Status of a portrait-fix setting: turned off (not the verb)."
     },
     "關閉後只做本機影像處理，可降低成本並避免生成模型改動內容。": {
       "en": "When off, uses local image processing only, which lowers cost and prevents the generative model from altering content.",
@@ -9437,7 +9627,8 @@
       "en": "Stories",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Hint under the 9:16 aspect-ratio option: the social-media Stories format; keep very short."
     },
     "雜誌 editorial": {
       "en": "Magazine Editorial",
@@ -9450,7 +9641,8 @@
       "en": "Editorial",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Short style tag: a magazine-like editorial look (not an opinion article)."
     },
     "需人工複查": {
       "en": "Needs manual review",
@@ -9487,14 +9679,16 @@
       "en": "Needs Work",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Rating on an analysis card (scale: needs work / could be better / good): this aspect needs fixing."
     },
     "面板": {
       "en": "Panel",
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "View-switch tab that shows the panel layout of settings and results (as opposed to the chat view)."
     },
     "預計花費": {
       "en": "Estimated Cost",
@@ -9583,7 +9777,8 @@
       "en": "Premium",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Short style tag meaning a high-end, refined look (not a paid tier)."
     },
     "髮絲": {
       "en": {
@@ -9610,7 +9805,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Name of a light purple colour theme for the app (the flower), not the eye part."
     },
     "點一下看大圖": {
       "en": "Tap to enlarge",
@@ -9707,7 +9903,8 @@
       "en": " (not recommended)",
       "where": [
         "panel"
-      ]
+      ],
+      "note": "Suffix on a portrait check result: adjusting it is not advised for this photo."
     },
     "（圖例僅示意風格，實際呈現依原圖調整）": {
       "en": " (examples show the style only; results are adapted to your photo)",

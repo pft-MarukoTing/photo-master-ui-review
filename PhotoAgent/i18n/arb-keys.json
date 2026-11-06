@@ -1,0 +1,9739 @@
+{
+  "_about": [
+    "The English id each Chinese key has in the ARB files (i18n/arb/). Ids are kept once given: the Hub stores translations by id.",
+    "`where` is the catalog the id's text goes back into: panel = frontend/i18n-*.js, chat = frontend-chat/src/i18n/*.ts, backend = photo_agent LABELS / TEXT.",
+    "`manual`: text with no letters, written by hand for each language instead of being translated.",
+    "Refreshed by scripts/translation_source.py; do not edit by hand."
+  ],
+  "keys": {
+    "backend_16_9_wallpaper": {
+      "zh": "16:9（桌布）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_1_1_square": {
+      "zh": "1:1（方形）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_1k_standard": {
+      "zh": "1K（標準）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_2_3_portrait": {
+      "zh": "2:3（人像）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_3_2_camera": {
+      "zh": "3:2（相機）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_3_4_phone": {
+      "zh": "3:4（手機）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_4_3_tablet": {
+      "zh": "4:3（平板）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_4_5_instagram_post": {
+      "zh": "4:5（IG 貼文）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_5_4_landscape": {
+      "zh": "5:4（橫幅）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_9_16_stories": {
+      "zh": "9:16（限動）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_a_ratio_was_chosen_from": {
+      "zh": "本機依 AI 建議裁切框的實際比例（{measured}）選擇候選比例，但套用 ROI／保護區域約束後裁切擴回完整畫面，因此維持原圖比例。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_a_result_that_skipped_the": {
+      "zh": "跳過分析的結果沒有構圖可以重新規劃。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_a_single_subject_close_up": {
+      "zh": "{label}(單一主體特寫,其餘人物/元素刻意裁切出畫面)",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_a_single_subject_close_up_2": {
+      "zh": "單一主體特寫,以{label}為主角並填滿畫面。原始場景可能包含多個人物或元素,但此特寫刻意只聚焦於此主體。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_adjust_the_head_and_shoulder": {
+      "zh": "調整頭肩外緣，讓整體比例更協調",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_analysis_failed": {
+      "zh": "分析失敗：{exc}",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_anything_else_youd_like_to": {
+      "zh": "還有其他想改的地方嗎？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_anything_else_youd_like_to_2": {
+      "zh": "還有其他想改的地方嗎？沒有的話，可以從下面選「分析」或「一鍵美化」喔！",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_anything_else_youd_like_to_3": {
+      "zh": "還有其他想改的地方嗎？沒有的話，可以按下面的{buttons}。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_anything_else_youd_like_to_4": {
+      "zh": "還有其他想改的地方嗎？沒有的話，按下面的「{label}」就會開始。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_aspect_ratio": {
+      "zh": "比例",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_being_adjusted": {
+      "zh": "（正在調整）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_change_the_aspect_ratio_to": {
+      "zh": "比例改成 {ratio}",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_change_to": {
+      "zh": "調整為{ratio}，{detail}",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_closed_eyes": {
+      "zh": "閉眼",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_correct_wide_angle_stretch_on": {
+      "zh": "修正廣角造成的邊緣人臉變形",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_could_you_tell_me_a": {
+      "zh": "可以再說清楚一點嗎？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_couldnt_hand_off_the_list": {
+      "zh": "人物清單暫時無法交接，請重試預覽。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_couldnt_load_the_people_preview": {
+      "zh": "無法讀取人物預覽圖片。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_couldnt_read_the_photo_please": {
+      "zh": "無法讀取照片，請使用有效的圖片檔案。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_couldnt_start_the_people_preview": {
+      "zh": "無法開始人物預覽，仍可稍後進行分析。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_detected": {
+      "zh": "偵測到有人物{problems}。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_detected_a_face_stretched_by": {
+      "zh": "偵測到有人物在畫面邊緣被廣角拉寬。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_detecting_the_people_in_the": {
+      "zh": "正在初步辨識照片中的人物。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_dont_apply": {
+      "zh": "不套用",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_dont_fix": {
+      "zh": "不修正",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_everyone": {
+      "zh": "所有人物",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_expressions_eyes_and_hair_all": {
+      "zh": "人物的表情、眼神與頭髮都很自然。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_eyes_not_looking_at_the": {
+      "zh": "眼睛沒有看向鏡頭",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_face_thumbnail": {
+      "zh": "頭像",
+      "where": [
+        "backend labels"
+      ]
+    },
+    "backend_facial_symmetry": {
+      "zh": "臉部左右平衡",
+      "where": [
+        "backend labels"
+      ]
+    },
+    "backend_finished_detecting_the_people_in": {
+      "zh": "人物初步辨識完成。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_fix": {
+      "zh": "修正",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_fix_2": {
+      "zh": "修正（{level}）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_fix_gaze": {
+      "zh": "視線修正",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_from_the_actual_ratio_of": {
+      "zh": "本機依 AI 建議裁切框的實際比例（{measured}）於支援清單中選出最接近的「{label}」；並完成 ROI／保護區域約束後確認此裁切可執行。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_geminis_reply_didnt_include_an": {
+      "zh": "Gemini 回應沒有包含圖片資料。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_geometry_analysis_found_no_extra": {
+      "zh": "本機幾何解析後不需要額外構圖裁切。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_geometry_analysis_found_no_workable": {
+      "zh": "本機幾何解析後沒有可執行的構圖裁切，維持完整畫面。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_geometry_analysis_kept_the_full": {
+      "zh": "本機幾何解析後選擇完整原圖構圖，不執行裁切。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_give_a_natural_smile": {
+      "zh": "讓{who}自然微笑",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_got_it_youd_like_ive": {
+      "zh": "我理解你是想「{revised}」，已整理到個人化需求。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_got_your_answer_but_i": {
+      "zh": "已收到你的回答，但需求整理暫時失敗，尚未套用；可以重試這項回答。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_have_look_at_the_camera": {
+      "zh": "讓{who}看向鏡頭",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_how_would_you_like_this": {
+      "zh": "這句話你希望怎麼用在照片上？可以再說明想調整的效果嗎？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_i_can_make_this_change": {
+      "zh": "可以幫你這樣調整，確認後套用。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_i_couldnt_match_that_to": {
+      "zh": "這個調整我沒辦法對應到可設定的項目，可以直接在面板上修改。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_i_couldnt_process_this_request": {
+      "zh": "這項需求暫時未能整理完成，尚未套用；請稍後再試。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ill_hold_on_to_this": {
+      "zh": "這句我先保留，稍後會一起確認對象與修改內容。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_im_not_sure_how_to": {
+      "zh": "我不太確定要怎麼調整，可以直接在面板上修改。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_improve_shadows": {
+      "zh": "改善陰影：",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_improves_subject_focus_and_edge": {
+      "zh": "依已解析的裁切框改善主體集中度與邊緣落點。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ive_added_it_to_my": {
+      "zh": "先幫你記進個人化需求了，下面可以直接修改。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ive_also_set_the_aspect": {
+      "zh": "長寬比也幫你換成「{ratio}」了，在「設定」裡隨時可以改。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ive_also_you_can_change": {
+      "zh": "另外{said}了，在「設定」裡隨時可以改。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ive_applied_it": {
+      "zh": "先幫你套用了。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ive_applied_it_tap_edit": {
+      "zh": "先幫你套用了，想改的話按「修改」。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ive_updated_the_earlier_request": {
+      "zh": "前面跟這句衝突的需求，已經照這句改掉了。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_keep_hair_movement": {
+      "zh": "保留髮絲動態",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_let_the_ai_decide": {
+      "zh": "交給 AI 判斷",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_let_the_ai_decide_2": {
+      "zh": "交給 AI 決定",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_local_mode_only_applies_a": {
+      "zh": "本機模式只做簡易裁切與色彩增強，未執行 AI 輸出 QA。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_local_preview": {
+      "zh": "本機預覽",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_messy_hair": {
+      "zh": "頭髮凌亂",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_must_stay_whole_in_the": {
+      "zh": "構圖必須完整保留。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_natural_premium": {
+      "zh": "自然高級修圖",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_no_faces_detected": {
+      "zh": "（沒有偵測到人臉）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_no_specific_person": {
+      "zh": "未指定對象",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_none_yet": {
+      "zh": "（還沒有）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_nothing_in_the_background_pulls": {
+      "zh": "背景沒有搶走主體的元素。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_off": {
+      "zh": "關",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_added_to_my_requests": {
+      "zh": "好，已加進個人化需求。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_done": {
+      "zh": "好，已經幫你改好了。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_ill_analyze_this_photo": {
+      "zh": "好，我先幫你分析這張照片。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_ill_drop_that_earlier": {
+      "zh": "好，前面那項需求就不做了。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_ill_drop_those_requests": {
+      "zh": "好，那些需求就不做了。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_ill_let_the_ai": {
+      "zh": "好，比例就交給 AI 決定。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_ill_let_the_ai_2": {
+      "zh": "好，比例就交給 AI 決定，其他的我記下來了。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_ill_skip": {
+      "zh": "好，{echo}就不做了。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_is_now": {
+      "zh": "好，{label}改成「{after}」了。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_ive_switched_to_version": {
+      "zh": "好，已經切到第 {n} 版，接著在這版上改。想改哪裡直接打在下面，我會先幫你看過、記下來；想換光線、角度這類效果，可以按「風格」。都好了再按「接續第 {n} 版美化」。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_ive_switched_to_version_2": {
+      "zh": "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的個人化需求了，沒問題就按「接續第 {n} 版美化」；想換光線、角度這類效果，可以先按「風格」。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_ive_you_can_change": {
+      "zh": "好，{said}了，在「設定」裡隨時可以改。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_my_requests_has_been": {
+      "zh": "好，個人化需求更新好了。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_noted": {
+      "zh": "好，記下了：{echo}。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_noted_2": {
+      "zh": "好，這個我記下來了。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_starting_one_tap_retouch": {
+      "zh": "好，馬上幫你一鍵美化。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_switching_back_to_the": {
+      "zh": "好，改回從原圖美化，剛剛記下的需求都留著。想再加什麼直接打在下面，好了就按「再美化」。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_ok_the_aspect_ratio_is": {
+      "zh": "好，長寬比幫你換成「{ratio}」了，在「設定」裡隨時可以改。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_on": {
+      "zh": "開",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_open_the_eyes_of_naturally": {
+      "zh": "讓{who}自然睜開眼睛",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_openais_reply_didnt_include_an": {
+      "zh": "OpenAI 回應沒有包含圖片資料。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_or": {
+      "zh": "或",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_original_photo": {
+      "zh": "原圖",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_output_size": {
+      "zh": "輸出尺寸",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_overall_look": {
+      "zh": "整體風格：",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_overview_several_photos_no_specific": {
+      "zh": "（總覽：好幾張照片，這裡不指定人物）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_people": {
+      "zh": "{n}位人物",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_people_are_not_listed_while": {
+      "zh": "（接續時不列人物）",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_planning_the_framing_for_the": {
+      "zh": "正在照新比例規劃構圖，好了就可以接著調整或美化。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_please_check_the_requested_text": {
+      "zh": "請核對指定字樣後再使用此成品。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_please_compare_the_original_and": {
+      "zh": "請人工快速比對原圖與輸出圖。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_processing_was_interrupted": {
+      "zh": "處理到一半中斷了",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_qa_didnt_return_a_complete": {
+      "zh": "QA 未回傳完整且有效的逐字核對結果",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_qa_incomplete": {
+      "zh": "QA 未完成",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_qa_skipped": {
+      "zh": "已略過 QA",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_quality_check_failed": {
+      "zh": "品質檢查失敗",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_refine_s_outline_to_balance": {
+      "zh": "修飾{who}外緣，讓畫面份量更均衡",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_refine_the_leg_outline_for": {
+      "zh": "修飾腿部外緣，讓下身線條更修長",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_refine_the_upper_arm_line": {
+      "zh": "修飾上臂線條，讓袖口至手肘更清楚",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_reframe": {
+      "zh": "重新構圖：",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_reframe_at_a_output_ratio": {
+      "zh": "以{ratio}輸出比例重新構圖；{detail}",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_reframe_at_the_original_output": {
+      "zh": "維持原圖輸出比例並重新構圖；{detail}",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_reframing_failed": {
+      "zh": "重新構圖失敗：{exc}",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_remove_distractions": {
+      "zh": "移除干擾物：",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_requested_text": {
+      "zh": "指定字樣",
+      "where": [
+        "backend labels"
+      ]
+    },
+    "backend_set_the_aspect_ratio_to": {
+      "zh": "長寬比換成「{ratio}」",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_side": {
+      "zh": "側拍",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_smile_can_be_adjusted": {
+      "zh": "笑容可以調整",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_smooth_and_tidy": {
+      "zh": "梳整俐落",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_something_in_the_background_draws": {
+      "zh": "背景有分散注意力的元素。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_sorry_i_cant_help_with": {
+      "zh": "不好意思，這個我幫不上忙。想怎麼修這張照片，再跟我說說看喔！",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_straighten": {
+      "zh": "水平／透視校正：",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_stray_hairs": {
+      "zh": "髮絲",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_suggested_style": {
+      "zh": "建議風格：",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_tap_below_to_start": {
+      "zh": "按下面的「{label}」我就開始。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_text_check_data_is_incomplete": {
+      "zh": "文字核對資料不完整",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_thats_already_in_the_current": {
+      "zh": "這些已經在目前的設定裡了。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_ai_didnt_suggest_a": {
+      "zh": "AI 未提出裁切建議，維持原圖比例。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_ai_quality_check_was": {
+      "zh": "已依設定略過 AI 輸出 QA 檢查。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_ais_reply_wasnt_valid": {
+      "zh": "AI 回應沒有包含有效 JSON。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_composition_could_be_better": {
+      "zh": "構圖還可以更好。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_composition_is_balanced_and": {
+      "zh": "構圖平衡穩定。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_composition_was_planned_for": {
+      "zh": "分析時即以使用者指定的輸出比例「{label}」規劃構圖；",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_crop_was_confirmed_after": {
+      "zh": "本機完成 ROI／保護區域約束後確認此裁切可執行。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_crops_ratio_doesnt_match": {
+      "zh": "裁切框比例與要求的輸出畫布不一致（裁切區 {crop} vs 要求 {requested}，差 {drift}）：修圖模型只能靠壓縮或拉伸畫面來同時滿足兩者。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_details_could_be_clearer": {
+      "zh": "細節還可以更清楚。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_figure": {
+      "zh": "身形",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_light_and_color_look": {
+      "zh": "光線與色彩表現自然。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_light_or_color_could": {
+      "zh": "光線或色彩還有可以改善的地方。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_list_of_people_didnt": {
+      "zh": "人物清單交接未通過驗證，已停止後續人物分析。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_main_dish": {
+      "zh": "主菜。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_original_crop_was_fitted": {
+      "zh": "本機將原裁切提案 fit 到此比例並完成 ROI／保護區域約束。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_original_ratio_was_chosen": {
+      "zh": "使用者選擇維持原圖比例；本機完成 ROI／保護區域約束後確認此同比例裁切可執行。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_output_canvas_ratio_doesnt": {
+      "zh": "輸出畫布比例與要求不一致（實際 {size} = {actual} vs 要求 {requested}，差 {drift}）。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_output_ratio_was_changed": {
+      "zh": "使用者在分析後改選輸出比例「{label}」，構圖說明仍為分析時比例所寫；",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_people_found_in_the": {
+      "zh": "人物身份交接不完整，已保留 2.0 清單並停止後續分析；請重試。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_people_preview_cant_be": {
+      "zh": "人物預覽暫時無法讀取，仍可進行分析。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_people_preview_didnt_finish": {
+      "zh": "人物預覽未完成，仍可進行分析。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_people_preview_is_out": {
+      "zh": "人物預覽版本不符，請重新預覽。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_person": {
+      "zh": "人物",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_photo_must_be_between": {
+      "zh": "照片大小需介於 1 byte 與 30 MB。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_photos_not_yet_retouched": {
+      "zh": "還沒美化的 {n} 張會照這樣修，已經在美化或美化好的 {done} 張不動。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_portrait_analysis_changed_the": {
+      "zh": "人物細節分析改變了固定身份清單，已停止後續處理。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_requested_text_failed_the": {
+      "zh": "指定文字未通過逐字核對，或有額外新增文案，請人工複查。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_result_is_ready_but": {
+      "zh": "輸出已完成，但品質檢查階段未成功回傳可解析結果。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_selected_person_hasnt_been": {
+      "zh": "指定的人物未完成身份確認，請重新指定或清除該需求。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_selected_person_isnt_confirmed": {
+      "zh": "指定人物尚未確認，請重新指定或清除該需求。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_selected_person_isnt_part": {
+      "zh": "指定的人物未納入本次分析，請重新確認需求。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_selected_persons_name_isnt": {
+      "zh": "指定人物的名稱不可用，請重新指定。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_selected_persons_preview_doesnt": {
+      "zh": "指定人物的預覽與此照片不符，請重新指定。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_selected_persons_reference_is": {
+      "zh": "指定人物的引用資料無效，請重新指定。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_settings_changed_in_the": {
+      "zh": "設定已在這段時間更新，這次需求尚未套用，請依最新設定再送出。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_single_most_prominent_subject": {
+      "zh": "單一最突出的主體",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_subject_already_fills_the": {
+      "zh": "分析判定主體已填滿畫面，改以向上下延伸場景達成「{label}」，原畫面完整保留、不裁切。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_subject_already_fills_the_2": {
+      "zh": "分析判定主體已填滿畫面，改以向左右延伸場景達成「{label}」，原畫面完整保留、不裁切。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_the_subjects_details_are_clear": {
+      "zh": "主體細節清楚。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_theres_no_ratio_the_closest": {
+      "zh": "目前沒有 {asked} 這個比例，最接近的是「{nearest}」，要換成這個嗎？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_these_are_all_analyzed_want": {
+      "zh": "這幾張都分析好了，要直接美化嗎？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_these_photos_will_follow_this": {
+      "zh": "這 {n} 張再美化時都會照這樣修。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_these_photos_will_follow_this_2": {
+      "zh": "這 {n} 張美化時都會照這樣修。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_this_person": {
+      "zh": "這位人物",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_this_photo_hasnt_been_analyzed": {
+      "zh": "這張照片還沒分析，只能依照個人化需求修圖；要整張美化請先按「幫我分析」。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_this_photo_is_still_processing": {
+      "zh": "這張照片正在處理中，完成後再試一次。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_tidy_the_messy_hair_of": {
+      "zh": "整理{who}的亂髮",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_tidy_the_waist_edge_so": {
+      "zh": "收整腰腹外緣，讓衣著側線更貼合",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_to_adjust_anything_else_tap": {
+      "zh": "還想調整其他項目可以點下面的項目，或按「{label}」我就開始。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_to_change_this_or_adjust": {
+      "zh": "要修改或調整其他項目，可以點下面的美化項目，或按「{label}」我就開始。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_to_make_a_new_version": {
+      "zh": "想照這樣重新產生一版，可以按「再美化」。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_turn_on_ai_retouch_to": {
+      "zh": "若要檢查生成式修圖品質，請開啟 AI 修圖。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_turned_off": {
+      "zh": "關掉「{name}」",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_turned_on": {
+      "zh": "打開「{name}」",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_use": {
+      "zh": "換成 {ratio}",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_want_me_to_analyze_it": {
+      "zh": "要不要我先幫你分析看看？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_want_me_to_analyze_it_2": {
+      "zh": "要先幫你分析看看，還是直接一鍵美化？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_want_me_to_analyze_these": {
+      "zh": "這幾張要先分析看看，還是直接一鍵美化？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_want_me_to_analyze_these_2": {
+      "zh": "這幾張要先分析看看，還是直接一鍵美化？分析完會整理出每張可以修的地方給你參考。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_want_me_to_analyze_this": {
+      "zh": "要不要我先幫你分析這張照片？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_want_me_to_retouch_it": {
+      "zh": "要不要直接幫你一鍵美化？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_want_me_to_retouch_it_2": {
+      "zh": "要直接幫你一鍵美化，還是先分析看看？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_want_me_to_retouch_them": {
+      "zh": "要不要照這樣再美化一次？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_want_me_to_retouch_these": {
+      "zh": "要照這樣把這幾張再美化一次嗎？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_want_me_to_retouch_these_2": {
+      "zh": "這幾張要直接一鍵美化，還是先分析看看？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_who_should_be_applied_to": {
+      "zh": "{label}要幫哪一位調整？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_will_be_applied_to": {
+      "zh": "{label}會幫{who}調整。",
+      "where": [
+        "backend text"
+      ]
+    },
+    "backend_would_you_like_me_to": {
+      "zh": "要先幫你分析這張照片，還是直接一鍵美化？",
+      "where": [
+        "backend text"
+      ]
+    },
+    "chat_a_dot_marks_a_change": {
+      "zh": "有小圓點的是看過原圖後建議調整的項目，點一下可以開或關。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_a_newer_suggestion_replaced_this": {
+      "zh": "已有新的建議，這個沒有套用。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_about_mp": {
+      "zh": "約 {v1}MP",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_above": {
+      "zh": "上面@@按鈕位置",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_above_2": {
+      "zh": "上面@@照片位置",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_add_the_first": {
+      "zh": "加前 {room} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_add_to_request": {
+      "zh": "加進需求",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_added_photos": {
+      "zh": "新增了 {n} 張照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_adjust_intensity": {
+      "zh": "換{label}的程度",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_adjust_this_one": {
+      "zh": "接著這張調整",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_adjusted": {
+      "zh": "已調整",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_adjusting": {
+      "zh": "接著調整",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_after": {
+      "zh": "修圖後",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ai_is_replying": {
+      "zh": "AI 正在回覆",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_all": {
+      "zh": "全部",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_all_photos_are_retouched_select": {
+      "zh": "每張都美化好了，從{where}選取照片就能看結果。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_all_photos_are_retouched_tap": {
+      "zh": "每張都美化好了，點上面的照片就能看結果。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_all_photos_have_already_started": {
+      "zh": "每張都已經開始了，這句不會套用；要改哪一張，到那張的結果頁說就好。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_all_photos_have_started_tap": {
+      "zh": "每張都開始了，點上面的照片看結果",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_all_retouched_select_a_photo": {
+      "zh": "每張都美化好了，從{where}選取照片看結果",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_all_set_tap_below_and": {
+      "zh": "這樣就可以了，按下面的「{label}」我就開始美化。想再看哪一項，點一下也行。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_almost_done": {
+      "zh": "快完成了，再等一下…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_almost_done_with_the_analysis": {
+      "zh": "即將完成分析…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_already_added": {
+      "zh": "{name}（已經加入了）",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_an_unknown_error_occurred": {
+      "zh": "發生未知錯誤",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analysis_complete": {
+      "zh": "分析完成。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analysis_engine_set_to": {
+      "zh": "分析引擎換成 {v1}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analysis_has_started_you_can": {
+      "zh": "這張開始分析了，結果頁裡可以看進度。其他照片從{where}「我的照片」回來接著弄。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analysis_has_started_you_can_2": {
+      "zh": "這張開始分析了，結果頁裡可以看進度。其他照片從左邊「我的照片」回來接著弄。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analyze_all": {
+      "zh": "全部分析",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analyze_all_2": {
+      "zh": "全部分析（{n} 張）",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analyze_remaining": {
+      "zh": "分析其餘 {n}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analyze_remaining_2": {
+      "zh": "分析其餘 {pending} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analyze_shows_you_what_i": {
+      "zh": "分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換引擎或長寬比，先按設定。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analyzed": {
+      "zh": "{n} 張分析好了",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analyzed_not_yet_retouched": {
+      "zh": "{n} 張分析好了，還沒美化",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analyzes_each_photo_that_hasnt": {
+      "zh": "還沒開始的每張照它自己的需求和設定分析，開始過的不重送",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_analyzes_every_photo_that_hasnt": {
+      "zh": "還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_and": {
+      "zh": "{v1}和{v2}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_and_the_scheduled_retouch_was": {
+      "zh": "，排定的美化也一併取消了",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_any_that_failed_are_marked": {
+      "zh": "沒成功的在{where}會標「失敗」，選取那張可以看原因。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_any_that_failed_are_marked_2": {
+      "zh": "沒成功的在上面會標「失敗」，點那張可以看原因。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_applied_retouch_now_or_adjust": {
+      "zh": "已套用，想直接美化，還是再調下面這幾項？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_applied_starting_a_new_round": {
+      "zh": "已套用，開始新的一輪調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_apply_and_retouch": {
+      "zh": "套用並美化",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_aspect_ratio": {
+      "zh": "長寬比：{v}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_aspect_ratio_set_to": {
+      "zh": "長寬比改成 {v1}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_at_the_top_left": {
+      "zh": "左上角",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_back_to_original": {
+      "zh": "換回原圖",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_back_to_the_overview_to": {
+      "zh": "回到總覽，全部一起分析、美化或調整設定",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_before": {
+      "zh": "修圖前",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_below": {
+      "zh": "下面@@按鈕位置",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_blending_the_edits_seamlessly_with": {
+      "zh": "正在讓改過的地方跟周圍自然接上…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_cant_connect_to_the_server": {
+      "zh": "連不上伺服器，請確認網路後再試一次。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_changed_not_yet_retouched": {
+      "zh": "改了{v1}，還沒美化",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_changed_not_yet_retouched_2": {
+      "zh": "改了，還沒美化",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_changes_only_what_you_described": {
+      "zh": "{only}：只動你寫到的地方，其他保持原樣。{full}：照你的需求修改，光線、人像、構圖也一起調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_changes_only_what_you_described_2": {
+      "zh": "只動你寫到的地方，其他保持原樣。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_changes_only_what_you_described_3": {
+      "zh": "只動你寫到的地方，加上你挑的風格（{styles}），其他保持原樣。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_changes_only_whats_described_and": {
+      "zh": "{only}：只動寫到的地方，其他保持原樣。{full}：照需求修改，光線、人像、構圖也一起調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_changing_the_aspect_ratio_reframes": {
+      "zh": "換長寬比會馬上依新的長寬比重新構圖，畫面建議裡的構圖也會跟著換。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_checking_exposure_white_balance_and_2": {
+      "zh": "正在檢查曝光、白平衡與色彩表現…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_checking_for_a_tilted_horizon": {
+      "zh": "正在檢查水平線傾斜與透視變形…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_checking_sharpness_and_noise": {
+      "zh": "正在評估清晰度與雜訊…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_choose_a_photo_then_tell": {
+      "zh": "選好照片就可以打字告訴我",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_choose_again": {
+      "zh": "重新選",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_choose_people": {
+      "zh": "指定對象",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_choose_people_total": {
+      "zh": "指定對象，共 {length} 位",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_choosing_requires_reframing_the_photo": {
+      "zh": "選了 {ratio} 就一定要重新構圖，想取消的話把比例改成「{original}」。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_chose_this_photo": {
+      "zh": "選了這張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_clear": {
+      "zh": "清除",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_clear_all": {
+      "zh": "全部清除",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_clear_photos": {
+      "zh": "確定要清除這 {n} 張照片嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_compare_before_after_on_the": {
+      "zh": "左側可比較 Before / After，也可從「美化紀錄」切換版本。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_compare_with_the_original_above": {
+      "zh": "上方照片可以跟原圖比，點右上的版本也能切換。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_comparing_with_the_original_to": {
+      "zh": "正在對照原圖，整理這版的變化…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_comparing_with_version_to_describe": {
+      "zh": "正在對照第 {from} 版，整理這版的變化…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_compiling_suggested_adjustments": {
+      "zh": "正在彙整建議的美化項目…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_connection_unstable_retrying_upload": {
+      "zh": "連線不穩，重新上傳中…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_correcting_white_balance_and_color": {
+      "zh": "正在校正白平衡與色彩…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_couldnt_load": {
+      "zh": "無法載入：{error}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_couldnt_load_the_sample_photo": {
+      "zh": "無法讀取範例照片（HTTP {status}）",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_couldnt_save_retrying_automatically": {
+      "zh": "儲存失敗，將自動重試",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_deselect": {
+      "zh": "取消指定{v1}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_deselect_all": {
+      "zh": "全部取消指定",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_deselect_all_2": {
+      "zh": "取消全選",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_detailed_explanations": {
+      "zh": "詳細解說",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_detailed_explanations_2": {
+      "zh": "詳細解說：{v}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_determining_the_photo_type_and_2": {
+      "zh": "正在判斷照片類型與拍攝場景…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_done": {
+      "zh": "選好了",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_download": {
+      "zh": "下載{title}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_download_all_finished_results_including": {
+      "zh": "下載所有已完成的結果，含每一版（{length} 張）",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_download_all_finished_with_every": {
+      "zh": "下載全部（已完成 {doneCount} 張含每一版，其餘為原圖，共 {length} 張）",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_drag_to_compare_before_and": {
+      "zh": "拖曳比較修圖前後",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_drag_to_resize_the_photo": {
+      "zh": "拖動調整照片和對話的大小",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_e_g_clean_up_the": {
+      "zh": "例如：讓背景更乾淨一點",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_each_person_in_the_photo": {
+      "zh": "照片裡每個人都可以分開調整，{base}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_earlier_versions_stay_in_version": {
+      "zh": "，之前的版本會留在美化紀錄",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_edited": {
+      "zh": "（已修改）",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_editing_has_started_you_can": {
+      "zh": "這張開始調整了，結果頁裡可以看進度。其他照片從{where}「我的照片」回來接著弄。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_editing_has_started_you_can_2": {
+      "zh": "這張開始調整了，結果頁裡可以看進度。其他照片從左邊「我的照片」回來接著弄。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_editing_the_photo": {
+      "zh": "正在調整照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_editing_the_photo_based_on": {
+      "zh": "正在照你的需求調整照片…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_enhancing_fine_details": {
+      "zh": "正在強化畫面細節…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_enlarge_version": {
+      "zh": "看第 {ordinal} 版大圖",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_enlarged_photo": {
+      "zh": "照片大圖",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_evaluating_the_composition_and_framing": {
+      "zh": "正在評估構圖與取景…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_evaluating_the_crop_and_aspect": {
+      "zh": "正在評估裁切範圍與長寬比…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_every_photo_is_already_being": {
+      "zh": "每張都已經在美化或美化好了，這句不會套用；要改哪一張，到那張的結果頁說就好。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_everything_here_is_based_on": {
+      "zh": "裡面的項目都是看原圖分析出來的，有小圓點的是建議調整的地方；哪些開著、哪些關著，則沿用上次美化的設定。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_everything_you_just_sent_is": {
+      "zh": "剛剛送出的都處理完成了。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_everything_you_just_sent_is_2": {
+      "zh": "剛剛送出的都處理完成了，目前 {list}。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_eyes": {
+      "zh": "閉眼",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_failed": {
+      "zh": "{n} 張沒有成功",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_failed_and_were_skipped": {
+      "zh": "有 {failed} 張沒有成功，已略過。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_failed_can_be_resent": {
+      "zh": "{n} 張沒有成功，可以再送一次",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_files_arent_images_and_were": {
+      "zh": "有 {v1} 個檔案不是圖片，先略過。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_finally_settings_you_can_change": {
+      "zh": "最後是設定，可以改美化時用的引擎和輸出尺寸。要看一下嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_finally_style_can_give_the": {
+      "zh": "最後是風格，{names}可以換一種氛圍，不選就維持照片原本的樣子。要看看嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_fine_tuning_lighting_and_details": {
+      "zh": "正在調整光影與細節…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_for": {
+      "zh": "{name}的{v2}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_for_a_different_mood_choose": {
+      "zh": "想換一種氛圍的話，先挑想改的類別再選風格；不選就維持照片原本的樣子。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_for_the_overall_image_lighting": {
+      "zh": "畫面的部分（光線、色調、構圖這些），我有 {v1} 項建議，預設都會套用。要看一下嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_got_it_noted_itll_be": {
+      "zh": "好，這句記下來了，按「接續第 {n} 版美化」時一起套用。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_got_your_photos": {
+      "zh": "收到你上傳的 {n} 張照片了。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_got_your_photos_uploading": {
+      "zh": "收到你選的 {total} 張照片，正在上傳…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_hair": {
+      "zh": "髮絲",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_has_requests": {
+      "zh": "有需求",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_heres_an_overview_of_this": {
+      "zh": "這裡是這批照片的總覽：{btn}可以一次分析或美化全部，也可以先按「設定」統一換引擎或長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打字告訴我，會套用到還沒開始的每一張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_heres_an_overview_of_this_2": {
+      "zh": "這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換美化引擎或長寬比；只想改某一張，從{where}選取那張就好。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_heres_an_overview_of_this_3": {
+      "zh": "這裡是這批照片的總覽：{btn}可以一次處理全部，也可以從{where}選取某一張個別調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_heres_an_overview_of_this_4": {
+      "zh": "這裡是這批照片的總覽：上面可以一次分析或美化全部，也可以先按「設定」統一換引擎或長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打在下面，會套用到還沒開始的每一張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_heres_an_overview_of_this_5": {
+      "zh": "這裡是這批照片的總覽：上面可以一次處理全部，也可以點某一張個別調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_heres_the_you_just_applied": {
+      "zh": "先看剛套用的{v1}，改動的地方已經標起來了。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_hi_start_by_choosing_the": {
+      "zh": "嗨！先選想美化的照片，一次最多 {MAX_BATCH} 張。要自己上傳，還是從範例照片挑？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_hi_start_by_choosing_the_2": {
+      "zh": "嗨！先選想美化的照片，一次最多 {n} 張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_hi_start_by_choosing_the_3": {
+      "zh": "嗨！先選想美化的照片，可以一次選多張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_hi_start_by_choosing_the_4": {
+      "zh": "嗨！先選想美化的照片，可以一次選多張。要自己上傳，還是從範例照片挑？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_hide_the_photo_list": {
+      "zh": "收起照片列表",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_should_i_retouch_it": {
+      "zh": "想怎麼美化？留空也可以直接開始",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_should_i_retouch_it_2": {
+      "zh": "想怎麼美化？點頭像可以指定人",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_should_the_rest_be": {
+      "zh": "還沒美化的這幾張想怎麼修？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_should_the_rest_be_2": {
+      "zh": "還沒美化的這幾張想怎麼修？會套用到每一張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_would_you_like_these": {
+      "zh": "想怎麼美化這幾張？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_would_you_like_these_2": {
+      "zh": "想怎麼美化這幾張？會套用到每一張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_would_you_like_these_3": {
+      "zh": "想怎麼調整這幾位？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_would_you_like_this": {
+      "zh": "想怎麼美化這張照片？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_would_you_like_this_2": {
+      "zh": "想怎麼美化這張照片？也可以留空直接開始",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_would_you_like_this_3": {
+      "zh": "想怎麼美化這張照片？點頭像可以指定要改誰",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_would_you_like_this_4": {
+      "zh": "想怎麼調整這位？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_identifying_the_subject_lighting_and_2": {
+      "zh": "正在辨識畫面主體、光線與構圖{then}…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_if_youd_rather_not_review": {
+      "zh": "不想一項一項看的話，按下面的「{label}」我就直接開始修。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_if_youd_rather_not_review_2": {
+      "zh": "不想一項一項看的話，按下面的「{startLabel}」我就直接開始修；也可以打字告訴我想怎麼改。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ill_answer_your_question_once": {
+      "zh": "，分析完就回答你的問題",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_improving_the_background_and_composition": {
+      "zh": "正在優化背景與構圖…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_in_my_photos_on_the": {
+      "zh": "左邊的「我的照片」@@照片位置",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_it_wont_apply_to_the": {
+      "zh": "已經在美化或美化好的 {n} 張不會套用。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_it_wont_apply_to_the_2": {
+      "zh": "已經開始的 {n} 張不會套用。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ive_reviewed_the_people_in": {
+      "zh": "人像我幫你看過了，{named}會幫你調整。要先看一下嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ive_reviewed_the_people_in_2": {
+      "zh": "人像我幫你看過了，{v1}等 {length} 個人都有要調整的地方。要先看一下嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ive_reviewed_the_people_in_3": {
+      "zh": "人像我幫你看過了，有幾項可以自己決定要不要調整。要先看一下嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_just_type_what_youd_like": {
+      "zh": "直接打字告訴我想怎麼改就可以。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_keep_reviewing": {
+      "zh": "繼續看",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_keep_their_own": {
+      "zh": "保留各自的",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_keeping_everything_else_as_is": {
+      "zh": "其他地方會保持原樣…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_let_me_choose": {
+      "zh": "先去選",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_limit_of_reached": {
+      "zh": "已經選滿 {MAX_BATCH} 張了",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_looking_for_distracting_elements_in_2": {
+      "zh": "正在辨識背景中的干擾元素…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_m_s": {
+      "zh": "{v1} 分 {v2} 秒",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_makes_your_changes_and_also": {
+      "zh": "{full}：照你的需求修改，光線、人像、構圖也一起調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_makes_your_changes_and_also_2": {
+      "zh": "{full}：照你的需求修改，光線、人像、構圖也一起調整。{only}：只動你寫到的地方，其他保持原樣。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_more": {
+      "zh": "+{n} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_more_photos": {
+      "zh": "還有 {parkedLeft} 張照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_more_photos_have_been_analyzed": {
+      "zh": "另外 {n} 張分析好了，還沒美化，按{btn}的{render}就會接著美化，也可以從{where}選取照片個別調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_more_photos_have_been_analyzed_2": {
+      "zh": "另外 {n} 張分析好了，還沒美化，按上面的「全部一鍵美化」就會接著美化，也可以點上面的照片個別調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_more_photos_havent_been_analyzed": {
+      "zh": "另外還有 {n} 張還沒分析。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_my_photos": {
+      "zh": "我的照片（{length} 張）",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_my_photos_on_the_left": {
+      "zh": "左邊的「我的照片」",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_my_requests": {
+      "zh": "個人化需求：「{v1}」",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_my_requests_at_the_time": {
+      "zh": "個人化需求（當時內容）",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_next_here_are_my_suggestions": {
+      "zh": "接著是這張照片的美化建議：",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_no_change": {
+      "zh": "不修",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_no_just_start": {
+      "zh": "不用，直接開始",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_no_photos_yet": {
+      "zh": "目前還沒有照片。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_no_photos_yet_tap_start": {
+      "zh": "還沒有照片，按「開始對話」挑一張吧。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_no_portrait_adjustments_for_now": {
+      "zh": "人像目前都不修。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_no_requests_yet": {
+      "zh": "目前沒有個人化需求。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_no_sample_photos_available_right": {
+      "zh": "目前沒有可用的範例照片。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_no_scene_suggestions_will_be": {
+      "zh": "畫面建議目前都不套用。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_no_settings_changed": {
+      "zh": "設定沒有改動。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_no_thanks": {
+      "zh": "不用了",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_not_analyzed_yet": {
+      "zh": "{n} 張還沒分析",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_not_now": {
+      "zh": "先不美化",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_not_started": {
+      "zh": "未開始",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_noted_for_now_itll_be": {
+      "zh": "好，這句先記下來，按「接續第 {n} 版美化」時一起套用。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_nothing_has_changed_yet_so": {
+      "zh": "還沒改過需求或設定，會照原本的再美化一次，結果可能跟上次不太一樣",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_nothing_to_change_yet": {
+      "zh": "還沒有要改的地方",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_off": {
+      "zh": "關閉@@狀態",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok": {
+      "zh": "好。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_2": {
+      "zh": "好，",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_4": {
+      "zh": "好，{changed}。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_5": {
+      "zh": "確定",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_adjust_the_settings_below": {
+      "zh": "好，調整下面的設定，完成後選擇要分析還是一鍵美化。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_analyzing_photos_ill_let": {
+      "zh": "好，{n} 張開始分析了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_analyzing_photos_ill_let_2": {
+      "zh": "好，{n} 張開始分析了，全部完成後我會在這裡說；想看哪張的進度，點上面那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_applied": {
+      "zh": "好，已套用。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_applied_heres_the_updated": {
+      "zh": "好，已套用。這是更新後的{v1}，改動的地方已經標起來了。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_applied_tell_me_if": {
+      "zh": "好，已套用。想再改什麼直接告訴我，或按下面的「美化」我就開始。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_applied_to_see_what": {
+      "zh": "好，已套用。想看改了什麼、或接著調整其他項目，點下面的項目；改好按「美化」我就開始。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_back_to_where_you": {
+      "zh": "好，回到上一步。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_change_the_settings_below": {
+      "zh": "好，調整下面的設定，會套用到每一張，再美化時生效。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_change_the_settings_below_2": {
+      "zh": "好，調整下面的設定，會套用到每張還沒美化的照片。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_change_the_settings_below_3": {
+      "zh": "好，調整下面的設定，會套用到每張還沒美化的照片；分析引擎只有還沒分析的用得到。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_change_the_settings_below_4": {
+      "zh": "好，調整下面的設定，會套用到每張還沒開始的照片。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_editing_photos_ill_let": {
+      "zh": "好，{n} 張開始調整了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_editing_photos_ill_let_2": {
+      "zh": "好，{n} 張開始調整了，全部完成後我會在這裡說；想看哪張的進度，點上面那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_every_photo_will_use": {
+      "zh": "好，{changed}，每一張再美化時都會照這個。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_here_are_the_current": {
+      "zh": "好，下面是目前的美化設定。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_heres_my_analysis_of": {
+      "zh": "好，這是我分析整張照片的結果：",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_i_wont_add_that": {
+      "zh": "好，那就先不加這句。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_i_wont_apply_it": {
+      "zh": "好，這次不套用。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_i_wont_apply_it_2": {
+      "zh": "好，這次不套用。想怎麼改再告訴我。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_if_theres_anything_else": {
+      "zh": "好。還有想改的地方，直接輸入告訴我就行；想讓我分析整張照片，也隨時跟我說。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_ill_add_these_to": {
+      "zh": "好，這些會當成個人化需求，美化時一起套用。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_ill_skip_and_keep": {
+      "zh": "好，{what}就不做了，其他的照舊。{back}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_ill_skip_you_dont": {
+      "zh": "好，{what}就不做了，目前沒有其他個人化需求。{back}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_ive_cleared_my_requests": {
+      "zh": "好，個人化需求都清掉了，美化時就不另外加了。{back}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_ive_kept_your_changes": {
+      "zh": "好，{v1}的改動先幫你留著，還沒美化。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_no_longer_building_on": {
+      "zh": "好，第 {n} 版先不接著改了。之後想接著改，在輸入框上方換就可以。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_no_requests_for_now": {
+      "zh": "好，那就先不加個人化需求。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_noted": {
+      "zh": "好，記下了：{line}。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_noted_anything_else_youd": {
+      "zh": "好，這個我記下來了。還有其他想改的地方嗎？沒有的話，可以從下面選「分析」或「一鍵美化」喔！",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_retouching_photos_again_ill": {
+      "zh": "好，{n} 張開始重新美化了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_retouching_photos_again_with": {
+      "zh": "好，{n} 張開始照原本的需求和設定重新美化了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_retouching_photos_ill_let": {
+      "zh": "好，{n} 張開始美化了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_retouching_photos_ill_let_2": {
+      "zh": "好，{n} 張開始美化了，全部完成後我會在這裡說；想看哪張的進度，點上面那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_since_you_said_this": {
+      "zh": "好，這句是在總覽說的，這張也會照著修。只想改這張的話，直接在這裡說。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_the_changes_you_made": {
+      "zh": "好，接續時改的地方都帶到原圖上了，還沒美化。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_these_are_still_being": {
+      "zh": "好，這幾張還在美化，等美化好我會把這句套用到每一張，到時按「全部再美化」就會照這樣重新美化。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_these_have_been_added": {
+      "zh": "好，加進來了，這幾張加到{where}裡了。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_these_have_been_added_2": {
+      "zh": "好，加進來了，這幾張加到上面的照片裡了。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_this_applies_to_every": {
+      "zh": "好，{changed}，會套用到每張還沒美化的照片。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_this_one_has_been": {
+      "zh": "好，加進來了，這張加到{where}裡了。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_this_one_has_been_2": {
+      "zh": "好，加進來了，這張加到上面的照片裡了。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_this_will_apply_to": {
+      "zh": "好，這句會套用在 {n} 張照片上。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_undone": {
+      "zh": "好，已復原。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_undone_let_me_know": {
+      "zh": "好，已復原。想怎麼改再告訴我。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_ok_your_settings_are_back": {
+      "zh": "好，設定已還原成調整前的樣子。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_on": {
+      "zh": "開啟@@狀態",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_on_off_settings_carry_over": {
+      "zh": "開或關沿用上次美化的設定，有小圓點的是看過原圖後建議調整的項目，點一下可以改。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_on_the_left": {
+      "zh": "左邊",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_on_the_left_2": {
+      "zh": "左邊@@按鈕位置",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_once_youve_chosen_a_photo": {
+      "zh": "選好照片後就可以用文字告訴我想怎麼調整",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_one_photo": {
+      "zh": "一張照片，",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_open_another": {
+      "zh": "打開另一張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_opening_the_report": {
+      "zh": "打開回報",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_or_type_your_own": {
+      "zh": "或是自己輸入",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_our_ai_looks_at_the": {
+      "zh": "AI 先判讀人物、光線、構圖與畫面細節，給你幾個美化方向，表情、姿勢、視角也能幫你調；你也可以直接說想怎麼修，它就照你的意思來。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_output_size": {
+      "zh": "輸出尺寸",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_output_size_set_to": {
+      "zh": "輸出尺寸改成 {v1}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_overview": {
+      "zh": "總覽",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_overview_2": {
+      "zh": "總覽 · {n} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_people": {
+      "zh": "{length} 位",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_person_from_the_left": {
+      "zh": "照片中從左邊數來第 {v1} 位",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photo": {
+      "zh": "第 {v1} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photo_2": {
+      "zh": "第 {v1} 張，{text}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photo_has_its_own_settings": {
+      "zh": "第 {v1} 張在單張頁改過設定，要換成總覽的設定，還是保留它們自己的？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photo_has_requests_but_you": {
+      "zh": "第 {v1} 張有需求，還沒選要整體美化還是僅依需求修改，會用「整體美化」送出。要繼續嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photo_selected_tell_me_how": {
+      "zh": "照片選好了。想怎麼修，直接打在下面的對話框告訴我。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photo_to_retouch": {
+      "zh": "待美化的照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photo_to_retouch_2": {
+      "zh": "這次要修的照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photo_uploaded_preparing_the_analysis": {
+      "zh": "照片傳好了，準備開始分析…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photo_uploaded_preparing_the_retouch": {
+      "zh": "照片傳好了，準備開始美化…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photo_uploaded_preparing_your_edits": {
+      "zh": "照片傳好了，準備開始調整…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos": {
+      "zh": "{length} 張照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_are_now_being_analyzed": {
+      "zh": "有 {n} 張開始分析了，完成後我會在這裡說；想看哪張的進度，從{where}選取那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_are_now_being_analyzed_2": {
+      "zh": "有 {n} 張開始分析了，完成後我會在這裡說；想看哪張的進度，點上面那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_are_now_being_processed": {
+      "zh": "有 {n} 張開始處理了，完成後我會在這裡說；想看哪張的進度，從{where}選取那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_are_now_being_processed_2": {
+      "zh": "有 {n} 張開始處理了，完成後我會在這裡說；想看哪張的進度，點上面那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_are_now_being_retouched": {
+      "zh": "有 {n} 張開始美化了，完成後我會在這裡說；想看哪張的進度，從{where}選取那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_are_now_being_retouched_2": {
+      "zh": "有 {n} 張開始美化了，完成後我會在這裡說；想看哪張的進度，點上面那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_are_still_in_progress": {
+      "zh": "{running} 張還在處理，{n} 張分析好了，還沒美化，按{btn}的{render}就會接著美化，也可以從{where}選取照片個別調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_are_still_in_progress_2": {
+      "zh": "還有 {n} 張處理中，完成後我會在這裡說；想看哪張的進度，從{where}選取那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_are_still_in_progress_3": {
+      "zh": "還有 {n} 張處理中，完成後我會在這裡說；想看哪張的進度，點上面那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_failed_select_one_to": {
+      "zh": "另外有 {n} 張沒有成功，選取那張可以看原因。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_havent_started_yet_tap": {
+      "zh": "還有 {n} 張沒開始，可以按{btn}的{analyze}先看我打算怎麼修，或按{btn}的{render}直接美化，也可以從{where}選取照片個別調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_havent_started_yet_tap_2": {
+      "zh": "還有 {n} 張沒開始，可以按上面的「全部分析」先看我打算怎麼修，或按上面的「全部一鍵美化」直接美化，也可以點上面的照片個別調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_photos_in_this_chat": {
+      "zh": "這段對話的照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_pick_a_photo_then_just": {
+      "zh": "選一張照片，剩下的用聊的",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_planned_the_new_framing_it": {
+      "zh": "已{by}規劃好新構圖，下次美化時會套用到照片上。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_planning_the_framing_for": {
+      "zh": "正在依 {ratio} 規劃構圖…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_planning_the_framing_for_the": {
+      "zh": "正在依原圖比例規劃構圖…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_planning_the_framing_with_an": {
+      "zh": "正在由 AI 選擇比例並規劃構圖…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_planning_the_lighting_and_color": {
+      "zh": "正在規劃成品的光影與色調方向…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_please_choose_an_image_file": {
+      "zh": "請選擇圖片檔。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_portrait_adjustments": {
+      "zh": "人像會修{v1}。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_portrait_adjustments_for_people": {
+      "zh": "人像會修 {length} 個人。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_preparing": {
+      "zh": "打包中",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_preparing_2": {
+      "zh": "打包中…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_preparing_one_tap_retouch": {
+      "zh": "正在準備一鍵美化",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_preparing_to_analyze_the_photo": {
+      "zh": "正在準備分析照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_preparing_your_answer": {
+      "zh": "正在整理回覆…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_quality_review": {
+      "zh": "輸出評語",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_quality_score": {
+      "zh": " 品質分數 {score}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_reading_photos": {
+      "zh": "正在讀取 {n} 張照片…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_reading_your_requests": {
+      "zh": "正在讀你寫的需求…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_refining_the_color_tones": {
+      "zh": "正在細修色調…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_reframing": {
+      "zh": "正在重新構圖",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_reframing_failed_the_ratio_has": {
+      "zh": "{by}重新構圖沒有成功：{error}。比例先改回「{ratio}」",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_remove": {
+      "zh": "移除",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_remove_photo": {
+      "zh": "移除第 {v1} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_removed_automatic_adjustments_for": {
+      "zh": "已取消「{v1}」的自動調整",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_removed_photos_left": {
+      "zh": "移除了 {count} 張，現在一共 {left} 張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_reset_to_original_setting": {
+      "zh": "{v1}：已還原為原本設定",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_again": {
+      "zh": "再美化 {n} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_again_with_same_settings": {
+      "zh": "照原設定再美化",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_all": {
+      "zh": "全部一鍵美化",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_all_2": {
+      "zh": "全部一鍵美化（{n} 張）",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_all_above_retouches_every": {
+      "zh": "按上面的「全部一鍵美化」會把還沒美化的都美化好；只想先看分析，按上面的「全部分析」。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_all_again": {
+      "zh": "全部再美化",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_engine_set_to": {
+      "zh": "美化引擎換成 {v1}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_from_version": {
+      "zh": "從第 {n} 版美化",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_remaining": {
+      "zh": "一鍵美化其餘 {n}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_remaining_2": {
+      "zh": "美化其餘 {length} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_remaining_3": {
+      "zh": "美化其餘 {renderable} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_the_whole_photo_or": {
+      "zh": "要整體美化，還是僅依你的需求修改？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouch_with_same_settings": {
+      "zh": "照原設定美化",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouched": {
+      "zh": "{n} 張美化好了",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouched_em_just_for_you": {
+      "zh": "開啟<em>專屬</em>美化體驗",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouches_each_photo_that_hasnt": {
+      "zh": "還沒美化的每張照目前的設定美化，美化過的不重送",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouches_each_photo_that_hasnt_2": {
+      "zh": "還沒開始的照它自己的需求和設定美化，已經分析好的直接美化，美化過的不重送",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouches_the_photos_whose_requests": {
+      "zh": "總覽改過需求或設定的那幾張，照改過的再美化一次",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouching_has_started_you_can": {
+      "zh": "這張開始美化了，結果頁裡可以看進度。其他照片從{where}「我的照片」回來接著弄。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouching_has_started_you_can_2": {
+      "zh": "這張開始美化了，結果頁裡可以看進度。其他照片從左邊「我的照片」回來接著弄。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouching_the_photo": {
+      "zh": "正在美化照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouching_will_start_automatically_once": {
+      "zh": "重新構圖完成後會自動開始美化…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_retouching_will_start_once_the": {
+      "zh": "，分析完會自動開始美化",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_review_edits_first": {
+      "zh": "先看美化項目",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_running_a_final_quality_check": {
+      "zh": "正在做最後的品質檢查…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_s": {
+      "zh": "{sec} 秒",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_saved": {
+      "zh": "已儲存",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_saving": {
+      "zh": "儲存中…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_scene_suggestions_will_be_applied": {
+      "zh": "畫面建議會套用 {n} 項。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_see": {
+      "zh": "看{v1}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_see_again": {
+      "zh": "再看{v1}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_see_results": {
+      "zh": "看結果",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_select": {
+      "zh": "指定{v1}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_select_2": {
+      "zh": "選取",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_select_all": {
+      "zh": "全選",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_select_multiple_up_to": {
+      "zh": "可以選多張，最多 {max} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_selected": {
+      "zh": "已選 {length} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_selected_2": {
+      "zh": "已選擇「{v1}」",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_selected_photos": {
+      "zh": "選好的照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_selected_up_to": {
+      "zh": "已選 {length} 張（最多 {max} 張）",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_send": {
+      "zh": "送出",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_send_or_type_to_add": {
+      "zh": "選好就送出，或再打字補充",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_send_your_choice_or_type": {
+      "zh": "選好了就直接送出，也可以再打字補充",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_sending": {
+      "zh": "送出中…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_sends_every_photo_that_hasnt": {
+      "zh": "還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_settings_at_the_time": {
+      "zh": "當時的設定",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_show_all": {
+      "zh": "顯示全部",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_show_in_panel": {
+      "zh": "在面板上顯示",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_skip": {
+      "zh": "略過{v1}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_skip_the_rest": {
+      "zh": "不用看了",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_skip_to": {
+      "zh": "略過，看{v1}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_some_photos_have_requests_full": {
+      "zh": "有幾張講了需求，要整體美化，還是僅依需求修改？在單張頁已經選過的，照它自己選的。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_something_went_wrong": {
+      "zh": "出了點問題：{text}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_spotting_what_could_be_improved": {
+      "zh": "正在診斷畫面中可以加強的地方…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_start_a_chat": {
+      "zh": "開始對話",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_start_a_new_chat_for": {
+      "zh": "要開新對話處理另一張照片嗎？已經開始的照片可以從「最近照片」再打開，還沒開始的 {parkedLeft} 張會清掉。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_start_a_new_chat_for_2": {
+      "zh": "要開新對話處理另一張照片嗎？目前這段對話可以從「最近照片」再打開。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_started": {
+      "zh": "已開始",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_status": {
+      "zh": "目前{list}。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_still_in_progress": {
+      "zh": "還有 {n} 張在處理",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_still_in_progress_select_a": {
+      "zh": "還有 {n} 張處理中，從{where}選取照片看進度",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_stop_adjusting_this_version": {
+      "zh": "不調整這版了",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_stop_building_on_version": {
+      "zh": "不接著第 {n} 版改了",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_style": {
+      "zh": "風格選了{v1}。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_style_keep_the_photos_original": {
+      "zh": "風格維持照片原本的樣子。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_styles_picked": {
+      "zh": "已選風格：{v}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_suggested_adjustments": {
+      "zh": "建議的調整",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_suggested_after_reviewing_the_original": {
+      "zh": "看過原圖後建議調整",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_summarizing_the_analysis": {
+      "zh": "正在整理分析重點…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_switch": {
+      "zh": "更換",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_switch_to_panel_mode": {
+      "zh": "切換到面板模式",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_switch_to_this_one": {
+      "zh": "換這張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_switched_to": {
+      "zh": "已切換為「{v1}」",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_switched_to_version_changes_from": {
+      "zh": "已切到第 {n} 版，接下來從這一版接著改。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_switching_to_this_photo_clears": {
+      "zh": "換成這張照片的話，剛剛打的需求和選的設定都會清掉。確定要換嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_a_face_above_or": {
+      "zh": "點上面的頭像，或打字回答",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_a_face_above_to": {
+      "zh": "點上面的頭像選人，或直接打字回答",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_a_face_or_type": {
+      "zh": "點頭像或打字回答",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_an_item_below_to": {
+      "zh": "想調整哪一項點下面，改好按「{goLabel}」我就開始。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_analyze_all_above_to": {
+      "zh": "可以按上面的「全部分析」先看我打算怎麼修，或按上面的「全部一鍵美化」直接美化；想怎麼修也可以打在下面，會套用到每一張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_below_to_change_it": {
+      "zh": "點下面的「{v1}」就可以改。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_below_to_change_it_2": {
+      "zh": "點下面的「{v1}」就可以改，改好按「{goLabel}」我就開始。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_below_to_start": {
+      "zh": "按下面的「{goLabel}」我就開始。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_the_button_below_to": {
+      "zh": "按下面的按鈕就會用新構圖美化。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_to_enlarge": {
+      "zh": "點一下看大圖",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_to_retouch_every_photo": {
+      "zh": "按{btn}的{render}會把還沒美化的都美化好；只想先看分析，按{btn}的{analyze}。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_to_see_what_id": {
+      "zh": "可以按{btn}的{analyze}先看我打算怎麼修，或按{btn}的{render}直接美化；想怎麼修也可以直接打字告訴我，會套用到每一張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tapping_retouch_from_original_makes": {
+      "zh": "按「從原圖美化」會從原圖重做一版，這裡的需求會一起套用，要調整的話可以先編輯。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_text": {
+      "zh": "{done} / {total} 張 · {pct}%",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_text_2": {
+      "zh": "第 {v1}／{length} 組",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_thanks_for_reporting_well_look": {
+      "zh": "已回報，我們會盡快確認。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_thats": {
+      "zh": "就是{name}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_ai_cant_respond_right": {
+      "zh": "AI 暫時無法回覆，可以直接點選項調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_ai_is_looking_at": {
+      "zh": "AI 正在看照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_ai_is_retouching_the": {
+      "zh": "AI 正在美化照片…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_analysis_failed": {
+      "zh": "這次分析沒有成功：{error}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_analysis_of_this_photo": {
+      "zh": "這張照片分析沒有成功：{error}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_aspect_ratio_is_back": {
+      "zh": "長寬比也改回「AI 建議」了。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_engine_and_output_settings": {
+      "zh": "這張照片美化時用的引擎與輸出設定，可以直接修改。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_engine_and_output_settings_2": {
+      "zh": "這是上次美化用的引擎與輸出設定，可以直接修改。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_people_preview_is_taking": {
+      "zh": "人物預覽等待較久，仍可繼續聊天或分析。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_photo_has_changed_please": {
+      "zh": "照片已更換，請重新選擇分析或一鍵美化。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_photo_you_picked": {
+      "zh": "剛剛選的照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_photo_you_picked_and": {
+      "zh": "剛剛選的照片和打的需求",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_photos_above": {
+      "zh": "上面的照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_request_timed_out": {
+      "zh": "系統回應逾時",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_requests_you_made_on": {
+      "zh": "你在總覽提的需求，這張也會照著修，整理在下面。針對這張的改動，可以在這裡說。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_retouch_failed": {
+      "zh": "這次美化沒有成功：{error}。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_scheduled_retouch_was_also": {
+      "zh": "。排定的美化也一併取消了。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_scheduled_retouch_was_also_2": {
+      "zh": "排定的美化也先取消了。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_server_took_too_long": {
+      "zh": "系統回應逾時，請再試一次。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_settings_havent_changed_since": {
+      "zh": "設定和上一版一樣，再美化一次會用相同的設定重新產生，結果可能和上一版差不多。要直接再美化，還是先看美化項目？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_versions_based_on_your": {
+      "zh": "照你需求修的版本都還在，可以再試一次分析。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_these_are_detected_and_fixed": {
+      "zh": "這幾項預設會偵測並修正，不想被改到的先關掉。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_these_are_still_being_retouched": {
+      "zh": "這幾張還在美化，等美化好我會把這句套用到每一張，到時按「全部再美化」就會照這樣重新美化。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_these_are_your_requests_from": {
+      "zh": "這是上次的個人化需求，可以直接修改或清除。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_these_people": {
+      "zh": "這幾位",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_these_requests_will_be_applied": {
+      "zh": "這段個人化需求會在美化時一起套用，可以直接修改或清除。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_these_suggestions_cover_the_whole": {
+      "zh": "這些是看過原圖後，針對光線、色調、構圖這些整張畫面的建議，打勾的會套用，點一下可以開或關。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_thinking": {
+      "zh": "思考中",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_applies_to_photos_tap": {
+      "zh": "這句會套用在 {n} 張上，按{redo}就照這樣重新美化。只想改某一張，從{where}選取那張調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_applies_to_photos_that": {
+      "zh": "這句會套用在 {n} 張還沒美化的照片上。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_batch": {
+      "zh": "這批照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_batch_photos": {
+      "zh": "這批照片 · {n} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_chat_has_no_photos": {
+      "zh": "這個對話沒有照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_is_the_style_you": {
+      "zh": "這是上次選的風格，想換可以直接改；不選就維持照片原本的樣子。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_is_turned_off_under": {
+      "zh": "這一項已在「設定」的人像修正關閉",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_person": {
+      "zh": "就是這位",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_person_2": {
+      "zh": "這個人",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_photo_is_still_processing": {
+      "zh": "照片還在處理中，請稍候再試。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_photo_may_contain_content": {
+      "zh": "照片裡可能有平台政策不允許編輯的內容（例如受著作權保護的角色、商標，或其他敏感內容）",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_request_hasnt_been_applied": {
+      "zh": "這項需求尚未套用，可以繼續回答或補充需求。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_request_needs_a_bit": {
+      "zh": "這項需求還沒整理完整，請再說明想調整的效果。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_retouch_engine_renders_at": {
+      "zh": "這個美化引擎的輸出尺寸是固定的",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_version_didnt_use_your": {
+      "zh": "剛剛在美化項目改的{v1}，這版沒有用到，還幫你留著。想修改的話，按「看美化項目」再看一次，或直接按「再美化」。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_version_follows_only_your": {
+      "zh": "這版只照你的需求改，所以這輪只能改個人化需求，或加個風格。想整張一起美化的話，按「幫我分析」。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_version_follows_only_your_2": {
+      "zh": "這版只照你的需求改，所以這輪只要改個人化需求就好。想整張一起美化的話，按「幫我分析」。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_version_follows_only_your_3": {
+      "zh": "這版只照你的需求改，沒有分析整張照片。需要我幫你分析，看看還有哪些地方可以修嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_this_was_later_withdrawn_or": {
+      "zh": "這句後來撤回或被新的需求取代了，已經從每張拿掉。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to": {
+      "zh": "依 {ratio} ",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_add_a_style_choose": {
+      "zh": "想加個風格的話，先挑類別再選；下一版會照你的需求改，再加上這裡選的風格。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_adjust_anything_else_tap": {
+      "zh": "還想調整其他項目可以點下面的項目，或按「{goLabel}」我就開始。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_adjust_further_just_tell": {
+      "zh": "想再調整，直接打字告訴我，或按{btn}的{settings}，會套用到每一張；{again}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_adjust_just_one_person": {
+      "zh": "想只調整其中一位，點輸入框上方的頭像。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_adjust_the_edits_tap": {
+      "zh": "想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_adjust_the_edits_tap_2": {
+      "zh": "想調整美化項目，按「看美化項目」；想直接開始美化，按「{goLabel}」。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_change_just_one_select": {
+      "zh": "只想改某一張，從{where}選取那張調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_change_just_one_tap": {
+      "zh": "只想改某一張，點上面那張調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_change_the_enhancements_tap": {
+      "zh": "想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」；想接續某一版修改，在輸入框上方把「原圖」換成那一版。也可以直接打字跟我說。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_make_version_again_the": {
+      "zh": "想照第 {n} 版當初的做法再做一版，按「再美化」。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_retouch_them_next_tap": {
+      "zh": "要接著美化，按{btn}的{render}。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_retouch_them_next_tap_2": {
+      "zh": "要接著美化，按上面的「全部一鍵美化」",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_retouch_them_next_tap_3": {
+      "zh": "要接著美化，按上面的「全部一鍵美化」。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_return_here_later_tap": {
+      "zh": "之後想回來這裡，點{where}「我的照片」最上面的「總覽」。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_see_a_result_select": {
+      "zh": "想看哪張的結果，從{where}選取那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_see_a_result_tap": {
+      "zh": "想看哪張的結果，點上面那張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_to_the_original_ratio": {
+      "zh": "依原圖比例",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_today": {
+      "zh": "今天 {hm}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_try_choosing_a_ratio_again": {
+      "zh": "可以再選一次比例試試，或照現在的構圖按下面的按鈕美化。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_turned_off": {
+      "zh": "關掉{v1}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_turned_on": {
+      "zh": "打開{v1}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_type_or_tap_an_option": {
+      "zh": "打字回答，或點上面的選項",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_type_what_youd_like_changed": {
+      "zh": "想改的地方可以一句一句打在下面，我會先幫你看過、記下來；也可以按「風格」換光線、角度這類效果。都好了再按「接續第 {n} 版美化」。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_type_your_answer": {
+      "zh": "直接打字回答",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_type_your_answer_or_tap": {
+      "zh": "直接打字回答，或點上面的選項",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_type_your_own_answer": {
+      "zh": "自己輸入回答",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_undo": {
+      "zh": "復原",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_undone_not_applied": {
+      "zh": "已復原，沒有套用。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_updated_portrait_settings_to_match": {
+      "zh": "已配合「{v1}」自動調整人像設定",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_upload_failed": {
+      "zh": "上傳失敗",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_upload_progress": {
+      "zh": "上傳進度",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_upload_the_first": {
+      "zh": "上傳前 {MAX_BATCH} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_uploaded_photos": {
+      "zh": "上傳了 {n} 張照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_uploaded_photos_2": {
+      "zh": "上傳了 {v1} 張照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_uploaded_this_photo": {
+      "zh": "上傳了這張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_uploading": {
+      "zh": "上傳中",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_uploading_the_photo": {
+      "zh": "正在上傳照片…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_use_another_photo": {
+      "zh": "換一張照片",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_use_overview_settings": {
+      "zh": "換成總覽的",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_use_selected_photos": {
+      "zh": "使用所選照片（{length} 張）",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_use_this": {
+      "zh": "用這句",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_using_the_framing_planned_in": {
+      "zh": "已沿用面板模式{by}規劃的構圖，下次美化時會套用到照片上。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_version": {
+      "zh": "第 {ordinal} 版",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_version_adjusted_from_version": {
+      "zh": "第 {ordinal} 版・由第 {from} 版調整",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_version_is_ready": {
+      "zh": "第 {ordinal} 版完成",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_version_is_ready_and_changes": {
+      "zh": "第 {n} 版好了，接下來從這一版接著改。想改的地方可以告訴我，也可以按下方的「風格」調整；想看原圖的美化項目，在輸入框上方換回「原圖」。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_version_is_ready_and_changes_2": {
+      "zh": "第 {n} 版好了，接下來從這一版接著改。想改的地方可以告訴我，也可以按下方的「風格」調整；照一樣的需求再來一版，按「再美化」；想看原圖的美化項目，在輸入框上方換回「原圖」。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_version_ready_adjusted_from_version": {
+      "zh": "第 {ordinal} 版完成・由第 {from} 版調整",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_version_result": {
+      "zh": "第 {ordinal} 版美化結果",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_versions": {
+      "zh": "{length} 個版本",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_versions_2": {
+      "zh": "共 {n} 版",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_view_the_result": {
+      "zh": "查看美化結果",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_what_else_would_you_like": {
+      "zh": "想再怎麼修這幾張？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_what_else_would_you_like_2": {
+      "zh": "想再怎麼修這幾張？會套用到每一張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_what_should_change": {
+      "zh": "想改什麼？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_what_should_change_in_version": {
+      "zh": "想在第 {n} 版上改什麼？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_what_would_you_like_to": {
+      "zh": "想調整什麼？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_what_would_you_like_to_2": {
+      "zh": "想調整什麼？點頭像可以指定要改誰",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_what_would_you_like_to_3": {
+      "zh": "想調整什麼？點頭像指定人",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_what_you_just_said_now": {
+      "zh": "剛剛說的已經套用到每一張，按{btn}的{redo}就照這樣重新美化。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_when_on_the_assistant_explains": {
+      "zh": "開啟後，助理會更詳細地說明分析、建議與每一版的成果。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_when_youre_ready_review_another": {
+      "zh": "調整好後，可以接著看其他項目，或按下面的「美化」我就開始",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_when_youre_ready_review_another_2": {
+      "zh": "調整好後，可以接著看其他項目，或按下面的「美化」我就開始。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_when_youre_ready_tap_retouch": {
+      "zh": "改好後按下面的「美化」我就開始",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_when_youre_ready_tap_retouch_2": {
+      "zh": "改好後按下面的「美化」我就開始。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_when_youre_ready_tap_to": {
+      "zh": "改好了按{btn}的{redo}重新美化。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_when_youre_ready_tap_to_2": {
+      "zh": "改好了按{btn}的{redo}重新美化；沒改直接按，會照原本的需求和設定再美化一次，結果可能跟上次不太一樣。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_which_our_platform_policy_doesnt": {
+      "zh": "{v1}，平台政策不允許編輯這類內容",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_whole_image_suggestions_based_on": {
+      "zh": "這些是看原圖分析出來、整張畫面的建議，打勾的狀態沿用上次美化，點一下可以開或關。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_will_be_lost_if_you": {
+      "zh": "{what}還沒開始美化，{where}就會清掉。確定嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_with_an_ai_selected_ratio": {
+      "zh": "由 AI 選比例",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_working_on_the_areas_you": {
+      "zh": "正在處理你指定的地方…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_would_you_like_to_see": {
+      "zh": "要先看我對這張照片的分析，還是直接幫你美化？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_write_your_own": {
+      "zh": "自己寫一句",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_write_your_own_caption": {
+      "zh": "自己寫一句文案",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_yes_analyze_it": {
+      "zh": "好，幫我分析",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_yesterday": {
+      "zh": "昨天 {hm}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_you_can_adjust_which_would": {
+      "zh": "可以調整{v1}，想先看哪一項？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_you_can_also_tap_style": {
+      "zh": "也可以點「風格」，幫這版調整光線、角度之類的風格。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_you_can_choose_up_to": {
+      "zh": "一次最多只能選 {MAX_BATCH} 張，先放前 {v2} 張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_you_can_choose_up_to_2": {
+      "zh": "最多只能選 {MAX_BATCH} 張，先加前 {length} 張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_you_can_go_back_to": {
+      "zh": "可以回到首頁換一張照片，或按「看美化項目」換個方式再試。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_you_can_start_once_the": {
+      "zh": "上傳完就可以開始了，先稍等一下。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_you_havent_changed_anything_this": {
+      "zh": "這一輪還沒改任何設定，美化會用和上一版相同的設定重新產生，結果可能差不多。要直接美化，還是繼續看美化項目？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_you_havent_sent_yet_add": {
+      "zh": "輸入框裡的「{v1}」還沒送出，要加進需求一起{v2}嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_you_selected_photos_but_the": {
+      "zh": "你選了 {n} 張照片，一次最多 {MAX_BATCH} 張。要先上傳最前面的 {MAX_BATCH} 張，還是重新選？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_you_selected_photos_the_limit": {
+      "zh": "你選了 {n} 張照片，一次最多 {MAX_BATCH} 張，現在還能再加 {room} 張。要先加最前面的 {room} 張，還是重新選？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_your_earlier_request_will_be": {
+      "zh": "你先前寫的「{v1}」美化時會一起套用。要看一下嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_your_photo_has_also_been": {
+      "zh": "照片也美化完成了，以下是這次的結果：",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_your_request_and_styles_come": {
+      "zh": "個人化需求和風格會帶過去，{v1}還沒美化的調整會清掉。確定要接著第 {n} 版調整嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_your_requests_are_kept_and": {
+      "zh": "你的需求會留著，這次會連同分析的建議一起美化。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_youve_reached_the_limit_of": {
+      "zh": "已經選滿 {MAX_BATCH} 張了。想新增照片的話，建議先移除幾張，或按「全部清除」重新選，再新增其他照片。",
+      "where": [
+        "chat"
+      ]
+    },
+    "common_a_new_version_of_the": {
+      "zh": "網站有新版本，請重新整理頁面以取得最新內容。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_add_photos": {
+      "zh": "新增照片",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_ai_suggested": {
+      "zh": "AI 建議",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_all": {
+      "zh": "全部 {n}",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_analysis_engine": {
+      "zh": "分析引擎",
+      "where": [
+        "panel",
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_analyze": {
+      "zh": "分析",
+      "where": [
+        "panel",
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_analyze_for_me": {
+      "zh": "幫我分析",
+      "where": [
+        "panel",
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_analyzed": {
+      "zh": "已分析",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_analyzing": {
+      "zh": "分析中",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_analyzing_the_photo": {
+      "zh": "正在分析照片",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_apply": {
+      "zh": "套用",
+      "where": [
+        "chat",
+        "backend labels",
+        "backend text"
+      ]
+    },
+    "common_architecture": {
+      "zh": "建築",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_aspect_ratio": {
+      "zh": "長寬比",
+      "where": [
+        "panel",
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_aurora": {
+      "zh": "極光",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_auto": {
+      "zh": "自動",
+      "where": [
+        "panel",
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_available_after_analysis_or_retouching": {
+      "zh": "分析或美化完成後才能切換",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_back": {
+      "zh": "返回",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_back_to_home": {
+      "zh": "回到首頁",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_backlight_glow": {
+      "zh": "逆光暈",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_big_smile": {
+      "zh": "開朗笑",
+      "where": [
+        "panel",
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_blue_hour": {
+      "zh": "藍調光線",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_body_shape": {
+      "zh": "身形調整",
+      "where": [
+        "panel",
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_camera_angle": {
+      "zh": "拍攝角度",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_cancel": {
+      "zh": "取消",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_candid": {
+      "zh": "自然抓拍",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_changes_that_havent_been_retouched": {
+      "zh": "還沒美化的調整會清掉。確定不調整了嗎？",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_chat": {
+      "zh": "對話",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_cheer": {
+      "zh": "歡呼",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_choose_a_sample_photo": {
+      "zh": "從範例照片挑選",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_chosen_based_on_the_photo": {
+      "zh": "依照片內容自動決定",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_clear_all_requests": {
+      "zh": "清除所有需求",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_click_to_switch_themes": {
+      "zh": "點擊切換主題",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_close": {
+      "zh": "關閉",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_close_up": {
+      "zh": "特寫",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_commercial": {
+      "zh": "商業",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_commercial_product": {
+      "zh": "商業產品照",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_compare_in_full_screen": {
+      "zh": "全螢幕檢視比較",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_complete": {
+      "zh": "{tag}，已完成",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_content": {
+      "zh": "內容",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_continue": {
+      "zh": "繼續",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_cool": {
+      "zh": "酷帥",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_couldnt_decode_the_heic_photo": {
+      "zh": "HEIC 解碼失敗",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_couldnt_delete_this_item_please": {
+      "zh": "刪除紀錄失敗，請稍後再試。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_couldnt_delete_your_history_please": {
+      "zh": "刪除所有紀錄失敗，請稍後再試。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_couldnt_load_the_heic_preview": {
+      "zh": "HEIC 預覽元件載入失敗",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_couldnt_load_the_release_notes": {
+      "zh": "無法載入版本紀錄。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_couldnt_prepare_the_download_please": {
+      "zh": "打包下載失敗，請稍後再試。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_couldnt_send_the_report_please": {
+      "zh": "回報失敗，請稍後再試。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_current": {
+      "zh": "{level}（目前）",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_custom_direction": {
+      "zh": "自訂方向",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_delete": {
+      "zh": "刪除",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_delete_2": {
+      "zh": "刪除紀錄",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_delete_all": {
+      "zh": "全部刪除",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_delete_all_history_this_cant": {
+      "zh": "確定要刪除所有處理紀錄嗎？此操作無法復原。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_delete_selected": {
+      "zh": "刪除所選",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_delete_selected_2": {
+      "zh": "刪除所選（{count} 張）",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_delete_these_items": {
+      "zh": "確定要刪除這 {length} 筆處理紀錄嗎？",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_delete_this_item": {
+      "zh": "確定要刪除這筆處理紀錄嗎？",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_describe_the_problem": {
+      "zh": "請描述遇到的問題…",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_describe_the_problem_with_this": {
+      "zh": "請描述這筆結果的問題…",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_description_optional": {
+      "zh": "問題描述（選填）",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_development_environment": {
+      "zh": "開發環境",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_done": {
+      "zh": "完成",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_download": {
+      "zh": "下載",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_download_all_originals": {
+      "zh": "下載所有原圖（{length} 張）",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_download_complete": {
+      "zh": "已下載完成。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_download_failed_please_try_again": {
+      "zh": "下載失敗，請稍後再試。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_download_result": {
+      "zh": "下載結果",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_dusk": {
+      "zh": "夜霞",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_dynamic": {
+      "zh": "動感",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_each_result_is_generated_from": {
+      "zh": "每張美化結果皆由原圖重新產生",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_edit": {
+      "zh": "修改",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_editing": {
+      "zh": "調整中",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_elegant": {
+      "zh": "優雅",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_ember": {
+      "zh": "燼火",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_enlarge": {
+      "zh": "看大圖",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_enlarge_and_switch_versions": {
+      "zh": "看大圖、切換版本",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_enlarged": {
+      "zh": "{title}大圖",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_enter_your_name": {
+      "zh": "輸入你的名稱",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_everyday": {
+      "zh": "日常",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_exit_full_screen": {
+      "zh": "返回原視窗",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_eye_level": {
+      "zh": "平視",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_failed": {
+      "zh": "失敗",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_filter_by_status": {
+      "zh": "依狀態篩選",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_finished_reviewing_the_photo": {
+      "zh": "已完成照片總覽辨識。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_fix_closed_eyes": {
+      "zh": "閉眼修正",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_flash": {
+      "zh": "閃光燈",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_food": {
+      "zh": "食物",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_framing": {
+      "zh": "取景範圍",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_full_retouch": {
+      "zh": "整體美化",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_gaze": {
+      "zh": "視線",
+      "where": [
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_gentle_smile": {
+      "zh": "微笑",
+      "where": [
+        "panel",
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_golden_hour": {
+      "zh": "金色光調",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_high_angle": {
+      "zh": "俯拍",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_hold_to_see_the_original": {
+      "zh": "按住看原圖",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_in_progress": {
+      "zh": "處理中",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_indoor": {
+      "zh": "室內",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_iris": {
+      "zh": "鳶尾",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_keep_the_original_ratio": {
+      "zh": "維持原圖比例，{detail}",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_keeps_the_calm_polished_feel": {
+      "zh": "維持冷靜、俐落的姿態氛圍",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_keeps_the_expression_elegant_natural": {
+      "zh": "讓表情維持優雅、自然且不過度張揚",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_keeps_the_hair_flowing_naturally": {
+      "zh": "保留人物移動時自然的髮絲方向",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_keeps_the_natural_candid_gaze": {
+      "zh": "保留自然、非擺拍的鏡頭外視線",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_keeps_the_original_dimensions": {
+      "zh": "不改變照片長寬",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_landscape": {
+      "zh": "橫式 →",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_landscape_2": {
+      "zh": "風景",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_language": {
+      "zh": "介面語言",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_laughing": {
+      "zh": "大笑",
+      "where": [
+        "panel",
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_lets_the_gaze_follow_the": {
+      "zh": "讓視線配合自然的動態瞬間",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_lighting": {
+      "zh": "光線",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_lilac": {
+      "zh": "藕荷",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_loading": {
+      "zh": "載入中…",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_low_angle": {
+      "zh": "仰拍",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_magazine_editorial": {
+      "zh": "雜誌 editorial",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_main_subject": {
+      "zh": "主要主體",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_matches_the_expression_to_the": {
+      "zh": "讓表情與 V-Sign 的輕鬆、開朗氛圍一致",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_matches_the_expression_to_the_2": {
+      "zh": "讓表情與活潑、輕鬆的姿勢一致",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_matches_the_expression_to_the_3": {
+      "zh": "讓表情與開放、歡呼的姿勢一致",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_medium_close_up": {
+      "zh": "近景",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_more_options": {
+      "zh": "更多選項",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_my_photos": {
+      "zh": "我的照片",
+      "where": [
+        "panel",
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_my_requests": {
+      "zh": "個人化",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_my_requests_2": {
+      "zh": "個人化需求",
+      "where": [
+        "panel",
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_natural": {
+      "zh": "保留髮絲動態",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_needs_manual_review": {
+      "zh": "需人工複查",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_new_chat": {
+      "zh": "新對話",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_new_chat_2": {
+      "zh": "開新對話",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_next_retouch_from": {
+      "zh": "下一次從 {base} 美化",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_night": {
+      "zh": "夜色",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_no_photos_to_show": {
+      "zh": "目前沒有可顯示的照片。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_no_smile": {
+      "zh": "不笑",
+      "where": [
+        "panel",
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_none": {
+      "zh": "（無）",
+      "where": [
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_not_set": {
+      "zh": "不指定",
+      "where": [
+        "panel",
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_one_tap_retouch": {
+      "zh": "一鍵美化",
+      "where": [
+        "panel",
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_only_my_requests": {
+      "zh": "僅依需求修改",
+      "where": [
+        "panel",
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_original": {
+      "zh": "原圖",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_original_2": {
+      "zh": "原圖比例",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_original_photo": {
+      "zh": "原始照片",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_other": {
+      "zh": "其他",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_outdoor": {
+      "zh": "戶外",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_panel": {
+      "zh": "面板",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_peace_sign": {
+      "zh": "勝利手勢",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_people": {
+      "zh": "人物",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_person": {
+      "zh": "人物 {n}",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_person_2": {
+      "zh": "人物 {v1}",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_personalized_ai_photo_retouching": {
+      "zh": "AI 個人化美化分析",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_pet": {
+      "zh": "寵物",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_photo_content": {
+      "zh": "照片內容",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_photo_summary": {
+      "zh": "照片摘要",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_photos": {
+      "zh": "{n} 張",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_playful": {
+      "zh": "俏皮",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_please_enter_your_name": {
+      "zh": "請輸入你的名稱。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_portrait": {
+      "zh": "← 直式",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_portrait_2": {
+      "zh": "人像",
+      "where": [
+        "panel",
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_portrait_3": {
+      "zh": "人像調整",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_portrait_fixes": {
+      "zh": "人像修正",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_portrait_retouch": {
+      "zh": "人像精修",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_pose": {
+      "zh": "姿勢",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_powerful": {
+      "zh": "強勢",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_product": {
+      "zh": "產品",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_ready_to_share": {
+      "zh": "可展示",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_recent_photos": {
+      "zh": "最近照片",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_reframe": {
+      "zh": "重新構圖：",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_refresh": {
+      "zh": "重新整理",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_release_notes": {
+      "zh": "版本紀錄",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_report": {
+      "zh": "回報",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_report_a_problem": {
+      "zh": "回報問題",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_report_this_result": {
+      "zh": "回報此結果",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_result": {
+      "zh": "{title}美化結果",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_retouch": {
+      "zh": "美化",
+      "where": [
+        "panel",
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_retouch_again": {
+      "zh": "再美化",
+      "where": [
+        "panel",
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_retouch_as_suggested": {
+      "zh": "照建議直接美化",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_retouch_engine": {
+      "zh": "美化引擎",
+      "where": [
+        "panel",
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_retouch_from_original": {
+      "zh": "從原圖美化",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_retouch_from_version": {
+      "zh": "接續第 {n} 版美化",
+      "where": [
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_retouched": {
+      "zh": "已美化",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_retouched_2": {
+      "zh": "美化完成",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_retouched_result": {
+      "zh": "美化結果",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_retouching": {
+      "zh": "美化中",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_retouching_steps": {
+      "zh": "美化流程",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_review_edits": {
+      "zh": "看美化項目",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_sample_photos": {
+      "zh": "範例照片",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_scene": {
+      "zh": "場景",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_scene_2": {
+      "zh": "場景：{scene}。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_scene_3": {
+      "zh": "畫面",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_scene_4": {
+      "zh": "畫面調整",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_scene_suggestions": {
+      "zh": "畫面建議",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_scene_type": {
+      "zh": "場景類型",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_send_report": {
+      "zh": "送出回報",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_settings": {
+      "zh": "設定",
+      "where": [
+        "panel",
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_smile": {
+      "zh": "笑容",
+      "where": [
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_smile_adjustment": {
+      "zh": "笑容調整",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_soft_light": {
+      "zh": "柔光",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_some_versions_adjust_another_version": {
+      "zh": "有幾版是接著別版調整的，其他皆由原圖重新產生",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_square": {
+      "zh": "方形",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_start_from_a_different_image": {
+      "zh": "換一張當底",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_stay_here": {
+      "zh": "留在這裡",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_stop_adjusting": {
+      "zh": "不調整了",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_street": {
+      "zh": "街拍",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_style": {
+      "zh": "美化風格",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_style_2": {
+      "zh": "風格",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_subject": {
+      "zh": "主體",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_subject_2": {
+      "zh": "主體：{subject}。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_sunlight": {
+      "zh": "暖陽",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_text": {
+      "zh": "{v1}月{v2}日",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_thanks_for_reporting_well_review": {
+      "zh": "已回報，我們會盡快確認這筆結果。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_the_page_will_reload_after": {
+      "zh": "切換後頁面會重新載入；之前的對話和分析維持原本的語言。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_the_people_preview_isnt_available": {
+      "zh": "人物預覽暫時不可用，仍可進行分析。",
+      "where": [
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_the_processing_server_has_been": {
+      "zh": "後端處理伺服器已更新，執行中的工作可能已中斷，請立即重新整理頁面。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_theme_click_to_switch": {
+      "zh": "主題：{v1}（點擊切換）",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_this_person": {
+      "zh": "這位",
+      "where": [
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_this_photo_may_contain_harassing": {
+      "zh": "照片可能包含騷擾相關內容",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_this_photo_may_contain_hateful": {
+      "zh": "照片可能包含仇恨或歧視相關內容",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_this_photo_may_contain_nudity": {
+      "zh": "照片可能包含裸露或性暗示內容",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_this_photo_may_contain_self": {
+      "zh": "照片可能包含自我傷害相關內容",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_this_photo_may_contain_violent": {
+      "zh": "照片可能包含暴力或血腥內容",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_this_photos_version_history": {
+      "zh": "這張照片的美化紀錄",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_tidy": {
+      "zh": "梳整俐落",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_tidy_stray_hairs": {
+      "zh": "髮絲整理",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_to_retouch": {
+      "zh": "待美化",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_to_see_what_else_in": {
+      "zh": "想看整張照片還有哪些地方可以修，也可以按「幫我分析」。",
+      "where": [
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_today": {
+      "zh": "今天",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_travel": {
+      "zh": "旅行",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_try_again": {
+      "zh": "再試一次",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_upload": {
+      "zh": "上傳",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_upload_a_photo": {
+      "zh": "自行上傳照片",
+      "where": [
+        "chat",
+        "backend labels"
+      ]
+    },
+    "common_upload_photo": {
+      "zh": "上傳照片",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_use_selected_photo": {
+      "zh": "使用所選照片",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_version": {
+      "zh": "第 {n} 版",
+      "where": [
+        "panel",
+        "chat",
+        "backend text"
+      ]
+    },
+    "common_version_history": {
+      "zh": "美化紀錄",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_view": {
+      "zh": "檢視方式",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_view_the_original": {
+      "zh": "查看原始照片",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_wide_angle": {
+      "zh": "廣角",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_wide_shot": {
+      "zh": "遠景",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_window_light": {
+      "zh": "窗影光線",
+      "where": [
+        "panel",
+        "backend text"
+      ]
+    },
+    "common_yesterday": {
+      "zh": "昨天",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_your_name": {
+      "zh": "你的名稱",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "panel_a_refined_result_ready_to": {
+      "zh": "產出精修成果，即可下載",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_adding_clarity_and_depth_to": {
+      "zh": "提升主體的清晰度與立體感",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_additional_user_instructions": {
+      "zh": "使用者補充指令",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_adds_a_natural_smile_to": {
+      "zh": "為沒有笑的人自動加上自然笑容，已經在笑的人維持原樣。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_adds_visual_impact_and_an": {
+      "zh": "讓照片更有視覺張力與雜誌感，但不改變主體與場景。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_adjust_local_contrast_and_subject": {
+      "zh": "調整局部對比與主體清晰度。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_adjustable": {
+      "zh": "可以調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_adjusted_as_you_asked": {
+      "zh": "依你的需求調整：「{request}」",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_adjusted_with_the_style_you": {
+      "zh": "依你挑的風格調整。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_adjusting": {
+      "zh": "為{who}進行{fix}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_adjusting_depth_between_subject_and": {
+      "zh": "調整背景與主體的層次關係",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_adjusting_overall_lighting_and_tonal": {
+      "zh": "調整整體光線與明暗層次",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_adjustments_made": {
+      "zh": "實際調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_after_you_sign_out_this": {
+      "zh": "登出後，這個瀏覽器將不再記得目前的使用者名稱，需要重新輸入才能再次查看處理紀錄。{unsent}確定要登出嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ai_candidate": {
+      "zh": "AI 候選 {v1}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ai_retouch": {
+      "zh": "AI 修圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ai_retouching": {
+      "zh": "AI 美化中",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ai_retouching_complete": {
+      "zh": "目前已執行 AI 影像美化。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ai_retouching_failed": {
+      "zh": "AI 美化失敗。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ai_smart_retouch": {
+      "zh": "AI 智能美化",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_aipoc_analysis_failed_http": {
+      "zh": "AIPoC 分析失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_aipoc_doesnt_support_viewing_the": {
+      "zh": "（AIPoC 尚不支援查看第一階段中間圖）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ais_final_choice": {
+      "zh": "AI 最終選擇：{v1}。{v2}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ais_initial_crop_suggestion": {
+      "zh": "AI 初始裁切建議",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_all_photos_failed_please_try": {
+      "zh": "全部處理失敗，請稍後再試。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_allow_the_ai_to_fix": {
+      "zh": "允許 AI 修正此項目",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_also_following_your_requests": {
+      "zh": "也依照您的個人化需求修圖：",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_an_unknown_error_occurred": {
+      "zh": "發生未知錯誤。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analysis_adjustments": {
+      "zh": "分析與調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analysis_complete_tap_retouch_to": {
+      "zh": "已分析完成，按「美化」就會產生這一組",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analysis_cost": {
+      "zh": "分析花費",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analysis_failed": {
+      "zh": "分析失敗",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analysis_failed_2": {
+      "zh": "分析失敗：{v1}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analysis_results": {
+      "zh": "分析結果",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyze_and_retouch": {
+      "zh": "分析並美化",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyzing": {
+      "zh": "分析中…",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyzing_background_lighting_and_tones": {
+      "zh": "分析背景的光線與明暗分布",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyzing_highlight_and_shadow_detail": {
+      "zh": "分析亮部與暗部的細節層次",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyzing_how_smoothly_light_and": {
+      "zh": "分析畫面中光色變化的協調程度",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyzing_leading_lines_and_eye": {
+      "zh": "分析畫面中線條的延伸與視線引導",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyzing_light_direction_and_overall": {
+      "zh": "分析光線方向與畫面的整體氛圍",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyzing_materials_and_textures": {
+      "zh": "分析照片中材質與紋理的呈現",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyzing_the_arrangement_and_density": {
+      "zh": "分析背景元素的排列與疏密關係",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyzing_the_balance_of_warm": {
+      "zh": "分析畫面中冷色與暖色的搭配",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyzing_the_impact_of_highlights": {
+      "zh": "分析高光與反光對畫面的影響",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyzing_the_relationship_between_subject": {
+      "zh": "分析畫面主體與背景的視覺關係",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_analyzing_the_whole_photo_suggestions": {
+      "zh": "正在分析整張照片，完成後建議會顯示在這裡。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_api_usage_and_cost": {
+      "zh": "API 用量與費用",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_apply_the_necessary_crop_or": {
+      "zh": "套用必要裁切或保留原構圖。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_automatically_adjusted_to_match": {
+      "zh": "已配合 {poseLabel} 自動調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_automatically_fixes_eyes_that_are": {
+      "zh": "偵測到閉眼或半閉眼時自動修正。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_automatically_tidies_hair_across_the": {
+      "zh": "偵測到碎髮擋臉、髮絲翹起、毛躁、被風吹亂或瀏海結塊時自動整理。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_avoid_a_plastic_look_heavy": {
+      "zh": "避免塑膠感、重濾鏡與不自然改造。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_background": {
+      "zh": "背景",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_background_and_edge_distractions_could": {
+      "zh": "背景或邊緣干擾可再降低。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_balance": {
+      "zh": "平衡",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_balancing_highlight_and_shadow_detail": {
+      "zh": "平衡亮部與暗部的細節",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_batch_images": {
+      "zh": "批次圖片",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_best_candidate": {
+      "zh": "最佳候選",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_body_shape": {
+      "zh": "身形調整：{bodyPrompt}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_body_shape_analysis_failed_so": {
+      "zh": "身形調整分析失敗，已停用；請重新分析",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_bringing_out_shadow_detail": {
+      "zh": "處理陰影區域的細節表現",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_by_default_wide_screens_show": {
+      "zh": "預設時，寬版顯示格狀拼貼、窄版顯示交錯散落的卡片；也可以固定使用其中一種樣式。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_camera": {
+      "zh": "相機",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_candidate": {
+      "zh": "候選方案",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_candidate_score_10": {
+      "zh": "候選評分 {score}/10",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_cant_connect_to_the_server": {
+      "zh": "目前無法連線到伺服器，請稍後再試，或確認網路連線是否正常。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_capture_again": {
+      "zh": "重新擷取",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_capture_current_screen": {
+      "zh": "擷取目前畫面",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_capturing": {
+      "zh": "擷取中…",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_capturing_the_screen": {
+      "zh": "擷取畫面中…",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_caution": {
+      "zh": "注意",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_change_to": {
+      "zh": "調整為{ratioLabel}，{detail}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_changes_only_what_you_ask": {
+      "zh": "只改你要求的地方，其他保持第 {n} 版的樣子。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_changes_only_what_you_described": {
+      "zh": "只動你寫到的地方（加上你挑的風格），其他保持原樣。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_changes_to_this_photo_that": {
+      "zh": "這張照片還沒美化的調整也會清掉。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_changes_to_this_photo_that_2": {
+      "zh": "這張照片還沒美化的調整會清掉。確定要回到首頁嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_changes_to_this_photo_that_3": {
+      "zh": "這張照片還沒美化的調整會清掉。確定要打開另一張嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_changes_to_this_photo_that_4": {
+      "zh": "這張照片還沒美化的調整會清掉。確定要開新對話嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_changes_to_this_photo_that_5": {
+      "zh": "這張照片還沒美化的調整沒辦法帶到對話模式，切過去就會清掉。確定要切換嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_changing_the_analysis_engine_requires": {
+      "zh": "換分析引擎必須重新分析這張照片，目前的分析結果和建議都會被取代。要繼續嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_changing_the_aspect_ratio_reframes": {
+      "zh": "改變長寬比需要依新比例重新構圖，會再呼叫一次分析模型並產生額外費用；畫面建議的其他項目維持不變。要繼續嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_chat_account": {
+      "zh": "對話帳號：{owner}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_chat_mode": {
+      "zh": "對話模式",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_chat_mode_2": {
+      "zh": "聊天模式",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_checking_edges_for_negative_space": {
+      "zh": "分析照片邊緣的留白與干擾元素",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_checking_overall_balance_and_cohesion": {
+      "zh": "檢查整體畫面的協調與完整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_checking_whether_key_details_are": {
+      "zh": "檢視重要細節是否受到邊緣裁切影響",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_choose_a_photo_to_get": {
+      "zh": "點選照片，開始專屬美化",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_choose_one": {
+      "zh": "選擇{label}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_choose_whether_to_send_body": {
+      "zh": "決定是否將身形調整指令送給 Editor",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_choose_which_analysis_boxes_to": {
+      "zh": "選擇要顯示的分析框類型",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_clarity": {
+      "zh": "清晰度",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_clean": {
+      "zh": "乾淨",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_clear": {
+      "zh": "清除{label}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_clear_all_photos": {
+      "zh": "清除所有照片",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_clear_camera_angle": {
+      "zh": "清除拍攝角度",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_clear_framing": {
+      "zh": "清除取景範圍",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_clear_lighting": {
+      "zh": "清除光線",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_clear_pose": {
+      "zh": "清除姿勢",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_click_to_change_the_photo": {
+      "zh": "點擊更換照片",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_click_to_upload_a_photo": {
+      "zh": "點選上傳照片",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_close_batch_list": {
+      "zh": "關閉批次列表",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_collapse": {
+      "zh": "收合",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_color": {
+      "zh": "色彩",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_colors_could_be_more_harmonious": {
+      "zh": "色彩關係可以更穩定。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_compare_with_original": {
+      "zh": "與原圖比較",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_compiling_lighting_color_and_composition": {
+      "zh": "整理光線、色彩與構圖的改善建議",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_composition": {
+      "zh": "構圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_composition_analysis_suggestions": {
+      "zh": "構圖分析與建議",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_confirm": {
+      "zh": "確認送出",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_controlled": {
+      "zh": "可控",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_correct_exposure_and_white_balance": {
+      "zh": "先校正曝光與白平衡。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_correcting_white_balance_and_color": {
+      "zh": "校正白平衡與整體色溫",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_corrects_eye_direction_and_focus": {
+      "zh": "修正視線方向與眼神焦點。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_cost": {
+      "zh": "花費金額",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_could_be_better": {
+      "zh": "可以更好",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_capture_a_preview_but": {
+      "zh": "無法擷取畫面預覽，回報仍可送出。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_capture_the_screenshot": {
+      "zh": "回報截圖擷取失敗",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_create_the_account_http": {
+      "zh": "建立帳號失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_create_the_account_please": {
+      "zh": "建立帳號失敗，請再試一次。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_delete_all_history_http": {
+      "zh": "刪除所有紀錄失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_delete_the_item_http": {
+      "zh": "刪除紀錄失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_delete_the_report_http": {
+      "zh": "刪除回報失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_delete_the_report_please": {
+      "zh": "刪除回報失敗，請稍後再試。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_find_the_history_for": {
+      "zh": "找不到這張照片的處理紀錄。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_find_the_original_or": {
+      "zh": "資料夾裡找不到原圖與 run_N 子資料夾。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_load_the_sample_photos": {
+      "zh": "載入範例照片失敗：{v1}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_load_the_screenshot_tool": {
+      "zh": "截圖元件載入失敗",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_load_the_stage_1": {
+      "zh": "（載入第一階段中間圖時發生錯誤）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_open_this_report_you": {
+      "zh": "打不開這筆回報：可能沒有管理者權限，或回報已經刪掉了。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_parse_the_account_http": {
+      "zh": "解析帳號失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_read_the_image_please": {
+      "zh": "無法讀取圖片，請確認檔案格式是否正確。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_read_the_results_folder": {
+      "zh": "無法讀取結果資料夾：{v1}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_reload_the_original_photo": {
+      "zh": "無法重新載入原始照片，請稍後再試。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_reload_the_report_list": {
+      "zh": "重新載入回報清單失敗，請稍後再試。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_retrieve_chat_history_http": {
+      "zh": "取得對話紀錄失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_retrieve_history_http": {
+      "zh": "取得處理紀錄失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_retrieve_the_analysis_http": {
+      "zh": "取得分析結果失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_retrieve_the_report_http": {
+      "zh": "取得回報失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_retrieve_the_report_list": {
+      "zh": "取得回報清單失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_retrieve_the_result_for": {
+      "zh": "無法取得這一版的結果。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_retrieve_the_result_http": {
+      "zh": "取得結果失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_retrieve_the_status_please": {
+      "zh": "無法取得處理狀態，請稍後再試。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_retrieve_this_item_please": {
+      "zh": "無法取得這筆處理紀錄，請稍後再試。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_send_the_analysis": {
+      "zh": "送出分析失敗",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_send_the_report_http": {
+      "zh": "回報失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_submit_the_analysis_http": {
+      "zh": "送出分析失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_submit_the_follow_up": {
+      "zh": "送出後續處理失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_submit_the_reframe_http": {
+      "zh": "送出重新構圖失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_submit_the_rerun_http": {
+      "zh": "送出重跑失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_couldnt_update_the_report_status": {
+      "zh": "更新回報狀態失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_create_account": {
+      "zh": "建立帳號",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_created_with_v": {
+      "zh": "產生版本 v{compatibilityVersion}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_crisp": {
+      "zh": "清楚",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_crop_actually_sent": {
+      "zh": "實際送出裁切",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_crop_applied": {
+      "zh": "已套用裁切",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_crop_box_analysis_suggestion": {
+      "zh": "crop_box（分析建議）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_crop_selection": {
+      "zh": "裁切評選",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_crop_to_send_preview": {
+      "zh": "將送出裁切（預覽）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_crop_validation": {
+      "zh": "裁切驗證",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_current_version_v": {
+      "zh": "系統版本 v{currentCompatibilityVersion}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_custom": {
+      "zh": "自訂",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_default": {
+      "zh": "預設",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_delete_report": {
+      "zh": "刪除回報",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_delete_screenshot": {
+      "zh": "刪除截圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_delete_the_history_for_this": {
+      "zh": "確定要刪除這組 {photo_count} 張照片的處理紀錄嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_delete_this_group": {
+      "zh": "刪除這組紀錄",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_delete_this_report": {
+      "zh": "確定要刪除這筆回報嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_depth": {
+      "zh": "層次",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_describe_what_you_have_in": {
+      "zh": "說出你的想法，打造專屬美化效果",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_diagnosis_suggestions": {
+      "zh": "診斷與建議",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_direction": {
+      "zh": "執行方向：{normalized_user_direction}。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_distractions_re_evaluated_after_crop": {
+      "zh": "裁切後重新評估干擾",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_done": {
+      "zh": "（已完成 {doneCount}/{runCount} 張）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_dont_add_text_logos_people": {
+      "zh": "不新增文字、標誌、人物或不相關物件。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_download_all": {
+      "zh": "全部下載",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_download_all_finished_originals_for": {
+      "zh": "下載全部（已完成 {doneCount} 張，其餘為原圖，共 {length} 張）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_download_all_finished_results": {
+      "zh": "下載所有已完成的結果（{doneCount} 張）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_download_all_zip": {
+      "zh": "全部下載（ZIP）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_download_current_result": {
+      "zh": "下載目前結果",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_download_options_total": {
+      "zh": "下載選項（共 {lastDoneRunsCount} 張）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_download_original": {
+      "zh": "下載原圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_download_selected": {
+      "zh": "下載所選",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_download_selected_2": {
+      "zh": "下載所選（{count} 張）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_e_g_brighten_it_up": {
+      "zh": "例如：增加亮度，調整成冷色調，模糊背景。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_edges_have_enough_breathing_room": {
+      "zh": "邊緣呼吸感合理",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_editing": {
+      "zh": "編輯中",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_editorial": {
+      "zh": "雜誌感",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_enhances_the_products_shape_materials": {
+      "zh": "強化產品形狀、材質、色準與背景秩序。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_enhancing_detail_and_texture": {
+      "zh": "強化畫面中的細節與質感",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_enlarge_screenshot": {
+      "zh": "放大檢視截圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_enlarge_thumbnail": {
+      "zh": "放大檢視縮圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_estimated_cost": {
+      "zh": "預計花費",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_examples_show_the_style_only": {
+      "zh": "（圖例僅示意風格，實際呈現依原圖調整）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_examples_show_the_style_only_2": {
+      "zh": "（圖例僅示意風格，實際姿勢依原圖調整）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_expand": {
+      "zh": "展開",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_expression_unclear": {
+      "zh": "無法辨識表情",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_eye_correction_stage_2": {
+      "zh": "眼部修正（第二段）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_eyes": {
+      "zh": "閉眼偵測",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_face_crops": {
+      "zh": "臉部裁切",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_faithful_to_original": {
+      "zh": "保留原照",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_feature_resolver_result": {
+      "zh": "Feature Resolver 結果",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_final_choice": {
+      "zh": "最終選擇",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_findings_cards": {
+      "zh": "分析卡片",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_fix_gaze": {
+      "zh": "眼神對焦修正",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_focus": {
+      "zh": "視覺焦點",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_follows_your_additional_instructions_while": {
+      "zh": "依照補充指令調整，同時保留原始照片的真實內容。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_gaze": {
+      "zh": "眼神對焦",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_gaze_focus_off": {
+      "zh": "眼神對焦：關閉",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_gaze_focus_reset_to_original": {
+      "zh": "眼神對焦：已還原為原本設定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_general_feedback": {
+      "zh": "{v1} · 一般回報",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_generating": {
+      "zh": "產生中… {doneCount}/{length} 張",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_good": {
+      "zh": "良好",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_gpt_wasnt_called_in_this": {
+      "zh": "（此步驟未呼叫 GPT）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_grid": {
+      "zh": "格狀",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_hair": {
+      "zh": "亂髮偵測",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_hair_natural": {
+      "zh": "亂髮偵測：保留髮絲動態",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_hair_reset_to_the_original": {
+      "zh": "亂髮偵測：已還原為原本設定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_highlights": {
+      "zh": "照片亮點",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_history_isnt_available_right_now": {
+      "zh": "目前無法取得處理紀錄。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_horizon_perspective": {
+      "zh": "水平/透視",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_identifying_features_worth_preserving": {
+      "zh": "整理照片中值得保留的特色",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_identifying_focal_points": {
+      "zh": "檢視畫面中的視覺焦點",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_identity_preserved": {
+      "zh": "身分保留",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_image_analysis_and_output_complete": {
+      "zh": "已完成影像分析與輸出。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_images_per_run": {
+      "zh": "生成張數",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_improve_overall_lighting_and_color": {
+      "zh": "提升整體光線與色彩完成度。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_improve_tonal_depth_and_subject": {
+      "zh": "改善亮度層次與主體分離，避免過曝、死黑或平面化。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_improves_subject_emphasis_and_edge": {
+      "zh": "依解析後的裁切框改善主體集中度與邊緣落點。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_in_depth_ai_analysis": {
+      "zh": "AI 全面分析",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_initial_analysis": {
+      "zh": "初步分析",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_input_text_image_output_text": {
+      "zh": "{timePart}輸入 文字{text}/圖片{image}｜輸出 文字{v4}/圖片{v5}｜共 {total} tokens ｜ ${v7}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_instagram": {
+      "zh": "IG 貼文",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_items": {
+      "zh": "{length} 項值得調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_items_to_improve": {
+      "zh": "共 {count} 項可改善",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_job_id": {
+      "zh": "{v1}（Job ID: {jobId}）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_job_id_2": {
+      "zh": "（Job ID: {jobId}）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_keep_adjusting": {
+      "zh": "繼續調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_keep_as_is": {
+      "zh": "維持現況",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_keep_natural_believable_colors_for": {
+      "zh": "維持膚色、天空、綠色、食物與材質的可信記憶色。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_keep_the_original_composition": {
+      "zh": "保留原始構圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_keeps_the_full_original_at": {
+      "zh": "此比例下維持完整原圖（沒有有效裁切）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_keeps_the_original_content_while": {
+      "zh": "保留原照內容，提升光線、色彩、構圖與整體質感。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_key_area": {
+      "zh": "重要區域",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_landscape": {
+      "zh": "橫",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_landscape_2": {
+      "zh": "橫幅",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_last_modified": {
+      "zh": "最後修改時間",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_layout": {
+      "zh": "布局方法",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_level_horizon_and_stable_perspective": {
+      "zh": "水平/透視穩定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_light_color": {
+      "zh": "光線色彩",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_lighting_and_color_improved": {
+      "zh": "光色改善",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_lighting_and_contrast_could_have": {
+      "zh": "光線或對比仍可更有層次。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_local_processing": {
+      "zh": "本機處理",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_local_worker_uses_the_local": {
+      "zh": "Local Worker：走本機 Redis 隊列與 docker worker。AIPoC：直接呼叫共用推論閘道。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_main_subject": {
+      "zh": "照片主體",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_making_the_lighting_look_more": {
+      "zh": "優化光線，讓畫面更自然",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_matches_composition_method": {
+      "zh": "構圖方法吻合",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_matches_framing_intent": {
+      "zh": "取景意圖一致",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_material": {
+      "zh": "材質",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_meets_the_users_goal": {
+      "zh": "使用者目標達成",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_minimize_background_distractions_while_keeping": {
+      "zh": "控制背景干擾並保留自然質感。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_model_settings": {
+      "zh": "模型設定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_mood": {
+      "zh": "氛圍",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_mood_2": {
+      "zh": "畫面氛圍",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_my_requests": {
+      "zh": "個人化需求：{user_prompt}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_natural": {
+      "zh": "自然",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_natural_premium": {
+      "zh": "自然高級美化",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_needs_fixing": {
+      "zh": "需要修正",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_needs_fixing_2": {
+      "zh": "（需修正）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_needs_review": {
+      "zh": "需複查",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_needs_work": {
+      "zh": "需要處理",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_negative_space": {
+      "zh": "留白",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_negative_space_is_purposeful": {
+      "zh": "留白有功能",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_next": {
+      "zh": "下一張",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_next_crop_preview": {
+      "zh": "下次裁切（預覽）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_next_output_ratio_preview": {
+      "zh": "下次輸出比例（預覽）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_analysis_available_for_this": {
+      "zh": "此人像沒有可顯示的分析結果。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_analysis_yet": {
+      "zh": "（尚無分析結果）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_crop_retouching_and_color": {
+      "zh": "不做構圖裁切，只進行美化與色彩整理",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_crop_suggestion_provided": {
+      "zh": "未提供裁切建議。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_fix_needed": {
+      "zh": "無需修正",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_history_yet": {
+      "zh": "目前尚無處理紀錄。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_items_available_to_run": {
+      "zh": "目前沒有可批次執行的案例。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_qa_result_yet": {
+      "zh": "尚未取得 QA 檢查結果。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_reports_yet": {
+      "zh": "目前尚無回報紀錄。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_result_to_view_yet": {
+      "zh": "（尚無結果可查看）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_retouch_items_yet": {
+      "zh": "尚未取得修圖項目。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_scene_suggestions_yet": {
+      "zh": "尚未取得畫面建議。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_timing_recorded_yet": {
+      "zh": "（尚無處理時間記錄）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_usage_recorded_yet": {
+      "zh": "（尚無用量記錄）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_none_of_the_subfolders_contain": {
+      "zh": "子資料夾裡都找不到可用的 result.json（需含 analysis）。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_not_checked": {
+      "zh": "未檢查",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_not_over_retouched": {
+      "zh": "未過度美化",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_not_recommended": {
+      "zh": "不建議調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_not_recommended_2": {
+      "zh": "（不建議調整）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_not_retouched_yet_ai_retouching": {
+      "zh": "尚未執行美化，確認後將開始 AI 影像美化。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_not_run": {
+      "zh": "未執行",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_note": {
+      "zh": "提醒：{v1}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_note_2": {
+      "zh": "提醒：{warning}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_note_3": {
+      "zh": "提醒：{w}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_now": {
+      "zh": "目前為{level}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_off": {
+      "zh": "已關閉",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_on_wide_screens_shows_the": {
+      "zh": "寬螢幕時，將分析面板顯示在預覽圖旁邊，而不是疊在下方；視窗較窄時仍會自動改回目前的排列。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_one_photo_retouched_just_for": {
+      "zh": "一張照片，開啟專屬美化體驗",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_one_tap_retouch_again": {
+      "zh": "重新一鍵美化",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_only_my_requests_is_on": {
+      "zh": "已勾選「僅依需求修改」，這裡的建議這次不會套用。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_open": {
+      "zh": "待解決",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_open_history": {
+      "zh": "開啟歷史紀錄",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_open_settings": {
+      "zh": "開啟設定：{summary}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_open_settings_differs_from_the": {
+      "zh": "開啟設定：{summary}（設定與目前結果不同）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_original_composition_kept": {
+      "zh": "保留原始構圖。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_original_photo_notes": {
+      "zh": "原圖觀察",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_our_ai_looks_at_the": {
+      "zh": "AI 先判讀人物、光線、構圖與畫面細節，",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_outdated_we_recommend_reprocessing": {
+      "zh": "（已過舊，建議重新處理）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_output_ratio": {
+      "zh": "輸出比例",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_pass": {
+      "zh": "通過",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_pauses_after_the_analysis_so": {
+      "zh": "分析完成後會先暫停，讓你確認、調整，再手動繼續美化",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_people_subjects": {
+      "zh": "人物主體（subjects）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_phone": {
+      "zh": "手機",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_photo": {
+      "zh": "第 {n} 張",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_photo_analysis": {
+      "zh": "照片分析",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_photo_master_is_analyzing_the": {
+      "zh": "Photo Master 正在逐步診斷原圖、評選構圖。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_photo_overview": {
+      "zh": "照片總覽",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_please_choose_a_jpg_png": {
+      "zh": "請選擇 JPG、PNG、WebP 或 HEIC/HEIF 圖片。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_please_enter_a_username": {
+      "zh": "請輸入使用者名稱。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_please_upload_a_photo_first": {
+      "zh": "請先上傳一張照片。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_polished_results": {
+      "zh": "完成美化",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_portrait": {
+      "zh": "人像檢查",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_portrait_2": {
+      "zh": "直",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_portrait_fix_settings": {
+      "zh": "人像修正設定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_portrait_settings": {
+      "zh": "人像設定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_premium": {
+      "zh": "高質感",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_preparing": {
+      "zh": "準備中…",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_preparing_download": {
+      "zh": "打包下載中…",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_preparing_download_2": {
+      "zh": "打包下載中…（{done}/{total}）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_preserve_the_original_content_while": {
+      "zh": "以保留原照內容為前提，讓照片看起來更乾淨、更有完成度。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_preserve_the_original_while_enhancing": {
+      "zh": "保留原照並提升質感。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_preserve_the_subject_scene_and": {
+      "zh": "保留主體、場景與原始拍攝角度。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_preserves_identity_expression_skin_tone": {
+      "zh": "保留身分、表情、膚色與姿態，改善光線與皮膚質感。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_preserves_the_full_original_and": {
+      "zh": "保留完整原圖與原始場景脈絡",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_preserving_important_details_from_the": {
+      "zh": "保留原圖中的重要細節",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_previous": {
+      "zh": "上一張",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_processing_failed": {
+      "zh": "處理失敗",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_processing_failed_please_try_again": {
+      "zh": "處理失敗，請稍後再試。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_processing_path": {
+      "zh": "處理路徑",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_processing_the_photo": {
+      "zh": "正在處理照片",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_processing_time": {
+      "zh": "處理時間",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_product": {
+      "zh": "商品",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_professional_suggestions_tailored_to_your": {
+      "zh": "依照片特性，提出專業級調整建議",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_protected_areas": {
+      "zh": "保護區域：{v1}。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_protected_areas_intact": {
+      "zh": "保護區域安全",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_qa_check": {
+      "zh": "QA 驗證",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_quality_check": {
+      "zh": "品質檢查",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ratio": {
+      "zh": "比例",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ratio_2": {
+      "zh": "比例 {value}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ratio_3": {
+      "zh": "，比例 {ratio}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ratio_original": {
+      "zh": "比例 原圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_ratio_supports_the_composition": {
+      "zh": "比例有構圖意義",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_raw_analysis_json": {
+      "zh": "分析原始 JSON",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reanalyze": {
+      "zh": "重新分析",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reanalyze_this_photo_with_the": {
+      "zh": "用最新版本重新分析這張照片",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reanalyze_with_the_new_version": {
+      "zh": "確定要用新版本重新分析一次嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reason": {
+      "zh": "原因：{reason}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_recent_sample_photos_layout": {
+      "zh": "最近照片／範例照片排列方式",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_refined": {
+      "zh": "精修",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_refining_the_subjects_texture_and": {
+      "zh": "修飾主體的質感與邊緣",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_refining_tone_and_saturation": {
+      "zh": "細修畫面的色調與飽和度",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reframe": {
+      "zh": "重新構圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reframed_to": {
+      "zh": "已依 {pref} 完成重新構圖。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reframed_to_the_original_ratio": {
+      "zh": "已依原圖比例完成重新構圖。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reframed_with_an_ai_selected": {
+      "zh": "已由 AI 選擇比例並完成重新構圖。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reframing": {
+      "zh": "重新構圖中…",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reframing_failed": {
+      "zh": "重新構圖失敗：{v1}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reframing_to": {
+      "zh": "依 {pref} 重新構圖中…",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reframing_to_the_original_ratio": {
+      "zh": "依原圖比例重新構圖中…",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reframing_with_an_ai_selected": {
+      "zh": "由 AI 選擇比例並重新構圖中…",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reload": {
+      "zh": "重新載入",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_remove_photo": {
+      "zh": "移除照片",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_removed_automatic_adjustments_for": {
+      "zh": "已取消 {previousPoseLabel} 的自動調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_report_list": {
+      "zh": "回報清單",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_report_notes": {
+      "zh": "回報說明：{note}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_report_screenshot": {
+      "zh": "回報截圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_report_screenshot_preview": {
+      "zh": "回報截圖預覽",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_report_status_click_to_change": {
+      "zh": "回報狀態：{v1}（點擊切換）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reports": {
+      "zh": "回報紀錄",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reprocessing_failed_please_try_again": {
+      "zh": "重新處理失敗，請稍後再試。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_request_unchanged_makes_another_version": {
+      "zh": "需求沒改，會從第 {n} 版照一樣的需求再做一版",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_requests_adjustments": {
+      "zh": "需求與調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_resolved": {
+      "zh": "已解決",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouch_all": {
+      "zh": "全部美化",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouch_cost_2": {
+      "zh": "美化花費",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouch_goal": {
+      "zh": "美化目標",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouch_now": {
+      "zh": "立即美化",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouch_sent_to_editor": {
+      "zh": "修圖（送給 Editor）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouch_the_other": {
+      "zh": "美化其餘 {pending} 張",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouch_with_the_new_framing": {
+      "zh": "{done}要直接以新構圖美化照片，還是先繼續調整其他建議？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouched": {
+      "zh": "已美化 ({runsDone}/{length})",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouched_2": {
+      "zh": "美化完成（{doneCount}/{length}）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouched_3": {
+      "zh": "美化完成（{rendered_count}/{photo_count}）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouched_from_the_ai_analysiss": {
+      "zh": "依 AI 分析的建議美化。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouches_right_after_the_analysis": {
+      "zh": "分析完成後，直接美化並顯示結果",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouching": {
+      "zh": "美化中 ({runsDone}/{length})",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouching_2": {
+      "zh": "美化執行",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouching_based_on_your_requests": {
+      "zh": "依照您的個人化需求修圖：",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retouching_from_the_original_makes": {
+      "zh": "從原圖美化會從原圖重做一版，這裡的需求會一起套用，要調整的話可以先編輯。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retrieving_the_analysis": {
+      "zh": "取得分析結果",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_retrieving_the_result": {
+      "zh": "取得結果",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reviewing_camera_angle_and_perspective": {
+      "zh": "檢視取景角度與透視的視覺效果",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reviewing_composition_and_framing": {
+      "zh": "檢視照片的構圖與取景細節",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reviewing_foreground_midground_and_background": {
+      "zh": "檢視前景、中景與遠景的層次關係",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reviewing_how_background_details_affect": {
+      "zh": "檢視背景細節對主體的影響",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reviewing_overall_color_and_tone": {
+      "zh": "檢視照片整體的色彩與色調",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reviewing_saturation_across_the_image": {
+      "zh": "檢視不同區域的色彩飽和度",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reviewing_shadow_detail_and_visibility": {
+      "zh": "檢視陰影區域的細節與可見度",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reviewing_spatial_and_visual_balance": {
+      "zh": "檢視構圖中的空間與視覺平衡",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reviewing_subject_separation_from_the": {
+      "zh": "檢視主體輪廓與周圍環境的區隔",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_reviews_the_people_lighting_composition": {
+      "zh": "辨識人物、光線、構圖與畫面細節",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_roi_protected_areas": {
+      "zh": "ROI / 保護區域",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_run_one_tap_retouch_again": {
+      "zh": "用最新版本重新一鍵美化這張照片",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_run_one_tap_retouch_again_2": {
+      "zh": "確定要用新版本重新一鍵美化一次嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_running_local_image_processing": {
+      "zh": "正在進行本機影像處理{progress}。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_s": {
+      "zh": "{v1}s｜",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_safe_crop": {
+      "zh": "裁切安全",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_scattered": {
+      "zh": "交錯",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_scene": {
+      "zh": "畫面建議",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_scene_preservation": {
+      "zh": "場景保留：{scene_preservation_strategy}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_scene_preserved_faithfully": {
+      "zh": "場景真實保留",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_scene_suggestions_score_10": {
+      "zh": "畫面建議達成度：{score}/10。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_scene_suggestions_score_not_available": {
+      "zh": "尚未取得畫面建議達成度。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_score_10": {
+      "zh": "，分數 {score}/10",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_screen_capture_timed_out": {
+      "zh": "擷取畫面逾時",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_screenshot_optional": {
+      "zh": "畫面截圖（選填）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_scroll_down_for_more": {
+      "zh": "往下滑看更多",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_see_more": {
+      "zh": "查看更多",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_select_multiple": {
+      "zh": "選取多筆",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_set": {
+      "zh": "第 {versionNumber}／{versionTotal} 組",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_set_to": {
+      "zh": "設定{label}為「{v2}」",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_set_to_no_fix": {
+      "zh": "已設定不修正",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_sharpen_the_subject_without_overdoing": {
+      "zh": "讓主體更清楚但不過度銳化。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_should_not_appear": {
+      "zh": "不應出現：{item}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_show_analysis_panel_next_to": {
+      "zh": "分析面板顯示於預覽右側",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_show_estimated_cost_first": {
+      "zh": "分析／美化前顯示預計花費",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_show_prompt": {
+      "zh": "顯示 Prompt",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_show_stage_1_image": {
+      "zh": "顯示第一階段圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_shows_the_findings_cards_tab": {
+      "zh": "在面板模式顯示「分析卡片」分頁：美化項目依光線色彩、背景、人像、清晰度、構圖整理成評等卡片（app 審閱畫面用）。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_sign_in": {
+      "zh": "登入",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_sign_in_to_keep_a": {
+      "zh": "登入後，你修過的每張照片都會留下紀錄，隨時可以回來查看。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_sign_out": {
+      "zh": "登出",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_skin_tone": {
+      "zh": "膚色",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_skip_for_now": {
+      "zh": "先略過",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_skipped_non_image_files": {
+      "zh": "已略過非圖片檔案。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_skipped_unreadable_subfolders": {
+      "zh": "已略過 {length} 個無法讀取的子資料夾：{v2}{v3}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_smile": {
+      "zh": "笑容調整@@人像檢查",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_smile_big_smile": {
+      "zh": "笑容：開朗笑",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_smile_gentle_smile": {
+      "zh": "笑容：微笑",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_smile_no_smile": {
+      "zh": "笑容：不笑",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_smile_reset_to_original_setting": {
+      "zh": "笑容：已還原為原本設定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_smile_suggested": {
+      "zh": "建議微笑",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_smoothing_color_transitions": {
+      "zh": "讓色彩過渡更加平順",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_so_every_edit_brings_you": {
+      "zh": "讓每次調整都更貼近你期待的效果。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_some_items_couldnt_be_deleted": {
+      "zh": "部分紀錄刪除失敗，請稍後再試。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_something_went_wrong_while_reprocessing": {
+      "zh": "重新處理時發生錯誤，請再試一次。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_square": {
+      "zh": "方",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_stage_1_intermediate_image": {
+      "zh": "第一階段中間圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_stage_1_intermediate_image_before": {
+      "zh": "第一階段中間圖（眼部修正前）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_start_analysis": {
+      "zh": "開始分析",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_status_check_failed_http": {
+      "zh": "查詢狀態失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_status_unavailable": {
+      "zh": "無法取得狀態",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_step_2_photo_analysis": {
+      "zh": "Step 2：照片分析",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_step_3_additional_user_instructions": {
+      "zh": "Step 3：使用者補充指令",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_step_4_crop_validation": {
+      "zh": "Step 4：裁切驗證",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_step_5_retouching": {
+      "zh": "Step 5：美化執行",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_step_5b_eye_correction": {
+      "zh": "Step 5b：眼部修正",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_step_6_quality_check": {
+      "zh": "Step 6：品質檢查",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_steps": {
+      "zh": "實務步驟",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_still_retouching_please_wait": {
+      "zh": "美化仍在進行中，請稍候",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_stories": {
+      "zh": "限動",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_subject_and_identity_preserved": {
+      "zh": "主體與身分保留",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_subject_extent": {
+      "zh": "主體範圍",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_submission_failed_http": {
+      "zh": "提交失敗：HTTP {status}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_submitting_the_analysis_job": {
+      "zh": "送出分析任務",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_submitting_the_follow_up": {
+      "zh": "提交後續處理",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_suggested_composition": {
+      "zh": "建議構圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_suggested_framing": {
+      "zh": "建議取景",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_suggested_ratio": {
+      "zh": "建議比例",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_switch": {
+      "zh": "切換",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_switch_to_chat_mode": {
+      "zh": "切換到對話模式",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_switched_to": {
+      "zh": "已切換為 {poseLabel}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_tablet": {
+      "zh": "平板",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_tailored_adjustments": {
+      "zh": "客製化調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_text": {
+      "zh": "{v1}月{v2}日 {v3}:{v4}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_text_2": {
+      "zh": "第 {runInVersion} / {runsInVersion} 張",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_ai_is_generating_the": {
+      "zh": "AI 正在產生美化結果{progress}。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_ai_is_retouching": {
+      "zh": "AI 正在美化",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_ai_will_analyze_the": {
+      "zh": "AI 會分析整張照片，整理出修圖建議；你寫的個人化需求會保留。要繼續嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_analysis_found_no_fix": {
+      "zh": "分析判定無需或不建議調整；仍可手動開啟",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_heic_file_doesnt_contain": {
+      "zh": "HEIC 檔案沒有可解碼的影像",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_model_found_nothing_to": {
+      "zh": "模型未判定此項目需要修正，無需操作",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_output_quality_check_hasnt": {
+      "zh": "尚未執行輸出品質檢查。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_photo_has_a_solid": {
+      "zh": "照片已有基本資訊，接下來以提升光線、色彩、構圖與視覺焦點為主。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_ratio_requires_reframing_to": {
+      "zh": "指定比例{ratio}需重新構圖，若需取消請把長寬比改成「原圖比例」",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_request_timed_out_please": {
+      "zh": "系統回應逾時，請稍後再試一次。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_request_timed_out_please_2": {
+      "zh": "處理逾時，請稍後再試。（Job ID: {jobId}）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_roi_is_the_most": {
+      "zh": "ROI 是主體最重要、不可被裁掉的視覺區域。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_the_users_goal_takes_priority": {
+      "zh": "優先遵守使用者目標：{v1}。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_then_plans_the_expression_pose": {
+      "zh": "再依照片特性擬定表情、姿勢、視角與美化方向，",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_these_are_the_ais_suggestions": {
+      "zh": "這是 AI 分析後提供的建議，你可依此在這裡進一步調整設定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_is_turned_off_in": {
+      "zh": "此項目已在人像修正設定中關閉，需先在設定中開啟才能個別調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_item_has_no_original": {
+      "zh": "這筆紀錄沒有可重新上傳的原始照片。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_item_has_no_original_2": {
+      "zh": "這筆紀錄沒有可重新分析的原始照片。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_item_has_no_original_3": {
+      "zh": "這筆紀錄沒有可重新構圖的原始照片。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_persons_analysis_is_based": {
+      "zh": "此人物的分析結果來自整張照片的判讀，未使用特寫照片進行細節分析，準確度可能略低。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_photo_cant_be_retouched": {
+      "zh": "這張照片目前無法完成美化——{reasonText}基於平台政策無法編輯這類內容。請嘗試更換照片，或調整美化風格後再試一次。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_photo_hasnt_been_analyzed": {
+      "zh": "{text}這張照片還沒分析過。「幫我分析」會分析原圖並整理修圖建議，完成後會換成從原圖美化。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_photo_hasnt_been_analyzed_2": {
+      "zh": "{text}這張照片還沒分析過。想先看 AI 的修圖建議，請按「幫我分析」；或取消勾選「僅依需求修改」，按「美化」時會一起分析。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_photo_was_processed_with": {
+      "zh": "這張照片還沒套用最新版本，重新處理一次就能得到更好的美化結果。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_photo_wasnt_analyzed": {
+      "zh": "這張照片沒有做分析",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_reports_result_has_expired": {
+      "zh": "這筆回報的結果已經過期，無法開啟。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_result_has_no_stage": {
+      "zh": "（此結果沒有第一階段中間圖，可能是單階段模式或未啟用 AI 修圖）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_set_was_created_from": {
+      "zh": "這一組是用舊版分析產生的，無法以它繼續美化。請在「美化紀錄」切回最新一組後再美化。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_usually_happens_when_the": {
+      "zh": "這通常是因為照片中包含平台內容政策不允許編輯的元素（例如可辨識的受著作權保護角色/商標，或其他敏感內容），",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_version_follows_my_requests": {
+      "zh": "這個版本依照你的個人化需求修圖，可以在這裡修改需求、調整風格或設定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_version_follows_my_requests_2": {
+      "zh": "這個版本依照你的個人化需求修圖，可以在這裡修改需求或調整設定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_version_was_retouched_based": {
+      "zh": "這個版本只依照個人化需求修圖，沒有分析整張照片，所以沒有 AI 的修圖建議。可以直接在下方修改個人化需求；想要 AI 給建議的話，請按「美化」左邊的「幫我分析」。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_this_versions_result_is_no": {
+      "zh": "這一版的結果已經無法取得。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_to_improve": {
+      "zh": "優先改善",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_to_start_from_another_photo": {
+      "zh": "要換底的話，可以從下方挑一張，或直接點美化紀錄裡的照片，底會跟著換。按「返回」就不調整了，還沒美化的調整會清掉。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_total": {
+      "zh": "合計",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_total_2": {
+      "zh": "總金額",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_true_to_life": {
+      "zh": "保留真實",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_try_a_different_shot_to": {
+      "zh": "換一種拍法，重新詮釋照片氛圍",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_turn_off_body_shape": {
+      "zh": "關閉身形調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_turn_on_body_shape": {
+      "zh": "開啟身形調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_turned_off_in_portrait_fix": {
+      "zh": "已於人像修正設定關閉",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_turned_on_manually": {
+      "zh": "已手動開啟",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_two_stage_retouch": {
+      "zh": "兩階段美化",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_unchecked_its_a_full_retouch": {
+      "zh": "沒勾的話會整體美化：先分析整張照片，再依照分析結果和你的需求一起修圖。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_unchecked_its_a_full_retouch_2": {
+      "zh": "沒勾的話會整體美化：照你的需求修改，光線、人像、構圖也一起調整。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_undecided": {
+      "zh": "未定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_understanding_the_photo": {
+      "zh": "理解照片",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_understated": {
+      "zh": "克制",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_unread": {
+      "zh": "未讀",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_update_available": {
+      "zh": "可更新",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_updated_individual_settings_to_match": {
+      "zh": "已配合 {poseLabel} 調整個人設定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_uploaded": {
+      "zh": "上傳時間",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_use_selected_photos": {
+      "zh": "使用所選照片 ({count})",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_user_goal": {
+      "zh": "使用者目標：{user_intent_summary}。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_user_goal_2": {
+      "zh": "使用者目標：{v1}。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_using_local_processing_ai_image": {
+      "zh": "目前使用本機處理，未執行 AI 影像生成。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_version": {
+      "zh": "第 {versionNumber} 版",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_version_2": {
+      "zh": "第 {versionNumber} 版，{v2}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_version_is_ready": {
+      "zh": "第 {n} 版完成",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_version_ready_adjusted_from_version": {
+      "zh": "第 {n} 版完成・由第 {m} 版調整",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_versions": {
+      "zh": "共 {versionTotal} 版",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_view_chat": {
+      "zh": "查看對話",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_view_history": {
+      "zh": "{user}｜查看處理紀錄",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_view_history_2": {
+      "zh": "查看處理紀錄",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_view_or_change_the_analysis": {
+      "zh": "查看或調整這張照片使用的分析模型、美化引擎與輸出選項。分析模型變更後會重新分析，長寬比變更後會重新構圖；其他設定會套用於下一次美化。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_view_output": {
+      "zh": "查看輸出結果",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_view_the_report_screenshot": {
+      "zh": "查看回報截圖",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_waiting_for_analysis": {
+      "zh": "等待分析結果",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_wallpaper": {
+      "zh": "桌布",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_what_to_preserve": {
+      "zh": "保留原則",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_when_off_skips_the_step": {
+      "zh": "關閉後跳過 Step 6 品質檢查，加快測試迭代速度。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_when_off_this_is_locked": {
+      "zh": "關閉後將鎖定所有人此項，需回到這裡重新開啟才能個別調整。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_when_off_uses_local_image": {
+      "zh": "關閉後只做本機影像處理，可降低成本並避免生成模型改動內容。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_when_on_any_gaze_or": {
+      "zh": "開啟後，若有眼神或閉眼修正，會在主要美化完成後再執行一次獨立的眼部修正；關閉時只執行一次主要美化。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_when_on_tapping_analyze_one": {
+      "zh": "開啟後，按下「分析」「一鍵美化」「美化」時會先跳出預計花費供確認；關閉則直接送出，不再顯示相關內容。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_why_this_ratio": {
+      "zh": "比例理由",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_write_what_youd_like_to": {
+      "zh": "先寫下想調整的地方，或挑一個風格。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_writing_up_the_notes_on": {
+      "zh": "正在整理這版的修圖說明…",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_x_y_w_h": {
+      "zh": "　x {v1} · y {v2} · w {v3} · h {v4}",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_you_can_also_drop_a": {
+      "zh": "也可拖曳結果資料夾（原圖 + run_N/result.json）重跑",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_you_havent_made_any_changes": {
+      "zh": "你沒有做任何修改，確定要再執行一次美化嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_your_style_settings": {
+      "zh": "使用者風格設定：{styleOptionsText}",
+      "where": [
+        "panel"
+      ]
+    }
+  },
+  "manual": {
+    "{a}{b}": [
+      "backend text"
+    ],
+    "{label}（{note}）": [
+      "panel"
+    ],
+    "{label}：": [
+      "chat"
+    ],
+    "{label}：{text}。": [
+      "panel"
+    ],
+    "{label}：{v2}": [
+      "chat"
+    ],
+    "{name}（{where}）": [
+      "chat"
+    ],
+    "{summary}。": [
+      "panel",
+      "chat"
+    ],
+    "{v1}。": [
+      "panel"
+    ],
+    "{v1}，{text}": [
+      "chat"
+    ],
+    "{v1}：": [
+      "chat"
+    ],
+    "{v1}：{v2}": [
+      "panel"
+    ],
+    "{v1}：{v2}（{reason}）": [
+      "chat"
+    ],
+    "{what}：{ratio}": [
+      "panel"
+    ],
+    "、": [
+      "panel",
+      "chat",
+      "backend text"
+    ],
+    "。": [
+      "panel",
+      "chat"
+    ],
+    "。@@句尾": [
+      "panel"
+    ],
+    "「{v1}」": [
+      "chat"
+    ],
+    "（": [
+      "panel"
+    ],
+    "（{level}）": [
+      "panel"
+    ],
+    "（{reason}）": [
+      "panel"
+    ],
+    "）": [
+      "panel"
+    ],
+    "，": [
+      "panel"
+    ],
+    "：": [
+      "panel",
+      "chat"
+    ],
+    "；": [
+      "chat",
+      "backend text"
+    ]
+  }
+}
