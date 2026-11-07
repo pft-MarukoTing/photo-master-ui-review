@@ -980,6 +980,9 @@
         const group = picker?.closest(".option-pill-group");
         if (group) group.style.display = isDebug ? "" : "none";
       });
+    // Row 1's tracks are laid out for the engine pickers too; without them
+    // its two remaining pills get their own centred two-column grid.
+    document.querySelector(".upload-inline-settings-row-1")?.classList.toggle("is-engines-hidden", !isDebug);
     // The upload row's compact layout depends on which groups are shown.
     refreshCompactUploadSelectors?.();
     if (els.apAnalysisModelSelect) els.apAnalysisModelSelect.disabled = !isDebug;

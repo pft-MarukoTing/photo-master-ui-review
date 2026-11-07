@@ -1477,6 +1477,13 @@ body[data-theme-mode="light"] .upload-main-col {
     width: 100%;
     gap: 7px;
   }
+  /* Outside debug mode the engine pickers are hidden (applyDebugUiVisibility),
+     leaving 長寬比 and 輸出尺寸: two equal centred tracks about as wide as the
+     人像設定 + Run row below, instead of the left two of three columns. */
+  .upload-main-col .upload-inline-settings-row-1.is-engines-hidden {
+    grid-template-columns: repeat(2, minmax(145px, 175px));
+    justify-content: center;
+  }
   .upload-main-col .upload-inline-settings-row-1 > .option-pill-group,
   .upload-main-col .upload-inline-settings-row-1 > .option-pill-group > .ap-style-item {
     width: 100%;
