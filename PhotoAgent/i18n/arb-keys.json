@@ -762,6 +762,12 @@
         "backend text"
       ]
     },
+    "backend_set_the_output_size_to": {
+      "zh": "輸出尺寸換成「{scale}」",
+      "where": [
+        "backend text"
+      ]
+    },
     "backend_side": {
       "zh": "側拍",
       "where": [

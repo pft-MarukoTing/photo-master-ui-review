@@ -257,6 +257,7 @@ TEXT = {
     "要照這樣把這幾張再美化一次嗎？": "Want me to retouch these again with this?",
     "要不要照這樣再美化一次？": "Want me to retouch them again with this?",
     "長寬比換成「{ratio}」": "set the aspect ratio to “{ratio}”",
+    "輸出尺寸換成「{scale}」": "set the output size to “{scale}”",
     "打開「{name}」": "turned on “{name}”",
     "關掉「{name}」": "turned off “{name}”",
     "好，{said}了，在「設定」裡隨時可以改。": "OK, I've {said}. You can change this anytime in “Settings”.",

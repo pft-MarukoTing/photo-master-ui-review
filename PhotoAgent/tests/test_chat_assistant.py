@@ -527,6 +527,14 @@ class AskTest(unittest.TestCase):
         history[-1]["text"] = "柔光、維持原比例吧"
         self.assertTrue(ask(model_says(patch=patch), history=history)["proposal"]["direct"])
 
+    # 輸出尺寸跟長寬比一樣：看得到現在是哪一個，也改得了。
+    def test_the_output_size_is_seen_and_changed_like_the_aspect_ratio(self):
+        model = model_says(patch={"output_scale": "1K"})
+        result = ask(model, history=[{"role": "user", "text": "輸出改成 1K", "card": {"type": "ask", "photo_id": "p1"}}])
+        self.assertIn('"output_scale":"2K"', model.seen[0])
+        changes = {c["field"]: (c["before"], c["after"]) for c in result["proposal"]["changes"]}
+        self.assertEqual(changes["output_scale"], ("2K", "1K"))
+
     def test_undo_puts_the_plan_back(self):
         plan = default_plan()
         plan["style_options"] = {"lighting": "gold"}
@@ -731,6 +739,22 @@ class ReviewLineTest(unittest.TestCase):
         self.assertIsNone(self.look({"reply": "", "options": ["a"], "lines": True})[0])
         with self.assertRaises(TimeoutError):
             self.look({"reply": "x", "options": [], "lines": False}, deadline=0)
+
+    # 上傳頁說的輸出尺寸跟比例一樣直接改「設定」：只講這個的不進清單，還有別的就照收。
+    def test_an_output_size_on_the_upload_page_changes_the_setting(self):
+        seen = []
+        result = chat_assistant.review_line("輸出 2K", "", model=lambda c: seen.append(c) or {
+            "verdict": "setting", "reply": "", "line": "", "options": [], "output_scale": "2K"})
+        self.assertIn("SCALES:", seen[0])
+        self.assertEqual((result["kept"], result["output_scale"], result["line"]), (False, "2K", ""))
+        self.assertIn("輸出尺寸換成「2K」", result["reply"])
+        result = chat_assistant.review_line("輸出 2K，天空藍一點", "", model=lambda c: {
+            "verdict": "keep", "reply": "", "line": "天空藍一點", "options": [], "output_scale": "2K"})
+        self.assertEqual((result["kept"], result["output_scale"], result["line"]), (True, "2K", "天空藍一點"))
+        # 不在選項裡的值不算。
+        result = chat_assistant.review_line("輸出 8K", "", model=lambda c: {
+            "verdict": "setting", "reply": "", "line": "", "options": [], "output_scale": "8K"})
+        self.assertEqual(result["output_scale"], "")
 
     # 比例和開關沿用那一版：講到的話當一般需求收下，不改設定。
     def test_a_continuation_keeps_a_ratio_as_a_wish(self):

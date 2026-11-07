@@ -2217,6 +2217,9 @@ def prompt_review():
         # so the analysis plans for that shape instead of picking its own --
         # also when that was all it said and nothing went into the list.
         out["aspect_ratio"] = answer["aspect_ratio"]
+    if answer.get("output_scale") in chat_assistant.REVIEW_SCALES:
+        # 「輸出 2K」: the page's 輸出尺寸, not a line in the list.
+        out["output_scale"] = answer["output_scale"]
     switches = {k: v for k, v in (answer.get("advanced_options") or {}).items()
                 if k in chat_assistant.REVIEW_SWITCHES and isinstance(v, bool)}
     if switches:

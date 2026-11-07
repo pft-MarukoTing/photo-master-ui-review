@@ -49,7 +49,7 @@ HISTORY_LEN = 20
 # run count, prompt overwrite, Body Reshape) stays in the panel; chat renders
 # one image per round. preset is not
 # adjustable at all, so the model never sees it and a patch for it is dropped.
-PATCHABLE_KEYS = ("aspect_ratio", "user_prompt", "literal_texts", "style_options",
+PATCHABLE_KEYS = ("aspect_ratio", "output_scale", "user_prompt", "literal_texts", "style_options",
                   "advanced_options", "recipe_checked", "face_issue_overrides", "face_requests")
 # The per-person facial request the editor renders as that person's own final state.
 FACE_SYMMETRY_LABEL = "臉部左右平衡"
@@ -104,7 +104,7 @@ How this tool works. These are the only facts you may state about the tool; if a
 - This is an AI photo retouching tool. On the upload page the user picks a photo (「自行上傳照片」 or 「從範例照片挑選」), can type what they want changed, and then starts with 「分析」 or 「一鍵美化」.
 - 「分析」: the AI looks the photo over first, finds the people in it and what could be improved, and lays out suggestions for the user to look over: what to fix on each person (人像), suggestions for the picture as a whole such as light, colour and framing (畫面), and 風格 choices. The user can switch items on or off and type more wishes, then press 「美化」. 分析 itself does not change the photo. Put it in plain words, e.g. 「分析會先看過這張照片，找出照片裡的人和可以修的地方，整理成建議給你參考」 -- never 「修圖打算」, which Taiwanese users do not say (「修圖計畫」 is fine), and never 「讓你挑」「讓你挑選」, which sound odd here -- say 「給你參考」, or 「你看過、決定要留哪些再美化」.
 - 「一鍵美化」: analyzes and retouches in one go, using the AI's own suggestions plus the user's 個人化需求, with no step in between. The result can still be changed afterwards.
-- 「設定」 (on the upload page and in the session): 美化引擎 is the AI model and quality used to retouch (higher quality is usually finer but takes longer); 長寬比 is the output shape (「AI 建議」 lets the AI choose, 「原圖比例」 keeps the photo's own shape, and fixed ones like 「4:5（IG 貼文）」 or 「9:16（限動）」 fit a given use); 人像修正 (閉眼修正、視線修正、髮絲整理、笑容調整) is on by default -- switch off any the user does not want touched. Some setups also offer 分析引擎, the model that analyzes the photo.
+- 「設定」 (on the upload page and in the session): 美化引擎 is the AI model and quality used to retouch (higher quality is usually finer but takes longer); 長寬比 is the output shape (「AI 建議」 lets the AI choose, 「原圖比例」 keeps the photo's own shape, and fixed ones like 「4:5（IG 貼文）」 or 「9:16（限動）」 fit a given use); 輸出尺寸 is the size of the finished image (OUTPUT SIZES below); 人像修正 (閉眼修正、視線修正、髮絲整理、笑容調整) is on by default -- switch off any the user does not want touched. Some setups also offer 分析引擎, the model that analyzes the photo.
 - 個人化需求: the user's own wishes in their own words -- change the background or clothes, add or remove something, tidy the scene, a pose, an expression. They are the editor's top goal when retouching. On the upload page each line typed goes into the 個人化需求 list above the start buttons, where it can be edited, or all cleared with 「清除所有需求」. When there are several people, tapping a person's 頭像 under the chat box before typing says who the wish is for; tapping several 頭像 aims the same wish at all of them, and tapping one again takes it back out.
 - 人像 panel (after 分析): per person, 閉眼 (open eyes that are shut), 視線 (look into the lens), 髮絲 (保留髮絲動態 or 梳整俐落), 笑容 (不笑、微笑、開朗笑、大笑; switched on at 微笑 for people who are not smiling, off for people already smiling). A dot marks what the analysis suggests fixing.
 - 畫面 panel: the retouch items the analysis came up with for the picture as a whole (light, colour, framing...); checked ones are applied. In a sentence call it 「畫面」 when quoting the button and 「畫面建議」 otherwise -- a bare 「看畫面」 reads as "look at the photo".
@@ -115,6 +115,21 @@ How this tool works. These are the only facts you may state about the tool; if a
 """
 
 
+def _output_sizes_guide():
+    """OUTPUT SIZES for TOOL GUIDE, from the same table the 輸出尺寸 picker shows."""
+    rows = []
+    for c in capabilities.describe(debug=False)["render"]["output_scales"]:
+        sizes = "、".join(f"{r} {wh.replace('x', '×')}" for r, wh in c["sizes"].items())
+        rows.append(f"- 「{c['value']}」: 約 {round(c['megapixels'] * 100)} 萬像素 ({sizes})")
+    return ("OUTPUT SIZES\n" + "\n".join(rows) + "\n"
+            "Asked what the output size is (「目前輸出尺寸是多少？」), answer with the size and its pixels only, nothing about "
+            "what it is good for or how it looks: 「目前輸出尺寸是「2K」，約 350 萬像素。」. When PLAN.aspect_ratio is one of the "
+            "ratios above, add that ratio's width × height: 「目前輸出尺寸是「1K」，約 160 萬像素（3:2 是 1536×1024）。」.\n")
+
+
+TOOL_GUIDE += _output_sizes_guide()
+
+
 
 # 分析引擎、美化引擎只在 debug UI 給選（frontend-chat settings.tsx enginesVisible）：
 # 一般使用者看不到，助理就不提、也不叫人去「設定」裡找。
@@ -122,7 +137,7 @@ ENGINE_TEXT_RELEASE = (
     ("美化引擎 is the AI model and quality used to retouch (higher quality is usually finer but takes longer); ", ""),
     (" Some setups also offer 分析引擎, the model that analyzes the photo.",
      " The AI models used to analyze and retouch are fixed and cannot be changed."),
-    ("「設定」 (美化引擎、長寬比、人像修正)", "「設定」 (長寬比、人像修正)"),
+    ("「設定」 (美化引擎、長寬比、輸出尺寸、人像修正)", "「設定」 (長寬比、輸出尺寸、人像修正)"),
     ("「我要換美化引擎」「開啟設定」", "「我要改長寬比」「開啟設定」"),
     ("「美化引擎在「設定」裡，打開在下面了。」", "「長寬比在「設定」裡，打開在下面了。」"),
     ("美化引擎 and the number of images are changed only in 「設定」", "The number of images is changed only in 「設定」"),
@@ -148,7 +163,7 @@ SCOPE
 - You only handle this photo: what the analysis says about it, what the plan will do, and what this tool can change. That is the whole job.
 - Ground visual answers in ANALYSIS. Something omitted from an analysis is not proof that it is absent from the photo. Distinguish what is visibly depicted from hidden properties that appearance cannot establish; do not infer those properties from an object's name or appearance. When evidence is insufficient, state the limit briefly rather than guessing or claiming a definitive absence.
 - Questions about how this tool works -- what a button, panel, setting or step does, what it can or cannot change, what to do next (「分析在做什麼？」「一鍵美化是什麼意思？」「再美化跟看美化項目差在哪？」) -- are in scope. Answer from TOOL GUIDE in one to three short sentences, then point at SCREEN (see NEVER A DEAD END) as a question offering it (「要不要…？」), not as an instruction to press it.
-- When the user wants to see or change a panel rather than learn what it is -- 「設定」 (美化引擎、長寬比、人像修正), 人像, 畫面, 風格 or 個人化需求 (「我要換美化引擎」「開啟設定」「幫我打開風格」) -- set open to that panel: the page opens it right under your reply, so there is nothing to press. Say in one short line where it is, e.g. 「美化引擎在「設定」裡，打開在下面了。」 Action "none", patch_json "", options []. Open only a panel SCREEN panels lists -- after a render that includes the ones folded into 「看美化項目」, and the page opens the round for it; a panel not listed is not on this photo or cannot change this version, so answer instead. A change you can make in PATCH (a 長寬比, a 風格 choice) goes in patch_json instead, and a question about what a panel does gets an answer with open "".
+- When the user wants to see or change a panel rather than learn what it is -- 「設定」 (美化引擎、長寬比、輸出尺寸、人像修正), 人像, 畫面, 風格 or 個人化需求 (「我要換美化引擎」「開啟設定」「幫我打開風格」) -- set open to that panel: the page opens it right under your reply, so there is nothing to press. Say in one short line where it is, e.g. 「美化引擎在「設定」裡，打開在下面了。」 Action "none", patch_json "", options []. Open only a panel SCREEN panels lists -- after a render that includes the ones folded into 「看美化項目」, and the page opens the round for it; a panel not listed is not on this photo or cannot change this version, so answer instead. A change you can make in PATCH (a 長寬比, a 風格 choice) goes in patch_json instead, and a question about what a panel does gets an answer with open "".
 - Before declining, ask yourself one thing: is this message about this photo? It is when it concerns what the photo shows, what it could be made into or used for (a poster, a magazine cover, an ad, a post), or words to go with it (a title, a headline, a caption, ad copy). Such a request is in scope even if the conversation never mentioned it, and even if it would be out of scope without the photo (「如果要做成海報，有什麼適合的標題？」「這張適合配什麼文案？」). Read it together with CONVERSATION and PLAN too: a short follow-up (「還有別的嗎？」「再給幾個」) continues what the user is making with this photo.
 - When they ask for words for the photo, give two or three short lines that fit what the photo shows and the look being made, as options with "lines" true. The page lays them out as a list to pick from, with a last row for writing their own, so the reply does not repeat the lines: it says they are below and asks which one to put on the photo, e.g. 「幫你想了幾句，想放哪一句到照片上？也可以自己寫一句。」. When they pick one, or write one of their own in reply, propose adding it to user_prompt (「海報標題放上「…」」). When they ask to make the photo into something (「做成海報」「做成雜誌封面」), propose it in user_prompt like any other wish.
 - Asking to add a title, headline, caption or copy without giving the words (「做成海報，加上標題」「配一句文案」「下面放個標語」) leaves the words to you: they are words for the photo, so offer the lines as above instead of asking the user to supply them -- a question about which words, with no lines under it, is a dead end. Do not propose yet: once they pick a line or write their own, propose the whole wish together (「做成海報，標題放上「…」」).
@@ -212,6 +227,7 @@ Decide in this order:
 PATCH
 patch_json is either "" or a JSON object string containing only changed keys:
 - "aspect_ratio": one of the listed values.
+- "output_scale": one of the listed values -- the size of the finished image. Change it only when the user asks for a bigger or smaller image or a higher or lower resolution (「輸出 2K」「解析度高一點」「檔案小一點」). A size the user names outright (「輸出改成 2K」「用 1K 就好」) is complete: put it in patch_json right away -- never ask whether they are sure, and never ask which size when they named one.
 - "style_options": {"<group>": "<choice>"}; "default" clears a group.
 - "advanced_options": {"<key>": true|false}; switches a portrait fix on/off for everyone.
 - "face_issue_overrides": {"<subject_index>:<category>": false | {"allowed": true} | {"allowed": true, "level": "<level>"} | null}. false means do not fix this person; {"allowed": true} means fix; null returns to the AI's own call. Copy the keys exactly from FACES. The category is one of the English category names in FACES. A request about someone's eyes (「眼睛」) changes both that person's blink_issue and gaze_issue keys.
@@ -1424,6 +1440,8 @@ def _panel_to_open(label, status, analysis, screen):
 # 每一句才能單獨讀、單獨刪。補出來的句子開頭若帶著人物，人物拆開回給頁面掛。
 # 上傳頁「設定」裡的長寬比選項：說出比例的需求會直接改這個設定。
 REVIEW_RATIOS = {c.value: c.label for c in capabilities.ASPECT_RATIOS if not c.hidden and not c.debug_only}
+# 上傳頁「設定」裡的輸出尺寸：說要大一點、解析度高一點的直接改這個設定。
+REVIEW_SCALES = {c.value: c.label for c in capabilities.OUTPUT_SCALES if not c.hidden and not c.debug_only}
 # 「設定」裡的人像修正開關：只講開或關的需求（「不要動閉眼」）直接撥開關，不進清單。
 REVIEW_SWITCHES = {o.key: o.label for o in capabilities.ADVANCED_OPTIONS
                    if not o.internal and not o.debug_only and not o.choices}
@@ -1435,7 +1453,7 @@ REVIEW_SCHEMA = {
     "schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["verdict", "reply", "line", "options", "later", "aspect_ratio", "advanced_options", "asked_ratio", "merged", "withdraw", "semantics", "question_kind", "answer_mode", "missing_information", "text_transformations"],
+        "required": ["verdict", "reply", "line", "options", "later", "aspect_ratio", "output_scale", "advanced_options", "asked_ratio", "merged", "withdraw", "semantics", "question_kind", "answer_mode", "missing_information", "text_transformations"],
         "properties": {
             "text_transformations": text_transform.SCHEMA,
             "missing_information": {"type": "string"},
@@ -1446,6 +1464,7 @@ REVIEW_SCHEMA = {
             "options": {"type": "array", "items": {"type": "string"}},
             "later": {"type": "boolean"},
             "aspect_ratio": {"type": "string", "enum": ["", *REVIEW_RATIOS]},
+            "output_scale": {"type": "string", "enum": ["", *REVIEW_SCALES]},
             "advanced_options": {"type": "array", "items": {
                 "type": "object", "additionalProperties": False, "required": ["key", "on"],
                 "properties": {"key": {"type": "string", "enum": list(REVIEW_SWITCHES)}, "on": {"type": "boolean"}}}},
@@ -1489,7 +1508,7 @@ photo has zero or one person. Do not invent an owner for unrelated or unclear in
 VERDICT
 - Resolve who is responsible for a missing choice before treating it as missing information. When the user asks you to suggest, generate, recommend or choose content, the unspecified content is delegated to you; do not ask the user to supply that same content. This applies to words, scene ideas, colours, styles and other supported creative choices. A request to propose alternatives is not permission to apply one. If suggestions depend on seeing the photo, offer analysis and set later=true. Still clarify genuinely necessary constraints or targets the user has not delegated. A request to apply the user's own exact content without providing it needs clarification instead.
 - "keep" -- the line asks for something to be done to this photo: a person's hair, eyes, gaze, expression, skin, body, pose, clothing or accessories; the background, the scene, the lighting, the colour, the crop or the style. Taking things out of the scene, tidying it up or putting something into it is a wish about the photo like any other (「把桌上的垃圾都移掉」、「去掉背景的電線」、「幫我加個背景」) -- it reads like an errand in the real world, but it is an edit to this image. When part of NEW LINE is something 「設定」 does by itself (THE SETTINGS FIELDS), that part goes to the settings fields and "line" is only the rest (「做成限動，天空藍一點」 -> "line" 「天空藍一點」, "aspect_ratio" "9:16"). Keep it even if it repeats a wish already in LINES SO FAR for a different person, or changes one the user wrote earlier: a later wish wins, and THE "merged" FIELD takes the earlier one out. When you are unsure, keep.
-- "setting" -- everything NEW LINE asks for is something 「設定」 does by itself: a frame shape in RATIOS, or turning one of SWITCHES on or off (THE SETTINGS FIELDS) -- 「做成限動」、「裁成 4:5」、「閉眼不用修」、「表情不要動」、「幫大家看鏡頭」. The page changes 「設定」 and nothing goes into the list. "line" is "".
+- "setting" -- everything NEW LINE asks for is something 「設定」 does by itself: a frame shape in RATIOS, an output size in SCALES, or turning one of SWITCHES on or off (THE SETTINGS FIELDS) -- 「做成限動」、「裁成 4:5」、「輸出 2K」、「閉眼不用修」、「表情不要動」、「幫大家看鏡頭」. The page changes 「設定」 and nothing goes into the list. "line" is "".
 - "clarify" -- the wish is about this photo, but the user's own words leave out something only they can say. Only two cases:
   (a) Who. PEOPLE IN PHOTO has more than one person, the line did not start with a person, and the line is about one person but the words cannot tell which: 「他」、「她」、「這個人」, or 「另一位」、「旁邊那個」 when there are three people or more. Words that describe the person (「男孩」、「媽媽」、「戴眼鏡的」、「左邊的」) say who -- the editor matches them to a face later, so they are never this case. Neither is a line that names nobody and carries on from the wish just before it (「眼睛也要張開」、「還有頭髮弄蓬」 right after 「把男孩的帽子拿掉」): it is the same person -- keep it and write the person into "line". A wish for everyone (「大家都要笑」) or about the scene is not this case either.
   (b) What. The line asks to change something into something else and says nothing at all about what it should become (「換個背景」、「頭髮換顏色」、「衣服換一件」). If the line says anything about the result -- a colour, a material, a style, a place, even one word (「換成白底」、「換成海邊」、「換深色的」) -- it is complete: keep it. Amounts and strength are never this case (「皮膚白一點」、「瘦一點」 are complete) -- the editor picks those.
@@ -1530,8 +1549,9 @@ THE "later" FIELD
 This records an outstanding question or requested recommendation that needs the photo's analysis, independently of the verdict or which start button is listed first. Set later=true whenever this reply leaves NEW LINE to be answered after analysis or retouching, including an answer or clarification that offers that route. If you promise a response after analysis, later must be true; do not make that promise with later=false. For a delegated suggestion, offer to analyze instead of asking the user to invent the answer themselves. Word the promise so it holds for either start: analysis or retouching. Set later=false when this turn is only a start command, an executable edit, a withdrawal, a tool explanation already answered, or a clarification requiring only the user's own information. Do not infer a pending answer merely from an invitation to analyze.
 
 THE SETTINGS FIELDS
-「設定」 has the 長寬比 (RATIOS lists its values) and the SWITCHES, set for every person in the photo before anything starts. When the verdict is "keep" or "setting", they carry what NEW LINE asks of them; every other verdict: "aspect_ratio" "", "advanced_options" [].
+「設定」 has the 長寬比 (RATIOS lists its values), the 輸出尺寸 (SCALES lists its values) and the SWITCHES, set for every person in the photo before anything starts. When the verdict is "keep" or "setting", they carry what NEW LINE asks of them; every other verdict: "aspect_ratio" "", "output_scale" "", "advanced_options" [].
 - "aspect_ratio": when NEW LINE plainly asks for a frame shape, the value that matches, so the setting follows the wish instead of contradicting it: an exact ratio (「9:16」、「裁成 4:5」), or a use that has one shape -- 限動、直式短影音 "9:16"; IG 貼文 "4:5"; 方形、大頭貼 "1:1"; 桌布、寬螢幕、橫式影片 "16:9"; 「不要裁」、「保持原本的比例」 "original". Only when the shape is plain from the words: a framing wish that names no shape (「裁掉旁邊的雜物」、「構圖好看一點」、「拉近一點」、「做成海報」) is "" and stays a wish in words. A shape RATIOS does not have (「21:9」、「5:7」) is "" too: never swap in a near one the user did not ask for -- put it in "asked_ratio" instead, written as width:height (「21比9」 -> "21:9"), the verdict is "keep", and the page asks the user about it. "asked_ratio" is "" in every other case.
+- "output_scale": when NEW LINE plainly asks for the size of the finished image, the value that matches: a size SCALES names (「輸出 2K」、「用 1K 就好」), bigger or higher resolution (「解析度高一點」、「要大圖」、「要印出來用」) "2K", smaller (「檔案小一點」、「小圖就好」) "1K". Sharpness or detail inside the picture (「清楚一點」、「畫質好一點」、「去雜訊」) is a wish about the photo, not a size: "" and it stays a wish in words. "" in every other case.
 - "advanced_options": each switch NEW LINE turns on or off, as {"key", "on"}. On: the user wants that fix done (閉眼修正 -- eyes open, no closed eyes; 視線修正 -- looking at the camera; 髮絲整理 -- stray hair tidied; 笑容調整 -- smiles adjusted). Off: the user wants it left alone (「閉眼不用修」、「頭髮不要動」、「表情維持原樣」、「笑容不要改」). Only when on or off says all of it: a switch is the same for everyone, so a wish about some of the people (it starts with 「照片中從左邊數來第 N 位」 tags, or names who: 「左邊男生眼睛張開」) stays a wish in words; so does a wish with a direction or an amount the switch cannot hold (「笑開一點」、「不要笑」、「頭髮梳整齊往後」、「眼睛睜大」). 身形 has no switch: always words.
 - When a setting is all NEW LINE asks for, the verdict is "setting"; when NEW LINE asks for more, it is "keep" and "line" is the rest. The page tells the user about the settings itself.
 OPTIONS
@@ -1555,22 +1575,23 @@ REPLY
 """
 
 
-def _settings_said(ratio, switches=None):
+def _settings_said(ratio, switches=None, scale=""):
     """What a line changed in 「設定」, in the words the panel uses: 「長寬比換成「9:16（限動）」、關掉「閉眼修正」」."""
     parts = [i18n.tr("長寬比換成「{ratio}」", ratio=i18n.tr(REVIEW_RATIOS[ratio]))] if ratio else []
+    parts += [i18n.tr("輸出尺寸換成「{scale}」", scale=i18n.tr(REVIEW_SCALES[scale]))] if scale else []
     parts += [i18n.tr("打開「{name}」" if on else "關掉「{name}」", name=i18n.tr(REVIEW_SWITCHES[k]))
               for k, on in (switches or {}).items()]
     return i18n.join(parts)
 
 
-def _settings_reply(ratio, switches=None):
+def _settings_reply(ratio, switches=None, scale=""):
     """The reply to a line that only changed 「設定」: nothing went into the list."""
-    return i18n.tr("好，{said}了，在「設定」裡隨時可以改。", said=_settings_said(ratio, switches))
+    return i18n.tr("好，{said}了，在「設定」裡隨時可以改。", said=_settings_said(ratio, switches, scale))
 
 
-def _settings_note(ratio, switches=None):
+def _settings_note(ratio, switches=None, scale=""):
     """Said after a kept line that also changed 「設定」."""
-    said = _settings_said(ratio, switches)
+    said = _settings_said(ratio, switches, scale)
     return i18n.tr("另外{said}了，在「設定」裡隨時可以改。", said=said) if said else ""
 
 
@@ -2251,6 +2272,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         REVIEW_INSTRUCTION,
         _engine_text(TOOL_GUIDE, debug),
         "RATIOS:\n" + "\n".join(f"{v}: {label}" for v, label in REVIEW_RATIOS.items()),
+        "SCALES:\n" + "\n".join(f"{v}: {label}" for v, label in REVIEW_SCALES.items()),
         "SWITCHES:\n" + "\n".join(f"{k}: {label}" for k, label in REVIEW_SWITCHES.items()),
         REVIEW_SEMANTIC_CONTRACT,
         LITERAL_CHOICE_INSTRUCTION,
@@ -2493,11 +2515,12 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     setting = verdict == "setting" and not start and not ask
     changes = verdict in ("keep", "setting") and not start and not ask and not continuation
     ratio = result.get("aspect_ratio") if changes and result.get("aspect_ratio") in REVIEW_RATIOS else ""
+    scale = result.get("output_scale") if changes and result.get("output_scale") in REVIEW_SCALES else ""
     switches = {}
     for o in (result.get("advanced_options") if changes and isinstance(result.get("advanced_options"), list) else []):
         if isinstance(o, dict) and o.get("key") in REVIEW_SWITCHES and isinstance(o.get("on"), bool):
             switches.setdefault(o["key"], o["on"])
-    if setting and not ratio and not switches:
+    if setting and not ratio and not scale and not switches:
         # Nothing the settings can take after all: when unsure, keep.
         setting, verdict = False, "keep"
     wish = result.get("line").strip() if isinstance(result.get("line"), str) else ""
@@ -2525,11 +2548,11 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     if withdrawn and not reply:
         reply = i18n.tr(WITHDRAWN_REPLY)
     if setting:
-        reply = _cat(_settings_reply(ratio, switches), _kept_next(batch, continuation))
+        reply = _cat(_settings_reply(ratio, switches, scale), _kept_next(batch, continuation))
     elif kept and "？" not in reply and "?" not in reply:
-        reply = _cat(reply or i18n.tr(KEPT_REPLY), replaced, _settings_note(ratio, switches), _kept_next(batch, continuation))
-    elif ratio or switches or replaced:
-        reply = _cat(replaced, _settings_note(ratio, switches), reply)
+        reply = _cat(reply or i18n.tr(KEPT_REPLY), replaced, _settings_note(ratio, switches, scale), _kept_next(batch, continuation))
+    elif ratio or scale or switches or replaced:
+        reply = _cat(replaced, _settings_note(ratio, switches, scale), reply)
     if switch == "original" and not ask:
         reply = i18n.tr(CONTINUE_ORIGINAL_REPLY)
     elif switch and not ask:
@@ -2558,6 +2581,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         "persons": persons if wish else [],
         "options": [labels.get(o) or i18n.label(o) for o in options] if ask or offer else [],
         "aspect_ratio": ratio,
+        "output_scale": scale,
         "advanced_options": switches,
         "merged": merged,
         "withdrawn": withdrawn,

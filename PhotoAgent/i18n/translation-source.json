@@ -8324,6 +8324,12 @@
         "backend text"
       ]
     },
+    "輸出尺寸換成「{scale}」": {
+      "en": "set the output size to “{scale}”",
+      "where": [
+        "backend text"
+      ]
+    },
     "輸出尺寸改成 {v1}": {
       "en": "output size set to {v1}",
       "where": [

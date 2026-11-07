@@ -230,11 +230,12 @@ function conversation(ns: Note[], events: PreviewReplyEvent[] = []): Turn[] {
   return chronological.sort((a, b) => a.order - b.order || a.index - b.index).map(x => x.turn);
 }
 
-// 上傳頁／總覽打的一句裡，設定做得到的部分（長寬比、人像修正開關）。
-function withReviewSettings(s: Settings, r: { aspect_ratio?: string; advanced_options?: { [key: string]: boolean } }): Settings {
+// 上傳頁／總覽打的一句裡，設定做得到的部分（長寬比、輸出尺寸、人像修正開關）。
+function withReviewSettings(s: Settings, r: { aspect_ratio?: string; output_scale?: string; advanced_options?: { [key: string]: boolean } }): Settings {
   return {
     ...s,
     ...(r.aspect_ratio ? { aspect_ratio: r.aspect_ratio } : {}),
+    ...(r.output_scale ? { output_scale: r.output_scale } : {}),
     ...(r.advanced_options ? { advanced_options: { ...s.advanced_options, ...r.advanced_options } } : {}),
   };
 }
@@ -2280,7 +2281,7 @@ export function App() {
       done({ kept: false, reply: r.reply || t("好，那就先不加這句。"), options: r.ask || r.offer ? r.options || [] : [], offer: !!r.offer });
     }
     // 說了比例、或開關人像修正的（「做成限動」「閉眼不用修」）改總覽的設定；只講這些的不進清單。
-    if (allSettings && (r.aspect_ratio || r.advanced_options))
+    if (allSettings && (r.aspect_ratio || r.output_scale || r.advanced_options))
       overviewSettings(withReviewSettings(allSettings, r));
     if (r.start) overviewStart(r.start);
   }
@@ -2679,7 +2680,7 @@ export function App() {
         });
       }
       // 「做成限動」「閉眼不用修」這種設定做得到的，同步改「設定」；只講這些的不進清單。
-      if (r.aspect_ratio || r.advanced_options) setSettings((s) => s && withReviewSettings(s, r));
+      if (r.aspect_ratio || r.output_scale || r.advanced_options) setSettings((s) => s && withReviewSettings(s, r));
       // 「幫我美化」「幫我分析」就是底下那兩顆鍵，照按：已經收下的需求一起帶進去。
       if (r.start) startSession(r.start, laterNote(base), [...base, settled]);
       return r.accepted ? [...base, settled] : null;
