@@ -1,5 +1,6 @@
 """Acceptance: every formal analyze gets Stage 2.0 only when the flag is on."""
 import copy
+import threading
 import unittest
 from unittest.mock import patch
 import image_tools
@@ -11,6 +12,8 @@ from tests.test_chat_subject_preview import image_bytes, context
 class AnalysisPreviewPreflight(unittest.TestCase):
     def setUp(self):
         self.data=image_bytes()
+        p=patch.object(pipeline,'run_call0',return_value=({'state':'unavailable'},None))
+        p.start();self.addCleanup(p.stop)
         # Post-analysis geometry and skills are independent of the preflight.
         p=patch.object(pipeline,'analyze_photo',return_value=({'subjects':[]},{}))
         self.enter=p.start();self.addCleanup(p.stop)
@@ -58,6 +61,8 @@ class InlineStage20Stories(unittest.TestCase):
         from pathlib import Path
         from photo_agent import ab_preview
         self.data=image_bytes()
+        p=patch.object(pipeline,'run_call0',return_value=({'state':'unavailable'},None))
+        p.start();self.addCleanup(p.stop)
         fixture=json.loads((Path(__file__).parent/'fixtures/ab_candidate_subject_selection.json').read_text())
         a={**fixture['a_crop'],'confidence':.9176,'bytes':b'crop'}
         b={**fixture['b_candidate'],'bytes':None}
@@ -167,3 +172,109 @@ class InlineStage20Stories(unittest.TestCase):
         detect=self.start(patch.object(image_tools,'detect_face_crops',return_value=[a]))
         self.analyze()
         detect.assert_called_once();self.detect.assert_not_called()
+
+
+class ParallelPreviewAndRoute(unittest.TestCase):
+    def setUp(self):
+        AnalysisPreviewPreflight.setUp(self)
+        self.enter.side_effect = None
+        self.router = self.enterContext(patch.object(pipeline, 'run_call0',
+            return_value=({'state': 'ready', 'main_category': 'portrait', 'photo_summary': 'A portrait', 'scene_category': 'indoor', 'scene_type': 'room'}, {'usage': {}})))
+        self.enterContext(patch.object(config, 'ENABLE_PHOTO_ROUTER', True))
+        self.enterContext(patch('requests.sessions.Session.request',
+            side_effect=AssertionError('Network forbidden in unit tests')))
+
+    # unittest.TestCase.enterContext is not available on Python 3.10.
+    def enterContext(self, manager):
+        value = manager.__enter__()
+        self.addCleanup(manager.__exit__, None, None, None)
+        return value
+
+    def test_overlap_preserves_language_and_joins_before_analysis(self):
+        rendezvous = threading.Barrier(2, timeout=3)
+        completed = set()
+        snapshot = context(self.data)
+        from photo_agent import i18n
+
+        def preview(*args):
+            rendezvous.wait()
+            completed.add('preview')
+            return snapshot, None
+
+        def route(*args):
+            self.assertEqual(i18n.current(), 'en')
+            rendezvous.wait()
+            completed.add('route')
+            return {'state': 'ready', 'main_category': 'portrait', 'photo_summary': 'A portrait', 'scene_category': 'indoor', 'scene_type': 'room'}, {'usage': {}}
+
+        def formal(*args, **kwargs):
+            self.assertEqual(completed, {'preview', 'route'})
+            self.assertIs(kwargs['precomputed_preview'], snapshot)
+            self.assertEqual(kwargs['photo_facts']['main_category'], 'portrait')
+            return {'subjects': []}, {}
+
+        self.router.side_effect = route
+        self.enter.side_effect = formal
+        with patch.object(pipeline, '_prepare_analysis_preview', side_effect=preview), i18n.use('en'):
+            result = pipeline.analyze_stage(self.data)
+        self.router.assert_called_once()
+        self.enter.assert_called_once()
+        self.assertGreaterEqual(result['timings']['Step 2.0 - photo_route'], 0)
+
+    def test_ready_snapshot_does_not_regenerate_preview(self):
+        with patch.object(pipeline, '_prepare_analysis_preview', side_effect=AssertionError('duplicate preview')):
+            pipeline.analyze_stage(self.data, precomputed_preview=context(self.data))
+        self.router.assert_called_once()
+        self.enter.assert_called_once()
+
+    def test_invalid_snapshot_stops_before_router_or_formal_analysis(self):
+        snapshot = context(self.data)
+        snapshot['binding']['analysis_model'] = 'wrong-model'
+        with self.assertRaises(ValueError):
+            pipeline.analyze_stage(self.data, precomputed_preview=snapshot)
+        self.router.assert_not_called()
+        self.enter.assert_not_called()
+
+    def test_router_disabled_runs_only_preview(self):
+        with patch.object(config, 'ENABLE_PHOTO_ROUTER', False), patch.object(
+                pipeline, '_prepare_analysis_preview', return_value=(context(self.data), None)) as preview:
+            pipeline.analyze_stage(self.data)
+        preview.assert_called_once()
+        self.router.assert_not_called()
+        self.assertNotIn('photo_facts', self.enter.call_args.kwargs)
+
+    def test_classification_failure_keeps_formal_analysis_fallback(self):
+        from photo_agent.photo_router import run_call0
+        self.router.side_effect = run_call0
+        with patch('photo_agent.photo_router.route_photo', side_effect=RuntimeError('classification unavailable')), patch.object(
+                pipeline, '_prepare_analysis_preview', return_value=(context(self.data), None)):
+            result = pipeline.analyze_stage(self.data)
+        self.enter.assert_called_once()
+        self.assertNotIn('photo_facts', self.enter.call_args.kwargs)
+        self.assertEqual(result['photo_route']['state'], 'unavailable')
+
+    def test_failed_preview_does_not_wait_for_running_router(self):
+        started, release, finished = threading.Event(), threading.Event(), threading.Event()
+
+        def route(*args):
+            started.set()
+            try:
+                release.wait(3)
+                return {'state': 'unavailable'}, None
+            finally:
+                finished.set()
+
+        def preview(*args):
+            self.assertTrue(started.wait(3))
+            raise ValueError('preview failed')
+
+        self.router.side_effect = route
+        try:
+            with patch.object(pipeline, '_prepare_analysis_preview', side_effect=preview):
+                with self.assertRaisesRegex(ValueError, 'preview failed'):
+                    pipeline.analyze_stage(self.data)
+            self.assertFalse(finished.is_set())
+            self.enter.assert_not_called()
+        finally:
+            release.set()
+            self.assertTrue(finished.wait(3))

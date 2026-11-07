@@ -1,7 +1,9 @@
 import base64
+import contextvars
 import inspect
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Optional
 
@@ -235,17 +237,25 @@ def analyze_preview_stage(image_bytes: bytes, *, analysis_model: str, binding: d
     return result
 
 
-def _prepare_analysis_preview(image_bytes, analysis_model, existing):
-    """Reuse validated authority or synchronously complete one local Stage 2.0."""
-    from photo_agent.preview_context import (AnalysisPreview, source_sha256,
-        validate_analysis_preview, validate_preview_context)
+def _reuse_analysis_preview(image_bytes, analysis_model, existing):
+    """Validate supplied authority before starting any new model calls."""
+    from photo_agent.preview_context import validate_preview_context
     if existing is not None:
         existing = validate_preview_context(existing, image_bytes=image_bytes)
         if existing['binding']['analysis_model'] != analysis_model:
             raise ValueError('preview_analysis_model_mismatch')
         if existing['subject_preview']['state'] == 'ready':
             logger.info('Stage 2.0 preflight: reusing completed snapshot')
-            return existing, None
+            return existing
+    return None
+
+
+def _prepare_analysis_preview(image_bytes, analysis_model, existing):
+    """Reuse validated authority or synchronously complete one local Stage 2.0."""
+    from photo_agent.preview_context import AnalysisPreview, source_sha256, validate_analysis_preview
+    ready = _reuse_analysis_preview(image_bytes, analysis_model, existing)
+    if ready is not None:
+        return ready, None
     logger.info('Stage 2.0 preflight: running before formal analysis')
     raw = _analyze_subject_preview(image_bytes, analysis_model=analysis_model)
     preview = AnalysisPreview(raw, source_sha256(image_bytes), analysis_model)
@@ -253,11 +263,20 @@ def _prepare_analysis_preview(image_bytes, analysis_model, existing):
     return preview, raw
 
 
+def _timed_photo_route(image_bytes):
+    started = time.perf_counter()
+    route, usage = run_call0(image_bytes)
+    seconds = time.perf_counter() - started
+    logger.info("Step 2.0 photo route: %s (%.2fs)", route.get("main_category") or route["state"], seconds)
+    return route, usage, seconds
+
+
 def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = MODELS["analysis"], *, precomputed_preview=None, analysis_user_requests=None) -> dict:
     """Steps 1-2: read the photo and analyze it.
 
     With ENABLE_CHAT_SUBJECT_PREVIEW enabled, reuse a ready preview or complete
-    Stage 2.0 here before formal analysis. Disabled callers retain the old path.
+    Stage 2.0 alongside photo classification before formal analysis.
+    Disabled callers retain the old path.
 
     Chat may supply validated read-only intent before analysis; observations
     remain factual and separate from the desired edit. Legacy callers omit it.
@@ -283,21 +302,32 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
         analysis_user_requests = validate(analysis_user_requests,
             source_sha256=hashlib.sha256(image_bytes).hexdigest(), analysis_model=analysis_model)
         preview_args['analysis_user_requests'] = analysis_user_requests
-    import config as agent_config
     preflight = None
-    if agent_config.ENABLE_CHAT_SUBJECT_PREVIEW:
-        prepared, preflight = _prepare_analysis_preview(image_bytes, analysis_model, precomputed_preview)
-        preview_args['precomputed_preview'] = prepared
-        t0 = time.time()  # Stage 2.0 usage/timing is recorded separately.
-    # Call 0 describes the photo first; Call A builds on its facts instead of writing them again.
+    prepared = (_reuse_analysis_preview(image_bytes, analysis_model, precomputed_preview)
+                if config.ENABLE_CHAT_SUBJECT_PREVIEW else None)
+    needs_preview = config.ENABLE_CHAT_SUBJECT_PREVIEW and prepared is None
     route, route_usage, route_seconds = None, None, 0.0
-    if config.ENABLE_PHOTO_ROUTER:
-        t_route = time.time()
-        route, route_usage = run_call0(image_bytes)
-        route_seconds = time.time() - t_route
-        logger.info("Step 2.0 photo route: %s (%.2fs)", route.get("main_category") or route["state"], route_seconds)
-        if route["state"] == "ready":
-            preview_args["photo_facts"] = route
+    if needs_preview and config.ENABLE_PHOTO_ROUTER:
+        # Both read only the photo. Carry the job's language into the router
+        # thread, then join both results before selecting the formal analyzer.
+        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="photo-route")
+        try:
+            route_future = pool.submit(contextvars.copy_context().run, _timed_photo_route, image_bytes)
+            prepared, preflight = _prepare_analysis_preview(image_bytes, analysis_model, None)
+            route, route_usage, route_seconds = route_future.result()
+        finally:
+            # A failed preview must still stop immediately; an already-running
+            # classification may finish, but cannot launch formal analysis.
+            pool.shutdown(wait=False, cancel_futures=True)
+    else:
+        if needs_preview:
+            prepared, preflight = _prepare_analysis_preview(image_bytes, analysis_model, None)
+        if config.ENABLE_PHOTO_ROUTER:
+            route, route_usage, route_seconds = _timed_photo_route(image_bytes)
+    if config.ENABLE_CHAT_SUBJECT_PREVIEW:
+        preview_args['precomputed_preview'] = prepared
+    if route is not None and route["state"] == "ready":
+        preview_args["photo_facts"] = route
     branch = select_branch(route, BRANCH_SKILLS) if route and route["state"] == "ready" else None
     t0 = time.time()
     if branch is not None:
