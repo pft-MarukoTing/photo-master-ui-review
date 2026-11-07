@@ -110,6 +110,16 @@ class AskTest(unittest.TestCase):
                            model=model, screen={"bar": ["看美化項目", "再美化"], "topics": []})
         self.assertIn('SCREEN: {"bar":["看美化項目","再美化"],"topics":[]}', model.seen[0])
 
+    def test_engine_pickers_are_mentioned_only_in_debug_mode(self):
+        # 分析引擎、美化引擎只在 debug UI 給選：其他人的提示裡不提，也不叫人去「設定」找。
+        for debug in (False, True):
+            ask = chat_assistant.build_context(analysis(), default_plan(), "ready", [], debug=debug)
+            model = model_says("好")
+            chat_assistant.review_line("亮一點", "", model=model, debug=debug)
+            for text in (ask, model.seen[0]):
+                self.assertEqual("美化引擎" in text, debug)
+        self.assertIn("cannot be changed", chat_assistant._engine_text(chat_assistant.TOOL_GUIDE, False))
+
     def test_what_stays_the_same_is_sent_as_cached_blocks(self):
         sent = []
         post = types.SimpleNamespace(__wrapped__=lambda url, payload, label, timeout=None: sent.append(payload) or {
@@ -122,7 +132,7 @@ class AskTest(unittest.TestCase):
         self.assertEqual(payload["prompt_cache_options"], {"mode": "explicit"})
         developer, user = payload["input"]
         self.assertEqual(developer["role"], "developer")
-        self.assertTrue(developer["content"][0]["text"].startswith(chat_assistant.INSTRUCTION))
+        self.assertTrue(developer["content"][0]["text"].startswith(chat_assistant._engine_text(chat_assistant.INSTRUCTION, False)))
         self.assertTrue(developer["content"][1]["text"].startswith("ANALYSIS:"))
         self.assertTrue(all(b["prompt_cache_breakpoint"] == {"mode": "explicit"} for b in developer["content"]))
         self.assertTrue(user["content"][0]["text"].startswith("PHOTO STATUS:"))

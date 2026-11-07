@@ -69,7 +69,7 @@ import {
   type Category,
   type Hot,
 } from "./options";
-import { defaultSettings, loadPrefs, PrefsModal, savePrefs, sameSettings, SettingsEditor, settingsChanges, settingsOf, type Prefs, type Settings } from "./settings";
+import { defaultSettings, enginesVisible, loadPrefs, PrefsModal, savePrefs, sameSettings, setEnginesShown, SettingsEditor, settingsChanges, settingsOf, type Prefs, type Settings } from "./settings";
 import type {
   Analysis,
   Capabilities,
@@ -976,6 +976,7 @@ export function App() {
         const user = await resolveUser();
         setUser(user);
         const [c, cfg] = await Promise.all([api.capabilities(), api.config()]);
+        setEnginesShown(!!cfg.debugUi);
         setCaps(c);
         capsRef.current = c;
         const p = loadPrefs();
@@ -3617,10 +3618,15 @@ export function App() {
         {photoLoad && first && photoLoad.entry === first.id ? <PhotoLoadMsg {...photoLoad} /> : <AssistantMsg>
           <p class="chat-text">{t("收到你上傳的 {n} 張照片了。", { n: firstUpload.length })}</p>
           {/* 「設定」跟著「全部…」出現，有那兩顆才提；都分析過了就只剩美化的設定好換。 */}
+          {/* 引擎只在 debug UI 給選（enginesVisible），其他人的「設定」只講長寬比。 */}
           <p class="chat-text">{introPending
-            ? t("這裡是這批照片的總覽：{btn}可以一次分析或美化全部，也可以先按「設定」統一換引擎或長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打字告訴我，會套用到還沒開始的每一張。", { btn: introBtn })
+            ? enginesVisible()
+              ? t("這裡是這批照片的總覽：{btn}可以一次分析或美化全部，也可以先按「設定」統一換引擎或長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打字告訴我，會套用到還沒開始的每一張。", { btn: introBtn })
+              : t("這裡是這批照片的總覽：{btn}可以一次分析或美化全部，也可以先按「設定」統一換長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打字告訴我，會套用到還沒開始的每一張。", { btn: introBtn })
             : (intro ? intro.renderable : renderable)
-              ? t("這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換美化引擎或長寬比；只想改某一張，從{where}選取那張就好。", { btn: introBtn, where })
+              ? enginesVisible()
+                ? t("這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換美化引擎或長寬比；只想改某一張，從{where}選取那張就好。", { btn: introBtn, where })
+                : t("這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換長寬比；只想改某一張，從{where}選取那張就好。", { btn: introBtn, where })
               : t("這裡是這批照片的總覽：{btn}可以一次處理全部，也可以從{where}選取某一張個別調整。", { btn: introBtn, where })}</p>
           <p class="chat-text chat-muted">{t("之後想回來這裡，點{where}「我的照片」最上面的「總覽」。", { where: photosSpot() })}</p>
           {chipRow(intro?.chips, introLive)}
@@ -3723,7 +3729,7 @@ export function App() {
                 <AssistantMsg>
                   <p class="chat-text">{ot.redo
                     ? t("好，調整下面的設定，會套用到每一張，再美化時生效。")
-                    : ot.model
+                    : ot.model && enginesVisible()
                     ? t("好，調整下面的設定，會套用到每張還沒美化的照片；分析引擎只有還沒分析的用得到。")
                     : t("好，調整下面的設定，會套用到每張還沒美化的照片。")}</p>
                   <SettingsEditor caps={caps} settings={settings} onChange={overviewSettings} hideModel={!ot.model} />
@@ -5133,7 +5139,9 @@ function PreChat(props: {
                 「讓你看」不寫「跟你確認」——分析完照樣可以直接按美化，一項一項
                 挑是可以做的事，不是非做不可。 */}
             <p class="chat-text">{t("要先看我對這張照片的分析，還是直接幫你美化？")}</p>
-            <p class="chat-text chat-muted">{t("分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換引擎或長寬比，先按設定。")}</p>
+            <p class="chat-text chat-muted">{enginesVisible()
+              ? t("分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換引擎或長寬比，先按設定。")
+              : t("分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換長寬比，先按設定。")}</p>
           </AssistantMsg>
           )}
           {props.previewError && <AssistantMsg><p class="chat-text chat-muted">{props.previewError}</p></AssistantMsg>}

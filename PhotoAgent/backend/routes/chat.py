@@ -2135,7 +2135,7 @@ def prompt_review():
         answer = chat_queue.run({
             "stage": chat_jobs.STAGE_REVIEW, "line": text, "prompt": prompt,
             "sections": [{"who": x["who"], "text": x["text"]} for x in sections],
-            "history": history, "people": [p.strip() for p in people],
+            "history": history, "people": [p.strip() for p in people], "debug": _debug(),
             **({"batch": batch} if batch else {}),
             **({"continuation": continuation} if continuation else {}),
             **({"versions": versions} if versions else {}),

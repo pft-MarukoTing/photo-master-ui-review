@@ -443,6 +443,12 @@ export const EN: Record<string, string> = {
   "想換一種氛圍的話，先挑想改的類別再選風格；不選就維持照片原本的樣子。":
     "For a different mood, choose a category and then a style. Leave it blank to keep the photo's original look.",
   "這段個人化需求會在美化時一起套用，可以直接修改或清除。": "These requests will be applied when retouching. You can edit or clear them here.",
+  "這是上次美化用的輸出設定，可以直接修改。": "The output settings from your last retouch. You can change them here.",
+  "這張照片美化時用的輸出設定，可以直接修改。": "The output settings for retouching this photo. You can change them here.",
+  "最後是設定，可以改長寬比和輸出尺寸。要看一下嗎？": "Finally, settings: you can change the aspect ratio and output size. Want to take a look?",
+  "這裡是這批照片的總覽：{btn}可以一次分析或美化全部，也可以先按「設定」統一換長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打字告訴我，會套用到還沒開始的每一張。": "Here's an overview of this batch. Use the buttons {btn} to analyze or retouch all photos at once, or tap “Settings” first to change the aspect ratio for all of them. To edit just one, tap that photo. You can also tell me how to edit them, and it'll apply to every photo that hasn't started yet.",
+  "這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換長寬比；只想改某一張，從{where}選取那張就好。": "Here's an overview of this batch. Use the buttons {btn} to retouch all photos at once, or tap “Settings” first to change the aspect ratio for all of them. To edit just one, select it {where}.",
+  "分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換長寬比，先按設定。": "Analyze shows you what I plan to fix before I start; One-Tap Retouch does everything in one go. To change the aspect ratio, tap Settings first.",
   "這張照片美化時用的引擎與輸出設定，可以直接修改。": "The engine and output settings for retouching this photo. You can change them here.",
   "開或關沿用上次美化的設定，有小圓點的是看過原圖後建議調整的項目，點一下可以改。":
     "On/off settings carry over from the last retouch; a dot marks a change suggested after reviewing the original. Tap to change.",

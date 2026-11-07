@@ -2430,6 +2430,12 @@
         "chat"
       ]
     },
+    "分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換長寬比，先按設定。": {
+      "en": "Analyze shows you what I plan to fix before I start; One-Tap Retouch does everything in one go. To change the aspect ratio, tap Settings first.",
+      "where": [
+        "chat"
+      ]
+    },
     "分析照片中材質與紋理的呈現": {
       "en": "Analyzing materials and textures",
       "where": [
@@ -5301,6 +5307,12 @@
         "chat"
       ]
     },
+    "最後是設定，可以改長寬比和輸出尺寸。要看一下嗎？": {
+      "en": "Finally, settings: you can change the aspect ratio and output size. Want to take a look?",
+      "where": [
+        "chat"
+      ]
+    },
     "最後是風格，{names}可以換一種氛圍，不選就維持照片原本的樣子。要看看嗎？": {
       "en": "Finally, style: {names} can give the photo a different mood. Leave them blank to keep its original look. Want to take a look?",
       "where": [
@@ -5542,8 +5554,8 @@
         "panel"
       ]
     },
-    "查看或調整這張照片使用的分析模型、美化引擎與輸出選項。分析模型變更後會重新分析，長寬比變更後會重新構圖；其他設定會套用於下一次美化。": {
-      "en": "View or change the analysis model, retouch engine and output options for this photo. Changing the analysis model triggers a new analysis, and changing the aspect ratio reframes the photo. Other settings apply to the next retouch.",
+    "查看或調整這張照片的輸出選項。長寬比變更後會重新構圖；其他設定會套用於下一次美化。": {
+      "en": "View or change the output options for this photo. Changing the aspect ratio reframes the photo. Other settings apply to the next retouch.",
       "where": [
         "panel"
       ]
@@ -8654,6 +8666,12 @@
         "chat"
       ]
     },
+    "這張照片美化時用的輸出設定，可以直接修改。": {
+      "en": "The output settings for retouching this photo. You can change them here.",
+      "where": [
+        "chat"
+      ]
+    },
     "這張照片還沒分析，只能依照個人化需求修圖；要整張美化請先按「幫我分析」。": {
       "en": "This photo hasn't been analyzed, so it can only be retouched based on My Requests. To retouch the whole photo, tap “Analyze for Me” first.",
       "where": [
@@ -8762,6 +8780,12 @@
         "chat"
       ]
     },
+    "這是上次美化用的輸出設定，可以直接修改。": {
+      "en": "The output settings from your last retouch. You can change them here.",
+      "where": [
+        "chat"
+      ]
+    },
     "這是上次選的風格，想換可以直接改；不選就維持照片原本的樣子。": {
       "en": "This is the style you chose last time. You can change it here, or leave it blank to keep the photo's original look.",
       "where": [
@@ -8852,8 +8876,20 @@
         "chat"
       ]
     },
+    "這裡是這批照片的總覽：{btn}可以一次分析或美化全部，也可以先按「設定」統一換長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打字告訴我，會套用到還沒開始的每一張。": {
+      "en": "Here's an overview of this batch. Use the buttons {btn} to analyze or retouch all photos at once, or tap “Settings” first to change the aspect ratio for all of them. To edit just one, tap that photo. You can also tell me how to edit them, and it'll apply to every photo that hasn't started yet.",
+      "where": [
+        "chat"
+      ]
+    },
     "這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換美化引擎或長寬比；只想改某一張，從{where}選取那張就好。": {
       "en": "Here's an overview of this batch. Use the buttons {btn} to retouch all photos at once, or tap “Settings” first to change the retouch engine or aspect ratio for all of them. To edit just one, select it {where}.",
+      "where": [
+        "chat"
+      ]
+    },
+    "這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換長寬比；只想改某一張，從{where}選取那張就好。": {
+      "en": "Here's an overview of this batch. Use the buttons {btn} to retouch all photos at once, or tap “Settings” first to change the aspect ratio for all of them. To edit just one, select it {where}.",
       "where": [
         "chat"
       ]

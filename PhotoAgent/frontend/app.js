@@ -971,6 +971,17 @@
     // one re-analyzes the photo rather than relabeling an analysis that model
     // never produced (see els.apAnalysisModelSelect's change listener).
     if (els.apAnalysisModelPicker) els.apAnalysisModelPicker.classList.toggle("is-locked", !isDebug);
+    // 分析引擎 / 美化引擎 are only offered in debug mode at all (same as the
+    // chat page, frontend-chat settings.tsx enginesVisible): a regular user
+    // always gets the default engines, so the pickers -- upload page and the
+    // results page's 設定 modal alike -- are not shown outside it.
+    [els.analysisModelPicker, els.apAnalysisModelPicker, els.imageModelQualityPicker, els.apImageModelQualityPicker]
+      .forEach((picker) => {
+        const group = picker?.closest(".option-pill-group");
+        if (group) group.style.display = isDebug ? "" : "none";
+      });
+    // The upload row's compact layout depends on which groups are shown.
+    refreshCompactUploadSelectors?.();
     if (els.apAnalysisModelSelect) els.apAnalysisModelSelect.disabled = !isDebug;
     if (apAnalysisToggle) apAnalysisToggle.hidden = !isDebug;
     // #boxes-toggle-btn draws the raw analysis geometry over the photo, and
@@ -1642,6 +1653,8 @@
   // When the upload selectors no longer fit on one line, move every group
   // but 長寬比 (models, 輸出尺寸 -- with their live picker state) into one
   // compact menu; 長寬比 stays its own pill. They move back once the row has room.
+  // Outside debug mode the engines are hidden and only 輸出尺寸 is left, so it
+  // stays a pill of its own instead (see useMenu).
   function setupCompactUploadSelectors() {
     const row = document.querySelector(".upload-inline-settings-row-1");
     const secondRow = document.querySelector("#upload-inline-settings-row-2");
@@ -1656,13 +1669,20 @@
     if (!groups.length) return;
     const aspectGroup = groups.find((group) => group.querySelector("#image-aspect-ratio-picker"));
     const menuGroups = groups.filter((group) => group !== aspectGroup);
+    // applyDebugUiVisibility hides the engine groups outside debug mode; a
+    // hidden group has no position to measure and is nothing to collect.
+    const shown = (group) => group.style.display !== "none";
     let compact = false;
+    // Whether compact mode collected its groups into the 模型設定 menu: only
+    // when more than one is shown -- a lone 輸出尺寸 (engines hidden) stays its
+    // own pill next to 長寬比 instead of sitting alone in a menu.
+    let useMenu = false;
 
     const closeModal = () => {
       if (modal.hidden) return;
       portraitFold.open = false;
       portraitFold.classList.remove("standalone-modal");
-      menuGroups.forEach((group) => panel.appendChild(group));
+      if (useMenu) menuGroups.forEach((group) => panel.appendChild(group));
       if (compact) {
         row.appendChild(portraitFold);
         const runControl = row.querySelector(".split-run") || secondRow.querySelector(".split-run");
@@ -1707,22 +1727,28 @@
       // while the window is being resized.
       menu.hidden = true;
       compact = false;
+      useMenu = false;
     };
     const refresh = () => {
       if (compact) restoreGroups();
-      const firstTop = groups[0].getBoundingClientRect().top;
-      const wrapped = groups.some((group) => group.getBoundingClientRect().top > firstTop + 2);
+      const visible = groups.filter(shown);
+      if (!visible.length) return;
+      const firstTop = visible[0].getBoundingClientRect().top;
+      const wrapped = visible.some((group) => group.getBoundingClientRect().top > firstTop + 2);
+      useMenu = wrapped && menuGroups.filter(shown).length > 1;
       if (wrapped) {
-        menuGroups.forEach((group) => panel.appendChild(group));
+        if (useMenu) menuGroups.forEach((group) => panel.appendChild(group));
+        else menuGroups.forEach((group) => row.appendChild(group));
         // In compact mode 長寬比, the portrait control and Run join the
-        // compact selector button in the first row, in that order.
+        // compact selector button (or the lone 輸出尺寸 pill) in the first
+        // row, in that order.
         if (aspectGroup) row.appendChild(aspectGroup);
         row.appendChild(portraitFold);
         const runControl = secondRow.querySelector(".split-run");
         if (runControl) row.appendChild(runControl);
         compact = true;
       }
-      menu.hidden = !wrapped;
+      menu.hidden = !useMenu;
     };
 
     menu.querySelector("summary")?.addEventListener("click", (e) => {
@@ -1890,7 +1916,8 @@
 
   function apCaseSettingsSummaryText() {
     const model = findModelQualityOption(els.apImageModelQualitySelect?.value);
-    const parts = [model?.displayLabel || model?.label].filter(Boolean);
+    // The engine is named only where it can be picked (debug mode).
+    const parts = [isDebugUiActive && (model?.displayLabel || model?.label)].filter(Boolean);
     const ratio = els.apImageAspectRatioSelect?.value;
     // "auto" is the default and says nothing; anything else was a deliberate
     // choice and belongs in the tooltip. 人像設定 stays out of it entirely --

@@ -335,7 +335,7 @@ window.PHOTOAGENT_CATALOGS.en = {
   "回報截圖": "Report Screenshot",
   "分析面板顯示於預覽右側": "Show analysis panel next to preview",
   "寬螢幕時，將分析面板顯示在預覽圖旁邊，而不是疊在下方；視窗較窄時仍會自動改回目前的排列。": "On wide screens, shows the analysis panel next to the preview instead of below it. Narrow windows still use the stacked layout.",
-  "查看或調整這張照片使用的分析模型、美化引擎與輸出選項。分析模型變更後會重新分析，長寬比變更後會重新構圖；其他設定會套用於下一次美化。": "View or change the analysis model, retouch engine and output options for this photo. Changing the analysis model triggers a new analysis, and changing the aspect ratio reframes the photo. Other settings apply to the next retouch.",
+  "查看或調整這張照片的輸出選項。長寬比變更後會重新構圖；其他設定會套用於下一次美化。": "View or change the output options for this photo. Changing the aspect ratio reframes the photo. Other settings apply to the next retouch.",
   "打包下載中…": "Preparing download…",
   "AI 建議": "AI Suggested",
   "依照片內容自動決定": "Chosen based on the photo",

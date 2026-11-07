@@ -9,7 +9,7 @@ import { urls } from "./api";
 import { fillNoteBox, noteBoxKeys, promptFaces, promptSections, PromptEditor, readPromptBox, type FaceRef } from "./chat";
 import { FACE_CATEGORIES, faceEntries, LEVEL_OPTIONS, POSE_FACE_RULES, poseFacePatch, sendsLevel, type FaceEntry, type FaceIssue, type PoseFaceResult } from "./face";
 import { Icon } from "./icons";
-import { AspectRatioField, OutputScaleField } from "./settings";
+import { AspectRatioField, enginesVisible, OutputScaleField } from "./settings";
 import type { Analysis, Capabilities, FaceOverride, Plan } from "./types";
 import { aspectLabel, FIXED_RATIO_RE, recipeItems, REFRAME_RE, renderOptionLabel } from "./util";
 
@@ -55,6 +55,9 @@ const canConfigurePerson = (f: FaceEntry) => f.subjectIndex >= 0 && f.issues.len
 // 面板裡真的列出不只一個人時，才講「每個人可以分開調整」-- 只有一個人的照片講
 // 這句，就是在說一件看不到的事。
 export function introFor(cat: Category, a: Analysis, plan: Plan, again = false): string {
+  // 引擎只在 debug UI 給選（enginesVisible）；其他人的設定只有輸出那幾項。
+  if (cat === "settings" && !enginesVisible())
+    return again ? t("這是上次美化用的輸出設定，可以直接修改。") : t("這張照片美化時用的輸出設定，可以直接修改。");
   const base = again ? AGAIN_INTRO[cat] : CATEGORIES[cat].intro;
   if (cat !== "face") return base;
   const people = faceEntries(a, plan.face_issue_overrides || {}).filter(canConfigurePerson).length;
@@ -112,7 +115,9 @@ export function topicLead(cat: Category, a: Analysis, caps: Capabilities, plan: 
     case "prompt":
       return t("你先前寫的「{v1}」美化時會一起套用。要看一下嗎？", { v1: short(plan.user_prompt?.trim() || "", 18) });
     default:
-      return t("最後是設定，可以改美化時用的引擎和輸出尺寸。要看一下嗎？");
+      return enginesVisible()
+        ? t("最後是設定，可以改美化時用的引擎和輸出尺寸。要看一下嗎？")
+        : t("最後是設定，可以改長寬比和輸出尺寸。要看一下嗎？");
   }
 }
 
@@ -584,7 +589,7 @@ export function ContinueSettings(props: {
     <div class="chat-card chat-options">
       <div class="chat-settings-editor">
         <div class="chat-settings-fields">
-          <label class="chat-field">
+          {enginesVisible() && <label class="chat-field">
             <span class="chat-meta">{t("美化引擎")}</span>
             <select class="quality-select" value={plan.render_option} disabled={busy}
               onChange={(e) => props.onPatch({ render_option: (e.currentTarget as HTMLSelectElement).value })}>
@@ -592,7 +597,7 @@ export function ContinueSettings(props: {
                 <option value={o.id}>{renderOptionLabel(caps, o.id)}</option>
               ))}
             </select>
-          </label>
+          </label>}
           <AspectRatioField caps={caps} value={props.aspectRatio} disabled={busy} noAuto onChange={props.onAspectRatio} />
           <OutputScaleField
             caps={caps}
@@ -718,14 +723,14 @@ function SettingsOptions({ plan, caps, busy, hot, onPatch }: Body) {
   return (
     <div class="chat-settings-editor">
       <div class="chat-settings-fields">
-        <label class={field("render_option")}>
+        {enginesVisible() && <label class={field("render_option")}>
           <span class="chat-meta">{t("美化引擎")}</span>
           <select class="quality-select" value={plan.render_option} disabled={busy} onChange={(e) => onPatch({ render_option: val(e) })}>
             {caps.render.options.map((o) => (
               <option value={o.id}>{renderOptionLabel(caps, o.id)}</option>
             ))}
           </select>
-        </label>
+        </label>}
         <AspectRatioField
           caps={caps}
           class={field("aspect_ratio")}

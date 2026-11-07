@@ -1440,6 +1440,12 @@
         "chat"
       ]
     },
+    "chat_analyze_shows_you_what_i_2": {
+      "zh": "分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換長寬比，先按設定。",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_analyzed": {
       "zh": "{n} 張分析好了",
       "where": [
@@ -1944,6 +1950,12 @@
         "chat"
       ]
     },
+    "chat_finally_settings_you_can_change_2": {
+      "zh": "最後是設定，可以改長寬比和輸出尺寸。要看一下嗎？",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_finally_style_can_give_the": {
       "zh": "最後是風格，{names}可以換一種氛圍，不選就維持照片原本的樣子。要看看嗎？",
       "where": [
@@ -2030,6 +2042,18 @@
     },
     "chat_heres_an_overview_of_this_5": {
       "zh": "這裡是這批照片的總覽：上面可以一次處理全部，也可以點某一張個別調整。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_heres_an_overview_of_this_6": {
+      "zh": "這裡是這批照片的總覽：{btn}可以一次分析或美化全部，也可以先按「設定」統一換長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打字告訴我，會套用到還沒開始的每一張。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_heres_an_overview_of_this_7": {
+      "zh": "這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換長寬比；只想改某一張，從{where}選取那張就好。",
       "where": [
         "chat"
       ]
@@ -3716,6 +3740,18 @@
     },
     "chat_the_engine_and_output_settings_2": {
       "zh": "這是上次美化用的引擎與輸出設定，可以直接修改。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_output_settings_for_retouching": {
+      "zh": "這張照片美化時用的輸出設定，可以直接修改。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_the_output_settings_from_your": {
+      "zh": "這是上次美化用的輸出設定，可以直接修改。",
       "where": [
         "chat"
       ]
@@ -9457,8 +9493,8 @@
         "panel"
       ]
     },
-    "panel_view_or_change_the_analysis": {
-      "zh": "查看或調整這張照片使用的分析模型、美化引擎與輸出選項。分析模型變更後會重新分析，長寬比變更後會重新構圖；其他設定會套用於下一次美化。",
+    "panel_view_or_change_the_output": {
+      "zh": "查看或調整這張照片的輸出選項。長寬比變更後會重新構圖；其他設定會套用於下一次美化。",
       "where": [
         "panel"
       ]

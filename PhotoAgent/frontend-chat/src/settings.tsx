@@ -12,6 +12,16 @@ export type Prefs = Pick<Settings, "detailed_explanation">;
 
 const PREFS_KEY = "chat-prefs";
 
+// 分析引擎、美化引擎只在 debug UI 給選；一般使用者一律用後端的預設引擎。
+// App 讀到 /api/config 時設好，設定卡都等 caps 到了才畫，所以畫的時候已經定了。
+let enginesShown = false;
+export function setEnginesShown(on: boolean) {
+  enginesShown = on;
+}
+export function enginesVisible(): boolean {
+  return enginesShown;
+}
+
 export function loadPrefs(): Prefs {
   let saved: Partial<Prefs> = {};
   try {
@@ -290,7 +300,7 @@ export function SettingsEditor({
   return (
     <div class="chat-card chat-settings-editor">
       <div class="chat-settings-fields">
-        {!hideModel && <label class="chat-field">
+        {!hideModel && enginesVisible() && <label class="chat-field">
           <span class="chat-meta">{t("分析引擎")}</span>
           <select class="quality-select" value={settings.analysis_model} onChange={(e) => set({ analysis_model: val(e) })}>
             {caps.render.analysis_models.map((m) => (
@@ -298,14 +308,14 @@ export function SettingsEditor({
             ))}
           </select>
         </label>}
-        <label class="chat-field">
+        {enginesVisible() && <label class="chat-field">
           <span class="chat-meta">{t("美化引擎")}</span>
           <select class="quality-select" value={settings.render_option} onChange={(e) => set({ render_option: val(e) })}>
             {caps.render.options.map((o) => (
               <option value={o.id}>{renderOptionLabel(caps, o.id)}</option>
             ))}
           </select>
-        </label>
+        </label>}
         <AspectRatioField caps={caps} value={settings.aspect_ratio} onChange={(aspect_ratio) => set({ aspect_ratio })} />
         <OutputScaleField
           caps={caps}

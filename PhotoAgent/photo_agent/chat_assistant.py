@@ -116,6 +116,28 @@ How this tool works. These are the only facts you may state about the tool; if a
 
 
 
+# 分析引擎、美化引擎只在 debug UI 給選（frontend-chat settings.tsx enginesVisible）：
+# 一般使用者看不到，助理就不提、也不叫人去「設定」裡找。
+ENGINE_TEXT_RELEASE = (
+    ("美化引擎 is the AI model and quality used to retouch (higher quality is usually finer but takes longer); ", ""),
+    (" Some setups also offer 分析引擎, the model that analyzes the photo.",
+     " The AI models used to analyze and retouch are fixed and cannot be changed."),
+    ("「設定」 (美化引擎、長寬比、人像修正)", "「設定」 (長寬比、人像修正)"),
+    ("「我要換美化引擎」「開啟設定」", "「我要改長寬比」「開啟設定」"),
+    ("「美化引擎在「設定」裡，打開在下面了。」", "「長寬比在「設定」裡，打開在下面了。」"),
+    ("美化引擎 and the number of images are changed only in 「設定」", "The number of images is changed only in 「設定」"),
+)
+
+
+def _engine_text(text, debug):
+    """`text` as debug UI users see it, or without the engine pickers they alone have."""
+    if debug:
+        return text
+    for old, new in ENGINE_TEXT_RELEASE:
+        text = text.replace(old, new)
+    return text
+
+
 INSTRUCTION = """You are the assistant in a photo retouching chat. The user is looking at one photo, its AI analysis, and the edit plan the next render (美化) will use. Reply to the user's latest message.
 
 REPLY PLACEMENT
@@ -382,12 +404,12 @@ def build_context(analysis, plan, status, history, debug=False, screen=None):
     # What stays the same comes first, what changes turn to turn last, with a
     # CACHE_BREAK after each part that stays: the instructions (the same for
     # every photo), then the photo's analysis (the same for every turn).
-    return _localized("\n\n".join([
+    return _localized(_engine_text("\n\n".join([
         INSTRUCTION,
         *([VOICE] if plan.get("detailed_explanation") else []),
         TOOL_GUIDE,
         f"PLAN FIELDS: {_dump(_fields(debug))}",
-    ])) + CACHE_BREAK + "\n\n".join([
+    ]), debug)) + CACHE_BREAK + "\n\n".join([
         f"ANALYSIS: {_dump(trimmed) if trimmed else '(not available yet)'}",
         f"FACES: {_dump(_faces_view(analysis))}",
         f"RECIPE: {_dump(recipe)}",
@@ -2140,7 +2162,7 @@ def _completion_question(result=None):
 
 
 def review_line(line, prompt, history=(), people=(), *, sections=(), model=None, deadline=None, batch=None,
-                continuation=False, versions=0):
+                continuation=False, versions=0, debug=False):
     """{kept, start, ask, offer, later, reply, line, persons, options, aspect_ratio, merged} for one line typed on the upload page.
 
     `prompt` is the list as it stands -- the same string the page shows and
@@ -2227,7 +2249,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
     switchable = type(continuation) is int and type(versions) is int and 1 <= versions <= 999
     context = _localized("\n\n".join([
         REVIEW_INSTRUCTION,
-        TOOL_GUIDE,
+        _engine_text(TOOL_GUIDE, debug),
         "RATIOS:\n" + "\n".join(f"{v}: {label}" for v, label in REVIEW_RATIOS.items()),
         "SWITCHES:\n" + "\n".join(f"{k}: {label}" for k, label in REVIEW_SWITCHES.items()),
         REVIEW_SEMANTIC_CONTRACT,
