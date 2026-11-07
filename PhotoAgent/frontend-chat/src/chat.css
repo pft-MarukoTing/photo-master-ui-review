@@ -556,6 +556,8 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   padding-top:var(--sp-2);padding-bottom:var(--sp-2);padding-right:30px;cursor:pointer}
 .chat-ar-trigger svg{flex-shrink:0;color:var(--accent)}
 .chat-ar-trigger span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 同一排的 select 跟長寬比鈕一樣高：鈕裡的中文字行高比 select 的高，不定高度兩格會差幾 px。 */
+.chat-field select,.chat-ar-trigger{box-sizing:border-box;height:calc(20px + 2 * var(--sp-2) + 2px);line-height:20px}
 #chat-aspect-modal .error-modal-box{width:min(580px,calc(100vw - 24px));max-width:none;box-sizing:border-box}
 .chat-ar-panel{display:flex;flex-direction:column;gap:12px;container-type:inline-size;margin-top:var(--sp-3)}
 .chat-ar-panel label{position:relative;display:flex;cursor:pointer}
