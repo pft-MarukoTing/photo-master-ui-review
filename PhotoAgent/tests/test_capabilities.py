@@ -111,7 +111,7 @@ class DescribeTest(unittest.TestCase):
         self.assertEqual(caps["render"]["max_run_count"], capabilities.GENERAL_MAX_RUN_COUNT)
         self.assertEqual(caps["render"]["defaults"]["render_option"], "gpt-image-2.5-sunburst:medium")
         self.assertEqual([s["value"] for s in caps["render"]["output_scales"]], ["1K", "2K"])
-        self.assertEqual(caps["render"]["defaults"]["output_scale"], "1K")
+        self.assertEqual(caps["render"]["defaults"]["output_scale"], "2K")
         two_k = caps["render"]["output_scales"][-1]
         self.assertEqual(two_k["sizes"]["16:9"], "2512x1408")
         self.assertNotIn("auto", two_k["sizes"])

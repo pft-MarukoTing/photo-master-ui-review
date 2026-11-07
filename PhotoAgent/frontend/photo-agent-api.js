@@ -42,7 +42,7 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
-    form.append("output_scale", outputScale || "1K");
+    form.append("output_scale", outputScale || "2K");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
     // One-shot alternative to the default two-call edit (Step 5 + Step 5b
@@ -267,7 +267,7 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
-    form.append("output_scale", outputScale || "1K");
+    form.append("output_scale", outputScale || "2K");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
     form.append("single_pass_edit", singlePassEdit ? "true" : "false");
@@ -297,7 +297,7 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
-    form.append("output_scale", outputScale || "1K");
+    form.append("output_scale", outputScale || "2K");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
     if (userPrompt) form.append("user_prompt", userPrompt);
@@ -332,7 +332,7 @@ window.PhotoAgentApi = (() => {
         image_model: imageModel || "gpt-image-2",
         analysis_model: analysisModel || "gpt-5.6-luna",
         aspect_ratio: aspectRatio || "auto",
-        output_scale: outputScale || "1K",
+        output_scale: outputScale || "2K",
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
         run_qa: runQa === false ? "false" : "true",
         single_pass_edit: !!singlePassEdit,
@@ -363,7 +363,7 @@ window.PhotoAgentApi = (() => {
         image_model: imageModel || "gpt-image-2",
         analysis_model: analysisModel || "gpt-5.6-luna",
         aspect_ratio: aspectRatio || "auto",
-        output_scale: outputScale || "1K",
+        output_scale: outputScale || "2K",
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
         run_qa: runQa === false ? "false" : "true",
         single_pass_edit: !!singlePassEdit,
@@ -403,7 +403,7 @@ window.PhotoAgentApi = (() => {
         image_model: imageModel || "gpt-image-2",
         analysis_model: analysisModel || "gpt-5.6-luna",
         aspect_ratio: aspectRatio || "auto",
-        output_scale: outputScale || "1K",
+        output_scale: outputScale || "2K",
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
         run_qa: runQa === false ? "false" : "true",
         user_prompt: userPrompt || "",
@@ -439,7 +439,7 @@ window.PhotoAgentApi = (() => {
         user_prompt: userPrompt || "",
         style_options: styleOptions || {},
         aspect_ratio: aspectRatio || "original",
-        output_scale: outputScale || "1K",
+        output_scale: outputScale || "2K",
         image_quality: imageQuality,
         image_model: imageModel || "gpt-image-2",
         user: user || "",
@@ -467,7 +467,7 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
-    form.append("output_scale", outputScale || "1K");
+    form.append("output_scale", outputScale || "2K");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
     if (userPrompt) form.append("user_prompt", userPrompt);
@@ -530,7 +530,7 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
-    form.append("output_scale", outputScale || "1K");
+    form.append("output_scale", outputScale || "2K");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
     if (userPrompt) form.append("user_prompt", userPrompt);
@@ -554,7 +554,7 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
-    form.append("output_scale", outputScale || "1K");
+    form.append("output_scale", outputScale || "2K");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
     if (userPrompt) form.append("user_prompt", userPrompt);

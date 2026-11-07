@@ -135,7 +135,7 @@ ASPECT_RATIOS: Tuple[Choice, ...] = (
 # 2K ~3.5MP. 3K and 4K (above OpenAI's experimental 2560x1440 line) were
 # dropped; plans and settings saved with them fall back to 2K.
 OUTPUT_SCALES: Tuple[Choice, ...] = (
-    Choice("1K", "1K（標準）"),
+    Choice("1K", "1K"),
     Choice("2K", "2K"),
 )
 OUTPUT_SCALE_FACTORS = {"1K": 1.0, "2K": 1.5}
@@ -148,7 +148,7 @@ PRESET_IDS = ("natural", "editorial", "product", "portrait", "custom")
 MAX_RUN_COUNT = 20
 GENERAL_MAX_RUN_COUNT = 8
 
-DEFAULT_OUTPUT_SCALE = "1K"
+DEFAULT_OUTPUT_SCALE = "2K"
 DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst"
 DEFAULT_QUALITY = "medium"
 DEFAULT_ANALYSIS_MODEL = "gpt-5.6-luna"

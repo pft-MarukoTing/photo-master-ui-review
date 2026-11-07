@@ -34,13 +34,6 @@
         "backend text"
       ]
     },
-    "1K（標準）": {
-      "en": "1K (Standard)",
-      "where": [
-        "backend text"
-      ],
-      "note": "Output-resolution option: about 1,000 pixels on the long side, the standard size."
-    },
     "2:3（人像）": {
       "en": "2:3 (Portrait)",
       "where": [

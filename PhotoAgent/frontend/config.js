@@ -78,10 +78,10 @@ window.PhotoAgentConfig = {
   // is disabled for them. The per-ratio pixel sizes shown next to each tier
   // come from /api/capabilities at startup rather than being copied here.
   outputScaleOptions: [
-    { value: "1K", label: "1K", description: tr("標準") },
+    { value: "1K", label: "1K" },
     { value: "2K", label: "2K" }
   ],
-  defaultOutputScale: "1K",
+  defaultOutputScale: "2K",
   // User-facing aspect-ratio choices (upload page + analyze-preview, above
   // 生成張數) -- "auto" takes the output ratio from the framing the analysis
   // proposed (measured off its crop rectangle on the backend, not picked by

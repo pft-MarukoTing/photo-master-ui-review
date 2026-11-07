@@ -1900,7 +1900,7 @@
     if (ratio && ratio !== "auto") {
       parts.push(findAspectRatioOption(ratio)?.label || ratio);
     }
-    // Same for 輸出尺寸: only a tier above the default, and only where the
+    // Same for 輸出尺寸: only a tier other than the default, and only where the
     // engine actually renders at it.
     const scale = findOutputScaleOption(els.apImageOutputScaleSelect?.value);
     if (scale && scale.value !== window.PhotoAgentConfig.defaultOutputScale
@@ -6798,7 +6798,7 @@
     const imageModel = modelQualityOpt.model || "gpt-image-2";
     const analysisModel = els.analysisModelSelect?.value || window.PhotoAgentConfig.defaultAnalysisModel || "gpt-5.6-luna";
     const aspectRatio = els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto";
-    const outputScale = els.imageOutputScaleSelect?.value || window.PhotoAgentConfig.defaultOutputScale || "1K";
+    const outputScale = els.imageOutputScaleSelect?.value || window.PhotoAgentConfig.defaultOutputScale || "2K";
     const aiPhotoEditing = els.aiEditToggle.checked;
     const runQa = els.runQaToggle ? els.runQaToggle.checked : false;
     const singlePassEdit = readSinglePassEditOption();
@@ -7808,7 +7808,7 @@
       imageModel: modelQualityOpt.model || "gpt-image-2",
       analysisModel: els.analysisModelSelect?.value || window.PhotoAgentConfig.defaultAnalysisModel || "gpt-5.6-luna",
       aspectRatio: els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto",
-      outputScale: els.imageOutputScaleSelect?.value || window.PhotoAgentConfig.defaultOutputScale || "1K",
+      outputScale: els.imageOutputScaleSelect?.value || window.PhotoAgentConfig.defaultOutputScale || "2K",
       aiPhotoEditing: els.aiEditToggle.checked,
       runQa: els.runQaToggle ? els.runQaToggle.checked : false,
       singlePassEdit: readSinglePassEditOption(),
