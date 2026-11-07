@@ -439,6 +439,24 @@ def build_context(analysis, plan, status, history, debug=False, screen=None):
     ])
 
 
+def build_session_context(analysis, plan, status, history, debug=False, screen=None):
+    """Cache session-wide rules separately; only pending state varies.
+
+    Preserve the same rules and conversation data used by ask. The existing
+    photo-analysis breakpoint stays separate from the changing plan/history.
+    """
+    from photo_agent import session_request
+    context = build_context(analysis, plan, status, history, debug=debug, screen=screen)
+    instructions, photo, dynamic = context.split(CACHE_BREAK)
+    # Append a breakpoint after the existing two blocks. Keeping their text
+    # byte-for-byte avoids rewriting the already cached instructions/photo.
+    rules = SIDE_CHAT_RULE + session_request.INSTRUCTION + LITERAL_CHOICE_INSTRUCTION
+    context = CACHE_BREAK.join((instructions, photo, rules, dynamic))
+    marker = "CONVERSATION (oldest first, the last line is the message to answer):\n"
+    return context.replace(marker, "PENDING CLARIFICATION: "
+        + _dump(session_request.pending(history)) + "\n" + marker, 1)
+
+
 # --- the opening note (plan.detailed_explanation) ----------------------------------------
 
 # 開了「詳細解說」時，分析一好，聊天裡第一則講照片的話。分析的原文是寫給
@@ -1324,10 +1342,7 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     from photo_agent import session_request
     embedded_answer = _is_embedded_answer(history)
     navigation_screen = None if embedded_answer else screen
-    context = build_context(analysis, plan, status, history, debug=debug, screen=screen)
-    marker = "CONVERSATION (oldest first, the last line is the message to answer):\n"
-    context = context.replace(marker, SIDE_CHAT_RULE + session_request.INSTRUCTION + LITERAL_CHOICE_INSTRUCTION + "\nPENDING CLARIFICATION: "
-        + _dump(session_request.pending(history)) + "\n" + marker, 1)
+    context = build_session_context(analysis, plan, status, history, debug=debug, screen=screen)
     end = min(deadline, time.time() + TIMEOUT_SECONDS) if deadline is not None else time.time() + TIMEOUT_SECONDS
     def run_model(text):
         remaining = end - time.time()

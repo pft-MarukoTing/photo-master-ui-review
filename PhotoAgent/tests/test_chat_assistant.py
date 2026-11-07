@@ -41,6 +41,59 @@ def ask(model, plan=None, history=None):
     return chat_assistant.ask(analysis(), plan or default_plan(), "ready", history, model=model)
 
 
+class SessionCacheRulesTest(unittest.TestCase):
+    def test_fixed_session_rules_have_their_own_cached_block_once(self):
+        from photo_agent import session_request
+        from photo_agent.clarification_choices import LITERAL_CHOICE_INSTRUCTION
+        history = [{"role": "user", "text": "請保留帽子", "card": {"type": "ask"}}]
+        context = chat_assistant.build_session_context(analysis(), default_plan(), "ready", history)
+        stable, photo, rule_block, dynamic = context.split(chat_assistant.CACHE_BREAK)
+        for rules in (chat_assistant.SIDE_CHAT_RULE, session_request.INSTRUCTION, LITERAL_CHOICE_INSTRUCTION):
+            self.assertEqual(context.count(rules), 1)
+            self.assertIn(rules, rule_block)
+            self.assertNotIn(rules, dynamic)
+        self.assertIn("ANALYSIS:", photo)
+        self.assertIn("PENDING CLARIFICATION:", dynamic)
+        self.assertIn("請保留帽子", dynamic)
+        self.assertNotIn("請保留帽子", stable)
+
+    def test_provider_payload_writes_only_the_three_stable_blocks(self):
+        context = chat_assistant.build_session_context(analysis(), default_plan(), "ready",
+            [{"role": "user", "text": "這次只調亮一點", "card": {"type": "ask"}}])
+        with patch.object(chat_assistant._post_json, "__wrapped__", return_value={"output_text": "{}"}) as post:
+            chat_assistant.call_model(context)
+        payload = post.call_args.args[1]
+        stable, dynamic = payload["input"]
+        self.assertEqual(stable["role"], "developer")
+        self.assertEqual(len(stable["content"]), 3)
+        self.assertTrue(all(c["prompt_cache_breakpoint"] == {"mode": "explicit"} for c in stable["content"]))
+        self.assertEqual(payload["prompt_cache_options"], {"mode": "explicit"})
+        self.assertNotIn("這次只調亮一點", str(stable))
+        self.assertIn("這次只調亮一點", str(dynamic))
+
+    def test_history_and_pending_changes_preserve_both_cache_blocks(self):
+        first_history = [{"role": "user", "text": "先等一下", "card": {"type": "ask"}}]
+        second_history = first_history + [{"role": "assistant", "card": {"type": "llm_reply", "text": "好"}},
+            {"role": "user", "text": "再美化一版", "card": {"type": "ask"}}]
+        first = chat_assistant.build_session_context(analysis(), default_plan(), "ready", first_history).split(chat_assistant.CACHE_BREAK)
+        second = chat_assistant.build_session_context(analysis(), {**default_plan(), "user_prompt": "保留帽子"}, "rendering", second_history).split(chat_assistant.CACHE_BREAK)
+        self.assertEqual(first[:3], second[:3])
+        self.assertNotEqual(first[3], second[3])
+
+    def test_cache_move_preserves_all_rule_and_state_content(self):
+        from photo_agent import session_request
+        history = [{"role": "user", "text": "好", "card": {"type": "ask"}}]
+        base = chat_assistant.build_context(analysis(), default_plan(), "ready", history)
+        optimized = chat_assistant.build_session_context(analysis(), default_plan(), "ready", history)
+        instructions, photo, dynamic = base.split(chat_assistant.CACHE_BREAK)
+        new_instructions, new_photo, rules, new_dynamic = optimized.split(chat_assistant.CACHE_BREAK)
+        self.assertEqual(new_instructions, instructions)
+        self.assertEqual(photo, new_photo)
+        marker = "CONVERSATION (oldest first, the last line is the message to answer):\n"
+        pending = "PENDING CLARIFICATION: " + chat_assistant._dump(session_request.pending(history)) + "\n"
+        self.assertEqual(new_dynamic, dynamic.replace(marker, pending + marker, 1))
+
+
 class AskTest(unittest.TestCase):
     def test_embedded_answer_does_not_get_the_automatic_analysis_nudge(self):
         for lang, text, reply in (("zh", "照片裡有什麼？", "桌上有一本筆記本。"),

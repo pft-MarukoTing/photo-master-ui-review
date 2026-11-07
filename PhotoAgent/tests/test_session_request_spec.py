@@ -236,7 +236,8 @@ class SessionRequestStories(unittest.TestCase):
     def test_deadline_is_shared_by_initial_call_and_repair(self):
         bad=edit('營造雨天氛圍',[semantic('營造雨天氛圍','照片','營造雨天氛圍')])
         good=edit('將照片改為雨天氛圍')
-        with patch.object(assistant.time,'time',side_effect=[100,100,130]),patch.object(assistant,'call_model',side_effect=[bad,good]) as model:
+        with patch.object(assistant,'time') as clock, patch.object(assistant,'call_model',side_effect=[bad,good]) as model:
+            clock.time.side_effect = [100,100,130]
             result=assistant.ask(analysis(),chat_plan.default_plan(),'ready',[user('營造雨天氛圍')])
         self.assertEqual([c.kwargs['timeout'] for c in model.call_args_list],[45,15]);self.assertIsNotNone(result['proposal'])
 
