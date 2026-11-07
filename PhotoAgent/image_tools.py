@@ -248,15 +248,7 @@ def detect_face_crops(image_bytes: bytes) -> list:
     for x, y, w, h, confidence in kept:
         left, top, right, bottom = _padded_face_box(img, x, y, w, h)
         logger.info("detect_face_crops: raw_box=(%d,%d,%d,%d) crop_box=(left=%d,top=%d,right=%d,bottom=%d)", x, y, w, h, left, top, right, bottom)
-        crop = img.crop((left, top, right, bottom))
-        # Resized to _FACE_CROP_MAX_SIDE both ways: a small face is zoomed up,
-        # and the face of a high-res close-up (often several thousand px) is
-        # brought down -- analysis models that count image patches reject an
-        # oversized crop outright instead of resampling it.
-        longest = max(crop.width, crop.height)
-        if longest != _FACE_CROP_MAX_SIDE:
-            scale = _FACE_CROP_MAX_SIDE / longest
-            crop = crop.resize((round(crop.width * scale), round(crop.height * scale)), Image.LANCZOS)
+        crop = _fit_face_crop(img.crop((left, top, right, bottom)))
         crops.append({**_normalized_face_entry(img, x, y, w, h), "confidence": confidence, "bytes": _to_jpeg_bytes(crop)})
     aiutils_logger.log('[detect_face_crops] crop timing', crop_count=len(kept),
                         crop_total_ms=round((time.perf_counter() - t_crop0) * 1000, 1))
@@ -266,6 +258,19 @@ def detect_face_crops(image_bytes: bytes) -> list:
     for x, y, w, h, confidence in extra:
         crops.append({**_normalized_face_entry(img, x, y, w, h), "confidence": confidence, "bytes": None})
     return crops
+
+
+def _fit_face_crop(crop):
+    """A face crop resized to _FACE_CROP_MAX_SIDE both ways: a small face is
+    zoomed up, and the face of a high-res close-up (often several thousand px)
+    is brought down -- analysis models that count image patches reject an
+    oversized crop outright instead of resampling it, and charge for every
+    patch of one they accept. The crop's box is unchanged; only its pixels are."""
+    longest = max(crop.size)
+    if longest == _FACE_CROP_MAX_SIDE:
+        return crop
+    scale = _FACE_CROP_MAX_SIDE / longest
+    return crop.resize((round(crop.width * scale), round(crop.height * scale)), Image.LANCZOS)
 
 
 def restore_face_crops(image_bytes: bytes, detections: list) -> list:
@@ -282,12 +287,7 @@ def restore_face_crops(image_bytes: bytes, detections: list) -> list:
                   round((b["x"] + b["w"]) * img.width), round((b["y"] + b["h"]) * img.height))
         data = None
         if item["sent_to_model"]:
-            crop = img.crop(bounds)
-            longest = max(crop.size)
-            if longest < _FACE_CROP_MAX_SIDE:
-                scale = _FACE_CROP_MAX_SIDE / longest
-                crop = crop.resize((round(crop.width * scale), round(crop.height * scale)), Image.LANCZOS)
-            data = _to_jpeg_bytes(crop)
+            data = _to_jpeg_bytes(_fit_face_crop(img.crop(bounds)))
         result.append({"box": dict(b), "face_box": dict(item["face_box"]), "bytes": data})
     return result
 
@@ -1699,12 +1699,7 @@ def detect_preview_candidates(image_bytes: bytes) -> dict:
         result = {**_normalized_face_entry(img, x, y, right-x, bottom-y), 'confidence': float(f['confidence']), 'bytes': None}
         if zoom:
             bounds = _padded_face_box(img, x, y, right-x, bottom-y)
-            crop = img.crop(bounds)
-            longest = max(crop.size)
-            if longest < _FACE_CROP_MAX_SIDE:
-                scale = _FACE_CROP_MAX_SIDE / longest
-                crop = crop.resize((round(crop.width*scale), round(crop.height*scale)), Image.LANCZOS)
-            result['bytes'] = _to_jpeg_bytes(crop)
+            result['bytes'] = _to_jpeg_bytes(_fit_face_crop(img.crop(bounds)))
         return result
     crops = [entry(f, i < _FACE_CROP_MAX_COUNT) for i, f in enumerate(a)]
     candidates = [{**entry(f, i < config.SUBJECT_PREVIEW_MAX_LOW_CONFIDENCE_ZOOMS),
