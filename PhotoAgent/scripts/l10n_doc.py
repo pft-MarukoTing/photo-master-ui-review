@@ -29,13 +29,13 @@ SOURCE_BRANCH = "PhotoAgent-dev"
 
 
 def git(*args, capture=False):
-    result = subprocess.run(["git", "-C", str(DOC), *args], check=True, text=True,
+    result = subprocess.run(["git", "-C", str(DOC), *args], check=True, encoding="utf-8",
                             capture_output=capture)
     return result.stdout if capture else None
 
 
 def main_repo(*args):
-    return subprocess.run(["git", "-C", str(ROOT), *args], check=True, text=True,
+    return subprocess.run(["git", "-C", str(ROOT), *args], check=True, encoding="utf-8",
                           capture_output=True).stdout.strip()
 
 
@@ -43,7 +43,7 @@ def update_clone():
     if not (DOC / ".git").exists():
         print(f"cloning {REMOTE} into {DOC}", flush=True)
         subprocess.run(["git", "clone", REMOTE, str(DOC)], check=True)
-    if subprocess.run(["git", "ls-remote", "--heads", REMOTE], check=True, text=True,
+    if subprocess.run(["git", "ls-remote", "--heads", REMOTE], check=True, encoding="utf-8",
                       capture_output=True).stdout.strip():
         git("pull", "--rebase", "--quiet")
 

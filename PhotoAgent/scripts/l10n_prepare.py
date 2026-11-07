@@ -199,7 +199,7 @@ def render(made, languages, version):
 
 
 def doc_git(*args):
-    return subprocess.run(["git", "-C", str(l10n_doc.DOC), *args], check=True, capture_output=True, text=True).stdout
+    return subprocess.run(["git", "-C", str(l10n_doc.DOC), *args], check=True, capture_output=True, encoding="utf-8").stdout
 
 
 def fetch(ref):
@@ -208,7 +208,7 @@ def fetch(ref):
     try:
         if not (l10n_doc.DOC / ".git").exists():
             subprocess.run(["git", "clone", "--quiet", l10n_doc.REMOTE, str(l10n_doc.DOC)],
-                           check=True, capture_output=True, text=True)
+                           check=True, capture_output=True, encoding="utf-8")
         doc_git("fetch", "--quiet", "--prune", "origin")
         if ref:
             wanted = [f"refs/remotes/origin/{ref}", ref]
@@ -240,7 +240,7 @@ def warn_if_stale():
     """translation_source.py --check, as a warning: strings it has not picked
     up have no id yet, so other languages show them in English."""
     result = subprocess.run([sys.executable, str(ROOT / "scripts/translation_source.py"), "--check"],
-                            capture_output=True, text=True)
+                            capture_output=True, encoding="utf-8", env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     if result.returncode:
         detail = [l for l in result.stdout.splitlines() if l.startswith("out of step")] or [result.stderr.strip()]
         print("l10n: warning: run scripts/translation_source.py and commit its files;", *detail, flush=True)
