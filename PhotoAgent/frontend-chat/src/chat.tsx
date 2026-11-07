@@ -26,6 +26,10 @@ for (const type of ["pointerdown", "keydown"]) addEventListener(type, () => { us
 // 比對，被 Preact 改過的節點就不再碰。回傳的函式立刻全部顯示完。
 function finishMessage(message: HTMLElement) {
   message.classList.remove("is-waiting");
+  // 打完（或直接顯示）的字記在段落上：同一則訊息之後換了內容（摘要、這版的說明
+  // 寫好了換掉「正在整理…」），只打換上來的字，已經看過的不重打。記的是字本身，
+  // 因為 Preact 常沿用同一個 <p> 只換字。
+  message.querySelectorAll<HTMLElement>(TYPE_TEXT).forEach((p) => { p.dataset.typed = p.textContent || ""; });
   message.querySelectorAll(".is-typewriter-pending").forEach(row => row.classList.remove("is-typewriter-pending"));
   message.querySelectorAll(".is-typewriter-revealed").forEach(row => row.classList.remove("is-typewriter-revealed"));
   message.querySelectorAll('[data-typewriter-hold=""]').forEach(block => block.removeAttribute("data-typewriter-hold"));
@@ -43,7 +47,9 @@ function holdBlocks(parent: Element, out: HTMLElement[] = []): HTMLElement[] {
   return out;
 }
 
-function typeMessages(msgs: HTMLElement[]): () => void {
+// revised：畫面上本來就有、這次只是換了內容的訊息 -- 不藏起來排隊、不重播進場，
+// 只打還沒顯示過的字。
+function typeMessages(msgs: HTMLElement[], revised: Set<Element> = new Set()): () => void {
   type Item = { node: Text; chars: string[]; shown: string; row: HTMLElement | null };
   let i = 0;
   let items: Item[] = [];
@@ -55,24 +61,28 @@ function typeMessages(msgs: HTMLElement[]): () => void {
   let raf = 0;
   let next = 0;
   let rowRevealUntil = 0;
-  for (const m of msgs) m.classList.add("is-waiting");
+  for (const m of msgs) if (!revised.has(m)) m.classList.add("is-waiting");
   const start = () => {
     const m = msgs[i];
     m.classList.remove("is-waiting");
-    m.classList.add("is-entering");
-    m.addEventListener("animationend", () => m.classList.remove("is-entering"), { once: true });
+    if (!revised.has(m)) {
+      m.classList.add("is-entering");
+      m.addEventListener("animationend", () => m.classList.remove("is-entering"), { once: true });
+    }
     items = [];
     blocks = [];
     rowRevealUntil = 0;
     // 排在 AI 訊息後面的使用者泡泡沒有字要打，輪到時直接進場。
     if (m.classList.contains("is-user")) return;
-    m.querySelectorAll("[data-chat-typewriter-group]:has(.subject-preview-person)").forEach(group => group.classList.add("is-typewriter-pending"));
-    m.querySelectorAll(".subject-preview-person").forEach(row => row.classList.add("is-typewriter-pending"));
+    if (!revised.has(m)) {
+      m.querySelectorAll("[data-chat-typewriter-group]:has(.subject-preview-person)").forEach(group => group.classList.add("is-typewriter-pending"));
+      m.querySelectorAll(".subject-preview-person").forEach(row => row.classList.add("is-typewriter-pending"));
+    }
     const body = m.querySelector(".chat-body");
     blocks = body ? holdBlocks(body) : [];
     b = 0;
-    for (const block of blocks) block.setAttribute("data-typewriter-hold", "");
-    for (const p of Array.from(m.querySelectorAll(TYPE_TEXT))) {
+    for (const p of Array.from(m.querySelectorAll<HTMLElement>(TYPE_TEXT))) {
+      if (p.dataset.typed !== undefined && p.dataset.typed === p.textContent) continue;
       const walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
       for (let t = walk.nextNode() as Text | null; t; t = walk.nextNode() as Text | null) {
         if (!t.data) continue;
@@ -80,6 +90,11 @@ function typeMessages(msgs: HTMLElement[]): () => void {
         t.data = "";
       }
     }
+    // 第一段要打的字之前的卡片、按鈕本來就該看得到（換內容的訊息裡是已經顯示
+    // 過的），不先藏起來。
+    if (items.length) blocks = blocks.filter((block) => block.compareDocumentPosition(items[0].node) & Node.DOCUMENT_POSITION_PRECEDING);
+    else blocks = [];
+    for (const block of blocks) block.setAttribute("data-typewriter-hold", "");
     k = 0;
     n = 0;
     const total = items.reduce((sum, it) => sum + it.chars.length, 0);
@@ -233,7 +248,8 @@ export function ChatPanel(props: {
   // The first message of a result that just landed (toStart), or of the AI's
   // reply: the timeline stays on its start until the user scrolls or sends.
   const anchor = useRef<HTMLElement | null>(null);
-  const seen = useRef(new WeakSet<Element>());
+  // 看過的訊息，連同當時的 data-chat-revision：同一則換了 revision 就是內容換了。
+  const seen = useRef(new WeakMap<Element, string | null>());
   const lastStart = useRef(props.toStart);
   const typing = useRef<(() => void) | null>(null);
   useEffect(() => () => typing.current?.(), []);
@@ -252,6 +268,7 @@ export function ChatPanel(props: {
     }
     const msgs = Array.from(el.querySelectorAll(":scope > .chat-msg, :scope > .settings-turn > .chat-msg, :scope > .note-turn > .chat-msg"));
     const fresh = msgs.filter((m) => !seen.current.has(m));
+    const revised = msgs.filter((m) => seen.current.has(m) && seen.current.get(m) !== m.getAttribute("data-chat-revision"));
     if (props.toStart !== lastStart.current) {
       lastStart.current = props.toStart;
       anchor.current = (fresh[0] || msgs[msgs.length - 1] || null) as HTMLElement | null;
@@ -271,7 +288,7 @@ export function ChatPanel(props: {
     // 載入或換一串對話（fresh 等於全部）直接整串顯示。又有新訊息進來時，還沒
     // 打完的先一口氣補完，再打新的。使用者自己的訊息不等。打開之後陸續補上的
     // 舊紀錄（live 還是 false）一樣直接顯示。
-    if (fresh.length && fresh.length < msgs.length && (props.live ?? userActed)) {
+    if ((fresh.length || revised.length) && fresh.length < msgs.length && (props.live ?? userActed)) {
       typing.current?.();
       typing.current = null;
       const typed = (m: Element) => !m.classList.contains("is-user") && (!m.hasAttribute("data-chat-atomic") || m.hasAttribute("data-chat-typewriter"));
@@ -279,14 +296,16 @@ export function ChatPanel(props: {
       // 句，切到這張時跟開場白一起進來）要照順序排，不然它先冒出來，開場白才
       // 打在它上面。
       const first = fresh.findIndex(typed);
-      const ai = (first < 0 ? [] : fresh.slice(first).filter((m) => typed(m) || m.classList.contains("is-user"))) as HTMLElement[];
-      if (ai.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) typing.current = typeMessages(ai);
+      const queued = first < 0 ? [] : fresh.slice(first).filter((m) => typed(m) || m.classList.contains("is-user"));
+      // 換了內容的訊息排在同一輪，照畫面順序。
+      const ai = msgs.filter((m) => queued.includes(m) || (revised.includes(m) && typed(m))) as HTMLElement[];
+      if (ai.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) typing.current = typeMessages(ai, new Set(revised));
       else ai.forEach(finishMessage);
-    } else if (fresh.length) {
+    } else if (fresh.length || revised.length) {
       // Restored history has already happened; publish its controls without replay.
-      fresh.filter(m => !m.classList.contains("is-user")).forEach(m => finishMessage(m as HTMLElement));
+      [...fresh, ...revised].filter(m => !m.classList.contains("is-user")).forEach(m => finishMessage(m as HTMLElement));
     }
-    for (const m of msgs) seen.current.add(m);
+    for (const m of msgs) seen.current.set(m, m.getAttribute("data-chat-revision"));
     if (anchor.current) align();
     else if (pinned.current) el.scrollTop = el.scrollHeight;
   });
@@ -392,8 +411,11 @@ export function UserMsg({ meta, children }: { meta?: string; children: Component
   );
 }
 
-export function AssistantMsg({ children, atomic, animate, onTypingComplete }: {
+export function AssistantMsg({ children, atomic, animate, onTypingComplete, revision }: {
   children: ComponentChildren; atomic?: boolean; animate?: boolean; onTypingComplete?: () => void;
+  // 內容會在原地換掉的訊息（「正在整理…」換成摘要或這版的說明）：換了就換這個值，
+  // ChatPanel 把換上來的字打出來。
+  revision?: string;
 }) {
   const element = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -403,7 +425,8 @@ export function AssistantMsg({ children, atomic, animate, onTypingComplete }: {
     return () => message.removeEventListener("chat-typewriter-complete", onTypingComplete);
   }, [onTypingComplete]);
   return (
-    <div ref={element} class="chat-msg" data-chat-atomic={atomic ? "true" : undefined} data-chat-typewriter={animate ? "true" : undefined}>
+    <div ref={element} class="chat-msg" data-chat-atomic={atomic ? "true" : undefined} data-chat-typewriter={animate ? "true" : undefined}
+      data-chat-revision={revision}>
       <div class="chat-avatar">P</div>
       <div class="chat-body">{children}</div>
     </div>

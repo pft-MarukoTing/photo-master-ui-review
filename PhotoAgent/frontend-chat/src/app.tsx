@@ -6691,7 +6691,7 @@ export function SessionView(props: {
           </AssistantMsg>
         );
         return (
-          <AssistantMsg>
+          <AssistantMsg revision={holding(idx) ? "holding" : brief ? "brief" : photo.pending_brief ? "pending" : "done"}>
             {answer}
             {!holding(idx) && !skippedAnalysis && brief && answer && (
               <p class="chat-text">{t("接著是這張照片的美化建議：")}</p>
@@ -6868,7 +6868,7 @@ export function SessionView(props: {
                 <ClickBubble icon={check ? "search" : base ? "image" : "pencil"} label={check ? t("幫我分析") : base ? t("換回原圖") : t("看美化項目")} />
               </UserMsg>
             )}
-            <AssistantMsg>
+            <AssistantMsg revision={check ? (brief ? "brief" : photo.pending_brief ? "pending" : "done") : undefined}>
               <p class="chat-text">{openLine}</p>
               {check && (brief ? <BriefCard brief={brief} /> : photo.pending_brief && <p class="chat-text chat-muted" role="status">{t("正在整理分析重點…")}</p>)}
               {check && live && !!promptNow && <p class="chat-text chat-muted">{t("你的需求會留著，這次會連同分析的建議一起美化。")}</p>}
@@ -7029,8 +7029,9 @@ export function SessionView(props: {
         // 之後才補做的分析（自訂模式按了「幫我分析」）也算問過了：摘要接在後面。
         const offerCheck = offerCheckAt(idx);
         const answer = answerIn(idx);
+        const noting = photo.pending_note?.version_id === c.version_id;
         return (
-          <AssistantMsg>
+          <AssistantMsg revision={holding(idx) ? "holding" : typeof c.note === "string" ? "note" : noting ? "noting" : "done"}>
             {answer}
             {!holding(idx) && answer && (
               <p class="chat-text">{t("照片也美化完成了，以下是這次的結果：")}</p>
