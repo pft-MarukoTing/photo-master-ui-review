@@ -1,11 +1,14 @@
-"""What an analysis sends and pays for: face crops at a capped size."""
+"""What an analysis sends and pays for: face crops at a capped size, no prompt
+cache writes, and usage summed across calls."""
 
 import io
 import unittest
+from unittest.mock import patch
 
 from PIL import Image
 
 import image_tools
+import openai_client
 
 
 def _photo(width, height):
@@ -38,6 +41,45 @@ class FaceCropSizeTest(unittest.TestCase):
         self.assertEqual(image_tools._fit_face_crop(small).size, (768, 576))
         exact = Image.new("RGB", (768, 500))
         self.assertIs(image_tools._fit_face_crop(exact), exact)
+
+
+class NoCacheWritesTest(unittest.TestCase):
+    def payload(self, model):
+        return openai_client._responses_payload(model, [{"type": "input_text", "text": "x"}])
+
+    def test_analysis_calls_write_nothing_to_the_prompt_cache(self):
+        payload = openai_client._no_cache_writes(self.payload("gpt-5.6-luna"))
+        self.assertEqual(payload["prompt_cache_options"], {"mode": "explicit"})
+        self.assertEqual(openai_client._no_cache_writes(self.payload("gpt-6-luna"))["prompt_cache_options"],
+                         {"mode": "explicit"})
+
+    def test_an_older_model_gets_no_cache_options(self):
+        self.assertNotIn("prompt_cache_options", openai_client._no_cache_writes(self.payload("gpt-5.5")))
+
+    def test_the_portrait_passes_send_it(self):
+        sent = []
+        with patch.object(openai_client, "_post_json", lambda url, payload, label, **kw: sent.append(payload) or {}):
+            openai_client._analysis_request("gpt-5.6-luna", "data:a", [], "inst", {"type": "json_schema"}, "x")
+        self.assertEqual(sent[0]["prompt_cache_options"], {"mode": "explicit"})
+
+
+class SumUsageTest(unittest.TestCase):
+    # explicit 模式的 usage 多一層 cache_write_tokens_details，以前加總會當掉。
+    def test_nested_details_are_summed(self):
+        first = {"input_tokens": 100, "output_tokens": 10, "input_tokens_details": {
+            "cached_tokens": 0, "cache_write_tokens": 0,
+            "cache_write_tokens_details": {"ttl_30m_tokens": 0, "ttl_12h_tokens": 0}},
+            "output_tokens_details": {"reasoning_tokens": 4}}
+        second = {"input_tokens": 50, "output_tokens": 5, "input_tokens_details": {
+            "cached_tokens": 20, "cache_write_tokens": 30,
+            "cache_write_tokens_details": {"ttl_30m_tokens": 30, "ttl_12h_tokens": 0}},
+            "output_tokens_details": {"reasoning_tokens": 1}}
+        total = openai_client._sum_usage(first, second, None)
+        self.assertEqual((total["input_tokens"], total["output_tokens"], total["total_tokens"]), (150, 15, 165))
+        self.assertEqual(total["input_tokens_details"], {
+            "cached_tokens": 20, "cache_write_tokens": 30,
+            "cache_write_tokens_details": {"ttl_30m_tokens": 30, "ttl_12h_tokens": 0}})
+        self.assertEqual(total["output_tokens_details"], {"reasoning_tokens": 5})
 
 
 if __name__ == "__main__":
