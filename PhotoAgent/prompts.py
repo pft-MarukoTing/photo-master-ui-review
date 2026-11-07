@@ -593,9 +593,7 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   "scene_category": "室內 / 戶外 / 街拍 / 商業 / 旅行 / 日常 / 其他",
   "main_subject": "主要主體是誰或什麼：拍攝者取景要呈現的對象，不是避不開、剛好入鏡的物件（如橫越畫面的電線）。",
   "scene_type": "更具體的場景類型。",
-  "aesthetic_diagnosis": "說明照片目前不夠精緻的原因。",
   "detected_issues": ["2 到 6 個具體問題。"],
-  "edit_philosophy": "整體修圖哲學。",
   "edit_intent": "定義成品唯一的光影與色彩目標：整體亮度、主體與環境的明暗關係、色調氛圍，以及完成後最吸引人的視覺特質。",
   "composition_mood": "完成後希望呈現的氛圍。",
   "composition_intent": "這張照片最適合的構圖意圖，例如主體展示、生活敘事、動作瞬間、環境紀實、圖形平衡、負空間、親密肖像等。",
@@ -607,7 +605,6 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   "empty_space_strategy": "畫面空白、留白或大面積背景的構圖功能；若沒有功能，說明如何縮減或重新平衡。",
   "alignment_strategy": "水平線、垂直線與透視穩定性；說明是否需要輕微旋轉或透視校正，或為何保留傾斜。",
   "distraction_strategy": "裁切後，先逐一裁決 detected_issues 指為干擾或遮擋的每個場景元素（人物自己的頭髮、眼睛與表情不屬於場景，由各人的 hair/blink/gaze/smile_issue 判斷）：寫成「X：移除」，並說明移除後由哪些相鄰畫面延續；只有大到無法合理補出背景時才寫「X：弱化」並說明原因，不可原樣保留。再判斷其餘元素：拍攝者取景要呈現的是脈絡，避不開、剛好入鏡的是干擾，同樣裁決；它透露的場所或尺度，畫面其餘部分仍交代得了。",
-  "scene_preservation_strategy": "如何保留原始場景內容、背景結構、材質身分、透視與空間關係；不要在此限制曝光、白平衡、對比、色相或飽和度。",
   "roi_anchor": "主視覺焦點應落在哪裡，以及為什麼。",
   "recommended_aspect_ratio": "original 或 Aspect-ratio policy 列出的比例之一",
   "aspect_ratio_reason": "為什麼這個輸出比例最適合主體、陪襯元素、留白與畫面意圖。",
@@ -656,7 +653,6 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   ],
   "lighting_strategy": "依 edit_intent 說明成品的整體亮度，以及主體與環境的曝光、陰影、高光和對比安排；這是實現 edit_intent 的光影計畫，不是另一個成品目標。",
   "memory_color_strategy": "依 edit_intent 說明場景的白平衡、冷暖、色相與飽和度安排。膚色獨立保護，維持每個人的原生深淺、底調與色度，允許曝光調整並只修正非預期偏色。",
-  "evaluation_criteria": ["完成後用來判斷成功的標準。"],
   "crop_recommendation": "若需要裁切，說明裁哪裡與為什麼；不需要則說明保留原構圖。",
   "reframe_mode": "crop 或 expand 二選一。除非本回合的長寬比政策明確要求你做這個選擇，否則一律填 \"crop\"。",
   "reframe_mode_reason": "選擇的理由；政策未要求選擇時填空字串。",
@@ -693,11 +689,6 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
     "subject_anchor": "center",
     "looking_direction": "unknown",
     "remove_edge_distractions": []
-  },
-  "crop_risk": {
-    "needs_validation": false,
-    "risk_level": "low",
-    "reasons": []
   },
   "correction_plan": ["1 到 6 項，實際會做的具體技術調整，供編修模型執行；例如「提升整體曝光 0.3 EV 並拉回高光」。只列這張照片真正需要的項目；若某個面向已經夠好就不要列，不要為了湊數而發明問題。照片本來就平衡時，只列一項最必要的即可。"],
   "correction_axes": [["exposure", "highlight"]],
@@ -751,7 +742,6 @@ _CROP_GEOMETRY_RULES = """- protected_regions contain only indispensable subject
 - The crop_box.aspect_ratio and every crop_candidates[].crop_box.aspect_ratio must match recommended_aspect_ratio exactly. Do not describe one ratio while returning crop geometry intended for another ratio.
 - This is not just a label match: each crop_box's own x/y/w/h must itself compute to that same ratio -- (w * original_image_width) : (h * original_image_height) must equal the stated aspect_ratio, for both crop_box and every crop_candidates[].crop_box. A correctly-labeled aspect_ratio paired with geometry sized for a different ratio is an error, not a valid answer.
 - Choose aspect ratio from subject type, scene intent, supporting elements, empty-space function, visual balance, and breathing room.
-- Set crop_risk.needs_validation to true when composition is ambiguous, crop is aggressive, ROI is near an edge, protected regions are near edges, framing could be misread, or alignment/context tradeoffs need judgment.
 """
 
 _COORDINATE_GEOMETRY_RULES_OVERALL = """## Coordinate and geometry rules
@@ -1064,12 +1054,6 @@ _CROP_INTENT_SCHEMA = _schema_object({
     "remove_edge_distractions": _schema_string_array(),
 })
 
-_CROP_RISK_SCHEMA = _schema_object({
-    "needs_validation": _schema_boolean(),
-    "risk_level": _schema_string(),
-    "reasons": _schema_string_array(),
-})
-
 # Call A's schema (see build_overall_analysis_instruction).
 # The findings-card aspects Call A sorts its review items into; portrait comes from the portrait-QC pass.
 REVIEW_ASPECTS = ("light_color", "background", "clarity", "composition")
@@ -1084,9 +1068,7 @@ ANALYSIS_RESPONSE_SCHEMA_OVERALL = {
         "scene_category": _schema_string(),
         "main_subject": _schema_string(),
         "scene_type": _schema_string(),
-        "aesthetic_diagnosis": _schema_string(),
         "detected_issues": _schema_string_array(),
-        "edit_philosophy": _schema_string(),
         "edit_intent": _schema_string(),
         "composition_mood": _schema_string(),
         "composition_intent": _schema_string(),
@@ -1098,7 +1080,6 @@ ANALYSIS_RESPONSE_SCHEMA_OVERALL = {
         "empty_space_strategy": _schema_string(),
         "alignment_strategy": _schema_string(),
         "distraction_strategy": _schema_string(),
-        "scene_preservation_strategy": _schema_string(),
         "roi_anchor": _schema_string(),
         "recommended_aspect_ratio": _schema_string(),
         "aspect_ratio_reason": _schema_string(),
@@ -1109,14 +1090,12 @@ ANALYSIS_RESPONSE_SCHEMA_OVERALL = {
         "protected_regions": _schema_array_of(_PROTECTED_REGION_SCHEMA),
         "lighting_strategy": _schema_string(),
         "memory_color_strategy": _schema_string(),
-        "evaluation_criteria": _schema_string_array(),
         "crop_recommendation": _schema_string(),
         "reframe_mode": _schema_enum(("crop", "expand")),
         "reframe_mode_reason": _schema_string(),
         "crop_box": _CROP_BOX_SCHEMA,
         "crop_candidates": _schema_array_of(_CROP_CANDIDATE_SCHEMA),
         "crop_intent": _CROP_INTENT_SCHEMA,
-        "crop_risk": _CROP_RISK_SCHEMA,
         "correction_plan": _schema_string_array(),
         "correction_axes": _schema_array_of(_schema_string_array()),
         "correction_inverse": _schema_string_array(),
@@ -1142,7 +1121,7 @@ REFRAME_FIELDS = (
     "distraction_strategy", "recommended_aspect_ratio", "aspect_ratio_reason",
     "subject_extent_box", "protected_regions", "crop_recommendation",
     "reframe_mode", "reframe_mode_reason", "crop_box", "crop_candidates",
-    "crop_intent", "crop_risk",
+    "crop_intent",
 )
 
 # One ratio's resolved composition. Writing these keys back restores it
@@ -1192,7 +1171,6 @@ _REFRAME_RETURN_SHAPE = """Return exactly this JSON shape:
   "crop_box": {"enabled": true, "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0, "aspect_ratio": "", "reason": "裁切理由。"},
   "crop_candidates": [{"id": "ai-primary", "label": "主要建議裁切", "crop_box": {"enabled": true, "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0, "aspect_ratio": ""}, "composition_intent": "", "tradeoffs": ""}],
   "crop_intent": {"trim_left": false, "trim_right": false, "trim_top": false, "trim_bottom": false, "subject_anchor": "center", "looking_direction": "unknown", "remove_edge_distractions": []},
-  "crop_risk": {"needs_validation": false, "risk_level": "low", "reasons": []},
   "reframe_item": {"enabled": true, "correction_plan": "給編修模型的構圖指令。", "retouch_recipe": "重新構圖：給使用者看的構圖結果。", "correction_inverse": "取消此項時維持原構圖的說法。"}
 }
 
@@ -1743,8 +1721,8 @@ Targets:
 #
 # Dropping an unchecked item from correction_plan is not enough to stop the edit
 # model from making that change, because the same change is requested in several
-# other places the checkbox never touched: the analysis prose (aesthetic_diagnosis,
-# detected_issues, lighting_strategy, memory_color_strategy) still describes the
+# other places the checkbox never touched: the analysis prose
+# (detected_issues, lighting_strategy, memory_color_strategy) still describes the
 # problem and the preset can still describe that change. One negative sentence
 # loses that argument on volume.
 #

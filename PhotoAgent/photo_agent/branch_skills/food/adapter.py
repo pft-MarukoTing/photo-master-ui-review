@@ -136,7 +136,6 @@ def to_analysis(result, photo_facts, image_size):
                    "local_detection_index": -1, "skin": "不適用", "reason": i18n.tr("構圖必須完整保留。")}
                   for index, k in enumerate(keep)],
         local_face_review=[],
-        crop_risk={"needs_validation": False, "risk_level": "low", "reasons": []},
         **framing_fields({**result["framing"], "keep_in_frame": keep}, hero, image_size),
     )
     analysis["subject_extent_box"] = None

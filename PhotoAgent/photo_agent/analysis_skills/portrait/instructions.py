@@ -454,7 +454,8 @@ _BLINK_DETECTION_SCHEMA = _schema_object({
     "blink_failure_confidence": _schema_number(),
     "should_fix": _schema_boolean(),
     "reason": _schema_string(),
-    "blink_repair_strategy": _BLINK_REPAIR_STRATEGY_SCHEMA,
+    # No blink_repair_strategy here: derive_blink_decisions always replaces it
+    # (fallback or empty) and Call C writes the one the editor uses.
 })
 
 
