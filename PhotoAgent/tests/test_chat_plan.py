@@ -37,6 +37,19 @@ class SettingsTest(unittest.TestCase):
                 self.assertIsNone(apply_plan_patch(default_plan(), patch)[0])
                 self.assertIsNotNone(apply_plan_patch(default_plan(), patch, debug=True)[0])
 
+    # 已經不能選的引擎，存在舊對話裡的照片還是要能再美化：照原引擎送出、檢查會過。
+    def test_plans_saved_with_retired_engines_still_render(self):
+        for option, model, quality in (("gpt-image-2.5-flare:low", "gpt-image-2.5-flare", "low"),
+                                       ("gpt-image-2:medium", "gpt-image-2", "medium")):
+            with self.subTest(option=option):
+                plan = dict(default_plan(), render_option=option, analysis_model="gpt-5.6-sol")
+                form = build_render_form(plan, "finish")
+                self.assertEqual((form["image_model"], form["image_quality"]), (model, quality))
+                _validate_params(form)
+        plan = dict(default_plan(), render_option="no-such-engine:low")
+        default = next(o for o in capabilities.RENDER_OPTIONS if o.id == capabilities.DEFAULT_RENDER_OPTION)
+        self.assertEqual(build_render_form(plan, "finish")["image_model"], default.image_model)
+
     def test_retired_engines_cannot_be_selected_even_in_debug(self):
         patches = [{"analysis_model": m} for m in ("gpt-4.1-mini", "gpt-5.6-sol")]
         patches += [{"render_option": f"{m}:{q}"}

@@ -101,7 +101,13 @@ class AnalysisModel:
 ANALYSIS_MODELS: Tuple[AnalysisModel, ...] = (
     AnalysisModel("gpt-5.6-luna", "GPT 5.6 Luna", "low", False),
 )
-ANALYSIS_MODEL_REASONING_EFFORT = {m.id: m.reasoning_effort for m in ANALYSIS_MODELS}
+# No longer offered (not even in debug), but still accepted for cases and chat
+# plans made with them, so continuing or re-retouching those keeps working.
+LEGACY_ANALYSIS_MODELS: Tuple[AnalysisModel, ...] = (
+    AnalysisModel("gpt-4.1-mini", "GPT 4.1 Mini", None, True),
+    AnalysisModel("gpt-5.6-sol", "GPT 5.6 Sol", "none", True),
+)
+ANALYSIS_MODEL_REASONING_EFFORT = {m.id: m.reasoning_effort for m in ANALYSIS_MODELS + LEGACY_ANALYSIS_MODELS}
 
 
 # ── Render settings ───────────────────────────────────────────────────────────

@@ -309,6 +309,21 @@ def build_selections(plan):
     return selections
 
 
+def _render_engine(render_option):
+    """(image_model, quality) for a plan's render_option. A retired option
+    (a plan saved while it was still offered, e.g. "gpt-image-2.5-flare:low")
+    keeps its own engine as long as the API still accepts that model;
+    anything else falls back to the default option."""
+    option = next((o for o in capabilities.RENDER_OPTIONS if o.id == render_option), None)
+    if option:
+        return option.image_model, option.quality
+    model, _, quality = str(render_option or "").partition(":")
+    if model in capabilities.IMAGE_MODELS_BY_ID and quality in ("low", "medium", "high"):
+        return model, quality
+    default = next(o for o in capabilities.RENDER_OPTIONS if o.id == capabilities.DEFAULT_RENDER_OPTION)
+    return default.image_model, default.quality
+
+
 def build_render_form(plan, stage):
     """The params form api._parse_and_validate_params takes, for one job.
 
@@ -316,11 +331,11 @@ def build_render_form(plan, stage):
     and the render route fans out plan["run_count"] jobs itself, the same
     way the review screen fans out N /continue calls.
     """
-    option = next(o for o in capabilities.RENDER_OPTIONS if o.id == plan["render_option"])
+    image_model, image_quality = _render_engine(plan["render_option"])
     form = {
         "preset": plan["preset"],
-        "image_quality": option.quality,
-        "image_model": option.image_model,
+        "image_quality": image_quality,
+        "image_model": image_model,
         "analysis_model": plan["analysis_model"],
         "aspect_ratio": plan["aspect_ratio"],
         # Plans saved before this setting existed have no key.

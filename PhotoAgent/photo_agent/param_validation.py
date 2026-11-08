@@ -17,7 +17,7 @@ EFFECT_NAME = "photoAgent"
 VALID_PRESETS = capabilities.PRESET_IDS
 VALID_QUALITIES = capabilities.QUALITIES
 VALID_IMAGE_MODELS = tuple(m.id for m in capabilities.IMAGE_MODELS)
-VALID_ANALYSIS_MODELS = tuple(m.id for m in capabilities.ANALYSIS_MODELS)
+VALID_ANALYSIS_MODELS = tuple(m.id for m in capabilities.ANALYSIS_MODELS + capabilities.LEGACY_ANALYSIS_MODELS)
 # "auto" (from the proposed crop) / "original" (the source frame) / one fixed
 # W:H frame.
 VALID_ASPECT_RATIOS = tuple(c.value for c in capabilities.ASPECT_RATIOS)
