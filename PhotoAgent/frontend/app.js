@@ -1815,9 +1815,17 @@
   // the live {model, quality} into whichever flow state is active so
   // finishSingleFlow/editBatchItem (which read singleFlowState/batchSettings)
   // pick up a change made on the preview screen without any other wiring.
+  // A value no option has (a case or handoff saved with a retired engine, such
+  // as gpt-image-2.5-flare) lands on the default engine, not on whichever
+  // option happens to be listed first.
+  function defaultModelQualityOption() {
+    const options = window.PhotoAgentConfig.imageModelQualityOptions || [];
+    return options.find((o) => o.value === window.PhotoAgentConfig.defaultImageModelQuality) || options[0] || null;
+  }
+
   function findModelQualityOption(value) {
     const options = window.PhotoAgentConfig.imageModelQualityOptions || [];
-    return options.find((o) => o.value === value) || options[0] || null;
+    return options.find((o) => o.value === value) || defaultModelQualityOption();
   }
 
   // Matched on the option's own model/quality fields rather than a composed
@@ -1828,7 +1836,7 @@
     const options = window.PhotoAgentConfig.imageModelQualityOptions || [];
     return options.find((o) => o.model === model && o.quality === quality)
       || options.find((o) => o.model === model)
-      || options[0] || null;
+      || defaultModelQualityOption();
   }
 
   function populateModelQualitySelect(select) {
@@ -2106,21 +2114,6 @@
       batchRecord.singlePassEdit = singlePassEdit;
     } else if (batchSettings) {
       batchSettings.singlePassEdit = singlePassEdit;
-    }
-
-    // Nothing has touched a picker here, so this bump is the only thing that
-    // will move the visible control -- it has to land on whichever page the
-    // user is actually on.
-    const onUpload = !!els.sections.upload?.classList.contains("visible");
-    const current = findModelQualityOption(
-      (onUpload ? els.imageModelQualitySelect : els.apImageModelQualitySelect)?.value);
-    if (!current || current.model !== "gpt-image-2") return;
-    if (!enabled && current.quality === "low") {
-      const medium = findModelQualityOptionByPair("gpt-image-2", "medium");
-      if (medium) applyModelQualityChange(medium.value, { includeUpload: onUpload });
-    } else if (enabled && current.quality === "medium") {
-      const low = findModelQualityOptionByPair("gpt-image-2", "low");
-      if (low) applyModelQualityChange(low.value, { includeUpload: onUpload });
     }
   }
 
