@@ -63,6 +63,8 @@ class SessionCacheRulesTest(unittest.TestCase):
         with patch.object(chat_assistant._post_json, "__wrapped__", return_value={"output_text": "{}"}) as post:
             chat_assistant.call_model(context)
         payload = post.call_args.args[1]
+        self.assertEqual(payload["model"], "gpt-6-luna")
+        self.assertEqual(payload["reasoning"], {"effort": "low"})
         stable, dynamic = payload["input"]
         self.assertEqual(stable["role"], "developer")
         self.assertEqual(len(stable["content"]), 3)
@@ -92,6 +94,46 @@ class SessionCacheRulesTest(unittest.TestCase):
         marker = "CONVERSATION (oldest first, the last line is the message to answer):\n"
         pending = "PENDING CLARIFICATION: " + chat_assistant._dump(session_request.pending(history)) + "\n"
         self.assertEqual(new_dynamic, dynamic.replace(marker, pending + marker, 1))
+
+
+class ChatModelRoutingTest(unittest.TestCase):
+    def test_payload_and_usage_follow_each_chat_function(self):
+        calls = (
+            (chat_assistant.call_model, "gpt-6-luna"),
+            (chat_assistant.call_review, "gpt-6-luna"),
+            (chat_assistant.call_face_wishes, "gpt-6-luna"),
+            (chat_assistant.call_continuation, "gpt-6-luna"),
+            (chat_assistant.call_look, "gpt-6-luna"),
+            (chat_assistant.call_opening, "gpt-5.6-luna"),
+            (chat_assistant.call_render_note, "gpt-5.6-luna"),
+        )
+        usage = {"input_tokens": 3, "output_tokens": 2}
+        for call, expected in calls:
+            with self.subTest(function=call.__name__):
+                spent = []
+                token = chat_assistant.SPENT.set(spent)
+                try:
+                    with patch.object(chat_assistant._post_json, "__wrapped__",
+                            return_value={"output_text": "{}", "usage": usage}) as post:
+                        call("synthetic context")
+                    payload = post.call_args.args[1]
+                    self.assertEqual(payload["model"], expected)
+                    self.assertEqual(payload["reasoning"], {"effort": "low"})
+                    self.assertEqual(spent, [{"model": expected, "usage": usage}])
+                finally:
+                    chat_assistant.SPENT.reset(token)
+
+    def test_continuation_note_uses_the_explanation_model_with_both_images(self):
+        with patch.object(chat_assistant._post_json, "__wrapped__",
+                return_value={"output_text": '{"note":"這一版保留夕陽氛圍。"}'}) as post:
+            note = chat_assistant.write_continuation_note(analysis(), "提亮人物", {},
+                before="data:image/jpeg;base64,before", after="data:image/jpeg;base64,after")
+        self.assertTrue(note)
+        payload = post.call_args.args[1]
+        self.assertEqual(payload["model"], "gpt-5.6-luna")
+        self.assertEqual(payload["reasoning"], {"effort": "low"})
+        self.assertEqual(sum(item["type"] == "input_image" for message in payload["input"]
+                             for item in message["content"]), 2)
 
 
 class AskTest(unittest.TestCase):

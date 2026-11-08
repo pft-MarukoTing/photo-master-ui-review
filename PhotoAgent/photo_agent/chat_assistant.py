@@ -40,7 +40,9 @@ SIDE_CHAT_RULE = ("Do not ask subject-relative versus image-relative left/right.
     "Still ask which person when needed.\n")
 
 
-MODEL = "gpt-5.6-luna"
+MODEL = "gpt-6-luna"
+# Detailed analysis and finished-version notes keep the retoucher voice.
+EXPLANATION_MODEL = "gpt-5.6-luna"
 REASONING_EFFORT = "low"
 TIMEOUT_SECONDS = 45
 HISTORY_LEN = 20
@@ -501,7 +503,7 @@ Rules
 
 def call_opening(context):
     """{lead, points} from the model, or raises."""
-    return _call(context, OPENING_SCHEMA)
+    return _call(context, OPENING_SCHEMA, model=EXPLANATION_MODEL)
 
 
 # --- the note under a finished version ---------------------------------------
@@ -655,7 +657,7 @@ Rules
 
 def call_render_note(context, images=()):
     """{note} from the model, or raises."""
-    return _call(context, RENDER_NOTE_SCHEMA, images)
+    return _call(context, RENDER_NOTE_SCHEMA, images, model=EXPLANATION_MODEL)
 
 
 def write_render_note(analysis, plan, *, before=None, after=None, previous_plan=None, earlier_notes=(), model=None):
@@ -893,13 +895,14 @@ def read_continuation(text, *, model=None):
     return {"needs_original": needs_original, "restore": restore.strip() if needs_original else ""}
 
 
-def _call(context, schema, images=(), *, timeout=None):
+def _call(context, schema, images=(), *, timeout=None, model=None):
     """`images` are (caption, data URL) pairs shown after the text."""
+    model = model or MODEL
     *stable, context = context.split(CACHE_BREAK)
     content = [{"type": "input_text", "text": context}]
     for caption, url in images:
         content += [{"type": "input_text", "text": caption}, {"type": "input_image", "image_url": url}]
-    payload = _responses_payload(MODEL, content, text_format=schema, reasoning_effort=REASONING_EFFORT)
+    payload = _responses_payload(model, content, text_format=schema, reasoning_effort=REASONING_EFFORT)
     if stable:
         payload["input"] = [{"role": "developer", "content": [
             {"type": "input_text", "text": text, "prompt_cache_breakpoint": {"mode": "explicit"}} for text in stable]},
@@ -913,7 +916,7 @@ def _call(context, schema, images=(), *, timeout=None):
     data = _post_json.__wrapped__(OPENAI_RESPONSES_URL, payload, "Chat reply failed", timeout=TIMEOUT_SECONDS if timeout is None else timeout)
     spent = SPENT.get()
     if spent is not None:
-        spent.append({"model": MODEL, "usage": data.get("usage")})
+        spent.append({"model": model, "usage": data.get("usage")})
     return _parse_json_from_text(_extract_output_text(data))
 
 
