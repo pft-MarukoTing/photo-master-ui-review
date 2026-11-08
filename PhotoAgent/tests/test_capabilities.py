@@ -125,7 +125,11 @@ class DescribeTest(unittest.TestCase):
     def test_debug_view_and_body_reshape_flag(self):
         with patch.object(config, "ENABLE_BODY_RESHAPE", True):
             caps = capabilities.describe(debug=True)
-        self.assertEqual(len(caps["render"]["options"]), len(capabilities.RENDER_OPTIONS))
+        self.assertEqual([o["id"] for o in caps["render"]["options"]], [
+            "gpt-image-2.5-sunburst:low", "gpt-image-2.5-sunburst:medium",
+            "gpt-image-2.5-sunburst:high", "nano-banana-2", "MAI-Image-2.6",
+        ])
+        self.assertEqual([m["id"] for m in caps["render"]["analysis_models"]], ["gpt-5.6-luna"])
         self.assertEqual(caps["render"]["max_run_count"], capabilities.MAX_RUN_COUNT)
         keys = [o["key"] for o in caps["advanced_options"]]
         self.assertNotIn("calm_hair", keys)

@@ -29,10 +29,21 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(current, default_plan())
 
     def test_debug_only_choices_need_debug(self):
-        for patch in ({"render_option": "nano-banana-2"}, {"analysis_model": "gpt-4.1-mini"}):
+        for patch in ({"render_option": "nano-banana-2"}, {"render_option": "MAI-Image-2.6"}):
             with self.subTest(patch=patch):
                 self.assertIsNone(apply_plan_patch(default_plan(), patch)[0])
                 self.assertIsNotNone(apply_plan_patch(default_plan(), patch, debug=True)[0])
+
+    def test_retired_engines_cannot_be_selected_even_in_debug(self):
+        patches = [{"analysis_model": m} for m in ("gpt-4.1-mini", "gpt-5.6-sol")]
+        patches += [{"render_option": f"{m}:{q}"}
+                    for m in ("gpt-image-2", "gpt-image-2.5-flare") for q in ("low", "medium")]
+        for patch in patches:
+            for debug in (False, True):
+                with self.subTest(patch=patch, debug=debug):
+                    plan, error = apply_plan_patch(default_plan(), patch, debug=debug)
+                    self.assertIsNone(plan)
+                    self.assertIsNotNone(error)
 
     def test_fixed_aspect_ratios_are_open_to_everyone(self):
         plan, error = apply_plan_patch(default_plan(), {"aspect_ratio": "4:5"})

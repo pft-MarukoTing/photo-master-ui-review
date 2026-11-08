@@ -21,9 +21,7 @@ window.PhotoAgentConfig = {
   // analyze-preview), same array-of-options shape as imageModelQualityOptions
   // above and aspectRatioOptions below.
   analysisModelOptions: [
-    { value: "gpt-4.1-mini", label: "GPT 4.1 Mini" },
     { value: "gpt-5.6-luna", label: "GPT 5.6 Luna" },
-    { value: "gpt-5.6-sol", label: "GPT 5.6 Sol" }
   ],
   defaultAnalysisModel: "gpt-5.6-luna",
   // Mirrors photo_agent/param_validation.py's ADVANCED_OPTION_DEFAULTS, for the
@@ -46,9 +44,8 @@ window.PhotoAgentConfig = {
   },
   // Single source of truth for the merged 修圖模型/影像品質 selector (upload
   // page + analyze-preview). All three Sunburst tiers are approved for the
-  // release picker; every other combination here (gpt-image-2's two tiers,
-  // both Flare tiers, Nano Banana 2, MAI-Image-2.6) is a debug-only
-  // candidate -- app.js's DEBUG_ONLY_IMAGE_MODELS hides them outside debug
+  // release picker; Nano Banana 2 and MAI-Image-2.6 are debug-only
+  // candidates -- app.js's DEBUG_ONLY_IMAGE_MODELS hides them outside debug
   // mode, so they stay listed here purely for debug-mode testing. Nano
   // Banana 2 and MAI-Image-2.6 have no PhotoAgent quality tier, so each
   // uses one option with quality fixed internally.
@@ -61,13 +58,9 @@ window.PhotoAgentConfig = {
   // instead, since it's the release-facing set and reads better standalone
   // without a "Standard" that sounds like a fallback/default.
   imageModelQualityOptions: [
-    { value: "gpt-image-2:low", model: "gpt-image-2", quality: "low", label: "GPT Image 2 · Standard", displayLabel: "Image 2 · Standard" },
-    { value: "gpt-image-2:medium", model: "gpt-image-2", quality: "medium", label: "GPT Image 2 · Enhanced", displayLabel: "Image 2 · Enhanced" },
     { value: "gpt-image-2.5-sunburst:low", model: "gpt-image-2.5-sunburst", quality: "low", label: "GPT Image 2.5 Sunburst · Standard", displayLabel: "Sunburst · Standard" },
     { value: "gpt-image-2.5-sunburst:medium", model: "gpt-image-2.5-sunburst", quality: "medium", label: "GPT Image 2.5 Sunburst · Enhanced", displayLabel: "Sunburst · Enhanced" },
     { value: "gpt-image-2.5-sunburst:high", model: "gpt-image-2.5-sunburst", quality: "high", label: "GPT Image 2.5 Sunburst · Premium", displayLabel: "Sunburst · Premium" },
-    { value: "gpt-image-2.5-flare:low", model: "gpt-image-2.5-flare", quality: "low", label: "GPT Image 2.5 Flare · Standard", displayLabel: "Image 2.5 Flare" },
-    { value: "gpt-image-2.5-flare:medium", model: "gpt-image-2.5-flare", quality: "medium", label: "GPT Image 2.5 Flare · Enhanced", displayLabel: "Image 2.5 Flare·Enhanced" },
     { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2", displayLabel: "Nano Banana 2", scalable: false },
     { value: "MAI-Image-2.6", model: "MAI-Image-2.6", quality: "medium", label: "MAI-Image-2.6", displayLabel: "MAI-Image-2.6", scalable: false }
   ],

@@ -881,21 +881,11 @@
   }
 
 
-  // GPT 5.6 Sol is a testbed-only analysis-model variant, not yet vetted for
-  // general use, and GPT 4.1 Mini was pulled from the release picker -- keep
-  // both out of the 分析模型 picker outside debug mode.
-  const DEBUG_ONLY_ANALYSIS_MODELS = ["gpt-5.6-sol", "gpt-4.1-mini"];
+  // Luna is the only offered analysis model in every mode.
+  const DEBUG_ONLY_ANALYSIS_MODELS = [];
 
-  // All three Sunburst tiers are approved for the release 修圖模型/影像品質
-  // picker -- every other value in config.js's imageModelQualityOptions
-  // (gpt-image-2's two tiers, both Flare tiers, Nano Banana 2,
-  // MAI-Image-2.6) is a debug-only candidate, same treatment as
-  // DEBUG_ONLY_ANALYSIS_MODELS above.
+  // Sunburst tiers are release options; these candidates are debug-only.
   const DEBUG_ONLY_IMAGE_MODELS = [
-    "gpt-image-2:low",
-    "gpt-image-2:medium",
-    "gpt-image-2.5-flare:low",
-    "gpt-image-2.5-flare:medium",
     "nano-banana-2",
     "MAI-Image-2.6",
   ];

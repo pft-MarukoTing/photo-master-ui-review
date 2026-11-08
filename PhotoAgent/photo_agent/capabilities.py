@@ -69,18 +69,14 @@ class RenderOption:
 
 
 RENDER_OPTIONS: Tuple[RenderOption, ...] = (
-    RenderOption("gpt-image-2:low", "gpt-image-2", "low", "GPT Image 2 · Standard", True),
-    RenderOption("gpt-image-2:medium", "gpt-image-2", "medium", "GPT Image 2 · Enhanced", True),
     RenderOption("gpt-image-2.5-sunburst:low", "gpt-image-2.5-sunburst", "low", "GPT Image 2.5 Sunburst · Standard", False),
     RenderOption("gpt-image-2.5-sunburst:medium", "gpt-image-2.5-sunburst", "medium", "GPT Image 2.5 Sunburst · Enhanced", False),
     RenderOption("gpt-image-2.5-sunburst:high", "gpt-image-2.5-sunburst", "high", "GPT Image 2.5 Sunburst · Premium", False),
-    RenderOption("gpt-image-2.5-flare:low", "gpt-image-2.5-flare", "low", "GPT Image 2.5 Flare · Standard", True),
-    RenderOption("gpt-image-2.5-flare:medium", "gpt-image-2.5-flare", "medium", "GPT Image 2.5 Flare · Enhanced", True),
     RenderOption("nano-banana-2", "nano-banana-2", "medium", "Nano Banana 2", True),
     RenderOption("MAI-Image-2.6", "MAI-Image-2.6", "medium", "MAI-Image-2.6", True),
 )
-# gpt-image-1.5 and nano-banana-lite are accepted by the API but not offered
-# in the picker.
+# Legacy image models remain accepted by the API for existing cases, but
+# only the render options above are offered in the picker.
 
 
 @dataclass(frozen=True)
@@ -95,9 +91,7 @@ class AnalysisModel:
 
 
 ANALYSIS_MODELS: Tuple[AnalysisModel, ...] = (
-    AnalysisModel("gpt-4.1-mini", "GPT 4.1 Mini", None, True),
     AnalysisModel("gpt-5.6-luna", "GPT 5.6 Luna", "low", False),
-    AnalysisModel("gpt-5.6-sol", "GPT 5.6 Sol", "none", True),
 )
 ANALYSIS_MODEL_REASONING_EFFORT = {m.id: m.reasoning_effort for m in ANALYSIS_MODELS}
 
