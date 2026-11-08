@@ -29,7 +29,10 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(current, default_plan())
 
     def test_debug_only_choices_need_debug(self):
-        for patch in ({"render_option": "nano-banana-2"}, {"render_option": "MAI-Image-2.6"}):
+        for patch in ({"render_option": option} for option in (
+                "nano-banana-2", "MAI-Image-2.6",
+                "gpt-image-2.6-sunburst:low", "gpt-image-2.6-sunburst:medium", "gpt-image-2.6-sunburst:high",
+                "gpt-image-2.6-flare:low", "gpt-image-2.6-flare:medium", "gpt-image-2.6-flare:high")):
             with self.subTest(patch=patch):
                 self.assertIsNone(apply_plan_patch(default_plan(), patch)[0])
                 self.assertIsNotNone(apply_plan_patch(default_plan(), patch, debug=True)[0])

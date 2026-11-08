@@ -2357,6 +2357,1190 @@
    },
    "returned_prompt": "@text:a9e1112d395ee75f"
   },
+  "edit|gpt-image-2.6-flare|auto_16x9_crop": {
+   "request": {
+    "model": "gpt-image-2.6-flare",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:a35e63294448c6fd",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "1680x944"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 1.780，差 -43.8%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:7910cbba05a47232",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:e58e19a2d265f32e",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-flare",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:a35e63294448c6fd"
+  },
+  "edit|gpt-image-2.6-flare|auto_1x4_crop": {
+   "request": {
+    "model": "gpt-image-2.6-flare",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:fdf39bc1921ef826",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "720x2160"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.333，差 +200.0%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:30f5e0d8ffde1239",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:91b4e11664d7ea53",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-flare",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:fdf39bc1921ef826"
+  },
+  "edit|gpt-image-2.6-flare|auto_4x5": {
+   "request": {
+    "model": "gpt-image-2.6-flare",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:b4c91784194750da",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "1120x1408"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.795，差 +25.7%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:4106f4b49a557e7f",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:b1dc7f89d8d79659",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-flare",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:b4c91784194750da"
+  },
+  "edit|gpt-image-2.6-flare|auto_original": {
+   "request": {
+    "model": "gpt-image-2.6-flare",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:fd1438afbb88b970",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "1536x1024"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 1.500，差 -33.3%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:dd9a3fd9b55e6525",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": false,
+     "raw_crop_instruction": "@text:c4c4ce0cd3ac843d",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-flare",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:fd1438afbb88b970"
+  },
+  "edit|gpt-image-2.6-flare|fixed_4x5_no_mode": {
+   "request": {
+    "model": "gpt-image-2.6-flare",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:a1304e75131af9f1",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "1120x1408"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.795，差 +25.7%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:0d58ce6c4e2bb5d3",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:bf93620ae2ec4c06",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-flare",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:a1304e75131af9f1"
+  },
+  "edit|gpt-image-2.6-flare|fixed_9x16_crop": {
+   "request": {
+    "model": "gpt-image-2.6-flare",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:28e6a6c5b0b15144",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "944x1680"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.562，差 +78.0%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:074ce985cfb9a7c3",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:59e71d0c3bc29437",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-flare",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:28e6a6c5b0b15144"
+  },
+  "edit|gpt-image-2.6-flare|fixed_9x16_crop_wide": {
+   "request": {
+    "model": "gpt-image-2.6-flare",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:28e6a6c5b0b15144",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "944x1680"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.562，差 +78.0%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:074ce985cfb9a7c3",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:59e71d0c3bc29437",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-flare",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:28e6a6c5b0b15144"
+  },
+  "edit|gpt-image-2.6-flare|fixed_9x16_expand": {
+   "request": {
+    "model": "gpt-image-2.6-flare",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:5e288cac72e315c3",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "944x1680"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.562，差 +78.0%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:aa9bc03e707b6c4b",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:7e5aff7d22a911f8",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-flare",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:5e288cac72e315c3"
+  },
+  "edit|gpt-image-2.6-flare|high_quality": {
+   "request": {
+    "model": "gpt-image-2.6-flare",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:fd1438afbb88b970",
+    "provider": "openai",
+    "quality": "high",
+    "size": "1536x1024"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 1.500，差 -33.3%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:dd9a3fd9b55e6525",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": false,
+     "raw_crop_instruction": "@text:c4c4ce0cd3ac843d",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-flare",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:fd1438afbb88b970"
+  },
+  "edit|gpt-image-2.6-flare|original": {
+   "request": {
+    "model": "gpt-image-2.6-flare",
+    "png_size": [
+     900,
+     1400
+    ],
+    "prompt": "@text:fd1438afbb88b970",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "1008x1568"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.643，差 +55.6%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:dd9a3fd9b55e6525",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": false,
+     "raw_crop_instruction": "@text:c4c4ce0cd3ac843d",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-flare",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:fd1438afbb88b970"
+  },
+  "edit|gpt-image-2.6-flare|single_pass_revision": {
+   "request": {
+    "model": "gpt-image-2.6-flare",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:a9e1112d395ee75f",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "1248x1248"
+   },
+   "result": {
+    "geometry_warnings": [],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:2263e733a060bfce",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:e2e7e7c26afd9380",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-flare",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:a9e1112d395ee75f"
+  },
+  "edit|gpt-image-2.6-sunburst|auto_16x9_crop": {
+   "request": {
+    "model": "gpt-image-2.6-sunburst",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:a35e63294448c6fd",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "1680x944"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 1.780，差 -43.8%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:7910cbba05a47232",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:e58e19a2d265f32e",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-sunburst",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:a35e63294448c6fd"
+  },
+  "edit|gpt-image-2.6-sunburst|auto_1x4_crop": {
+   "request": {
+    "model": "gpt-image-2.6-sunburst",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:fdf39bc1921ef826",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "720x2160"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.333，差 +200.0%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:30f5e0d8ffde1239",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:91b4e11664d7ea53",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-sunburst",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:fdf39bc1921ef826"
+  },
+  "edit|gpt-image-2.6-sunburst|auto_4x5": {
+   "request": {
+    "model": "gpt-image-2.6-sunburst",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:b4c91784194750da",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "1120x1408"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.795，差 +25.7%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:4106f4b49a557e7f",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:b1dc7f89d8d79659",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-sunburst",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:b4c91784194750da"
+  },
+  "edit|gpt-image-2.6-sunburst|auto_original": {
+   "request": {
+    "model": "gpt-image-2.6-sunburst",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:fd1438afbb88b970",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "1536x1024"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 1.500，差 -33.3%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:dd9a3fd9b55e6525",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": false,
+     "raw_crop_instruction": "@text:c4c4ce0cd3ac843d",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-sunburst",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:fd1438afbb88b970"
+  },
+  "edit|gpt-image-2.6-sunburst|fixed_4x5_no_mode": {
+   "request": {
+    "model": "gpt-image-2.6-sunburst",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:a1304e75131af9f1",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "1120x1408"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.795，差 +25.7%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:0d58ce6c4e2bb5d3",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:bf93620ae2ec4c06",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-sunburst",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:a1304e75131af9f1"
+  },
+  "edit|gpt-image-2.6-sunburst|fixed_9x16_crop": {
+   "request": {
+    "model": "gpt-image-2.6-sunburst",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:28e6a6c5b0b15144",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "944x1680"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.562，差 +78.0%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:074ce985cfb9a7c3",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:59e71d0c3bc29437",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-sunburst",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:28e6a6c5b0b15144"
+  },
+  "edit|gpt-image-2.6-sunburst|fixed_9x16_crop_wide": {
+   "request": {
+    "model": "gpt-image-2.6-sunburst",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:28e6a6c5b0b15144",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "944x1680"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.562，差 +78.0%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:074ce985cfb9a7c3",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:59e71d0c3bc29437",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-sunburst",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:28e6a6c5b0b15144"
+  },
+  "edit|gpt-image-2.6-sunburst|fixed_9x16_expand": {
+   "request": {
+    "model": "gpt-image-2.6-sunburst",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:5e288cac72e315c3",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "944x1680"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.562，差 +78.0%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:aa9bc03e707b6c4b",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:7e5aff7d22a911f8",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-sunburst",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:5e288cac72e315c3"
+  },
+  "edit|gpt-image-2.6-sunburst|high_quality": {
+   "request": {
+    "model": "gpt-image-2.6-sunburst",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:fd1438afbb88b970",
+    "provider": "openai",
+    "quality": "high",
+    "size": "1536x1024"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 1.500，差 -33.3%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:dd9a3fd9b55e6525",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": false,
+     "raw_crop_instruction": "@text:c4c4ce0cd3ac843d",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-sunburst",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:fd1438afbb88b970"
+  },
+  "edit|gpt-image-2.6-sunburst|original": {
+   "request": {
+    "model": "gpt-image-2.6-sunburst",
+    "png_size": [
+     900,
+     1400
+    ],
+    "prompt": "@text:fd1438afbb88b970",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "1008x1568"
+   },
+   "result": {
+    "geometry_warnings": [
+     "輸出畫布比例與要求不一致（實際 1024x1024 = 1.000 vs 要求 0.643，差 +55.6%）。"
+    ],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:dd9a3fd9b55e6525",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": false,
+     "raw_crop_instruction": "@text:c4c4ce0cd3ac843d",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-sunburst",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:fd1438afbb88b970"
+  },
+  "edit|gpt-image-2.6-sunburst|single_pass_revision": {
+   "request": {
+    "model": "gpt-image-2.6-sunburst",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:a9e1112d395ee75f",
+    "provider": "openai",
+    "quality": "medium",
+    "size": "1248x1248"
+   },
+   "result": {
+    "geometry_warnings": [],
+    "prompt_resolution": {
+     "alignment_change_active": false,
+     "color_contract": {
+      "face_tonal_corrections": [],
+      "memory_color_strategy": "",
+      "skin_corrections": []
+     },
+     "compact_crop_guidance": "",
+     "compact_crop_instruction": "@text:2263e733a060bfce",
+     "compact_style_instruction": "",
+     "crop_instruction_source": "raw_edit_prompt",
+     "feature_contracts": [],
+     "framing_change_active": true,
+     "raw_crop_instruction": "@text:e2e7e7c26afd9380",
+     "raw_style_instruction": "",
+     "removed_preservations": [],
+     "resolved_features": [],
+     "strategy": "resolved_compact",
+     "style_change_footprint": [],
+     "style_instruction_source": "none",
+     "unresolved_conflicts": [],
+     "user_preserved_choices": [],
+     "visual_target": {
+      "edit_intent": "",
+      "lighting_strategy": "",
+      "memory_color_strategy": ""
+     }
+    },
+    "prompt_strategy": "resolved_compact",
+    "usage": {
+     "model": "gpt-image-2.6-sunburst",
+     "usage": {
+      "n": 1
+     }
+    }
+   },
+   "returned_prompt": "@text:a9e1112d395ee75f"
+  },
   "edit|gpt-image-2|auto_16x9_crop": {
    "request": {
     "model": "gpt-image-2",
@@ -4340,6 +5524,46 @@
    "returned_prompt": "@text:f7a811dc2ab762b8",
    "usage": {
     "model": "gpt-image-2.5-sunburst",
+    "usage": {
+     "n": 1
+    }
+   }
+  },
+  "eye_repair|gpt-image-2.6-flare": {
+   "request": {
+    "model": "gpt-image-2.6-flare",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:f7a811dc2ab762b8",
+    "provider": "openai",
+    "quality": "low",
+    "size": "1536x1024"
+   },
+   "returned_prompt": "@text:f7a811dc2ab762b8",
+   "usage": {
+    "model": "gpt-image-2.6-flare",
+    "usage": {
+     "n": 1
+    }
+   }
+  },
+  "eye_repair|gpt-image-2.6-sunburst": {
+   "request": {
+    "model": "gpt-image-2.6-sunburst",
+    "png_size": [
+     1200,
+     800
+    ],
+    "prompt": "@text:f7a811dc2ab762b8",
+    "provider": "openai",
+    "quality": "low",
+    "size": "1536x1024"
+   },
+   "returned_prompt": "@text:f7a811dc2ab762b8",
+   "usage": {
+    "model": "gpt-image-2.6-sunburst",
     "usage": {
      "n": 1
     }

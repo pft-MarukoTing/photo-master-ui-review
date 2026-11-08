@@ -46,6 +46,8 @@ IMAGE_MODELS: Tuple[ImageModel, ...] = (
     ImageModel("gpt-image-1.5", "GPT Image 1.5", "openai", "gpt-image-1.5", True),
     ImageModel("gpt-image-2.5-sunburst", "GPT Image 2.5 Sunburst", "openai", "gpt-image-2.5-sunburst", True, arbitrary_size=True),
     ImageModel("gpt-image-2.5-flare", "GPT Image 2.5 Flare", "openai", "gpt-image-2.5-flare", True, arbitrary_size=True),
+    ImageModel("gpt-image-2.6-sunburst", "GPT Image 2.6 Sunburst", "openai", "gpt-image-2.6-sunburst", True, arbitrary_size=True),
+    ImageModel("gpt-image-2.6-flare", "GPT Image 2.6 Flare", "openai", "gpt-image-2.6-flare", True, arbitrary_size=True),
     # "Nano Banana 2" / "Nano Banana 2 Lite" are Google's nicknames for these.
     ImageModel("nano-banana-2", "Nano Banana 2", "gemini", "gemini-3.1-flash-image", True),
     ImageModel("nano-banana-lite", "Nano Banana 2 Lite", "gemini", "gemini-3.1-flash-lite-image", True),
@@ -72,6 +74,12 @@ RENDER_OPTIONS: Tuple[RenderOption, ...] = (
     RenderOption("gpt-image-2.5-sunburst:low", "gpt-image-2.5-sunburst", "low", "GPT Image 2.5 Sunburst · Standard", False),
     RenderOption("gpt-image-2.5-sunburst:medium", "gpt-image-2.5-sunburst", "medium", "GPT Image 2.5 Sunburst · Enhanced", False),
     RenderOption("gpt-image-2.5-sunburst:high", "gpt-image-2.5-sunburst", "high", "GPT Image 2.5 Sunburst · Premium", False),
+    RenderOption("gpt-image-2.6-sunburst:low", "gpt-image-2.6-sunburst", "low", "GPT Image 2.6 Sunburst · Standard", True),
+    RenderOption("gpt-image-2.6-sunburst:medium", "gpt-image-2.6-sunburst", "medium", "GPT Image 2.6 Sunburst · Enhanced", True),
+    RenderOption("gpt-image-2.6-sunburst:high", "gpt-image-2.6-sunburst", "high", "GPT Image 2.6 Sunburst · Premium", True),
+    RenderOption("gpt-image-2.6-flare:low", "gpt-image-2.6-flare", "low", "GPT Image 2.6 Flare · Standard", True),
+    RenderOption("gpt-image-2.6-flare:medium", "gpt-image-2.6-flare", "medium", "GPT Image 2.6 Flare · Enhanced", True),
+    RenderOption("gpt-image-2.6-flare:high", "gpt-image-2.6-flare", "high", "GPT Image 2.6 Flare · Premium", True),
     RenderOption("nano-banana-2", "nano-banana-2", "medium", "Nano Banana 2", True),
     RenderOption("MAI-Image-2.6", "MAI-Image-2.6", "medium", "MAI-Image-2.6", True),
 )

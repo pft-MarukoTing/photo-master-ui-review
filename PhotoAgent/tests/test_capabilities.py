@@ -127,7 +127,10 @@ class DescribeTest(unittest.TestCase):
             caps = capabilities.describe(debug=True)
         self.assertEqual([o["id"] for o in caps["render"]["options"]], [
             "gpt-image-2.5-sunburst:low", "gpt-image-2.5-sunburst:medium",
-            "gpt-image-2.5-sunburst:high", "nano-banana-2", "MAI-Image-2.6",
+            "gpt-image-2.5-sunburst:high",
+            "gpt-image-2.6-sunburst:low", "gpt-image-2.6-sunburst:medium", "gpt-image-2.6-sunburst:high",
+            "gpt-image-2.6-flare:low", "gpt-image-2.6-flare:medium", "gpt-image-2.6-flare:high",
+            "nano-banana-2", "MAI-Image-2.6",
         ])
         self.assertEqual([m["id"] for m in caps["render"]["analysis_models"]], ["gpt-5.6-luna"])
         self.assertEqual(caps["render"]["max_run_count"], capabilities.MAX_RUN_COUNT)

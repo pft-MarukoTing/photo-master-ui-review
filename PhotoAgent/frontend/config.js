@@ -39,12 +39,15 @@ window.PhotoAgentConfig = {
     "gpt-image-2": "GPT Image 2",
     "gpt-image-2.5-sunburst": "GPT Image 2.5 Sunburst",
     "gpt-image-2.5-flare": "GPT Image 2.5 Flare",
+    "gpt-image-2.6-sunburst": "GPT Image 2.6 Sunburst",
+    "gpt-image-2.6-flare": "GPT Image 2.6 Flare",
     "nano-banana-2": "Nano Banana 2",
     "MAI-Image-2.6": "MAI-Image-2.6"
   },
   // Single source of truth for the merged 修圖模型/影像品質 selector (upload
   // page + analyze-preview). All three Sunburst tiers are approved for the
-  // release picker; Nano Banana 2 and MAI-Image-2.6 are debug-only
+  // release picker; both GPT Image 2.6 models, Nano Banana 2 and
+  // MAI-Image-2.6 are debug-only
   // candidates -- app.js's DEBUG_ONLY_IMAGE_MODELS hides them outside debug
   // mode, so they stay listed here purely for debug-mode testing. Nano
   // Banana 2 and MAI-Image-2.6 have no PhotoAgent quality tier, so each
@@ -61,6 +64,12 @@ window.PhotoAgentConfig = {
     { value: "gpt-image-2.5-sunburst:low", model: "gpt-image-2.5-sunburst", quality: "low", label: "GPT Image 2.5 Sunburst · Standard", displayLabel: "Sunburst · Standard" },
     { value: "gpt-image-2.5-sunburst:medium", model: "gpt-image-2.5-sunburst", quality: "medium", label: "GPT Image 2.5 Sunburst · Enhanced", displayLabel: "Sunburst · Enhanced" },
     { value: "gpt-image-2.5-sunburst:high", model: "gpt-image-2.5-sunburst", quality: "high", label: "GPT Image 2.5 Sunburst · Premium", displayLabel: "Sunburst · Premium" },
+    { value: "gpt-image-2.6-sunburst:low", model: "gpt-image-2.6-sunburst", quality: "low", label: "GPT Image 2.6 Sunburst · Standard", displayLabel: "2.6 Sunburst · Standard" },
+    { value: "gpt-image-2.6-sunburst:medium", model: "gpt-image-2.6-sunburst", quality: "medium", label: "GPT Image 2.6 Sunburst · Enhanced", displayLabel: "2.6 Sunburst · Enhanced" },
+    { value: "gpt-image-2.6-sunburst:high", model: "gpt-image-2.6-sunburst", quality: "high", label: "GPT Image 2.6 Sunburst · Premium", displayLabel: "2.6 Sunburst · Premium" },
+    { value: "gpt-image-2.6-flare:low", model: "gpt-image-2.6-flare", quality: "low", label: "GPT Image 2.6 Flare · Standard", displayLabel: "2.6 Flare · Standard" },
+    { value: "gpt-image-2.6-flare:medium", model: "gpt-image-2.6-flare", quality: "medium", label: "GPT Image 2.6 Flare · Enhanced", displayLabel: "2.6 Flare · Enhanced" },
+    { value: "gpt-image-2.6-flare:high", model: "gpt-image-2.6-flare", quality: "high", label: "GPT Image 2.6 Flare · Premium", displayLabel: "2.6 Flare · Premium" },
     { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2", displayLabel: "Nano Banana 2", scalable: false },
     { value: "MAI-Image-2.6", model: "MAI-Image-2.6", quality: "medium", label: "MAI-Image-2.6", displayLabel: "MAI-Image-2.6", scalable: false }
   ],
