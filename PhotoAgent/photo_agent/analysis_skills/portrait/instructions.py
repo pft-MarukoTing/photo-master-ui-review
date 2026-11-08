@@ -83,7 +83,7 @@ _HAIR_ANALYSIS_SECTION = """## Hair analysis
 
 _HAIR_CORRECTION_HANDOFF_SECTION = """## Per-person candidate hair correction plan
 - Keep the plan inside that person's hair_issue.correction_plan.
-- For a state routed to a non-none candidate action above, name the exact visible target, the operation, and the visible final state. The instruction must stand on its own for the editor.
+- For a state routed to a non-none candidate action above, name the exact visible target, the operation, and the visible final state. The instruction must stand on its own for the editor inside the final person block. Describe only the target strands or region, the operation, and the endpoint; do not identify the person again by label, name, clothing, or whole-frame person position. Preserve concrete photograph-left/right anatomical directions, source roots, and adjacent hair-flow directions.
 - Write a renderable endpoint, not vague intent such as 修飾, 整理, 調整, 重組, 精修, 順服, 自然分布, or 均勻連續.
 - For lay_back/remove, limit work to the named strands and their thin footprints; keep surrounding hair and visible facial geometry source-matched.
 - For settle, name the disturbed region and the unaffected hair on the same head that defines its target flow and silhouette.
@@ -243,6 +243,13 @@ _ANALYSIS_RESPONSIBILITIES_PORTRAIT_QC = """- Hair analysis is observation-only:
 """
 
 
+_PORTRAIT_TEXT_SCOPE = """## Per-person evidence and operation scope
+The supplied labels and locations identify the people to inspect; labels are provisional and may change after this pass. Bind each result through subject_index and local_detection_index. The editor receives the final person label and location separately.
+Keep reason and visible_evidence factual and specific to the person being inspected, without unnecessarily repeating their label. Preserve useful anatomical directions, full-frame geometry, and visible gaze-target or activity descriptions. For lens_issue, explicitly allow position relative to the frame center or edge and the outward stretch direction: these are geometric evidence, not a new person identifier.
+For hair_issue.correction_plan, write only the local hair operation inside this person's record, not a second person-identification instruction. Keep the exact strands or region, photograph-left/right eye or cheek, source roots, adjacent hair-flow direction, preservation details, and required final state. Do not reference a crop number or analysis identifier; do not make the operation generic.
+"""
+
+
 _PORTRAIT_QC_PERSONA_HEADER = """You are a meticulous portrait quality-control reviewer. The people listed below have already been selected for review, and a separate pass handles this photo's composition, color, and crop. Your only job is to inspect each of them, independently, for blink/eye closure, gaze direction, hair disruption, smile intensity, and wide-angle edge stretch of the face. You are not judging composition, color, or crop. For hair, author only the nested per-person candidate hair_issue.correction_plan required by the observed state; Python decides whether that candidate is enabled.
 
 Return only valid JSON. Keep the JSON keys in English. Every user-visible string value (e.g. each issue's "reason") must be Traditional Chinese.
@@ -306,6 +313,7 @@ def build_portrait_qc_instruction(persons):
         + _person_list_text(persons)
         + "\n\n"
         + _PORTRAIT_QC_FACE_CROP_EVIDENCE_SECTION
+        + _PORTRAIT_TEXT_SCOPE
         + "\n"
         + _BLINK_DETECTION_SECTION
         + _HAIR_ANALYSIS_SECTION
