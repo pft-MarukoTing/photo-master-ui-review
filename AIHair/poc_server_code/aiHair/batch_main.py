@@ -469,7 +469,11 @@ def _timed_run(ctx: core.Context, feature: core.Feature, photo: core.Photo, opts
     """Feature.run, as it is, with its two halves timed into `timing` as the
     server times them (ai_hair/pipeline.py): process as generate_sec, finish
     as postprocess_sec, and the OpenAI calls (a TimedClient in a copy of
-    `ctx`, its call slots shared with every photo's) as api_sec."""
+    `ctx`, its call slots shared with every photo's) as api_sec; and each
+    step: the feature's own in process (process_steps) and the
+    post-processing's (postprocess_steps: the face, the colour match, the
+    lining up, the blend and the hair model inside them, with the algorithm
+    each ran; postprocess_breakdown, each kind's own seconds)."""
     timer = CallTimer()
     own = copy.copy(ctx)
     own.client = TimedClient(ctx.client, timer)
@@ -483,11 +487,15 @@ def _timed_run(ctx: core.Context, feature: core.Feature, photo: core.Photo, opts
             except Exception as e:  # noqa: BLE001 — keep what the steps before it made
                 where = f"{result.step} failed — " if result.step else ""
                 result.error = f"{where}{type(e).__name__}: {e}"
+            timing["process_steps"] = core.process_steps(result, time.perf_counter())
         with timing.section("postprocess"):
             feature.finish(own, photo, opts, result)
     finally:
         timing["api_sec"] = round(timer.busy_seconds(), 3)
         timing["api_calls"] = timer.summary()
+        steps = result.info.pop("postprocess_steps", [])
+        timing["postprocess_steps"] = steps
+        timing["postprocess_breakdown"] = core.breakdown(steps)
     return result
 
 
@@ -617,6 +625,33 @@ def _timing_line(timing: dict) -> str:
     return ", ".join(parts)
 
 
+# The post-processing's kinds, in the order the console shows them.
+_KINDS = ("face", "hair_masks", "colour_match", "align", "blend")
+
+
+def _steps_lines(timing: dict) -> list[str]:
+    """A photo's steps, for the console: the feature's own, each kind's own
+    post-processing time, then each post-processing step, indented by how
+    deep it ran, with its algorithm (cut short; record.json and
+    timing.jsonl have it whole)."""
+    lines = []
+    if timing.get("process_steps"):
+        lines.append("process:   " + ", ".join(f"{s['step']} {s['sec']:.2f}s"
+                                              for s in timing["process_steps"]))
+    own = timing.get("postprocess_breakdown") or {}
+    if own:
+        kinds = [k for k in _KINDS if k in own] + [k for k in own if k not in _KINDS]
+        lines.append("postproc:  " + ", ".join(f"{k} {own[k]:.2f}s" for k in kinds)
+                     + "  (each kind's own time)")
+    for s in timing.get("postprocess_steps") or []:
+        algorithm = s.get("algorithm") or ""
+        if len(algorithm) > 90:
+            algorithm = algorithm[:89] + "…"
+        lines.append(f"           {'  ' * s['depth']}{s['step']:<{16 - 2 * s['depth']}} "
+                     f"{s.get('sec', 0):7.2f}s  {algorithm}")
+    return lines
+
+
 def _report(record: dict, name: str, k: int, total: int) -> str:
     """One photo's record, its results saved under `name`, for the
     console."""
@@ -640,6 +675,7 @@ def _report(record: dict, name: str, k: int, total: int) -> str:
     timing = record.get("timing") or {}
     if timing:
         lines.append("timing:    " + _timing_line(timing))
+        lines += _steps_lines(timing)
     lines += [f"warning:   {w}" for w in record.get("warnings", [])]
     for key in ("skipped", "error"):
         if record.get(key):
@@ -1033,6 +1069,13 @@ def main() -> int:
             f"{key} {sum(t.get(f'{key}_sec', 0) for t in timed) / len(timed):.2f}s / "
             f"{max(t.get(f'{key}_sec', 0) for t in timed):.2f}s"
             for key in ("generate", "api", "postprocess", "total")))
+        kinds = {k for t in timed for k in (t.get("postprocess_breakdown") or {})}
+        if kinds:
+            order = [k for k in _KINDS if k in kinds] + sorted(kinds - set(_KINDS))
+            print("postprocess by kind (per photo, mean / max):  " + ",  ".join(
+                f"{k} {sum((t.get('postprocess_breakdown') or {}).get(k, 0) for t in timed) / len(timed):.2f}s / "
+                f"{max((t.get('postprocess_breakdown') or {}).get(k, 0) for t in timed):.2f}s"
+                for k in order))
         print(f"timing log: {(effect_dir / 'timing.jsonl').resolve()}")
     print(f"cost (list price) this run: ${run_cost:.4f}"
           + (f", input ${run_input_cost:.4f} ({run_input_cost / run_cost:.0%})"

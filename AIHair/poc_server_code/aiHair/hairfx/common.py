@@ -38,8 +38,9 @@ BLENDED).
 import io
 import math
 
-from . import align, hairseg, imaging, region_align
-from .core import Feature, _colour_match_outputs, _find_face, edit
+from . import align, imaging, region_align
+from .core import (BLEND_ALGORITHMS, Feature, _colour_match_outputs, _find_face,
+                   colour_algorithm, edit, face_algorithm, hair_model, stage)
 
 
 # The hair's body: the hair mask shrunk by a Gaussian of this share of the
@@ -199,9 +200,14 @@ class Composited(Feature):
         if not result.outputs:
             return
         if self.colour_matches(ctx, opts):
-            _colour_match_outputs(ctx, photo, result, self.colour_shift, self.colour_area(ctx))
+            area = self.colour_area(ctx)
+            with stage(result, "colour_match", colour_algorithm(area, self.colour_shift)):
+                _colour_match_outputs(ctx, photo, result, self.colour_shift, area)
         try:
-            pasted = self.composite(ctx, photo, opts, result)
+            # aiHair: the composite lines the renders up itself, so its
+            # align steps are inside this blend step.
+            with stage(result, "blend", BLEND_ALGORITHMS.get(self.blend_mask, self.blend_mask)):
+                pasted = self.composite(ctx, photo, opts, result)
         except Exception as e:  # noqa: BLE001 — the renders are paid for; keep them
             result.warnings.append(f"{self.blend_mask} composite failed, outputs left unblended "
                                    f"— {type(e).__name__}: {e}")
@@ -240,7 +246,8 @@ def lined_up(ctx, photo, renders: dict, grow: float, result, first=None):
     line_up takes the rest. hair_input, hair_<name>, <name>_lined_up (where
     it moved) and info["alignment"] go into `result`."""
     names = list(renders)
-    photo_hair, *masks = hairseg.hair_masks([photo.image, *renders.values()], ctx.seg_python)
+    photo_hair, *masks = hair_model(ctx, result, [photo.image, *renders.values()],
+                                    f"the photo and {len(names)} render(s)")
     if not photo_hair.any():
         raise RuntimeError("the hair model found no hair in the photo")
     result.intermediates["hair_input"] = imaging.mask_image(photo_hair)
@@ -249,20 +256,25 @@ def lined_up(ctx, photo, renders: dict, grow: float, result, first=None):
     notes = result.info.setdefault("alignment", {})
     done = first(photo_hair, hair) if first is not None else {}
     lined, moved = {}, []
-    for name in names:
-        render, render_hair = renders[name], hair[name]
-        if name in done:
-            aligned, notes[name] = done[name]
-        else:
-            aligned, notes[name] = align.line_up(
-                photo.image, render, imaging.dilated(photo_hair | render_hair, radius))
-        if aligned is not None:
-            result.intermediates[f"{name}_lined_up"] = render = aligned
-            moved.append(name)
-        lined[name] = [render, render_hair]
+    with stage(result, "align", "align.line_up: one affine transform of each render, fitted "
+                                "outside the photo's and its hair grown by "
+                                f"{grow:g} of the long side"
+                                + ("; region_align.lined_up's where it lined one up first"
+                                   if first is not None else "")):
+        for name in names:
+            render, render_hair = renders[name], hair[name]
+            if name in done:
+                aligned, notes[name] = done[name]
+            else:
+                aligned, notes[name] = align.line_up(
+                    photo.image, render, imaging.dilated(photo_hair | render_hair, radius))
+            if aligned is not None:
+                result.intermediates[f"{name}_lined_up"] = render = aligned
+                moved.append(name)
+            lined[name] = [render, render_hair]
     if moved:
-        for name, render_hair in zip(moved, hairseg.hair_masks([lined[n][0] for n in moved],
-                                                               ctx.seg_python)):
+        for name, render_hair in zip(moved, hair_model(ctx, result, [lined[n][0] for n in moved],
+                                                       f"{len(moved)} render(s) as lined up")):
             lined[name][1] = render_hair
     for name, (_, render_hair) in lined.items():
         result.intermediates[f"hair_{name}"] = imaging.mask_image(render_hair)
@@ -594,15 +606,18 @@ def shifted_composite(ctx, photo, result, face, keep_out, zone_of, match=None,
     as a Composited effect's composite returns."""
     names = list(result.outputs)
     renders = [result.outputs[name] for name in names]
-    photo_hair, *hairs = hairseg.hair_masks([photo.image, *renders], ctx.seg_python)
+    photo_hair, *hairs = hair_model(ctx, result, [photo.image, *renders],
+                                    f"the photo and {len(renders)} render(s)")
     result.intermediates["hair_input"] = imaging.mask_image(photo_hair)
-    lined, weights = region_align.shifted(photo.image, renders, photo_hair, hairs, face,
-                                          keep_out, ctx.face_python)
+    with stage(result, "align", "region_align.shifted: the face, the hair and the rest each "
+                                "lined up by one translation (OpenCV, in the face python)"):
+        lined, weights = region_align.shifted(photo.image, renders, photo_hair, hairs, face,
+                                              keep_out, ctx.face_python)
     result.intermediates["regions.jpg"] = _regions(photo.image, weights)
     moved = [i for i, (image, _) in enumerate(lined) if image is not None]
     if moved:
-        for i, hair in zip(moved, hairseg.hair_masks([lined[i][0] for i in moved],
-                                                     ctx.seg_python)):
+        for i, hair in zip(moved, hair_model(ctx, result, [lined[i][0] for i in moved],
+                                             f"{len(moved)} render(s) as lined up")):
             hairs[i] = hair
     long_side = max(photo.size)
     notes = result.info.setdefault("alignment", {})
@@ -620,7 +635,11 @@ def shifted_composite(ctx, photo, result, face, keep_out, zone_of, match=None,
             weight = weight * (1 - lock)
             result.intermediates[f"face_lock_{name}.jpg"] = imaging.as_image(
                 imaging.tinted(photo.image, lock > 0.5))
-        image = _paste(photo.image, render, photo_hair, hairs[i], weight, match, lock)
+        with stage(result, "blend", "common._paste: the render pasted through the zone (grown, "
+                                    "feathered, less the face lock) by Laplacian pyramid"
+                                    + (", its hair's colour matched first" if match else ""),
+                   name=f"paste {name}"):
+            image = _paste(photo.image, render, photo_hair, hairs[i], weight, match, lock)
         # What the paste dropped: the render's pixels off the photo's where
         # the photo is kept.
         kept = weight < 0.01
@@ -647,7 +666,8 @@ class HairShifted(Composited):
         import numpy as np
 
         shape = (photo.size[1], photo.size[0])
-        found = _find_face(ctx, photo, result)
+        with stage(result, "face", face_algorithm(ctx)):
+            found = _find_face(ctx, photo, result)
         face, lock_of = np.zeros(shape, bool), None
         if found is not None:
             points, long_side = found["points"], max(photo.size)

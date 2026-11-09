@@ -57,7 +57,7 @@ from dataclasses import dataclass
 
 from .. import align, imaging
 from ..common import CompositeFeature, _gaussian, _reach, lined_up
-from ..core import option
+from ..core import option, stage
 
 
 # hairpart_composite.py's defaults, as shares of the photo's long side but
@@ -220,8 +220,11 @@ class HairPartFeature(CompositeFeature):
             imaging.tinted(photo.image, envelope))
         pasted = {}
         for name, (render, render_hair) in lined.items():
-            image, weight = _paste(photo.image, render, photo_hair, render_hair, envelope,
-                                   opts.level)
+            with stage(result, "blend", "hairpart._paste: the render taken only where it "
+                                        "filled the parting, its colour fixed to the hair "
+                                        "round it", name=f"paste {name}"):
+                image, weight = _paste(photo.image, render, photo_hair, render_hair, envelope,
+                                       opts.level)
             # What the paste dropped: the photo's hair kept where the render
             # had re-toned or moved it (hairpart_composite.py's
             # hair_off_pct_before).

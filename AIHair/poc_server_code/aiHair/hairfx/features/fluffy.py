@@ -86,7 +86,7 @@ from ..common import (_BROWS, _JAW, _LOCAL_SIZE, _MATCH_EDGE, _PYRAMID_LEVELS, _
                       _ZONE_FEATHER, _ZONE_GROW, CompositeFeature, _face_frame, _face_lock,
                       _filled_hull, _gaussian, _hair_pulled, _lab, _local_stats,
                       _pyramid_blend, _reach, _rgb, lined_up)
-from ..core import _find_face, option
+from ..core import _find_face, face_algorithm, option, stage
 
 
 # fluffy_composite.py's defaults, as shares of the photo's long side: the
@@ -401,7 +401,10 @@ class FluffyFeature(CompositeFeature):
 
     def composite(self, ctx, photo, opts, result) -> dict:
         """Steps 2–4."""
-        face = _find_face(ctx, photo, result) if self.blend_face(opts) else None
+        face = None
+        if self.blend_face(opts):
+            with stage(result, "face", face_algorithm(ctx)):
+                face = _find_face(ctx, photo, result)
         first = (_by_region(ctx, photo, result.outputs, face["points"])
                  if opts.align_regions and face is not None else None)
         photo_hair, lined = lined_up(ctx, photo, result.outputs, _GROW, result, first)
@@ -419,8 +422,12 @@ class FluffyFeature(CompositeFeature):
                 imaging.tinted(photo.image, lock > 0.5))
         pasted = {}
         for name, (render, render_hair) in lined.items():
-            image, weight = _paste(photo.image, render, photo_hair, render_hair, roots, cap,
-                                   lock, opts)
+            with stage(result, "blend", "fluffy._paste: the render's hair on top of the head "
+                                        "(by -o roots_only, only_changed, whole_cap), the face "
+                                        "kept (-o lock_face), by Laplacian pyramid",
+                       name=f"paste {name}"):
+                image, weight = _paste(photo.image, render, photo_hair, render_hair, roots, cap,
+                                       lock, opts)
             # What the paste dropped: the render's pixels off the photo's
             # where the photo is kept (fluffy_composite.py's outside_off_pct).
             kept = weight < 0.01

@@ -30,8 +30,10 @@ import math
 import os
 import sys
 import threading
+import time
 import typing
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -248,6 +250,142 @@ class EffectResult:
         out."""
         return sum(c.input_cost or 0.0 for c in self.calls)
 
+    def __setattr__(self, name, value):
+        # aiHair: each step a feature names (result.step) is marked with the
+        # time it began, for process_steps.
+        if name == "step" and value is not None:
+            self.__dict__.setdefault("_step_marks", []).append((value, time.perf_counter()))
+        object.__setattr__(self, name, value)
+
+
+# ---------------------------------------------------------------------------
+# aiHair: what each step took, for the timing records.
+#
+# process_steps: the feature's own steps (Feature.process), from the marks
+# result.step leaves: the render calls and what the feature does round them
+# (frizzCare's smoothing, soft's paste), each until the next step began.
+# stage: one post-processing step (Feature.finish and the composites), its
+# kind, the algorithm it runs and its time, into
+# result.info["postprocess_steps"], nested steps (the hair model inside the
+# colour match, the lining up inside a composite) a level deeper;
+# breakdown: each kind's own time, a step's less the steps inside it.
+# ---------------------------------------------------------------------------
+
+def process_steps(result: "EffectResult", end: float) -> list[dict]:
+    """The steps result.step named before `end` (time.perf_counter), each
+    with the seconds until the next began (the last until `end`)."""
+    marks = [m for m in result.__dict__.get("_step_marks", []) if m[1] <= end]
+    return [{"step": name, "sec": round((marks[i + 1][1] if i + 1 < len(marks) else end)
+                                        - start, 3)}
+            for i, (name, start) in enumerate(marks)]
+
+
+@contextmanager
+def stage(result: "EffectResult", kind: str, algorithm: str | None = None,
+          name: str | None = None):
+    """Time the block as one post-processing step of `kind` ("face",
+    "colour_match", "align", "blend", "hair_masks"; a paste is a blend) running
+    `algorithm`, into result.info["postprocess_steps"] in the order the steps
+    began, a step begun inside another one level deeper. Yields its record,
+    for notes on what it did."""
+    steps = result.info.setdefault("postprocess_steps", [])
+    depth = result.__dict__.get("_stage_depth", 0)
+    entry = {"step": name or kind, "kind": kind, "algorithm": algorithm, "depth": depth}
+    steps.append(entry)
+    result.__dict__["_stage_depth"] = depth + 1
+    start = time.perf_counter()
+    try:
+        yield entry
+    finally:
+        entry["sec"] = round(time.perf_counter() - start, 3)
+        result.__dict__["_stage_depth"] = depth
+
+
+def breakdown(steps: list[dict] | None) -> dict[str, float]:
+    """Each kind's own seconds over `steps` (stage's records): a step's less
+    those of the steps one level inside it, so the kinds add up to the
+    post-processing's time and the hair model inside the colour match counts
+    as the hair model's."""
+    steps = steps or []
+    own = {}
+    for i, step in enumerate(steps):
+        inside = 0.0
+        for later in steps[i + 1:]:
+            if later["depth"] <= step["depth"]:
+                break
+            if later["depth"] == step["depth"] + 1:
+                inside += later.get("sec", 0.0)
+        own[step["kind"]] = round(own.get(step["kind"], 0.0)
+                                  + max(step.get("sec", 0.0) - inside, 0.0), 3)
+    return own
+
+
+def colour_algorithm(area: str, shift: bool) -> str:
+    """What the colour match runs, by its area (Feature.colour_area)."""
+    text = {
+        "hair": "imaging.colour_matched: one 3x3 colour matrix and offset, fitted on the 70% of "
+                "the photo's and the output's shared hair the render changed least (blocks "
+                "0.5% of the long side), taken in their hair",
+        "whole": "imaging.whole_colour_matched: one 3x3 colour matrix, fitted on every 7th "
+                 "pixel then refitted on the 70% the render changed least, taken over the "
+                 "whole picture",
+        "hair_inset": "imaging.colour_matched: one 3x3 colour matrix fitted in the hair, taken "
+                      "in it drawn in from its outline and the face's skin "
+                      "(imaging.inset_weight)",
+    }.get(area, area)
+    if shift and area != "whole":
+        text += "; the hair the fit leaves out shifted as the hair round it (shift_left_out)"
+    return text
+
+
+ALIGN_ALGORITHMS = {
+    "global": "align.line_up: one affine transform of the whole render, fitted outside the "
+              "photo's and the output's hair",
+    "local": "align.line_up: one affine transform outside the hair, then the brows, eyes, "
+             "nose, mouth and chin each matched and moved (FAN landmarks)",
+    "local_flow": "align.line_up: as local, then the face from just above the brows down by "
+                  "optical flow (OpenCV DIS, in the face python)",
+    "regions_flow": "align.line_up with region_align: the rest and the face each by an affine "
+                    "transform (ECC), the hair by optical flow faded in from the forehead; then "
+                    "the face part by part and by optical flow (OpenCV DIS, in the face python)",
+}
+
+BLEND_ALGORITHMS = {
+    "hair": "blend.weight hair: the photo's and the output's hair, grown by --blend-grow of the "
+            "long side and feathered; alpha paste",
+    "hair_brow": "blend.weight hair_brow: the hair and the forehead above the lower brow (FAN), "
+                 "grown and feathered; alpha paste",
+    "hair_face": "blend.weight hair_face: the hair and the feature's face_mask, grown and "
+                 "feathered; alpha paste",
+    "head": "blend.weight head: the hair and the face with its forehead (FAN), zone-feathered; "
+            "Laplacian pyramid paste (common._paste)",
+    "hair_shifted": "common.shifted_composite: each render lined up region by region (the face, "
+                    "the hair and the rest each by one translation, OpenCV), pasted through the "
+                    "hair (the photo's and the render's) by Laplacian pyramid, the face kept "
+                    "the photo's but for the hair",
+    "face": "common.shifted_composite: each render lined up region by region, pasted through "
+            "the face it drew, grown and feathered, its hair's colour matched to the photo's "
+            "near it",
+    "crown": "fluffy's composite: lined up (common.lined_up), its hair's colour matched place "
+             "by place, pasted on top of the head where it reshaped the hair, the face kept "
+             "the photo's (by its -o options)",
+    "parting": "hairpart's composite: lined up (common.lined_up), pasted only where it filled "
+               "the parting, its colour fixed to the hair round it",
+}
+
+
+def face_algorithm(ctx: "Context") -> str:
+    return ("landmarks.face_landmarks: FAN's 68 landmarks (face_alignment, sfd detector), "
+            + ("in this process" if landmarks.in_process(ctx.face_python)
+               else f"in {ctx.face_python}"))
+
+
+def hair_model(ctx: "Context", result: "EffectResult", images: list, what: str) -> list:
+    """hairseg.hair_masks on `images`, timed as a hair_masks step."""
+    with stage(result, "hair_masks", f"hairseg.hair_masks: the in-house hair model "
+                                     f"({Path(ctx.seg_python).name}) on {what}"):
+        return hairseg.hair_masks(images, ctx.seg_python)
+
 
 class Skip(Exception):
     """Raised in Feature.process for a photo the effect leaves as it is —
@@ -405,18 +543,23 @@ class Feature(ABC):
         face = None
         if ((colours and area == "hair_inset") or local
                 or (blends and self.blend_face(opts))):
-            face = _find_face(ctx, photo, result)
+            with stage(result, "face", face_algorithm(ctx)):
+                face = _find_face(ctx, photo, result)
         hair = None
         if colours:
-            hair = _colour_match_outputs(ctx, photo, result, self.colour_shift, area,
-                                         face)
+            with stage(result, "colour_match", colour_algorithm(area, self.colour_shift)):
+                hair = _colour_match_outputs(ctx, photo, result, self.colour_shift, area,
+                                             face)
         if aligns:
             how = self.align_how(ctx)
-            _align_outputs(ctx, photo, result, face if local else None, hair,
-                           flow=how in ("local_flow", "regions_flow"),
-                           regions=how == "regions_flow")
+            with stage(result, "align", ALIGN_ALGORITHMS.get(how, how)) as step:
+                _align_outputs(ctx, photo, result, face if local else None, hair,
+                               flow=how in ("local_flow", "regions_flow"),
+                               regions=how == "regions_flow")
+                step["aligned_by"] = result.info.get("aligned_by")
         if blends:
-            _blend_outputs(ctx, self.blend_mask, photo, result, face)
+            with stage(result, "blend", BLEND_ALGORITHMS.get(self.blend_mask, self.blend_mask)):
+                _blend_outputs(ctx, self.blend_mask, photo, result, face)
 
 
 def _find_face(ctx: Context, photo: Photo, result: EffectResult):
@@ -453,8 +596,8 @@ def _hair_masks(ctx: Context, photo: Photo, result: EffectResult):
     """The photo's hair and each output's (name -> mask), from the in-house
     hair model."""
     names = list(result.outputs)
-    photo_hair, *hair = hairseg.hair_masks(
-        [photo.image] + [result.outputs[n] for n in names], ctx.seg_python)
+    photo_hair, *hair = hair_model(ctx, result, [photo.image] + [result.outputs[n] for n in names],
+                                   f"the photo and {len(names)} output(s)")
     return photo_hair, dict(zip(names, hair))
 
 
@@ -603,8 +746,9 @@ def _blend_outputs(ctx: Context, kind: str, photo: Photo, result: EffectResult,
 
     names = list(result.outputs)
     try:
-        photo_hair, *hair = hairseg.hair_masks(
-            [photo.image] + [result.outputs[n] for n in names], ctx.seg_python)
+        photo_hair, *hair = hair_model(ctx, result,
+                                       [photo.image] + [result.outputs[n] for n in names],
+                                       f"the photo and {len(names)} output(s), as lined up")
         face_mask = result.intermediates.get("face_mask")
         face_mask = imaging.region(face_mask) if face_mask is not None else None
         notes = {"mask": kind}
