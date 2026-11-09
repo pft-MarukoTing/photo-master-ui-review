@@ -22,7 +22,7 @@ import { catalogs as MADE_CATALOGS, languages as MADE_LANGUAGES } from "virtual:
 export const SOURCE = "zh-TW";
 // What the language picker offers, each named in its own language.
 const isChinese = (code: string) => code.split("-")[0] === "zh";
-export const LANGS: { code: string; name: string; fallback?: string }[] = [
+export const LANGS: { code: string; name: string; fallback?: string; dir?: string }[] = [
   { code: SOURCE, name: "繁體中文" },
   ...MADE_LANGUAGES.filter((l) => isChinese(l.code)),
   { code: "en", name: "English" },
@@ -70,6 +70,7 @@ function resolve(): string {
 
 export const lang = resolve();
 document.documentElement.lang = lang === SOURCE ? "zh-Hant" : lang;
+document.documentElement.dir = LANGS.find((l) => l.code === lang)?.dir || "ltr";
 // Only the chosen language's catalog is downloaded; every module importing t() waits for it.
 async function loadCatalog(): Promise<Record<string, string> | undefined> {
   if (lang === "en") return EN;

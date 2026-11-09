@@ -63,6 +63,8 @@ def check_language(code, meta):
             problems.append(f"{code}: format.{field} should be a {kind.__name__}" + (f" of {length}" if length else ""))
     if meta.get("fallback") not in (None, "source"):
         problems.append(f"{code}: fallback should be \"source\" or left out")
+    if meta.get("dir") not in (None, "rtl"):
+        problems.append(f"{code}: dir should be \"rtl\" or left out")
     return problems
 
 
@@ -208,7 +210,7 @@ def generate(arbs, languages, keys_doc, source, version):
 
 def render(made, languages, version):
     names = [{"code": code, "name": languages[code]["name"],
-              **({"fallback": languages[code]["fallback"]} if languages[code].get("fallback") else {})} for code in made]
+              **{key: languages[code][key] for key in ("fallback", "dir") if languages[code].get(key)}} for code in made]
     page = lambda where: {"version": version, "languages": names,
                           "catalogs": {code: texts[where] for code, texts in made.items()}}
     backend = {"version": version, "languages": [

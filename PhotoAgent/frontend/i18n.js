@@ -63,6 +63,7 @@
   const toEnglish = (LANGS.find((l) => l.code === lang) || {}).fallback !== "source";
   const lookup = (key) => (catalog ? catalog[key] || (toEnglish ? ENGLISH[key] : undefined) : undefined);
   document.documentElement.lang = lang === SOURCE ? "zh-Hant" : lang;
+  document.documentElement.dir = (LANGS.find((l) => l.code === lang) || {}).dir || "ltr";
   if (lang === "zh-Hans") {
     const font = document.createElement("link");
     font.rel = "stylesheet";

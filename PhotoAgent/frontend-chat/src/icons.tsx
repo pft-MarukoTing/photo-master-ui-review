@@ -1,10 +1,12 @@
 import type { JSX } from "preact";
 
-const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
+// mirror: points along the reading direction, so it flips in a right-to-left page.
+const ICONS: Record<string, { sw: number; body: JSX.Element; mirror?: boolean }> = {
   chat: { sw: 2, body: <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" /> },
   spark: { sw: 2, body: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /> },
   redo: {
     sw: 2.2,
+    mirror: true,
     body: (
       <>
         <path d="M20 11a8 8 0 1 0-2.34 5.66" />
@@ -14,6 +16,7 @@ const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
   },
   undo: {
     sw: 2.2,
+    mirror: true,
     body: (
       <>
         <path d="M4 11a8 8 0 1 1 2.34 5.66" />
@@ -89,7 +92,7 @@ const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
     ),
   },
   check: { sw: 3, body: <path d="M20 6L9 17l-5-5" /> },
-  arrow: { sw: 2.5, body: <path d="M5 12h14M13 6l6 6-6 6" /> },
+  arrow: { sw: 2.5, mirror: true, body: <path d="M5 12h14M13 6l6 6-6 6" /> },
   // The option categories, as the old UI's review tabs and 設定 button draw them.
   person: {
     sw: 1.8,
@@ -180,7 +183,7 @@ const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
     ),
   },
   more: { sw: 3.2, body: <path d="M5 12h.01M12 12h.01M19 12h.01" /> },
-  next: { sw: 2, body: <path d="M9 6l6 6-6 6" /> },
+  next: { sw: 2, mirror: true, body: <path d="M9 6l6 6-6 6" /> },
   globe: {
     sw: 1.8,
     body: (
@@ -208,6 +211,7 @@ export function Icon({ name, size }: { name: keyof typeof ICONS | string; size?:
       stroke-linecap="round"
       stroke-linejoin="round"
       aria-hidden="true"
+      class={icon.mirror ? "icon-mirror" : undefined}
     >
       {icon.body}
     </svg>

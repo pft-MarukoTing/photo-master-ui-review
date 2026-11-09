@@ -169,7 +169,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 /* Baseline, not centre: the 20px title and 12px sub sit on one baseline. */
 .chat-panel-head{display:flex;align-items:baseline;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--border);background:var(--n04)}
 .chat-panel-title{font-family:var(--chat-serif);font-size:var(--chat-fs-xl);font-weight:600;line-height:1.3;letter-spacing:.02em;color:var(--n100)}
-.chat-panel-sub{font-size:var(--chat-fs-sm);color:var(--n54);margin-left:auto}
+.chat-panel-sub{font-size:var(--chat-fs-sm);color:var(--n54);margin-inline-start:auto}
 /* 對話頁標頭的「對話｜面板」（.mode-switch，styles.css）比標題高，改成置中對齊，
    上下留白收一點，讓標頭高度跟原本差不多。 */
 .chat-panel-head:has(.mode-switch){align-items:center;padding-block:var(--sp-2)}
@@ -198,7 +198,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    on those the scale step read as a slab instead of a bubble. The leading
    stays at 1.6 -- the long turns still wrap, and CJK needs it. */
 .chat-bubble{background:var(--tonal);border:1px solid var(--tonal-hi);color:var(--n100);font-size:15px;line-height:1.6;
-  padding:6px 14px;border-radius:18px 18px 6px 18px;max-width:380px}
+  padding:6px 14px;border-start-start-radius:18px;border-start-end-radius:18px;border-end-end-radius:6px;border-end-start-radius:18px;max-width:380px}
 .chat-bubble.is-click{display:inline-flex;align-items:center;gap:var(--sp-1)}
 .chat-bubble.is-click svg{color:var(--accent-text);width:14px;height:14px;flex-shrink:0}
 .chat-upload{display:flex;align-items:center;gap:var(--sp-3)}
@@ -220,7 +220,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 .chat-working li.is-now{font-weight:600;animation:chat-working-in .35s ease-out both}
 /* 已經等了幾秒：靠右、等寬數字，跳秒時字才不會左右晃；字重和顏色退回一般，
    不跟正在做的那句搶。 */
-.chat-working-time{margin-left:auto;padding-left:var(--sp-3);flex-shrink:0;font-size:var(--chat-fs-sm);
+.chat-working-time{margin-inline-start:auto;padding-inline-start:var(--sp-3);flex-shrink:0;font-size:var(--chat-fs-sm);
   font-weight:400;color:var(--n54);font-variant-numeric:tabular-nums;white-space:nowrap}
 @supports ((background-clip:text) or (-webkit-background-clip:text)){
   .chat-working li.is-now .chat-working-text{
@@ -334,7 +334,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    跟選項裡建議調整的 .chat-opt-dot 同色同意思，多一圈底色把它從 2px 的外框
    切開；出現時擴散一次就停，不一直閃。 */
 .chat-chip{position:relative}
-.chat-chip-badge{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;
+.chat-chip-badge{position:absolute;top:-2px;inset-inline-end:-2px;width:9px;height:9px;border-radius:50%;
   background:var(--accent);box-shadow:0 0 0 2px var(--card);animation:chat-chip-badge-in .9s ease-out 1}
 @keyframes chat-chip-badge-in{0%{transform:scale(0);box-shadow:0 0 0 2px var(--card),0 0 0 0 rgba(var(--accent-rgb),.5)}
   40%{transform:scale(1.15)}100%{transform:scale(1);box-shadow:0 0 0 2px var(--card),0 0 0 8px rgba(var(--accent-rgb),0)}}
@@ -348,13 +348,13 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    status colours. Same reasoning, and the same values, as the old sheet.
    The transparent border on the base keeps the pill one size across states,
    since the tinted ones carry a hairline. */
-.session-tile-badge{position:absolute;left:6px;bottom:6px;z-index:3;max-width:calc(100% - 12px);
+.session-tile-badge{position:absolute;inset-inline-start:6px;bottom:6px;z-index:3;max-width:calc(100% - 12px);
   display:inline-block;padding:3px 10px;border-radius:20px;
   font-size:var(--chat-fs-sm);font-weight:300;line-height:1.2;letter-spacing:.01em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;
   background:rgba(9,9,11,.65);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);
   border:1px solid transparent;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-.session-tile-badge::before{flex:0 0 auto;margin-right:5px;font-size:13px;font-weight:800;line-height:1}
+.session-tile-badge::before{flex:0 0 auto;margin-inline-end:5px;font-size:13px;font-weight:800;line-height:1}
 .session-tile-badge.is-analyzing::before,.session-tile-badge.is-rendering::before{content:"\25CC"}
 .session-tile-badge.is-ready::before{content:"\2726"}
 .session-tile-badge.is-done::before{content:"\2713"}
@@ -382,16 +382,16 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 .session-tile-cell b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   background:rgba(9,9,11,.45);color:#fff;font-size:var(--chat-fs-md);font-weight:600}
 /* 總共幾張：左上角，跟狀態那顆同一種玻璃膠囊，右上角留給刪除的 ×。 */
-.session-tile-count{position:absolute;left:6px;top:6px;z-index:3;padding:2px 8px;border-radius:20px;pointer-events:none;
+.session-tile-count{position:absolute;inset-inline-start:6px;top:6px;z-index:3;padding:2px 8px;border-radius:20px;pointer-events:none;
   font-size:var(--chat-fs-xs);line-height:1.3;color:#fff;background:rgba(9,9,11,.65);
   backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 @container (max-width:110px){
-  .session-tile-count{left:4px;top:4px;padding:1px 6px;font-size:10px}
+  .session-tile-count{inset-inline-start:4px;top:4px;padding:1px 6px;font-size:10px}
   .session-tile-cell b{font-size:12px}
 }
 @container (max-width:110px){
-  .session-tile-badge{left:4px;bottom:4px;max-width:calc(100% - 8px);padding:2px 5px;font-size:10px}
-  .session-tile-badge::before{margin-right:4px;font-size:10px}
+  .session-tile-badge{inset-inline-start:4px;bottom:4px;max-width:calc(100% - 8px);padding:2px 5px;font-size:10px}
+  .session-tile-badge::before{margin-inline-end:4px;font-size:10px}
 }
 .chat-composer{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3);border-top:1px solid var(--border);background:var(--n04)}
 .chat-attach,.chat-send{width:44px;height:44px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;
@@ -402,7 +402,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 .chat-composer-field{flex:1;min-height:48px;display:flex;align-items:center;padding:var(--sp-1) var(--sp-3);border-radius:999px;background:var(--card);
   border:1px solid var(--n24);color:var(--n64);font-size:var(--chat-fs-md)}
 .home-start{display:flex;flex-direction:column;align-items:center;gap:var(--sp-2);margin-top:var(--sp-5)}
-.home-start-btn{display:inline-flex;align-items:center;gap:var(--sp-2);min-height:48px;padding:0 var(--sp-6) 0 var(--sp-5);border-radius:999px;font-size:var(--chat-fs-lg);font-weight:700;
+.home-start-btn{display:inline-flex;align-items:center;gap:var(--sp-2);min-height:48px;padding-block:0;padding-inline:var(--sp-5) var(--sp-6);border-radius:999px;font-size:var(--chat-fs-lg);font-weight:700;
   background:var(--cta);color:var(--on-cta);border:0;box-shadow:0 8px 22px rgba(var(--accent-rgb),.30)}
 .home-start-btn svg{width:18px;height:18px}
 /* 首頁唯一要按的那顆：每隔幾秒輕輕跳兩下，落地時從按鈕邊緣擴散出一圈 accent 色的光暈，
@@ -436,7 +436,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    which is also where the eye lands last. */
 .chat-actions{align-items:center;gap:var(--sp-2) var(--sp-5)}
 /* Standalone pre-chat controls align with message text without an AI avatar. */
-.prechat-actions{margin-left:calc(28px + var(--sp-3));min-width:0;flex-shrink:0}
+.prechat-actions{margin-inline-start:calc(28px + var(--sp-3));min-width:0;flex-shrink:0}
 .chat-actions-main,.chat-actions-aux{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
 .chat-chip.is-picked{border-color:var(--accent);color:var(--accent-text);background:var(--tonal-lo)}
 /* An answered turn. Not disabled -- disabled says "unavailable for now", and
@@ -481,7 +481,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 /* 多選時選到的那張右上角標第幾張：多張照這個順序排，所以標數字不標勾。
    選滿了，沒選的淡下去，看得出點了也不會加。 */
 .sample-tile{position:relative}
-.sample-tile-order{position:absolute;top:var(--sp-2);right:var(--sp-2);min-width:24px;height:24px;padding:0 6px;box-sizing:border-box;
+.sample-tile-order{position:absolute;top:var(--sp-2);inset-inline-end:var(--sp-2);min-width:24px;height:24px;padding:0 6px;box-sizing:border-box;
   display:flex;align-items:center;justify-content:center;border-radius:999px;background:var(--accent);color:#fff;
   font:700 13px/1 Inter,var(--cjk-sans),system-ui,sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 .sample-tile.is-full{opacity:.45;cursor:not-allowed}
@@ -493,7 +493,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    同一套，整張一段字：不同對象用「；」隔開，指定了人的那段前面掛頭像。改的時候是同一段
    字變成可以打字的框，頭像還在字裡。 */
 .chat-notes{display:flex;flex-direction:column;gap:var(--sp-2)}
-.chat-notes .chat-face-chip,.chat-opt-prompt .chat-face-chip{vertical-align:middle;margin:-2px 2px 0 0}
+.chat-notes .chat-face-chip,.chat-opt-prompt .chat-face-chip{vertical-align:middle;margin-block:-2px 0;margin-inline:0 2px}
 .chat-notes .chat-face-chip.is-small,.chat-opt-prompt .chat-face-chip.is-small{padding:0;min-height:0;gap:0}
 .chat-notes-box{min-height:calc(var(--chat-fs-md)*1.5*2 + 2*var(--sp-2));padding:var(--sp-2) var(--sp-3);border:1px solid var(--n24);border-radius:8px;background:var(--card);
   font-size:var(--chat-fs-md);line-height:1.5;color:var(--n100);white-space:pre-wrap;overflow-wrap:anywhere;cursor:text}
@@ -508,7 +508,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 /* 面板收起後留下的那一句結論。跟它上面的引言是兩種東西 -- 引言是當時在說
    什麼，這句是最後談成的結果 -- 所以給它一道左線，讀起來像被引出來的一行，
    顏色也比引言實一點。 */
-.chat-recap{margin:0;padding-left:var(--sp-3);border-left:2px solid var(--n24);font-size:14px;line-height:1.7;color:var(--n84);text-wrap:pretty}
+.chat-recap{margin:0;padding-inline-start:var(--sp-3);border-inline-start:2px solid var(--n24);font-size:14px;line-height:1.7;color:var(--n84);text-wrap:pretty}
 .chat-error{color:var(--danger)}
 .chat-panel.is-dragging{outline:2px dashed var(--accent);outline-offset:-4px}
 .chat-verdict b.is-warn{background:var(--warn-bg);color:var(--warn)}
@@ -526,13 +526,13 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    of jumping straight to the file dialog. The sheet rises from the button it
    belongs to and sits above the composer, which is the last row on the page. */
 .chat-attach-wrap{position:relative;flex-shrink:0;display:flex}
-.chat-attach-menu{position:absolute;left:0;bottom:calc(100% + var(--sp-2));z-index:20;min-width:170px;
+.chat-attach-menu{position:absolute;inset-inline-start:0;bottom:calc(100% + var(--sp-2));z-index:20;min-width:170px;
   display:flex;flex-direction:column;gap:2px;padding:var(--sp-1);border-radius:12px;
   border:1px solid var(--border);background:var(--card);
   box-shadow:0 14px 32px rgba(0,0,0,.16),0 2px 6px rgba(0,0,0,.06);
   animation:chat-attach-menu-in .14s ease-out}
 .chat-attach-menu button{display:flex;align-items:center;gap:var(--sp-2);width:100%;padding:var(--sp-2) var(--sp-3);
-  border:0;border-radius:8px;background:none;cursor:pointer;white-space:nowrap;text-align:left;
+  border:0;border-radius:8px;background:none;cursor:pointer;white-space:nowrap;text-align:start;
   font:inherit;font-size:var(--chat-fs-md);color:var(--n84)}
 .chat-attach-menu button:hover,.chat-attach-menu button:focus-visible{background:var(--tonal-lo);color:var(--accent-text)}
 .chat-attach-menu svg{width:16px;height:16px;flex-shrink:0}
@@ -541,8 +541,8 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 /* 多張頁照片列標題上的 +：按鈕在頂端，選單往下開、跟按鈕置中對齊。
    置中用 translate 不用 transform，進場動畫的 transform 才不會把它蓋掉。 */
 .batch-add-wrap{position:relative;display:flex}
-.chat-attach-menu.is-down{left:50%;right:auto;bottom:auto;top:calc(100% + var(--sp-1));translate:-50% 0;z-index:30}
-.chat-attach-menu.is-down.is-end{left:auto;right:0;translate:none}
+.chat-attach-menu.is-down{left:50%;inset-inline-end:auto;bottom:auto;top:calc(100% + var(--sp-1));translate:-50% 0;z-index:30}
+.chat-attach-menu.is-down.is-end{inset-inline-start:auto;inset-inline-end:0;translate:none}
 .chat-boot-error{padding:var(--sp-7) var(--sp-4);color:var(--danger)}
 
 /* Settings editor */
@@ -554,8 +554,8 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 .chat-field select{width:100%;font-size:var(--chat-fs-md);padding-top:var(--sp-2);padding-bottom:var(--sp-2)}
 /* 長寬比：選項跟面板模式的 .aspect-ratio-picker 同一套（frontend/index.html）。鈕長得
    跟旁邊的 select 一樣，選單開在 header「設定」那種視窗裡。 */
-.chat-ar-trigger{display:flex;align-items:center;gap:var(--sp-2);width:100%;min-width:0;font-size:var(--chat-fs-md);text-align:left;
-  padding-top:var(--sp-2);padding-bottom:var(--sp-2);padding-right:30px;cursor:pointer}
+.chat-ar-trigger{display:flex;align-items:center;gap:var(--sp-2);width:100%;min-width:0;font-size:var(--chat-fs-md);text-align:start;
+  padding-top:var(--sp-2);padding-bottom:var(--sp-2);padding-inline-end:30px;cursor:pointer}
 .chat-ar-trigger svg{flex-shrink:0;color:var(--accent)}
 .chat-ar-trigger span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* 同一排的 select 跟長寬比鈕一樣高：鈕裡的中文字行高比 select 的高，不定高度兩格會差幾 px。 */
@@ -606,13 +606,13 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    the rules it overrides: below 1201px the rail is back in the flow and the
    row has no reservation to shrink. */
 @media (min-width:1201px){
-  #upload-section .upload-content-row{padding-right:320px}
+  #upload-section .upload-content-row{padding-inline-end:320px}
   #upload-section .upload-content-row>.upload-gallery-col{width:320px}
 }
 .upload-content-row>.home-intro{flex:0 1 980px;width:100%;max-width:980px;min-width:0}
 .home-intro{display:flex;flex-direction:column;gap:var(--sp-6);box-sizing:border-box}
 .home-hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);align-items:center;gap:var(--sp-7)}
-.home-hero-copy{display:flex;flex-direction:column;align-items:flex-start;text-align:left}
+.home-hero-copy{display:flex;flex-direction:column;align-items:flex-start;text-align:start}
 .home-eyebrow{display:flex;align-items:center;gap:var(--sp-3);margin:0 0 var(--sp-3);color:var(--accent-text);font-size:var(--chat-fs-md);font-weight:700;letter-spacing:.06em}
 .home-eyebrow::before{content:"";width:28px;height:1px;background:currentColor;opacity:.7}
 /* Was 800-weight Inter clipped to --mv-grad. Gradient text puts the whole
@@ -658,8 +658,8 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    the panel centres inside a row whose right 320px is padding around nothing
    and lands visibly left of the screen. The id here is not decoration: it is
    the only way to outrank #upload-section's own reservation. */
-.upload-content-row.is-chat{padding-right:0}
-#upload-section .upload-content-row.is-chat{padding-right:0}
+.upload-content-row.is-chat{padding-inline-end:0}
+#upload-section .upload-content-row.is-chat{padding-inline-end:0}
 /* Half and half, the same split the session view uses, so pressing 開始美化
    swaps the photo for the canvas without the page re-laying out under the
    cursor. The panel is capped so an ultra-wide screen spends its extra width
@@ -698,7 +698,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 /* 移除鈕、新增格：跟面板模式上傳區的 .dz-thumb-remove／.dz-add-more 同一套。
    能 hover 的裝置平常藏起來、滑到那格才出現；觸控沒有 hover，一直顯示。 */
 .batch-grid li{position:relative}
-.batch-remove{position:absolute;top:8px;right:8px;width:26px;height:26px;padding:0;border:0;border-radius:50%;
+.batch-remove{position:absolute;top:8px;inset-inline-end:8px;width:26px;height:26px;padding:0;border:0;border-radius:50%;
   display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;background:rgba(0,0,0,.55);
   -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);transition:opacity .15s,background .15s,transform .15s}
 .batch-remove:hover{background:rgba(220,60,60,.85);transform:scale(1.08)}
@@ -737,7 +737,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 .upload-content-row>.home-chat.is-overview{flex:1 1 0%;width:auto;max-width:none}
 .home-chat.is-overview .chat-timeline{padding-inline:max(var(--sp-5),calc((100% - 1040px) / 2))}
 .home-chat.is-overview .chat-composer{padding-inline:max(var(--sp-3),calc((100% - 1064px) / 2))}
-.chat-list{margin:0;padding-left:1.2em;font-size:15px;line-height:1.8;color:var(--n84)}
+.chat-list{margin:0;padding-inline-start:1.2em;font-size:15px;line-height:1.8;color:var(--n84)}
 .chat-list b{font-weight:700;color:var(--n100)}
 /* 多張照片還在讀的時候，總覽裡那則的進度條：細細一條，填色跟其他非文字的面一樣走 --mv-grad。 */
 .chat-upload-progress{height:6px;margin:var(--sp-2) 0 var(--sp-1);border-radius:999px;background:var(--n14);overflow:hidden}
@@ -745,9 +745,9 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 @media (prefers-reduced-motion: reduce){.chat-upload-progress>span{transition:none}}
 /* 側欄的「總覽」入口：橫條，不是照片方塊。小小的 2×2 拼圖 + 「總覽」，選中時跟單張方塊一樣
    用 accent 框，底色走 tonal（不用實心深色）。 */
-.batch-overview-entry{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 10px;padding:6px 8px 6px 6px;
+.batch-overview-entry{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 10px;padding-block:6px;padding-inline:6px 8px;
   box-sizing:border-box;border:1px solid var(--n24);border-radius:var(--radius);background:var(--n09);
-  font:inherit;color:var(--n84);text-align:left;cursor:pointer;transition:background .15s,border-color .15s}
+  font:inherit;color:var(--n84);text-align:start;cursor:pointer;transition:background .15s,border-color .15s}
 .batch-overview-entry:hover{background:var(--tonal-lo);border-color:var(--tonal-hi)}
 .batch-overview-entry:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .batch-overview-entry.is-on{background:var(--tonal);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
@@ -824,7 +824,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 .batch-grid-cell:disabled{cursor:default}
 .batch-grid-cell .rc-spinner{position:absolute;inset:0;margin:auto}
 /* 右上角的 ×：跟「最近照片」磚上的張數同一種深色毛玻璃，18px 圓。狀態那顆直接用 .session-tile-badge。 */
-.batch-grid-cell .history-cube-remove{position:absolute;top:4px;right:4px;left:auto;z-index:3;box-sizing:border-box;width:18px;height:18px;padding:0;
+.batch-grid-cell .history-cube-remove{position:absolute;top:4px;inset-inline-end:4px;inset-inline-start:auto;z-index:3;box-sizing:border-box;width:18px;height:18px;padding:0;
   display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;border-radius:50%;border:0;transform:none;
   color:#fff;background:rgba(9,9,11,.65);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .batch-grid-cell .history-cube-remove:hover{background:rgba(220,60,60,.85);transform:none}
@@ -857,18 +857,19 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    寫到 900，901–1200 直拿也是這套直排版面，所以這裡連那段一起重寫一次（上面那條桌機
    規則比舊版的選擇器重，不在這裡蓋回去就會變回擺在版面裡）。 */
 @media (max-width:900px),(max-width:1200px) and (orientation:portrait){
-  #results-body.batch-mode>#batch-sidebar{position:fixed;top:var(--header-h);left:0;bottom:0;margin:0;
-    width:min(204px,64vw);height:auto;max-width:none;padding:12px;flex-basis:auto;border-radius:0;border-width:0 1px 0 0;z-index:1001;
+  #results-body.batch-mode>#batch-sidebar{position:fixed;top:var(--header-h);inset-inline-start:0;bottom:0;margin:0;
+    width:min(204px,64vw);height:auto;max-width:none;padding:12px;flex-basis:auto;border-radius:0;border-block-width:0;border-inline-width:0 1px;z-index:1001;
     transform:translateX(-100%);transition:transform .25s ease}
   #results-body.batch-mode>#batch-sidebar.drawer-open{transform:translateX(0)}
-  #results-body.batch-mode>.batch-drawer-trigger{display:inline-flex;border-radius:0 12px 12px 0}
+  :where([dir="rtl"]) #results-body.batch-mode>#batch-sidebar{transform:translateX(100%)}
+  #results-body.batch-mode>.batch-drawer-trigger{display:inline-flex;border-start-start-radius:0;border-start-end-radius:12px;border-end-end-radius:12px;border-end-start-radius:0}
   /* 從最近照片打開一批時跟總覽一樣跳幾下（is-hop 由 App 控制，跳完就拿掉，同一批裡換張不會再跳）。 */
   #results-body.batch-mode>.batch-drawer-trigger.is-hop{animation:drawer-hop 2.4s ease-in-out .4s both}
   /* 抽屜寬度跟舊版共用那段一樣，剛好放得下「我的照片」、張數和全部下載；內距 12，關閉鈕對齊同一條邊。 */
-  #results-body.batch-mode .batch-sidebar-close-btn{display:flex;top:7px;right:8px}
+  #results-body.batch-mode .batch-sidebar-close-btn{display:flex;top:7px;inset-inline-end:8px}
   #results-body.batch-mode>.batch-sidebar-backdrop{top:var(--header-h)}
   #results-body.batch-mode>.batch-sidebar-backdrop.drawer-open{display:block}
-  #results-body.batch-mode .batch-sidebar-header{padding-right:36px}
+  #results-body.batch-mode .batch-sidebar-header{padding-inline-end:36px}
 }
 @media (prefers-reduced-motion:reduce){
   #results-body.batch-mode>.batch-sidebar{transition:none}
@@ -889,9 +890,9 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    align-self 要改回 stretch：fixed 的元素也吃 align-self，留著桌機的 center 會縮成內容高再置中，
    照片一多就往上溢出、頂端那列被標頭蓋住。 */
 @media (max-width:900px),(max-width:1200px) and (orientation:portrait){
-  #upload-section .upload-content-row>#batch-sidebar{position:fixed;top:var(--header-h);left:0;bottom:0;margin:0;align-self:stretch;
+  #upload-section .upload-content-row>#batch-sidebar{position:fixed;top:var(--header-h);inset-inline-start:0;bottom:0;margin:0;align-self:stretch;
     width:min(224px,68vw);height:auto;max-height:none;min-height:0;max-width:none;padding:12px;flex-basis:auto;
-    border-radius:0;border-width:0 1px 0 0;z-index:1001;
+    border-radius:0;border-block-width:0;border-inline-width:0 1px;z-index:1001;
     /* 從左上角那顆展開、收回那顆：關著的時候剪成那顆按鈕的位置和圓角（16 起點、標頭下 9px、40×32），
        打開時剪裁放到整片。先長大再淡出，收起時看得到它縮回哪裡。關著時連點擊都不吃，不會擋到那顆。 */
     --drawer-from:inset(9px calc(100% - 56px) calc(100% - 41px) 16px round 10px);
@@ -901,22 +902,24 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
     transition:clip-path .38s cubic-bezier(.2,.8,.2,1),opacity .12s ease,visibility 0s}
   /* 選了照片那顆往下移到 16px，展開的起點跟著。 */
   #upload-section .upload-content-row:has(.chat-panel.has-photo)>#batch-sidebar{--drawer-from:inset(16px calc(100% - 56px) calc(100% - 48px) 16px round 10px)}
-  #upload-section .upload-content-row>.batch-drawer-trigger{display:inline-flex;border-radius:0 12px 12px 0}
-  #upload-section .upload-content-row .batch-sidebar-close-btn{display:flex;top:7px;right:8px}
+  :where([dir="rtl"]) #upload-section .upload-content-row>#batch-sidebar{--drawer-from:inset(9px 16px calc(100% - 41px) calc(100% - 56px) round 10px)}
+  :where([dir="rtl"]) #upload-section .upload-content-row:has(.chat-panel.has-photo)>#batch-sidebar{--drawer-from:inset(16px 16px calc(100% - 48px) calc(100% - 56px) round 10px)}
+  #upload-section .upload-content-row>.batch-drawer-trigger{display:inline-flex;border-start-start-radius:0;border-start-end-radius:12px;border-end-end-radius:12px;border-end-start-radius:0}
+  #upload-section .upload-content-row .batch-sidebar-close-btn{display:flex;top:7px;inset-inline-end:8px}
   #upload-section .upload-content-row>.batch-sidebar-backdrop{top:var(--header-h)}
   #upload-section .upload-content-row>.batch-sidebar-backdrop.drawer-open{display:block}
-  #upload-section .upload-content-row .batch-sidebar-header{padding-right:36px}
+  #upload-section .upload-content-row .batch-sidebar-header{padding-inline-end:36px}
   /* 上傳頁的對話卡就在標頭正下方，那顆會正好落在對話標頭那一列：不做成從邊緣拉出來的分頁，
      改成標頭裡第一顆圓角小方塊（跟標頭的 chip 同高、不帶陰影），張數一樣掛在右上角；標頭（和選了
      照片後換上來的照片列）左邊讓出它的寬度（16 起點＋40＋16 間距）。選了照片標頭變 64px，按鈕跟著往下移到垂直置中。 */
-  #upload-section .upload-content-row>.batch-drawer-trigger{left:var(--sp-4);top:calc(var(--header-h) + 9px);width:40px;height:32px;
+  #upload-section .upload-content-row>.batch-drawer-trigger{inset-inline-start:var(--sp-4);top:calc(var(--header-h) + 9px);width:40px;height:32px;
     padding:0;border:1px solid var(--accent);border-radius:10px;box-shadow:none}
-  #upload-section .upload-content-row>.batch-drawer-trigger>.batch-drawer-trigger-count{top:-7px;right:-9px}
+  #upload-section .upload-content-row>.batch-drawer-trigger>.batch-drawer-trigger-count{top:-7px;inset-inline-end:-9px}
   /* 進到總覽（還沒點進哪一張）時先跳四下，提示照片都收在這裡；之後在總覽一直待著就每 5 秒輕跳兩下，
      不會停到被忘記，也不會一直搶眼。點進單張就停，再回來重新從四下開始。 */
   #upload-section .upload-content-row:not(:has(.chat-panel.has-photo))>.batch-drawer-trigger{
     animation:drawer-hop 2.4s ease-in-out .4s both,drawer-hop-idle 5s ease-in-out 2.8s infinite}
-  #upload-section .upload-content-row:has(>.batch-drawer-trigger) .chat-panel>:is(.chat-panel-head,.chat-panel-photo){padding-left:72px}
+  #upload-section .upload-content-row:has(>.batch-drawer-trigger) .chat-panel>:is(.chat-panel-head,.chat-panel-photo){padding-inline-start:72px}
   #upload-section .upload-content-row:has(.chat-panel.has-photo)>.batch-drawer-trigger{top:calc(var(--header-h) + 16px)}
   /* 總覽按「顯示全部」：那顆先放大、外圈亮一下，接著抽屜才滑出來，看得出是從這顆打開的。
      收起來時再跳幾下、外圈擴散一次，告訴使用者照片收回這裡了；之後接回每 5 秒輕跳，不從頭再跳四下
@@ -960,7 +963,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 /* 上傳頁的照片列表標題列多了「新增照片」，和「全部清除」一組靠右，縮成 26px 讓「我的照片」不被截斷。 */
 #upload-section .upload-content-row .batch-sidebar-header{gap:6px}
 #upload-section .upload-content-row .batch-sidebar-title{flex:0 1 auto}
-.batch-sidebar-actions{display:flex;gap:4px;margin-left:auto;flex:none}
+.batch-sidebar-actions{display:flex;gap:4px;margin-inline-start:auto;flex:none}
 .batch-sidebar-actions:empty{display:none}
 #upload-section .upload-content-row .batch-sidebar-actions .batch-download-all-btn{width:26px;height:26px}
 /* 垃圾桶 hover 轉紅，跟舊版 #history-clear-all-btn 一樣的「會刪掉」提示。 */
@@ -993,11 +996,11 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    100dvh-190px was budgeting for chrome that is not there -- it left the rail
    ending some 60px above the photo column and the page bottom. */
 .results-analysis-slot>.chat-panel{height:100%;min-height:0;
-  background:transparent;border:0;border-left:1px solid var(--border);border-radius:0;box-shadow:none;padding-left:var(--sp-4)}
+  background:transparent;border:0;border-inline-start:1px solid var(--border);border-radius:0;box-shadow:none;padding-inline-start:var(--sp-4)}
 .results-analysis-slot>.chat-panel .chat-panel-head,
 .results-analysis-slot>.chat-panel .chat-footbar,
 .results-analysis-slot>.chat-panel .chat-composer{background:transparent}
-.results-analysis-slot>.chat-panel .chat-timeline{padding-left:0;padding-right:var(--sp-3)}
+.results-analysis-slot>.chat-panel .chat-timeline{padding-inline-start:0;padding-inline-end:var(--sp-3)}
 
 /* 桌機上，同一批從上傳頁切進 session 時版面不要跳：以上傳頁為準，三樣對齊。
    - 「我的照片」欄：上傳頁 224px（舊版 index.html 給 session 的是 170px）。
@@ -1011,7 +1014,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
   /* 對話欄寬也照上傳頁：一半一半，但封頂 780（.upload-content-row>.home-chat），寬螢幕多出來
      的給照片。少了這條，視窗一寬，按下分析對話就突然變寬、照片被擠窄。 */
   .results-canvas-row.showing-analysis .results-analysis-slot{max-width:780px}
-  .results-analysis-slot>.chat-panel{background:var(--n09);border:0;border-radius:20px;padding-left:0;
+  .results-analysis-slot>.chat-panel{background:var(--n09);border:0;border-radius:20px;padding-inline-start:0;
     box-shadow:0 10px 30px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)}
   .results-analysis-slot>.chat-panel .chat-panel-head{background:var(--n04)}
   .results-analysis-slot>.chat-panel .chat-timeline{padding:var(--sp-5)}
@@ -1060,11 +1063,15 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    crumb lined up with the card's bounding box while the card's own 26px
    corner curved away underneath it, so the text read as hanging off the
    left of the photo instead of sitting over it. */
-.chat-flow{padding-left:calc(var(--sp-3) + 1px)}
+.chat-flow{padding-inline-start:calc(var(--sp-3) + 1px)}
 .chat-flow ol{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1) var(--sp-2);margin:0;padding:0;list-style:none}
 .chat-flow-step{display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--chat-fs-sm);line-height:1.5;color:var(--n54)}
-.chat-flow-step+.chat-flow-step::before{content:"";width:5px;height:5px;margin-right:var(--sp-1);flex-shrink:0;
+.chat-flow-step+.chat-flow-step::before{content:"";width:5px;height:5px;margin-inline-end:var(--sp-1);flex-shrink:0;
   border-top:1.5px solid var(--n34);border-right:1.5px solid var(--n34);transform:rotate(45deg)}
+:where([dir="rtl"]) .chat-flow-step+.chat-flow-step::before{transform:rotate(225deg)}
+:where([dir="rtl"]) .icon-mirror{transform:scaleX(-1)}
+:where([dir="rtl"]) :is(.chat-ar-scale,.chat-ar-shape-row){direction:ltr}
+:where([dir="rtl"]) :is(.chat-text,.chat-bubble,.chat-notes-box,.chat-composer-field input,.chat-line-own input,textarea){unicode-bidi:plaintext;text-align:start}
 .chat-flow-step.is-done{color:var(--n64)}
 .chat-flow-step.is-now{color:var(--accent-text);font-weight:700}
 .chat-flow-dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:chat-flow-dot 1.2s ease-in-out infinite}
@@ -1151,7 +1158,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
   outline:2px solid rgba(var(--accent-rgb),.9);outline-offset:2px}
 
 /* Faces the chat points at */
-.chat-face-chip{display:inline-flex;align-items:center;gap:var(--sp-1);min-height:30px;padding:0 var(--sp-3) 0 var(--sp-1);border-radius:999px;background:var(--card);
+.chat-face-chip{display:inline-flex;align-items:center;gap:var(--sp-1);min-height:30px;padding-block:0;padding-inline:var(--sp-1) var(--sp-3);border-radius:999px;background:var(--card);
   border:1px solid var(--n34);font:600 var(--chat-fs-sm) Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n84);flex-shrink:0}
 .chat-face-chip img,.chat-face-blank{width:24px;height:24px;border-radius:50%;object-fit:cover;display:block;background:var(--n14)}
 button.chat-face-chip{cursor:pointer}
@@ -1192,7 +1199,7 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
    so the strip does not jump when it folds. Plain faces, no picked ring --
    who is picked already shows as the token in the field below. */
 .chat-face-picker{position:relative}
-.chat-face-fold{display:inline-flex;align-items:center;gap:var(--sp-1);flex-shrink:0;padding:3px var(--sp-2) 3px 3px;
+.chat-face-fold{display:inline-flex;align-items:center;gap:var(--sp-1);flex-shrink:0;padding-block:3px;padding-inline:3px var(--sp-2);
   border:1px solid var(--n34);border-radius:999px;background:var(--card);color:var(--n64);cursor:pointer;
   font:600 var(--chat-fs-sm)/1 Inter,var(--cjk-sans),system-ui,sans-serif}
 .chat-face-fold:hover,.chat-face-fold.is-open{border-color:var(--accent);color:var(--accent-text)}
@@ -1200,14 +1207,14 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
 .chat-face-fold .chat-face-chip.is-avatar{padding:0;border:0;background:none}
 .chat-face-fold .chat-face-chip.is-avatar img,.chat-face-fold .chat-face-chip.is-avatar .chat-face-blank{width:40px;height:40px;
   box-shadow:0 0 0 2px var(--card)}
-.chat-face-fold-faces>.chat-face-chip+.chat-face-chip{margin-left:-12px}
+.chat-face-fold-faces>.chat-face-chip+.chat-face-chip{margin-inline-start:-12px}
 .chat-face-fold svg{flex-shrink:0;transition:transform .15s ease}
 .chat-face-fold.is-open svg{transform:rotate(180deg)}
 /* Opens upward over the transcript, like .chat-attach-menu -- the strip is the
    bottom of the screen. A grid, not a list: there are no names to list, only
    faces to recognise. As wide as the strip allows (100cqw is the strip, which
    is the container), so a crowded photo grows rows rather than a scroller. */
-.chat-face-panel{position:absolute;left:0;bottom:calc(100% + var(--sp-2));z-index:20;
+.chat-face-panel{position:absolute;inset-inline-start:0;bottom:calc(100% + var(--sp-2));z-index:20;
   width:max-content;max-width:calc(100cqw - 2 * var(--sp-4));
   display:flex;flex-direction:column;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3) var(--sp-3);border-radius:12px;
   border:1px solid var(--border);background:var(--card);
@@ -1215,14 +1222,14 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
   animation:chat-attach-menu-in .14s ease-out}
 .chat-face-panel-head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);
   font-size:var(--chat-fs-sm);color:var(--n54)}
-.chat-face-panel-x{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;margin-right:calc(-1 * var(--sp-2));
+.chat-face-panel-x{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;margin-inline-end:calc(-1 * var(--sp-2));
   padding:0;border:0;border-radius:50%;background:none;color:var(--n64);cursor:pointer}
 .chat-face-panel-x:hover{background:var(--n04);color:var(--n84)}
 .chat-face-grid{display:flex;flex-wrap:wrap;gap:var(--sp-2);padding:2px}
 @media (prefers-reduced-motion:reduce){.chat-face-panel{animation:none}}
 
 /* The live composer */
-.chat-composer-field.is-live{gap:var(--sp-1);padding:var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3);cursor:text;min-width:0}
+.chat-composer-field.is-live{gap:var(--sp-1);padding-block:var(--sp-1);padding-inline:var(--sp-3) var(--sp-1);cursor:text;min-width:0}
 .chat-composer-field.is-live input{flex:1;min-width:0;height:100%;border:0;outline:0;background:none;padding:0;font:inherit;color:var(--n100)}
 /* The real <input> has outline:0, so the ring has to live on the wrapper. */
 .chat-composer-field.is-live:focus-within{border-color:var(--accent);outline:2px solid rgba(var(--accent-rgb),.55);outline-offset:1px}
@@ -1234,11 +1241,11 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
 @keyframes chat-field-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 .chat-composer-field.is-hint{animation:chat-field-bob .8s ease-in-out 3}
 .chat-composer-who{display:inline-flex;align-items:center;gap:var(--sp-1);flex-shrink:0;max-width:40%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
-  font-size:var(--chat-fs-sm);font-weight:600;color:var(--accent-text);background:var(--tonal-lo);border-radius:999px;padding:2px var(--sp-1) 2px 2px}
+  font-size:var(--chat-fs-sm);font-weight:600;color:var(--accent-text);background:var(--tonal-lo);border-radius:999px;padding-block:2px;padding-inline:2px var(--sp-1)}
 /* Several picked faces overlap like a hand of cards; the mat ring each crop
    already has keeps their edges apart. */
 .chat-composer-who-faces{display:inline-flex;align-items:center;flex-shrink:0}
-.chat-composer-who-faces>.chat-face-chip+.chat-face-chip{margin-left:-8px}
+.chat-composer-who-faces>.chat-face-chip+.chat-face-chip{margin-inline-start:-8px}
 /* Picking a face moves focus to the field, so the field is where the user
    looks to undo it -- the token has to carry its own dismiss. The picker's
    own chip toggles too, but with one face in the photo there is no picker. */
@@ -1257,13 +1264,13 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
 .chat-proposal-list{display:flex;flex-direction:column;gap:var(--sp-1);margin:0;padding:0;list-style:none}
 /* A long value (個人化需求) drops the diff to its own line and wraps there. */
 .chat-proposal-row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1) var(--sp-2);width:100%;padding:var(--sp-2) var(--sp-3);border:1px solid transparent;border-radius:8px;background:var(--n04);
-  font:inherit;font-size:var(--chat-fs-md);color:var(--n84);text-align:left;cursor:pointer}
+  font:inherit;font-size:var(--chat-fs-md);color:var(--n84);text-align:start;cursor:pointer}
 button.chat-proposal-row:hover{border-color:var(--n34)}
 div.chat-proposal-row{cursor:default}
 /* 短標籤（個人化需求、閉眼）照舊一行、不被擠斷；畫面建議那種整句的標籤最多佔滿一列再換行，
    不會撐出卡片。 */
 .chat-proposal-label{flex:1 0 auto;max-width:100%;overflow-wrap:anywhere}
-.chat-proposal-label b{color:var(--n100);margin-right:var(--sp-1)}
+.chat-proposal-label b{color:var(--n100);margin-inline-end:var(--sp-1)}
 .chat-proposal-diff{display:inline-flex;align-items:baseline;gap:var(--sp-1);min-width:0;max-width:100%;font-size:var(--chat-fs-sm);line-height:1.5}
 .chat-proposal-diff svg{flex-shrink:0;align-self:center}
 .chat-proposal-diff s{flex-shrink:0;color:var(--n64)}
@@ -1274,10 +1281,10 @@ div.chat-proposal-row{cursor:default}
 /* 建議裡那段個人化需求就地可改：跟面板同一個框（.chat-notes-box），位置還是 is-long
    的那一欄。前後兩段字裡的人也是頭像。 */
 .chat-proposal-edit{width:100%;box-sizing:border-box}
-.chat-proposal-diff .chat-face-chip.is-small{vertical-align:middle;margin:-2px 2px 0 0;padding:0;min-height:0;gap:0}
+.chat-proposal-diff .chat-face-chip.is-small{vertical-align:middle;margin-block:-2px 0;margin-inline:0 2px;padding:0;min-height:0;gap:0}
 /* 摘要那句是這張卡唯一的實色，問題清單退到 --n54：同一段話裡只留一個重音，
    清單讀起來像註腳而不是第二個開場白。 */
-.chat-brief-issues{margin:0;padding-left:20px;font-size:var(--chat-fs-md);line-height:1.6;color:var(--n54)}
+.chat-brief-issues{margin:0;padding-inline-start:20px;font-size:var(--chat-fs-md);line-height:1.6;color:var(--n54)}
 .chat-typing{display:inline-flex;gap:var(--sp-1);padding:var(--sp-2) var(--sp-3);border-radius:14px;background:var(--n14);width:max-content}
 .chat-typing span{width:6px;height:6px;border-radius:50%;background:var(--n54);animation:chat-typing 1s infinite ease-in-out}
 .chat-typing span:nth-child(2){animation-delay:.15s}
@@ -1321,7 +1328,7 @@ div.chat-proposal-row{cursor:default}
 .chat-opt-people{display:flex;flex-direction:column;gap:var(--sp-1)}
 .chat-opt-person-fold{display:flex;flex-direction:column;gap:var(--sp-2)}
 .chat-opt-person-head{display:flex;align-items:center;gap:var(--sp-2);width:100%;min-height:32px;padding:var(--sp-1) var(--sp-2);
-  border:0;border-radius:999px;background:none;font:600 var(--chat-fs-sm) Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n84);text-align:left;cursor:pointer}
+  border:0;border-radius:999px;background:none;font:600 var(--chat-fs-sm) Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n84);text-align:start;cursor:pointer}
 .chat-opt-person-head:hover{background:var(--n04);color:var(--n100)}
 .chat-opt-person-head.is-open{color:var(--n100)}
 .chat-opt-person-head img,.chat-opt-person-head .chat-face-blank{width:24px;height:24px;border-radius:50%;object-fit:cover;display:block;background:var(--n14);flex-shrink:0}
@@ -1336,7 +1343,7 @@ div.chat-proposal-row{cursor:default}
 .chat-opt-person-head .chat-opt-caret{flex-shrink:0;color:var(--n54)}
 /* 內容對齊名字，一眼看得出這些是誰的：24 的人頭加兩個 gap。 */
 .chat-opt-person-body{display:flex;flex-direction:column;align-items:flex-start;gap:var(--sp-2);
-  padding:0 var(--sp-2) var(--sp-2) calc(24px + var(--sp-2) + var(--sp-2))}
+  padding-block:0 var(--sp-2);padding-inline:calc(24px + var(--sp-2) + var(--sp-2)) var(--sp-2)}
 .chat-opt-caret{width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);transition:transform .15s}
 .chat-opt-caret.is-open{transform:translateY(1px) rotate(-135deg)}
 /* 挑得了程度的項目（髮絲、笑容）：一顆藥丸切成兩半，左半邊照常開關、順便寫著
@@ -1345,21 +1352,21 @@ div.chat-proposal-row{cursor:default}
 .chat-opt-split{position:relative;display:inline-flex;align-items:stretch;border-radius:999px}
 /* 只有真的切成兩半時才切掉右邊的圓角。沒勾的時候右半邊不在，那就是一顆完整的
    藥丸 -- 跟旁邊那些沒程度可挑的項目長得一樣。 */
-.chat-opt-split.is-split>.chat-opt-chip{border-top-right-radius:0;border-bottom-right-radius:0;padding-right:var(--sp-2)}
-.chat-opt-split-more{display:inline-flex;align-items:center;justify-content:center;padding:0 var(--sp-3) 0 var(--sp-2);
-  border:1px solid var(--accent);border-left:0;border-radius:0 999px 999px 0;background:var(--tonal-lo);color:var(--accent-text);cursor:pointer}
+.chat-opt-split.is-split>.chat-opt-chip{border-start-end-radius:0;border-end-end-radius:0;padding-inline-end:var(--sp-2)}
+.chat-opt-split-more{display:inline-flex;align-items:center;justify-content:center;padding-block:0;padding-inline:var(--sp-2) var(--sp-3);
+  border:1px solid var(--accent);border-inline-start:0;border-start-start-radius:0;border-start-end-radius:999px;border-end-end-radius:999px;border-end-start-radius:0;background:var(--tonal-lo);color:var(--accent-text);cursor:pointer}
 .chat-opt-split-more:not([disabled]):hover{background:var(--tonal)}
 .chat-opt-split-more[disabled]{opacity:.45;cursor:not-allowed}
 /* 程度的選單從它自己的那半邊掀開，浮在對話上面 -- 這張卡夾在對話中間，在卡裡
    多推開一列會把下面的訊息整個擠下去。挑完就收，選了什麼藥丸上就寫著。 */
-.chat-opt-menu{position:absolute;top:calc(100% + var(--sp-1));right:0;z-index:20;min-width:140px;
+.chat-opt-menu{position:absolute;top:calc(100% + var(--sp-1));inset-inline-end:0;z-index:20;min-width:140px;
   display:flex;flex-direction:column;gap:2px;padding:var(--sp-1);border-radius:12px;
   border:1px solid var(--border);background:var(--card);
   box-shadow:0 14px 32px rgba(0,0,0,.16),0 2px 6px rgba(0,0,0,.06);
   animation:chat-opt-menu-in .14s ease-out}
 .chat-opt-menu.is-up{top:auto;bottom:calc(100% + var(--sp-1));animation-name:chat-opt-menu-up}
 .chat-opt-menu button{display:flex;align-items:center;gap:var(--sp-2);width:100%;padding:var(--sp-2) var(--sp-3);
-  border:0;border-radius:8px;background:none;cursor:pointer;white-space:nowrap;text-align:left;
+  border:0;border-radius:8px;background:none;cursor:pointer;white-space:nowrap;text-align:start;
   font:inherit;font-size:var(--chat-fs-sm);color:var(--n84)}
 .chat-opt-menu button:hover,.chat-opt-menu button:focus-visible{background:var(--tonal-lo);color:var(--accent-text)}
 .chat-opt-menu button.is-picked{color:var(--accent-text);font-weight:600}
@@ -1371,7 +1378,7 @@ div.chat-proposal-row{cursor:default}
 @media (prefers-reduced-motion:reduce){.chat-opt-menu{animation:none}}
 /* 建議調整的記號：縮到項目名稱的右上角，一眼掃過去只會看到項目本身。
    在 is-picked 的淡色底上也還讀得到，所以不分狀態都用同一顆點。 */
-.chat-opt-dot{align-self:flex-start;flex-shrink:0;width:5px;height:5px;margin:2px -3px 0 -2px;border-radius:50%;background:var(--accent)}
+.chat-opt-dot{align-self:flex-start;flex-shrink:0;width:5px;height:5px;margin-block:2px 0;margin-inline:-2px -3px;border-radius:50%;background:var(--accent)}
 .chat-opt-value{font-weight:700;color:var(--accent-text)}
 .chat-opt-prompt{display:flex;flex-direction:column;gap:var(--sp-2)}
 /* 還沒要改的時候，存下來的需求就是一段讀的內容，不是一個等著被打字的框。 */
@@ -1379,7 +1386,7 @@ div.chat-proposal-row{cursor:default}
   font-size:var(--chat-fs-md);line-height:1.5;color:var(--n100);white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty}
 .chat-opt-list{display:flex;flex-direction:column;gap:var(--sp-1);margin:0;padding:0;list-style:none}
 .chat-opt-row{display:flex;align-items:flex-start;gap:var(--sp-2);width:100%;padding:var(--sp-2) var(--sp-3);border:1px solid transparent;border-radius:8px;background:var(--n04);
-  font:var(--chat-fs-md)/1.5 Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n64);text-align:left;cursor:pointer}
+  font:var(--chat-fs-md)/1.5 Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n64);text-align:start;cursor:pointer}
 .chat-opt-row.is-on{color:var(--n100)}
 .chat-opt-row:not([disabled]):hover{border-color:var(--n34)}
 .chat-opt-row[disabled]{cursor:not-allowed;opacity:.6}
@@ -1398,7 +1405,7 @@ div.chat-proposal-row{cursor:default}
 .chat-line-row.is-on{background:var(--tonal);border-color:var(--accent)}
 .chat-line-row[disabled].is-on{opacity:1}
 .chat-line-text{flex:1;min-width:0;overflow-wrap:anywhere;text-wrap:pretty}
-.chat-line-own{display:flex;align-items:center;gap:var(--sp-2);margin:0;padding:var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3);
+.chat-line-own{display:flex;align-items:center;gap:var(--sp-2);margin:0;padding-block:var(--sp-1);padding-inline:var(--sp-3) var(--sp-1);
   border:1px dashed var(--n24);border-radius:8px;background:var(--card)}
 .chat-line-own:focus-within{border-style:solid;border-color:var(--accent)}
 .chat-line-own input{flex:1;min-width:0;padding:var(--sp-1) 0;border:0;outline:0;background:transparent;
@@ -1435,8 +1442,8 @@ div.chat-proposal-row{cursor:default}
 /* 「選取」和多選時的三顆都是有字的 28px 高按鈕，跟「取消」同一款。「刪除」舊頁面是 28px 見方的垃圾桶，
    這裡改成文字：紅字、跟前面多隔一點，沒勾東西時淡掉但外框還看得到。 */
 #history-select-btn.btn,#history-select-all-btn.btn,#history-delete-selected-btn.btn{height:28px;width:auto;padding:0 10px;font-size:13px;flex-shrink:0}
-#history-select-btn.btn{gap:4px;padding:0 10px 0 8px}
-#history-delete-selected-btn.btn{margin-left:8px;color:var(--danger)}
+#history-select-btn.btn{gap:4px;padding-block:0;padding-inline:8px 10px}
+#history-delete-selected-btn.btn{margin-inline-start:8px;color:var(--danger)}
 #history-delete-selected-btn.btn:hover:not(:disabled){color:var(--danger);background:var(--danger-bg);border-color:var(--danger)}
 #history-delete-selected-btn.btn:disabled{opacity:.45}
 .history-drawer .history-list{flex:0 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;
@@ -1526,35 +1533,35 @@ div.chat-proposal-row{cursor:default}
    order 排。桌機、平板完全不受影響。 */
 .chat-header-more,.chat-header-icon,.upload-gallery-all,.session-tile-when{display:none}
 /* 最近照片的尾巴：捲到這附近再畫下一段，自己不佔位置。 */
-.gallery-more{display:block;flex:0 0 1px;width:1px;height:1px;margin:0 0 0 -1px}
+.gallery-more{display:block;flex:0 0 1px;width:1px;height:1px;margin-block:0;margin-inline:-1px 0}
 /* 首頁右上的語言切換：靠右，緊貼在其他按鈕（手機上是 ⋯）左邊。 */
-.lang-switch{position:relative;margin-left:auto;margin-right:8px;display:flex}
-.lang-switch ~ .chat-header-more{margin-left:0}
+.lang-switch{position:relative;margin-inline-start:auto;margin-inline-end:8px;display:flex}
+.lang-switch ~ .chat-header-more{margin-inline-start:0}
 .lang-switch-btn{display:flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border:0;border-radius:50%;
   background:transparent;color:var(--text-2);cursor:pointer}
 .lang-switch-btn:hover,.lang-switch-btn[aria-expanded="true"]{background:rgba(var(--accent-rgb),.1);color:var(--accent)}
-.lang-switch-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:1500;min-width:160px;padding:6px;display:flex;flex-direction:column;gap:2px;
+.lang-switch-menu{position:absolute;top:calc(100% + 6px);inset-inline-end:0;z-index:1500;min-width:160px;padding:6px;display:flex;flex-direction:column;gap:2px;
   border-radius:14px;background:var(--card);border:1px solid var(--border);box-shadow:0 12px 32px rgba(0,0,0,.16)}
 .lang-switch-item{display:flex;align-items:center;justify-content:space-between;gap:12px;height:40px;padding:0 12px;border:0;border-radius:10px;
-  background:transparent;color:var(--text);font:inherit;font-size:14px;text-align:left;cursor:pointer}
+  background:transparent;color:var(--text);font:inherit;font-size:14px;text-align:start;cursor:pointer}
 .lang-switch-item:hover{background:rgba(var(--accent-rgb),.08)}
 .lang-switch-item.is-on{color:var(--accent-text);font-weight:700}
-@media (max-width:600px){.lang-switch{margin-right:0}}
+@media (max-width:600px){.lang-switch{margin-inline-end:0}}
 /* 對話頁的 header 有七顆按鈕，攤開要約 980px；平板直拿時按鈕放大到 44px，要約 1100px
    （Surface Pro 直拿 960 會把 logo 擠扁）。放不下的寬度也收進 ⋯，選單長相跟下面手機的一樣。
    首頁只有兩顆，維持攤開。 */
 @media (min-width:601px) and (max-width:1023px),(min-width:601px) and (max-width:1100px) and (orientation:portrait){
   .site-header:has(#chat-home-btn) .header-inner{position:relative}
-  .site-header:has(#chat-home-btn) .chat-header-more{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-left:auto;padding:0;border:0;border-radius:50%;
+  .site-header:has(#chat-home-btn) .chat-header-more{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-inline-start:auto;padding:0;border:0;border-radius:50%;
     background:transparent;color:var(--text-2);cursor:pointer}
-  .site-header:has(#chat-home-btn) .chat-header-icon{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-left:auto;padding:0;border:0;border-radius:50%;
+  .site-header:has(#chat-home-btn) .chat-header-icon{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-inline-start:auto;padding:0;border:0;border-radius:50%;
     background:transparent;color:var(--text-2);cursor:pointer}
   .site-header:has(#chat-home-btn) .chat-header-icon:hover{background:rgba(var(--accent-rgb),.08)}
-  .site-header:has(#chat-home-btn) .chat-header-icon ~ :is(.chat-header-icon,.chat-header-more){margin-left:0}
+  .site-header:has(#chat-home-btn) .chat-header-icon ~ :is(.chat-header-icon,.chat-header-more){margin-inline-start:0}
   .site-header:has(#chat-home-btn) :is(#chat-new-btn,#chat-history-btn){display:none}
   .site-header:has(#chat-home-btn) .chat-header-more[aria-expanded="true"]{background:rgba(var(--accent-rgb),.1);color:var(--accent)}
   .site-header:has(#chat-home-btn) .header-actions{display:none}
-  .site-header:has(#chat-home-btn) .header-actions.is-open{display:flex;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:calc(100% + 4px);right:16px;z-index:1500;
+  .site-header:has(#chat-home-btn) .header-actions.is-open{display:flex;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:calc(100% + 4px);inset-inline-end:16px;z-index:1500;
     min-width:200px;padding:6px;border-radius:16px;background:var(--card);border:1px solid var(--border);box-shadow:0 12px 32px rgba(0,0,0,.16)}
   .site-header:has(#chat-home-btn) .header-actions.is-open .btn,
   .site-header:has(#chat-home-btn) .header-actions.is-open #chat-report-btn.btn{width:100%;height:44px;justify-content:flex-start;gap:10px;padding:0 12px;border:0;border-radius:10px;
@@ -1566,19 +1573,19 @@ div.chat-proposal-row{cursor:default}
 @media (max-width:600px){
   /* Header：新對話、最近照片留在外面，其他按鈕收進 ⋯ 選單。 */
   html:root{--header-h:56px}
-  .site-header .header-inner{position:relative;padding:0 6px 0 16px}
+  .site-header .header-inner{position:relative;padding-block:0;padding-inline:16px 6px}
   .site-header .logo{font-size:20px}
-  .chat-header-more{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-left:auto;padding:0;border:0;border-radius:50%;
+  .chat-header-more{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-inline-start:auto;padding:0;border:0;border-radius:50%;
     background:transparent;color:var(--text-2);cursor:pointer}
   .chat-header-more[aria-expanded="true"]{background:rgba(var(--accent-rgb),.1);color:var(--accent)}
   /* 新對話、最近照片搬出選單，依序放在 ⋯ 左邊。 */
-  .chat-header-icon{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-left:auto;padding:0;border:0;border-radius:50%;
+  .chat-header-icon{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-inline-start:auto;padding:0;border:0;border-radius:50%;
     background:transparent;color:var(--text-2);cursor:pointer}
   .chat-header-icon:hover{background:rgba(var(--accent-rgb),.08)}
-  .chat-header-icon ~ :is(.chat-header-icon,.chat-header-more){margin-left:0}
+  .chat-header-icon ~ :is(.chat-header-icon,.chat-header-more){margin-inline-start:0}
   .site-header :is(#chat-new-btn,#chat-history-btn){display:none}
   .site-header .header-actions{display:none}
-  .site-header .header-actions.is-open{display:flex;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:calc(100% + 4px);right:8px;z-index:1500;
+  .site-header .header-actions.is-open{display:flex;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:calc(100% + 4px);inset-inline-end:8px;z-index:1500;
     min-width:180px;padding:6px;border-radius:16px;background:var(--card);border:1px solid var(--border);box-shadow:0 12px 32px rgba(0,0,0,.16)}
   .site-header .header-actions.is-open .btn,
   .site-header .header-actions.is-open #chat-report-btn.btn{width:100%;height:44px;justify-content:flex-start;gap:10px;padding:0 12px;border:0;border-radius:10px;
@@ -1597,7 +1604,7 @@ div.chat-proposal-row{cursor:default}
 
   #upload-section .home-eyebrow{order:1;margin:16px 0 6px;font-size:12px;font-weight:600;letter-spacing:.08em;justify-content:flex-start}
   #upload-section .home-eyebrow::before,#upload-section .home-eyebrow::after{display:none}
-  #upload-section .home-headline{order:2;font-size:26px;line-height:1.3;text-align:left}
+  #upload-section .home-headline{order:2;font-size:26px;line-height:1.3;text-align:start}
   #upload-section .home-lead{display:none}
 
   /* 分頁＋全部：緊貼在它切換的那排磚上面。分頁做成 segmented control，「全部」靠右。 */
@@ -1608,7 +1615,7 @@ div.chat-proposal-row{cursor:default}
   #upload-section .upload-gallery-tab{flex:0 0 auto;height:34px;padding:0 14px;border-radius:17px;font-size:13px;font-weight:500;color:var(--text-2);background:transparent}
   #upload-section .upload-gallery-tab.is-active{background:var(--card);color:var(--accent);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.1)}
   #upload-section .upload-gallery-tab-icon{display:none}
-  .upload-gallery-all{display:inline-flex;align-items:center;gap:2px;min-height:44px;padding:0 0 0 8px;border:0;background:transparent;
+  .upload-gallery-all{display:inline-flex;align-items:center;gap:2px;min-height:44px;padding-block:0;padding-inline:8px 0;border:0;background:transparent;
     color:var(--accent);font-size:13px;font-weight:500;cursor:pointer}
 
   /* 前後對照：滿版、比桌機矮。左右滑留給滑桿，上下滑照樣捲頁面。 */
@@ -1630,7 +1637,7 @@ div.chat-proposal-row{cursor:default}
     border-radius:14px;overflow:visible;scroll-snap-align:start}
   #upload-section .upload-gallery-col .demo-image-tile img:not(.demo-image-tile-bg){border-radius:inherit;object-fit:cover}
   #upload-section .upload-gallery-col .demo-image-tile .demo-image-tile-bg{display:none}
-  #upload-section .upload-gallery-col .session-tile-when{display:block;position:absolute;top:calc(100% + 6px);left:0;
+  #upload-section .upload-gallery-col .session-tile-when{display:block;position:absolute;top:calc(100% + 6px);inset-inline-start:0;
     font-size:12px;line-height:1.2;color:var(--n64);white-space:nowrap;pointer-events:none}
 
   /* 開始對話：固定在底部。跳動和光暈跟桌機一樣；最高跳 8px，在底部列 20px 的上緣留白裡，不會超出。 */
@@ -1651,11 +1658,11 @@ div.chat-proposal-row{cursor:default}
        (min-width:901px) and (max-width:1200px) and (orientation:landscape){
   /* Header：64px 高，按鈕放大到 44px 好按，不收進 ⋯。 */
   html:root{--header-h:64px}
-  .site-header .header-inner{padding:0 20px 0 32px}
+  .site-header .header-inner{padding-block:0;padding-inline:32px 20px}
   .header-actions .btn,.report-view-actions .btn{height:44px;padding:0 16px}
 
   /* 首頁的文案：靠左，字級照畫布。 */
-  #upload-section .home-hero-copy{align-items:flex-start;text-align:left}
+  #upload-section .home-hero-copy{align-items:flex-start;text-align:start}
   #upload-section .home-eyebrow{justify-content:flex-start;margin-bottom:var(--sp-3);font-size:13px;font-weight:600;letter-spacing:.08em}
   #upload-section .home-eyebrow::after{display:none}
   #upload-section .home-lead{font-size:15px;line-height:1.7}
@@ -1689,7 +1696,7 @@ div.chat-proposal-row{cursor:default}
   #upload-section .upload-content-row:has(>.home-intro)>.upload-gallery-col{order:1;width:100%;padding:32px 0 0;gap:12px}
   #upload-section .upload-gallery-tabs{gap:4px;border-radius:22px}
   #upload-section .upload-gallery-tab{height:38px;padding:0 18px;border-radius:19px;font-size:14px}
-  .upload-gallery-all{display:inline-flex;align-items:center;gap:2px;min-height:44px;padding:0 0 0 8px;border:0;background:transparent;
+  .upload-gallery-all{display:inline-flex;align-items:center;gap:2px;min-height:44px;padding-block:0;padding-inline:8px 0;border:0;background:transparent;
     color:var(--accent);font-size:14px;font-weight:500;cursor:pointer}
 
   /* 一次看到 5 張，更多的往右滑。頭尾貼齊 container 的內距，滑的時候不會被切一刀。 */
@@ -1701,7 +1708,7 @@ div.chat-proposal-row{cursor:default}
   #upload-section .upload-gallery-col .demo-images-grid::-webkit-scrollbar{display:none}
   #upload-section .upload-gallery-col .history-day-heading{display:none}
   #upload-section .upload-gallery-col .demo-image-tile{flex:0 0 var(--gallery-tile-size);border-radius:16px;scroll-snap-align:start}
-  #upload-section .upload-gallery-col .session-tile-when{display:block;position:absolute;top:calc(100% + 6px);left:0;
+  #upload-section .upload-gallery-col .session-tile-when{display:block;position:absolute;top:calc(100% + 6px);inset-inline-start:0;
     font-size:12px;line-height:1.2;color:var(--n64);white-space:nowrap;pointer-events:none}
 }
 
@@ -1715,7 +1722,7 @@ div.chat-proposal-row{cursor:default}
   #upload-section .home-headline{font-size:clamp(30px,3.4vw,40px)}
 
   #upload-section .upload-content-row:has(>.home-intro)>.upload-gallery-col{order:1;flex:0 0 280px;width:280px;height:auto;max-height:none;padding:20px 16px;gap:12px;
-    border:0;border-left:1px solid var(--border);border-radius:0;background:var(--card);overflow:hidden}
+    border:0;border-inline-start:1px solid var(--border);border-radius:0;background:var(--card);overflow:hidden}
   #upload-section .upload-gallery-tabs{flex:1 1 auto}
   #upload-section .upload-gallery-tab{flex:1 1 0;padding:0 8px}
   #upload-section .upload-gallery-scroll-frame{flex:1 1 auto;min-height:0}
@@ -1726,7 +1733,7 @@ div.chat-proposal-row{cursor:default}
   #upload-section .upload-gallery-col .demo-images-grid:has(.history-day-group){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:8px;
     width:100%;min-height:0;max-height:100%;margin:0;padding:0 0 8px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
   #upload-section .upload-gallery-col .demo-images-grid::-webkit-scrollbar{display:none}
-  #upload-section .upload-gallery-col .history-day-heading{grid-column:1/-1;display:block;margin:8px 0 0;padding:0;text-align:left;
+  #upload-section .upload-gallery-col .history-day-heading{grid-column:1/-1;display:block;margin:8px 0 0;padding:0;text-align:start;
     font-size:12px;font-weight:600;line-height:1.4;color:var(--text-2)}
   #upload-section .upload-gallery-col .history-day-group:first-child>.history-day-heading{margin-top:0}
   #upload-section .upload-gallery-col .demo-image-tile{width:100%;border-radius:12px}
@@ -1744,7 +1751,7 @@ div.chat-proposal-row{cursor:default}
   padding:calc(env(safe-area-inset-top) + 64px) 16px calc(env(safe-area-inset-bottom) + 24px);
   background:rgba(0,0,0,.84);animation:photo-viewer-in .15s ease-out}
 .photo-viewer img{max-width:100%;max-height:100%;object-fit:contain;border-radius:var(--radius-lg)}
-.photo-viewer-close{position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:12px;display:flex;align-items:center;justify-content:center;
+.photo-viewer-close{position:absolute;top:calc(env(safe-area-inset-top) + 12px);inset-inline-end:12px;display:flex;align-items:center;justify-content:center;
   width:44px;height:44px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.16);color:#fff;cursor:pointer}
 .photo-viewer-close:hover{background:rgba(255,255,255,.26)}
 @keyframes photo-viewer-in{from{opacity:0}}
@@ -1766,20 +1773,20 @@ div.chat-proposal-row{cursor:default}
   .chat-upload.is-zoom{flex-direction:column;align-items:flex-end;gap:var(--sp-2)}
   .chat-upload.is-zoom .chat-upload-shot{width:min(62vw,260px);aspect-ratio:4/5;border-radius:16px;box-shadow:0 6px 16px rgba(0,0,0,.1)}
   .chat-upload.is-zoom .chat-upload-shot img{width:100%;height:100%;border:0;border-radius:inherit;object-fit:cover}
-  .chat-upload-zoom{position:absolute;right:8px;bottom:8px;display:flex;align-items:center;justify-content:center;width:32px;height:32px;
+  .chat-upload-zoom{position:absolute;inset-inline-end:8px;bottom:8px;display:flex;align-items:center;justify-content:center;width:32px;height:32px;
     border-radius:50%;background:rgba(255,255,255,.9);color:var(--n84);box-shadow:var(--shadow-sm)}
 
   /* 選了照片之後，對話那條和照片列都是 64px。對話那條換行對齊置中，標題和副標照樣對基線。 */
   .chat-panel.has-photo>.chat-panel-head{height:64px;box-sizing:border-box;padding-block:0;flex-wrap:wrap;align-content:center}
   .chat-panel.is-photo-out>.chat-panel-head{display:none}
   .chat-panel.is-photo-out>.chat-panel-photo{display:flex;align-items:center;gap:var(--sp-3);flex:none;width:100%;height:64px;box-sizing:border-box;
-    padding:0 var(--sp-4);border:0;border-bottom:1px solid var(--border);background:var(--n04);color:var(--n54);text-align:left;cursor:zoom-in;
+    padding:0 var(--sp-4);border:0;border-bottom:1px solid var(--border);background:var(--n04);color:var(--n54);text-align:start;cursor:zoom-in;
     font:inherit;animation:chat-photo-in .15s ease-out}
   .chat-panel-photo img{flex:none;width:40px;height:50px;object-fit:cover;border-radius:8px}
   .chat-panel-photo-text{display:grid;min-width:0;line-height:1.4}
   .chat-panel-photo-text b{font-size:14px;font-weight:600;color:var(--n100)}
   .chat-panel-photo-text small{font-size:var(--chat-fs-xs);color:var(--n54)}
-  .chat-panel-photo svg{margin-left:auto;flex:none}
+  .chat-panel-photo svg{margin-inline-start:auto;flex:none}
 }
 @keyframes chat-photo-in{from{opacity:0;transform:translateY(-6px)}}
 
@@ -1822,7 +1829,7 @@ div.chat-proposal-row{cursor:default}
   .results-canvas-row.showing-analysis #compare-fullscreen-btn{display:none}
 
   /* 「第 N 版 ⌄｜比較｜下載」併成一顆膠囊，固定在照片那段的右上角，不跟著圖的寬窄移動。 */
-  .results-canvas-row.showing-analysis .canvas-header-row{position:absolute;inset:var(--sp-3) var(--sp-3) auto auto;z-index:2;margin:0;padding:0;
+  .results-canvas-row.showing-analysis .canvas-header-row{position:absolute;inset-block:var(--sp-3) auto;inset-inline:auto var(--sp-3);z-index:2;margin:0;padding:0;
     display:flex;align-items:center;pointer-events:none}
   .results-canvas-row.showing-analysis .canvas-header-row>*{pointer-events:auto}
   /* 膠囊退到背景裡：40px 高（手機上要好按，每顆鈕 44px 寬）、比較透的毛玻璃底加模糊（照片再花也讀得到），字和圖示用中灰、
@@ -1831,7 +1838,7 @@ div.chat-proposal-row{cursor:default}
      中灰的字才不會在深色主題下落在白底上看不見。 */
   .results-canvas-row.showing-analysis .canvas-tools{display:flex;align-items:center;height:40px;border-radius:20px;overflow:hidden;
     background:rgba(var(--glass-rgb),.58);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
-  .canvas-version-btn{display:flex;align-items:center;gap:2px;height:100%;padding:0 10px 0 14px;border:0;background:none;
+  .canvas-version-btn{display:flex;align-items:center;gap:2px;height:100%;padding-block:0;padding-inline:14px 10px;border:0;background:none;
     color:var(--n74);font:inherit;font-size:15px;font-weight:500;cursor:pointer}
   .canvas-version-btn svg{width:18px;height:18px;color:var(--n54)}
   .results-canvas-row.showing-analysis .canvas-actions{display:flex;height:100%;gap:0}
@@ -1867,12 +1874,12 @@ div.chat-proposal-row{cursor:default}
   .split-grip:focus-visible{outline:none}
   .split-grip:focus-visible i{outline:2px solid var(--accent);outline-offset:4px}
 
-  .results-analysis-slot>.chat-panel{flex:1 1 auto;height:auto;min-height:0;border-left:0;padding-left:0}
+  .results-analysis-slot>.chat-panel{flex:1 1 auto;height:auto;min-height:0;border-inline-start:0;padding-inline-start:0}
   /* 對話那張不放標頭，訊息直接從把手下面開始；「對話｜面板」縮小放在把手那排右邊，
      高度收在把手那排（--split-overlap）裡面，空間小，縮成小一號的切換鈕，圖示收掉。
      卡片上再墊白底會像多貼一層，改成淡淡的主色填色，跟其他地方的強調方式一致。 */
   .results-analysis-slot>.chat-panel>.chat-panel-head{display:none}
-  .sheet-mode-switch{display:inline-flex;position:absolute;top:calc((var(--split-overlap) - 26px) / 2);right:var(--sp-3);z-index:1;padding:2px}
+  .sheet-mode-switch{display:inline-flex;position:absolute;top:calc((var(--split-overlap) - 26px) / 2);inset-inline-end:var(--sp-3);z-index:1;padding:2px}
   .sheet-mode-switch .mode-switch-opt{height:22px;padding:0 10px;border-radius:11px;font-size:12px}
   .sheet-mode-switch{background:rgba(var(--accent-rgb),.06)}
   .sheet-mode-switch .mode-switch-opt.is-active{background:rgba(var(--accent-rgb),.14);box-shadow:none}
@@ -1928,7 +1935,7 @@ div.chat-proposal-row{cursor:default}
 [data-chat-typewriter-group].is-typewriter-pending { visibility: hidden; }
 
 .chat-target-person { display: inline-flex; align-items: center; gap: 7px; }
-.chat-target-person { padding-left: var(--sp-1); }
+.chat-target-person { padding-inline-start: var(--sp-1); }
 .chat-target-person img, .chat-target-person .chat-face-blank { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 
 /* 打字中，同一則訊息裡還沒輪到的卡片、按鈕先佔位不顯示，打到才淡入。 */
@@ -1939,10 +1946,10 @@ div.chat-proposal-row{cursor:default}
 .chat-prompt-foot{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);margin-top:var(--sp-2)}
 .chat-prompt-foot:empty{display:none}
 .prompts-modal{width:min(1200px,calc(100vw - var(--sp-6)))}
-.prompts-modal-job{margin-left:var(--sp-2);font:400 12px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--n64)}
+.prompts-modal-job{margin-inline-start:var(--sp-2);font:400 12px/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--n64)}
 .prompts-modal-body{flex:1;min-height:0;display:flex}
-.prompts-modal-tabs{flex:0 0 200px;display:flex;flex-direction:column;overflow-y:auto;background:var(--card-2);border-right:1px solid var(--border)}
-.prompts-modal-tab{padding:12px 14px;text-align:left;background:none;border:none;border-bottom:1px solid var(--border);cursor:pointer;
+.prompts-modal-tabs{flex:0 0 200px;display:flex;flex-direction:column;overflow-y:auto;background:var(--card-2);border-inline-end:1px solid var(--border)}
+.prompts-modal-tab{padding:12px 14px;text-align:start;background:none;border:none;border-bottom:1px solid var(--border);cursor:pointer;
   font-size:14px;font-weight:600;color:var(--text-2)}
 .prompts-modal-tab:last-child{border-bottom:none}
 .prompts-modal-tab:hover{color:var(--text)}
@@ -1952,11 +1959,11 @@ div.chat-proposal-row{cursor:default}
   color:var(--text-2);white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 .prompts-modal-image-wrap{position:relative;flex:1;min-width:0;background:var(--card-2)}
 .prompts-modal-image-layer{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
-.prompts-modal-image-compare-btn{position:absolute;top:10px;right:10px;z-index:2}
+.prompts-modal-image-compare-btn{position:absolute;top:10px;inset-inline-end:10px;z-index:2}
 @media (max-width:860px){
   .prompts-modal-body{flex-direction:column}
-  .prompts-modal-tabs{flex:none;flex-direction:row;overflow-x:auto;overflow-y:hidden;border-right:none;border-bottom:1px solid var(--border)}
-  .prompts-modal-tab{flex:none;white-space:nowrap;border-bottom:none;border-right:1px solid var(--border)}
+  .prompts-modal-tabs{flex:none;flex-direction:row;overflow-x:auto;overflow-y:hidden;border-inline-end:none;border-bottom:1px solid var(--border)}
+  .prompts-modal-tab{flex:none;white-space:nowrap;border-bottom:none;border-inline-end:1px solid var(--border)}
   .prompts-modal-tab.is-active{box-shadow:inset 0 -3px 0 var(--accent)}
 }
 
@@ -1975,7 +1982,7 @@ div.chat-proposal-row{cursor:default}
 
 /* 選了好幾張、打頭那張是 HEIC 還在解碼：多張頁開出來之前，頂端先浮一句，選完不會像沒反應。 */
 .photo-reading{position:fixed;z-index:900;top:calc(var(--header-h) + var(--sp-3));left:50%;transform:translateX(-50%);
-  display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-1);
+  display:flex;align-items:center;gap:var(--sp-2);padding-block:var(--sp-1);padding-inline:var(--sp-1) var(--sp-3);
   border-radius:999px;background:var(--tonal);color:var(--text);font-size:14px;white-space:nowrap;
   box-shadow:0 4px 16px rgba(0,0,0,.12);animation:photo-reading-in .2s ease-out both}
 .photo-reading .chat-typing{background:none}
@@ -1986,7 +1993,7 @@ div.chat-proposal-row{cursor:default}
    管理者從回報清單打開的那段對話。header 高度不變（--header-h 撐著整頁的
    版面），唯讀的標示就放在 header 那一列的右邊；回報的那一刻在時間軸上用一條
    accent 細線標出來，回報說明跟在線底下。都是 tonal，不用實心色塊。 */
-.report-view-meta{margin-left:auto;display:flex;align-items:center;gap:var(--sp-2);min-width:0}
+.report-view-meta{margin-inline-start:auto;display:flex;align-items:center;gap:var(--sp-2);min-width:0}
 .report-view-badge{flex-shrink:0;padding:2px 10px;border-radius:999px;background:var(--tonal);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent);
   color:var(--accent-text);font-size:12px;font-weight:600;line-height:20px}
@@ -2002,8 +2009,8 @@ div.chat-proposal-row{cursor:default}
 .chat-report-mark-note{margin:0;max-width:32em;padding:6px 12px;border-radius:12px;background:var(--tonal-lo);
   color:var(--text-2);font-size:13px;line-height:1.6;text-align:center;text-wrap:pretty;word-break:break-word}
 /* header 右邊：回報清單 · 回到聊天。窄螢幕只留圖示。 */
-.report-view-actions{display:flex;align-items:center;gap:12px;margin-left:var(--sp-3);flex-shrink:0}
-.site-header .header-inner:not(:has(.report-view-meta)) .report-view-actions{margin-left:auto}
+.report-view-actions{display:flex;align-items:center;gap:12px;margin-inline-start:var(--sp-3);flex-shrink:0}
+.site-header .header-inner:not(:has(.report-view-meta)) .report-view-actions{margin-inline-start:auto}
 .report-view-meta .report-item-status{padding:2px 10px;line-height:20px}
 @media (max-width:760px){
   .report-view-actions .btn{width:auto;aspect-ratio:1;padding:0;justify-content:center}
@@ -2051,7 +2058,7 @@ button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
 
 /* 輸入框上方那條的換底鍵：跟同一條上人物收合的「更多」鍵同一個樣子（白底細框、粗體），
    高度也一樣，才不會像一行散掉的小字。 */
-.chat-footbar .chat-continue-from{max-width:none;margin:var(--sp-2) 0;padding:3px var(--sp-1) 3px 3px;
+.chat-footbar .chat-continue-from{max-width:none;margin:var(--sp-2) 0;padding-block:3px;padding-inline:3px var(--sp-1);
   border:1px solid var(--n34);background:var(--card);color:var(--n64)}
 .chat-footbar .chat-continue-from:has(.chat-continue-pick:not(:disabled):hover),
 .chat-footbar .chat-continue-from:has(.chat-continue-pick[aria-expanded="true"]){border-color:var(--accent);color:var(--accent-text)}
@@ -2066,18 +2073,18 @@ button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
   font-size:var(--chat-fs-sm);color:var(--n54);white-space:nowrap}
 .chat-continue-text{flex-shrink:0}
 .chat-continue-control{position:relative;display:inline-flex;min-width:0}
-.chat-continue-pick{display:inline-flex;align-items:center;gap:var(--sp-1);min-width:0;padding:0 var(--sp-1) 0 0;
+.chat-continue-pick{display:inline-flex;align-items:center;gap:var(--sp-1);min-width:0;padding-block:0;padding-inline:0 var(--sp-1);
   border:0;border-radius:999px;background:none;font:inherit;color:inherit;cursor:pointer}
-.chat-continue-pick .chat-opt-caret{margin-left:2px;flex-shrink:0}
+.chat-continue-pick .chat-opt-caret{margin-inline-start:2px;flex-shrink:0}
 .chat-continue-pick:disabled{cursor:default}
 .chat-continue-pick:disabled .chat-opt-caret{opacity:.45}
 .chat-continue-pick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.chat-continue-menu{left:0;right:auto;max-height:min(320px,50vh);overflow-y:auto}
+.chat-continue-menu{inset-inline-start:0;inset-inline-end:auto;max-height:min(320px,50vh);overflow-y:auto}
 /* 換底跟指定對象是兩件事，同一條上換底在左、人物在右，中間用一道短直線隔開；左右各留
    一樣的空（footbar 的 gap 在左，picker 自己的 gap 加一點在右）。永遠同一行：換底那句
    不縮，擠的時候人物那排自己收進「更多」（FacePicker 量的是自己剩下的寬度）。 */
 .chat-footbar .chat-continue-base{flex-shrink:0}
-.chat-continue-base+.chat-face-picker::before{content:"";flex-shrink:0;width:1px;height:20px;margin-right:var(--sp-1);background:var(--border)}
+.chat-continue-base+.chat-face-picker::before{content:"";flex-shrink:0;width:1px;height:20px;margin-inline-end:var(--sp-1);background:var(--border)}
 /* 這一條上的頭像大小：桌機 40px（跟其他地方一樣），手機縮成 28px，整條人物頭像、收合
    的「更多」、換底鍵都是 36px 高。FacePicker（chat.tsx）讀這個變數算擺不擺得下。
    展開的人物面板裡維持大頭像，不受影響。 */
@@ -2089,7 +2096,7 @@ button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
 @media (max-width:900px){
   .chat-footbar{--footbar-face:28px}
   .chat-footbar .chat-continue-pick .chat-continue-shot{width:28px;height:28px}
-  .chat-footbar .chat-face-fold-faces>.chat-face-chip+.chat-face-chip{margin-left:-9px}
+  .chat-footbar .chat-face-fold-faces>.chat-face-chip+.chat-face-chip{margin-inline-start:-9px}
   /* 頭像縮小後撐不起整條的高度了，上下留跟換底鍵一樣的空，只有人物時也不會貼著邊。 */
   .chat-footbar .chat-face-picker{padding:var(--sp-2) 0}
 }
@@ -2097,4 +2104,4 @@ button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
    推到右邊、手機上整個超出去。在 footbar 裡改靠整條定位，左右各留跟 footbar 一樣的邊。 */
 .chat-footbar{position:relative}
 .chat-footbar .chat-face-picker{position:static}
-.chat-footbar .chat-face-panel{left:var(--sp-4);max-width:calc(100% - 2 * var(--sp-4))}
+.chat-footbar .chat-face-panel{inset-inline-start:var(--sp-4);max-width:calc(100% - 2 * var(--sp-4))}

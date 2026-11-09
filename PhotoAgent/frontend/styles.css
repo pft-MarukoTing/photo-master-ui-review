@@ -638,7 +638,7 @@ html[data-env-label] .logo::after {
      it onto the cap height of the "P". */
   vertical-align: top;
   transform: translateY(4px);
-  margin-left: 6px;
+  margin-inline-start: 6px;
   padding: 1px 5px;
   border: 1px solid var(--border-2);
   border-radius: 999px;
@@ -655,7 +655,7 @@ html[data-env-label] .logo::after {
 @media (max-width: 480px) {
   html[data-env-label] .logo::after {
     transform: translateY(2px);
-    margin-left: 5px;
+    margin-inline-start: 5px;
     padding: 1px 4px;
     font-size: 8px;
     letter-spacing: .06em;
@@ -796,7 +796,7 @@ html[data-env-label] .logo::after {
   flex-direction: column;
   min-width: 0;
   gap: 3px;
-  text-align: left;
+  text-align: start;
 }
 .upload-flow-text strong {
   color: var(--text);
@@ -1009,8 +1009,8 @@ html[data-env-label] .logo::after {
     max-height: 520px;
   }
   .upload-content-row > .upload-main-col {
-    margin-left: -16px;
-    margin-right: 16px;
+    margin-inline-start: -16px;
+    margin-inline-end: 16px;
   }
 }
 @media (min-width: 1600px) {
@@ -1329,7 +1329,7 @@ body[data-theme-mode="light"] .upload-gallery-col .history-cube:hover {
   display: flex;
 }
 .upload-gallery-col .history-cube .rc-badge {
-  left: 7px;
+  inset-inline-start: 7px;
   bottom: 7px;
   padding: 4px 9px;
   min-height: 24px;
@@ -1453,11 +1453,11 @@ body[data-theme-mode="light"] .upload-main-col {
 }
 .upload-main-col #start-btn.split-main {
   height: 30px;
-  border-radius: 15px 0 0 15px;
+  border-start-start-radius: 15px; border-start-end-radius: 0; border-end-end-radius: 0; border-end-start-radius: 15px;
 }
 .upload-main-col #start-full-btn.split-secondary {
   height: 30px;
-  border-radius: 0 15px 15px 0;
+  border-start-start-radius: 0; border-start-end-radius: 15px; border-end-end-radius: 15px; border-end-start-radius: 0;
 }
 .upload-main-col .upload-below-zone #advanced-settings-fold > summary {
   height: 30px;
@@ -1726,7 +1726,7 @@ body[data-theme-mode="light"] .upload-main-col {
 }
 .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) .ap-style-compact-label {
   display: inline;
-  margin-right: 4px;
+  margin-inline-end: 4px;
   color: var(--text-2);
   font-weight: 600;
 }
@@ -1841,7 +1841,7 @@ body[data-theme-mode="light"] .upload-main-col {
   height: 41px;
   background: transparent;
   box-shadow: none;
-  border-radius: 20px 0 0 20px;
+  border-start-start-radius: 20px; border-start-end-radius: 0; border-end-end-radius: 0; border-end-start-radius: 20px;
   transition: background-color .15s;
 }
 /* Per-button hover tint -- a soft dark overlay on just the half under the
@@ -1855,10 +1855,10 @@ body[data-theme-mode="light"] .upload-main-col {
   height: 41px;
   background: transparent;
   box-shadow: none;
-  border-radius: 0 20px 20px 0;
+  border-start-start-radius: 0; border-start-end-radius: 20px; border-end-end-radius: 20px; border-end-start-radius: 0;
   /* A high-contrast divider keeps the two click targets readable while the
      shared outer background makes them one connected button. */
-  border-left: 2px solid rgba(var(--on-surface-rgb),.55);
+  border-inline-start: 2px solid rgba(var(--on-surface-rgb),.55);
   transition: background-color .15s;
 }
 #start-full-btn.split-secondary:hover {
@@ -1873,7 +1873,7 @@ body[data-theme-mode="light"] .upload-main-col {
   height: 41px;
   background: transparent;
   box-shadow: none;
-  border-radius: 20px 0 0 20px;
+  border-start-start-radius: 20px; border-start-end-radius: 0; border-end-end-radius: 0; border-end-start-radius: 20px;
   transition: background-color .15s;
 }
 #ap-restart-analysis-btn.split-main:hover {
@@ -1883,8 +1883,8 @@ body[data-theme-mode="light"] .upload-main-col {
   height: 41px;
   background: transparent;
   box-shadow: none;
-  border-radius: 0 20px 20px 0;
-  border-left: 2px solid rgba(var(--on-surface-rgb),.55);
+  border-start-start-radius: 0; border-start-end-radius: 20px; border-end-end-radius: 20px; border-end-start-radius: 0;
+  border-inline-start: 2px solid rgba(var(--on-surface-rgb),.55);
   transition: background-color .15s;
 }
 #ap-restart-full-btn.split-secondary:hover {
@@ -2167,7 +2167,7 @@ body[data-theme-mode="light"] .upload-main-col {
   gap: 5px;
 }
 .option-pill-label {
-  padding-left: 2px;
+  padding-inline-start: 2px;
   font-size: 12px;
   font-weight: 700;
   color: var(--text-2);
@@ -2262,18 +2262,18 @@ label.option-row:hover { background: rgba(var(--on-surface-rgb),.025); }
 .ios-switch input:disabled + .ios-track { cursor: not-allowed; }
 .ios-thumb {
   position: absolute;
-  top: 3px; left: 3px;
+  top: 3px; inset-inline-start: 3px;
   width: 20px; height: 20px;
   background: #fff;
   border-radius: 50%;
   box-shadow: 0 1px 4px rgba(0,0,0,.3);
-  transition: left .22s cubic-bezier(.4,0,.2,1);
+  transition: inset-inline-start .22s cubic-bezier(.4,0,.2,1);
   display: block;
 }
 body[data-theme-mode="light"] .ios-thumb {
   box-shadow: 0 1px 4px rgba(var(--on-surface-rgb),.18);
 }
-.ios-switch input:checked + .ios-track .ios-thumb { left: 21px; }
+.ios-switch input:checked + .ios-track .ios-thumb { inset-inline-start: 21px; }
 
 /* 最近照片／範例照片排列方式 (#gallery-card-style-row, index.html): three
    buttons need their own full-width line below the label/description, not
@@ -2350,10 +2350,10 @@ body[data-theme-mode="light"] .ios-thumb {
   align-items: center;
   column-gap: 10px;
   row-gap: 8px;
-  padding-left: var(--face-issue-indent);
+  padding-inline-start: var(--face-issue-indent);
 }
 .ap-face-issue-main > .ap-face-issue-row {
-  margin-left: calc(-1 * var(--face-issue-indent));
+  margin-inline-start: calc(-1 * var(--face-issue-indent));
 }
 .ap-face-issue-level-row {
   position: static;
@@ -2362,7 +2362,7 @@ body[data-theme-mode="light"] .ios-thumb {
   max-width: 100%;
 }
 .ap-face-issue-toggle.ios-switch { width: 34px; height: 20px; cursor: pointer; flex-shrink: 0; }
-.ap-face-issue-toggle .ios-thumb { width: 14px; height: 14px; top: 3px; left: 3px; }
+.ap-face-issue-toggle .ios-thumb { width: 14px; height: 14px; top: 3px; inset-inline-start: 3px; }
 /* An unflagged issue still renders its toggle (results.js) -- always the
    same 34px slot on every row -- but disabled, since there's no proposed
    fix to allow/deny. Same dim+not-allowed treatment as the option pickers'
@@ -2377,7 +2377,7 @@ body[data-theme-mode="light"] .ios-thumb {
    ios-switch's own cursor:pointer above so it wins at equal specificity. */
 .ap-face-issue-toggle.is-locked { opacity: .35; cursor: not-allowed; }
 
-.ap-face-issue-toggle input:checked + .ios-track .ios-thumb { left: 17px; }
+.ap-face-issue-toggle input:checked + .ios-track .ios-thumb { inset-inline-start: 17px; }
 
 .ap-face-issue-note { color: var(--text-2); font-size: 13px; margin-bottom: 4px; }
 .quality-select.ap-face-issue-level-select {
@@ -2386,7 +2386,7 @@ body[data-theme-mode="light"] .ios-thumb {
   min-width: 96px;
   max-width: 100%;
   height: 28px;
-  padding: 3px 21px 3px 6px;
+  padding-block: 3px; padding-inline: 6px 21px;
   font-size: 11.5px;
   line-height: 1.2;
 }
@@ -2419,13 +2419,13 @@ body[data-theme-mode="light"] .ios-thumb {
   width: 14px;
   height: 14px;
   top: 3px;
-  left: 3px;
+  inset-inline-start: 3px;
 }
-.ap-body-reshape-toggle input:checked + .ios-track .ios-thumb { left: 17px; }
+.ap-body-reshape-toggle input:checked + .ios-track .ios-thumb { inset-inline-start: 17px; }
 .ap-body-reshape-name { color: var(--text); font-weight: 700; }
 .ap-body-reshape-verdict { white-space: nowrap; }
 .ap-body-reshape-prompt {
-  margin: 8px 0 0 44px;
+  margin-block: 8px 0; margin-inline: 44px 0;
   color: var(--text-2);
   font-size: 13px;
   line-height: 1.5;
@@ -2433,10 +2433,10 @@ body[data-theme-mode="light"] .ios-thumb {
 }
 .ap-body-reshape-prompt-label {
   color: var(--text-3);
-  margin-right: 4px;
+  margin-inline-end: 4px;
 }
 .ap-body-reshape-report {
-  margin: 8px 0 0 44px;
+  margin-block: 8px 0; margin-inline: 44px 0;
 }
 .ap-body-reshape-report-toggle {
   display: inline-flex;
@@ -2458,7 +2458,7 @@ body[data-theme-mode="light"] .ios-thumb {
   display: inline-block;
   width: 9px;
   height: 9px;
-  margin-right: 4px;
+  margin-inline-end: 4px;
   background:
     linear-gradient(currentColor, currentColor) center / 9px 1.6px no-repeat,
     linear-gradient(currentColor, currentColor) center / 1.6px 9px no-repeat;
@@ -2558,7 +2558,7 @@ body[data-theme-mode="light"] .proc-wrap {
   border: 1px solid var(--border-2);
   border-radius: var(--radius-sm);
   color: var(--text);
-  padding: 7px 30px 7px 12px;
+  padding-block: 7px; padding-inline: 12px 30px;
   font-size: 16.25px;
   font-weight: 600;
   outline: none;
@@ -2567,6 +2567,7 @@ body[data-theme-mode="light"] .proc-wrap {
   -webkit-appearance: none;
   appearance: none;
 }
+:where([dir="rtl"]) .quality-select { background-position: left 12px center; }
 .quality-select:hover { border-color: rgba(var(--on-surface-rgb),.28); }
 .quality-select:focus { border-color: rgba(var(--accent-rgb),.55); }
 /* The dropdown's own option list doesn't inherit .quality-select's dark
@@ -2652,13 +2653,13 @@ body[data-theme-mode="light"] .proc-wrap {
 .think-ring:nth-child(1) {
   inset: 0;
   border-top-color: rgba(var(--accent-rgb),.9);
-  border-right-color: rgba(var(--accent-2-rgb),.25);
+  border-inline-end-color: rgba(var(--accent-2-rgb),.25);
   animation: spin 1.9s linear infinite;
 }
 .think-ring:nth-child(2) {
   inset: 22px;
   border-top-color: rgba(var(--accent-2-rgb),.7);
-  border-left-color: rgba(var(--accent-rgb),.2);
+  border-inline-start-color: rgba(var(--accent-rgb),.2);
   animation: spin 2.5s linear infinite reverse;
 }
 .think-ring:nth-child(3) {
@@ -2724,7 +2725,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   max-width: none;
   min-width: 0;
   padding: 0;
-  text-align: left;
+  text-align: start;
   font-weight: 400;
 }
 .progress-feed-badge {
@@ -2820,7 +2821,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 .canvas-loading:has(.has-progress-feed) .proc-visual { grid-row: 1 / 4; align-self: center; }
 .canvas-loading:has(.has-progress-feed) .canvas-loading-eyebrow,
 .canvas-loading:has(.has-progress-feed) .canvas-loading-title,
-.canvas-loading:has(.has-progress-feed) .canvas-loading-status { grid-column: 2; text-align: left; }
+.canvas-loading:has(.has-progress-feed) .canvas-loading-status { grid-column: 2; text-align: start; }
 .canvas-loading:has(.has-progress-feed) .canvas-loading-eyebrow { font-size: 15px; }
 .canvas-loading:has(.has-progress-feed) .canvas-loading-title { font-size: clamp(30px, 3.75vw, 45px); }
 .canvas-loading:has(.has-progress-feed) .canvas-loading-status { max-width: none; padding: 0; font-weight: 400; }
@@ -2841,7 +2842,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
     justify-self: center;
     width: min(var(--progress-feed-width, 100%), 100%);
     max-width: 560px;
-    text-align: left;
+    text-align: start;
   }
   .proc-top .proc-text,
   .batch-main-loading .proc-text { align-self: stretch; }
@@ -2849,7 +2850,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
     width: min(var(--progress-feed-width, 100%), 100%);
     max-width: 560px;
     margin-inline: auto;
-    text-align: left;
+    text-align: start;
   }
 }
 
@@ -2899,7 +2900,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 .result-report-status {
   position: absolute;
   top: 0;
-  right: 0;
+  inset-inline-end: 0;
   z-index: 5;
 }
 .results-canvas-row.showing-analysis {
@@ -2988,7 +2989,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
    version currently shown. align-self keeps it off the head's baseline, which
    its inline icon would otherwise sit awkwardly on. */
 .version-strip-note {
-  margin-left: auto;
+  margin-inline-start: auto;
   align-self: center;
   display: inline-flex;
   align-items: center;
@@ -3000,7 +3001,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 /* Hidden while versions can be continued from (syncVersionStripCurrent):
    the preview button then takes over pushing itself to the far end. */
 .version-strip-note[hidden] { display: none; }
-.version-strip-note[hidden] + .version-strip-preview-btn { margin-left: auto; }
+.version-strip-note[hidden] + .version-strip-preview-btn { margin-inline-start: auto; }
 /* Touch replacement for the hover preview (.version-tile-preview disables
    itself below @media max-width:560px, since hover has no meaning on touch):
    opens #version-strip-preview-modal instead. Hidden by default, same as
@@ -3248,7 +3249,7 @@ button.version-origin-tile:focus-visible {
    version and a 3-image one still occupy the same vertical space. */
 .version-tile-run {
   position: absolute;
-  right: 2px;
+  inset-inline-end: 2px;
   bottom: 2px;
   min-width: 15px;
   padding: 0 3px;
@@ -3993,7 +3994,7 @@ button.version-origin-tile:focus-visible {
     justify-content: center;
   }
   body.side-panel-layout #results-analysis-slot:has(#ap-analysis-shell:not([open])) .ap-settings-run-row {
-    margin-left: 0;
+    margin-inline-start: 0;
     width: 100%;
     justify-content: center;
   }
@@ -4052,8 +4053,8 @@ button.version-origin-tile:focus-visible {
   body.side-panel-layout #ap-analysis-shell:not([open]) {
     width: 44px;
     margin-top: 26px;
-    border-radius: 0 var(--radius-sm) 0 0;
-    border-left: none;
+    border-start-start-radius: 0; border-start-end-radius: var(--radius-sm); border-end-end-radius: 0; border-end-start-radius: 0;
+    border-inline-start: none;
     border-bottom: none;
     border-color: rgba(var(--accent-rgb),.45);
     border-style: dashed;
@@ -4361,7 +4362,7 @@ button.version-origin-tile:focus-visible {
 .ap-finding-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ap-finding-name { font-weight: 700; color: var(--text); }
 .ap-finding-text { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-2); }
-.ap-finding-items { margin: 6px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--text); }
+.ap-finding-items { margin: 6px 0 0; padding-inline-start: 18px; font-size: 13px; line-height: 1.5; color: var(--text); }
 
 #ap-recipe-list li.is-reframing .step-cb-label {
   display: none;
@@ -4397,7 +4398,7 @@ button.version-origin-tile:focus-visible {
   display: inline-block;
   width: 12px;
   height: 12px;
-  margin-left: 8px;
+  margin-inline-start: 8px;
   vertical-align: -1px;
   border: 2px solid rgba(var(--on-surface-rgb), .25);
   border-top-color: var(--accent);
@@ -4466,7 +4467,7 @@ button.version-origin-tile:focus-visible {
 }
 .version-viewer[hidden] { display: none; }
 @keyframes version-viewer-in { from { opacity: 0; } }
-.version-viewer-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 60px; padding: 0 12px 0 24px; }
+.version-viewer-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 60px; padding-block: 0; padding-inline: 24px 12px; }
 .version-viewer-title { display: flex; align-items: baseline; gap: 8px; font-size: 16px; font-weight: 600; }
 .version-viewer-title small { font-size: 12px; font-weight: 400; color: var(--text-2); }
 .version-viewer-btn {
@@ -4502,8 +4503,8 @@ button.version-origin-tile:focus-visible {
 .version-viewer-track { display: flex; gap: 12px; overflow-x: auto; padding: 4px 16px; scrollbar-width: none; overscroll-behavior-x: contain; }
 .version-viewer-track::-webkit-scrollbar { display: none; }
 .version-viewer-track[hidden] { display: none; }
-.version-viewer-track > :first-child { margin-left: auto; }
-.version-viewer-track > :last-child { margin-right: auto; }
+.version-viewer-track > :first-child { margin-inline-start: auto; }
+.version-viewer-track > :last-child { margin-inline-end: auto; }
 .version-viewer-track.is-busy { opacity: .6; pointer-events: none; }
 .version-viewer-tile {
   flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -4529,7 +4530,7 @@ button.version-origin-tile:focus-visible {
 .download-menu {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  inset-inline-end: 0;
   z-index: 6;
   display: flex;
   flex-direction: column;
@@ -4550,7 +4551,7 @@ button.version-origin-tile:focus-visible {
   background: none;
   color: rgba(var(--on-surface-rgb),.85);
   font-size: 13px;
-  text-align: left;
+  text-align: start;
   white-space: nowrap;
   cursor: pointer;
   transition: background .15s, color .15s;
@@ -4562,7 +4563,7 @@ button.version-origin-tile:focus-visible {
    .canvas-btn-wrap instead of the right: #boxes-toggle-btn is the leftmost
    icon in .canvas-actions, so a right-anchored menu here would hang off the
    photo frame's left edge instead of opening back over the row. */
-.box-type-menu { left: 0; right: auto; }
+.box-type-menu { inset-inline-start: 0; inset-inline-end: auto; }
 .box-type-list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
 .box-type-row {
   display: flex;
@@ -4773,7 +4774,7 @@ body[data-theme-mode="light"] .recipe-tags span.recipe-tag-personalize:hover {
   flex: 0 0 auto;
   width: 1.05em;
   height: 1.05em;
-  margin-right: .35em;
+  margin-inline-end: .35em;
   background-color: currentColor;
   mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M21%204H3v12h10l5%204v-4h3z'/%3E%3C/svg%3E");
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M21%204H3v12h10l5%204v-4h3z'/%3E%3C/svg%3E");
@@ -4823,7 +4824,7 @@ body[data-theme-mode="light"] .recipe-tags span.recipe-tag-personalize:hover {
   backdrop-filter: blur(32px) saturate(1.4);
   -webkit-backdrop-filter: blur(32px) saturate(1.4);
   box-shadow: var(--shadow-md);
-  text-align: left;
+  text-align: start;
 }
 /* The bubble's tail. Sits entirely BELOW the body (top:100%, no overlap) and
    repeats its exact fill: two translucent layers overlapping would darken the
@@ -5082,8 +5083,8 @@ body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle:hover {
 .photo-switch-arrow:hover { background: rgba(var(--accent-rgb),.4); border-color: rgba(var(--accent-rgb),.55); }
 .photo-switch-arrow:active { transform: translateY(-50%) scale(.92); }
 .photo-switch-arrow:disabled { opacity: .3; cursor: not-allowed; pointer-events: none; }
-.photo-switch-prev { left: 10px; }
-.photo-switch-next { right: 10px; }
+.photo-switch-prev { inset-inline-start: 10px; }
+.photo-switch-next { inset-inline-end: 10px; }
 
 /* "產生中… N/total RUN" progress bar, directly under the photo -- shown for
    as long as any RUN of the current multi-RUN job is still generating in the
@@ -5233,7 +5234,7 @@ body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle:hover {
 
 .analysis-boxes-legend {
   position: absolute;
-  right: 10px;
+  inset-inline-end: 10px;
   bottom: 10px;
   /* Below .canvas-loading's 6 so the re-processing dim covers it too. */
   z-index: 5;
@@ -5330,8 +5331,8 @@ body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle:hover {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-left: 1px solid var(--border);
-  padding-left: 20px;
+  border-inline-start: 1px solid var(--border);
+  padding-inline-start: 20px;
   min-width: 80px;
   text-align: center;
 }
@@ -5553,8 +5554,8 @@ body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle:hover {
   font-size: 17.5px;
   color: var(--text-2);
   line-height: 1.5;
-  padding-left: 14px;
-  border-left: 2.5px solid rgba(var(--accent-rgb),.4);
+  padding-inline-start: 14px;
+  border-inline-start: 2.5px solid rgba(var(--accent-rgb),.4);
   letter-spacing: -.14px;
 }
 
@@ -5612,13 +5613,13 @@ body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle:hover {
   font-size: 16.25px;
   color: var(--text-2);
   line-height: 1.5;
-  padding-left: 16px;
+  padding-inline-start: 16px;
   position: relative;
 }
 .detail-list li::before {
   content: '';
   position: absolute;
-  left: 4px;
+  inset-inline-start: 4px;
   top: 6px;
   width: 6px; height: 6px;
   border-radius: 50%;
@@ -5825,9 +5826,9 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
 
   .verdict-row { flex-direction: column; align-items: stretch; }
   .verdict-score {
-    border-left: none;
+    border-inline-start: none;
     border-top: 1px solid var(--border);
-    padding-left: 0;
+    padding-inline-start: 0;
     padding-top: 16px;
     flex-direction: row;
     justify-content: space-between;
@@ -6219,27 +6220,27 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
      third flex card. Reserve its width in the content row so the main
      workspace remains fully visible beside it. */
   #upload-section .upload-content-row {
-    padding-right: 360px;
+    padding-inline-end: 360px;
   }
   #upload-section .upload-content-row > .upload-main-col {
     position: relative;
-    left: 32px;
+    inset-inline-start: 32px;
   }
   #upload-section .upload-content-row > .upload-gallery-col {
     position: fixed;
     top: var(--header-h);
-    right: 0;
+    inset-inline-end: 0;
     bottom: auto;
     z-index: 20;
     width: 360px;
     height: calc(100vh - var(--header-h));
     max-height: none;
     flex: none;
-    margin-right: 0;
+    margin-inline-end: 0;
     padding: 16px;
     gap: 12px;
     border: 0;
-    border-left: 1px solid rgba(var(--on-surface-rgb), .06);
+    border-inline-start: 1px solid rgba(var(--on-surface-rgb), .06);
     border-radius: 0;
     background: rgba(var(--on-surface-rgb), .022);
     box-shadow: none;
@@ -6589,7 +6590,7 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
   body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-badge {
     top: 6px;
     bottom: auto;
-    left: 6px;
+    inset-inline-start: 6px;
   }
   /* The base rule's .rc-media::after darkens toward the BOTTOM (for the
      bottom-left badge in mosaic mode) -- that dark band is what read as a
@@ -6633,7 +6634,7 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
     overflow-x: auto;
     overflow-y: hidden;
     gap: 0;
-    padding-left: 24px;
+    padding-inline-start: 24px;
     /* Asymmetric on purpose: 6px on top, 0 on the bottom. overflow-y has
        to be hidden here (overflow-x is auto, and CSS forces the other
        axis to a non-visible value), so whatever doesn't fit this padding
@@ -6690,7 +6691,7 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
     height: auto;
     aspect-ratio: 1 / 1;
     margin: 0;
-    margin-left: -26px;
+    margin-inline-start: -26px;
     padding: 0;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, .26);
@@ -6734,7 +6735,7 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
   }
   body.gallery-card-style #upload-section .upload-gallery-col .demo-images-grid > .demo-image-tile:first-child,
   body.gallery-card-style #upload-section .upload-gallery-col .history-grid > .history-cube:first-child {
-    margin-left: 0;
+    margin-inline-start: 0;
   }
   /* .demo-image-tile-check's own base position (index.html) is top-RIGHT --
      the opposite corner from .rc-badge/.history-cube-remove's top-left
@@ -6746,8 +6747,8 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
      same as the history badge already does. */
   body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile-check {
     top: 6px;
-    right: auto;
-    left: 6px;
+    inset-inline-end: auto;
+    inset-inline-start: 6px;
   }
   /* Same alternating tilt as desktop, but jittered vertically
      (translateY) instead of sideways -- sideways jitter would fight the
@@ -6809,7 +6810,7 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
   body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-badge {
     top: auto;
     bottom: 6px;
-    left: 6px;
+    inset-inline-start: 6px;
   }
   /* Remove button moved from its base top-RIGHT (index.html, the covered
      corner under this row's stacking) to top-left -- the other safe
@@ -6819,8 +6820,8 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
      last. */
   body.gallery-card-style #upload-section .upload-gallery-col .history-cube-remove {
     top: 5px;
-    right: auto;
-    left: 5px;
+    inset-inline-end: auto;
+    inset-inline-start: 5px;
   }
   /* Letterbox backdrop: same note as the desktop block -- defined once in
      .demo-image-tile-bg / .history-cube-bg's own base rules, not here. */
@@ -6878,9 +6879,9 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
     flex: 0 0 auto;
     width: 22px;
     padding: 0;
-    margin: 4px 4px 4px 0;
+    margin-block: 4px; margin-inline: 0 4px;
     border: 0;
-    border-left: 1px solid rgba(var(--on-surface-rgb), .16);
+    border-inline-start: 1px solid rgba(var(--on-surface-rgb), .16);
     border-radius: 0;
     background: transparent;
     color: inherit;
@@ -6901,7 +6902,7 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
 .recipe-tags .result-detail-label { font: inherit; }
 .recipe-tags.is-icon-only .result-detail-label { display: none; }
 .recipe-tags.is-icon-only .result-detail-toggle { padding: 7px; }
-.result-detail-list { margin: 0; padding-left: 1.25em; white-space: normal; }
+.result-detail-list { margin: 0; padding-inline-start: 1.25em; white-space: normal; }
 .result-detail-list li + li { margin-top: 6px; }
 
 /* Executed portrait corrections share the result popover, one aligned person per row. */
@@ -6934,3 +6935,13 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
   flex: 0 0 auto;
   white-space: nowrap;
 }
+
+:where([dir="rtl"]) .icon-mirror { transform: scaleX(-1); }
+:where([dir="rtl"]) .result-case-times time { direction: ltr; unicode-bidi: isolate; }
+:where([dir="rtl"]) :is(.ap-photo-summary-text, .ap-photo-issue-text, .ap-face-issue-reason, .ap-face-detail-name,
+  .ap-finding-text, .ap-findings-summary, .ap-body-reshape-report-text, .step-cb-label, .result-detail-list li,
+  .progress-feed-text, textarea, input[type="text"], [contenteditable]) {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+:where([dir="rtl"]) .aspect-ratio-picker :is(.ar-scale, .ar-shape-row) { direction: ltr; }

@@ -6,6 +6,7 @@
     "Required: arb_locale, name (the picker shows it, written in that language), prompt_name (what the model prompts call the language, in English) and format (every field of photo_agent/i18n.py SOURCE_FORMAT).",
     "manual: the text with no letters that the Hub does not translate (arb-keys.json `manual`), keyed by the Chinese; a missing one falls back to English, then Chinese.",
     "fallback \"source\": text the language lacks shows in Chinese instead of English.",
+    "dir \"rtl\": the pages lay out right to left (Arabic, Hebrew).",
     "zh-Hans is not translated by the Hub: its ARB is i18n/intl_zh_Hans.arb, made from the Chinese by scripts/translation_source.py (scripts/l10n_zh_hans.py)."
   ],
   "languages": {
@@ -623,6 +624,90 @@
         "，": "，",
         "：": "：",
         "；": "；"
+      }
+    },
+    "ar": {
+      "enabled": false,
+      "arb_locale": "ar",
+      "name": "العربية",
+      "prompt_name": "Arabic",
+      "dir": "rtl",
+      "format": {
+        "list": "، ",
+        "sentence": " ",
+        "quote": ["\"", "\""],
+        "sentence_end": ".!?؟",
+        "wish_marks": ["؛ ", "، ", "，、,،:： "],
+        "name_mark": ": ",
+        "echo_scale": 4
+      },
+      "manual": {
+        "{a}{b}": "{a}{b}",
+        "{label}（{note}）": "{label} ({note})",
+        "{label}：": "{label}: ",
+        "{label}：{text}。": "{label}: {text}.",
+        "{label}：{v2}": "{label}: {v2}",
+        "{name}（{where}）": "{name} ({where})",
+        "{summary}。": "{summary}. ",
+        "{v1}。": "{v1}.",
+        "{v1}，{text}": "{v1}، {text}",
+        "{v1}：": "{v1}: ",
+        "{v1}：{v2}": "{v1}: {v2}",
+        "{v1}：{v2}（{reason}）": "{v1}: {v2} ({reason})",
+        "{what}：{ratio}": "{what}: {ratio}",
+        "、": "، ",
+        "。": ". ",
+        "。@@句尾": ".",
+        "「{v1}」": "\"{v1}\"",
+        "（": " (",
+        "（{level}）": " ({level})",
+        "（{reason}）": " ({reason})",
+        "）": ")",
+        "，": "، ",
+        "：": ": ",
+        "；": "؛ "
+      }
+    },
+    "he": {
+      "enabled": false,
+      "arb_locale": "he",
+      "name": "עברית",
+      "prompt_name": "Hebrew",
+      "dir": "rtl",
+      "format": {
+        "list": ", ",
+        "sentence": " ",
+        "quote": ["\"", "\""],
+        "sentence_end": ".!?",
+        "wish_marks": ["; ", ", ", "，、,:： "],
+        "name_mark": ": ",
+        "echo_scale": 4
+      },
+      "manual": {
+        "{a}{b}": "{a}{b}",
+        "{label}（{note}）": "{label} ({note})",
+        "{label}：": "{label}: ",
+        "{label}：{text}。": "{label}: {text}.",
+        "{label}：{v2}": "{label}: {v2}",
+        "{name}（{where}）": "{name} ({where})",
+        "{summary}。": "{summary}. ",
+        "{v1}。": "{v1}.",
+        "{v1}，{text}": "{v1}, {text}",
+        "{v1}：": "{v1}: ",
+        "{v1}：{v2}": "{v1}: {v2}",
+        "{v1}：{v2}（{reason}）": "{v1}: {v2} ({reason})",
+        "{what}：{ratio}": "{what}: {ratio}",
+        "、": ", ",
+        "。": ". ",
+        "。@@句尾": ".",
+        "「{v1}」": "\"{v1}\"",
+        "（": " (",
+        "（{level}）": " ({level})",
+        "（{reason}）": " ({reason})",
+        "）": ")",
+        "，": ", ",
+        "：": ": ",
+        "；": "; "
       }
     }
   }

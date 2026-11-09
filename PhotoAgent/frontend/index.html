@@ -53,7 +53,7 @@
       display: none;
       position: absolute;
       top: 16px;
-      right: 16px;
+      inset-inline-end: 16px;
       z-index: 5;
       align-items: center;
       justify-content: center;
@@ -219,7 +219,7 @@
       color: var(--text-2);
     }
     .timing-row.timing-sub {
-      padding-left: 22px;
+      padding-inline-start: 22px;
       font-size: 13.75px;
       color: var(--text-3);
     }
@@ -307,7 +307,7 @@
       display: inline-flex;
       align-items: center;
       gap: 3px;
-      margin-left: auto;
+      margin-inline-start: auto;
       /* Two children now (the settings icon + 美化), and this row sits inside
          a panel that can be as narrow as the side-panel layout allows -- let
          the icon drop onto its own line rather than pushing 美化 out of the
@@ -367,7 +367,7 @@
     .ap-case-settings-dirty {
       position: absolute;
       top: 3px;
-      right: 3px;
+      inset-inline-end: 3px;
       width: 8px;
       height: 8px;
       border-radius: 50%;
@@ -923,7 +923,7 @@
       flex-shrink: 0;
       width: 9px;
       height: 9px;
-      margin-right: 4px;
+      margin-inline-end: 4px;
       background:
         linear-gradient(currentColor, currentColor) center / 9px 1.6px no-repeat,
         linear-gradient(currentColor, currentColor) center / 1.6px 9px no-repeat;
@@ -1129,8 +1129,8 @@
       }
       .ap-photo-secondary-sections:has(> .ap-photo-highlights:not([hidden])):has(> .ap-photo-issues:not([hidden])) > .ap-photo-issues {
         min-width: 0;
-        border-left: 1px solid var(--border);
-        padding-left: 15px;
+        border-inline-start: 1px solid var(--border);
+        padding-inline-start: 15px;
       }
     }
     .ap-analysis-shell {
@@ -1358,8 +1358,8 @@
     @container options-card-inline (max-width: 520px) {
       .ap-review-tab {
         gap: 4px;
-        padding-left: 8px;
-        padding-right: 8px;
+        padding-inline-start: 8px;
+        padding-inline-end: 8px;
       }
       .ap-review-tab .ic { width: 15px; height: 15px; }
       .ap-review-tab.is-active .ic { width: 16px; height: 16px; }
@@ -1515,7 +1515,7 @@
       min-width: 0;
       max-width: 100%;
       height: 32px;
-      padding: 0 12px 0 4px;
+      padding-block: 0; padding-inline: 4px 12px;
       border: 0;
       border-radius: 999px;
       background: rgba(var(--accent-rgb),.10);
@@ -1540,10 +1540,10 @@
       justify-content: center;
       width: 30px;
       height: 32px;
-      padding: 0 2px 0 0;
+      padding-block: 0; padding-inline: 0 2px;
       border: 0;
-      border-left: 1px solid rgba(var(--accent-rgb),.18);
-      border-radius: 0 999px 999px 0;
+      border-inline-start: 1px solid rgba(var(--accent-rgb),.18);
+      border-start-start-radius: 0; border-start-end-radius: 999px; border-end-end-radius: 999px; border-end-start-radius: 0;
       background: rgba(var(--accent-rgb),.10);
       color: var(--accent);
       cursor: pointer;
@@ -1553,8 +1553,8 @@
     .ap-continue-exit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .ap-continue-exit[hidden] { display: none; }
     .ap-continue-control:has(.ap-continue-exit:not([hidden])) .ap-continue-pick {
-      border-radius: 999px 0 0 999px;
-      padding-right: 10px;
+      border-start-start-radius: 999px; border-start-end-radius: 0; border-end-end-radius: 0; border-end-start-radius: 999px;
+      padding-inline-end: 10px;
     }
     .ap-continue-shot {
       width: 24px;
@@ -1566,7 +1566,7 @@
     .ap-continue-caret {
       width: 6px;
       height: 6px;
-      margin-left: 2px;
+      margin-inline-start: 2px;
       flex-shrink: 0;
       border-right: 1.5px solid currentColor;
       border-bottom: 1.5px solid currentColor;
@@ -1577,7 +1577,7 @@
     .ap-continue-menu {
       position: absolute;
       top: calc(100% + 4px);
-      left: 0;
+      inset-inline-start: 0;
       z-index: 20;
       min-width: 160px;
       max-height: min(320px, 50vh);
@@ -1606,7 +1606,7 @@
       font: inherit;
       font-size: 13px;
       white-space: nowrap;
-      text-align: left;
+      text-align: start;
       cursor: pointer;
     }
     .ap-continue-menu button:hover,
@@ -1614,7 +1614,7 @@
     .ap-continue-menu button.is-picked { color: var(--accent); font-weight: 600; }
     /* The tick's slot stays put, so unticked rows don't shift left. */
     .ap-continue-tick { display: inline-flex; width: 14px; flex-shrink: 0; color: var(--accent); }
-    .ap-continue-sub { margin-left: auto; padding-left: 8px; font-size: 11px; font-weight: 400; color: var(--text-2); }
+    .ap-continue-sub { margin-inline-start: auto; padding-inline-start: 8px; font-size: 11px; font-weight: 400; color: var(--text-2); }
     @keyframes ap-continue-menu-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
     @media (prefers-reduced-motion: reduce) {
       .ap-continue-menu { animation: none; }
@@ -1633,7 +1633,7 @@
       font-size: 14px;
       color: var(--text-2);
       transition: transform .15s;
-      margin-right: -2px;
+      margin-inline-end: -2px;
     }
     .ap-options-toggle[open] > summary::before { transform: rotate(90deg); }
     .ap-options-toggle > summary:hover { color: var(--accent); }
@@ -1809,7 +1809,7 @@
          not "something's wrong"). */
       position: absolute;
       top: -4px;
-      right: -4px;
+      inset-inline-end: -4px;
       width: 16px;
       height: 16px;
       border-radius: 50%;
@@ -1842,7 +1842,7 @@
        label, smaller/muted so it reads as supporting detail, not another
        checklist row. */
     .ap-face-issue-reason {
-      margin: 4px 0 0 30px;
+      margin-block: 4px 0; margin-inline: 30px 0;
       font-size: 12.5px;
       line-height: 1.4;
       color: var(--text-2);
@@ -1897,7 +1897,7 @@
     .ap-style-item .ap-style-panel {
       position: absolute;
       top: calc(100% + 8px);
-      left: 0;
+      inset-inline-start: 0;
       z-index: 20;
       margin-top: 0;
       /* width:max-content (capped) instead of a flat min-width -- some of
@@ -2112,7 +2112,7 @@
       border-radius: var(--radius);
       background: var(--card-2);
       cursor: pointer;
-      text-align: left;
+      text-align: start;
       transition: border-color .15s, background .15s, transform .15s;
     }
     .ap-style-card:hover { border-color: rgba(var(--accent-rgb),.4); transform: translateY(-1px); }
@@ -2220,7 +2220,7 @@
     .ap-style-card-clear {
       position: absolute;
       top: 8px;
-      right: 8px;
+      inset-inline-end: 8px;
       width: 20px;
       height: 20px;
       display: flex;
@@ -2447,7 +2447,7 @@
       display: none;
       position: absolute;
       top: 6px;
-      right: 6px;
+      inset-inline-end: 6px;
       width: 20px;
       height: 20px;
       align-items: center;
@@ -2503,8 +2503,8 @@
     }
     .ap-analysis-body .ap-composition-text {
       margin-top: 10px;
-      padding-left: 12px;
-      border-left: 2px solid rgba(var(--accent-rgb),.45);
+      padding-inline-start: 12px;
+      border-inline-start: 2px solid rgba(var(--accent-rgb),.45);
       font-size: 15px;
       color: var(--text-2);
       line-height: 1.5;
@@ -2531,7 +2531,7 @@
     .photo-frame-wrap { position: relative; }
 
     /* ── Summary band list ── */
-    .sb-list { margin: 0; padding-left: 1.2em; }
+    .sb-list { margin: 0; padding-inline-start: 1.2em; }
     .sb-list li { margin-bottom: 2px; }
 
     /* ── Multi-file upload thumbnail strip ── */
@@ -2634,7 +2634,7 @@
     .dz-thumb-remove {
       position: absolute;
       top: 5px;
-      left: 5px;
+      inset-inline-start: 5px;
       width: 22px;
       height: 22px;
       border: none;
@@ -2720,9 +2720,9 @@
          is the tonal tab itself -- an accent wash over the card, accent edge
          and icon, never a solid fill. The chat page copies this block and
          swaps in its own --tonal / --accent-text tokens (chat.css). */
-      position: fixed; top: calc(var(--header-h) + 10px); left: 0; z-index: 999;
-      width: 46px; height: 40px; margin: 0; padding: 0 2px 0 0;
-      border: 2px solid var(--accent); border-left: none; border-radius: 0 12px 12px 0;
+      position: fixed; top: calc(var(--header-h) + 10px); inset-inline-start: 0; z-index: 999;
+      width: 46px; height: 40px; margin: 0; padding-block: 0; padding-inline: 0 2px;
+      border: 2px solid var(--accent); border-inline-start: none; border-start-start-radius: 0; border-start-end-radius: 12px; border-end-end-radius: 12px; border-end-start-radius: 0;
       background: linear-gradient(rgba(var(--accent-rgb), .1), rgba(var(--accent-rgb), .1)), var(--card);
       box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
       color: var(--accent); cursor: pointer;
@@ -2730,7 +2730,7 @@
     .batch-drawer-trigger:hover { background: linear-gradient(rgba(var(--accent-rgb), .16), rgba(var(--accent-rgb), .16)), var(--card); }
     .batch-drawer-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .batch-drawer-trigger-count {
-      position: absolute; top: -8px; right: -8px;
+      position: absolute; top: -8px; inset-inline-end: -8px;
       min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box;
       border-radius: 999px; background: var(--accent); color: #fff;
       box-shadow: 0 0 0 2px var(--card);
@@ -2742,7 +2742,7 @@
          edge as .batch-sidebar-header's row (also 30px tall, via
          .batch-download-all-btn), so the two sit on the same horizontal
          line instead of this one floating 6px higher. */
-      display: none; position: absolute; top: 20px; right: 14px;
+      display: none; position: absolute; top: 20px; inset-inline-end: 14px;
       align-items: center; justify-content: center;
       width: 30px; height: 30px; border-radius: 999px; border: none;
       background: var(--card-2); color: var(--text-2); cursor: pointer;
@@ -2790,7 +2790,7 @@
       flex: 1 1 auto; min-height: 0; overflow-y: auto;
       /* Breathing room so the last item isn't flush against the card's edge
          and so its own scrollbar doesn't overlap the item content. */
-      margin-right: -8px; padding-right: 8px; margin-bottom: -4px;
+      margin-inline-end: -8px; padding-inline-end: 8px; margin-bottom: -4px;
     }
     .batch-sidebar-item {
       display: flex; align-items: center; gap: 10px;
@@ -2848,7 +2848,7 @@
       align-items: center;
       justify-content: center;
       flex: 0 0 auto;
-      margin-right: 5px;
+      margin-inline-end: 5px;
       font-size: 13px;
       font-weight: 800;
       line-height: 1;
@@ -3216,7 +3216,7 @@
     .upload-below-zone #advanced-settings-fold .settings-fold-body {
       position: absolute;
       bottom: calc(100% + 8px);
-      left: 0;
+      inset-inline-start: 0;
       z-index: 20;
       width: 340px;
       margin-top: 0;
@@ -3273,7 +3273,7 @@
     }
     .changelog-entry-list {
       margin: 0;
-      padding-left: 1.2em;
+      padding-inline-start: 1.2em;
       font-size: 14.5px;
       line-height: 1.7;
       color: var(--text-2);
@@ -3311,11 +3311,11 @@
       flex-direction: column;
       overflow-y: auto;
       background: var(--card-2);
-      border-right: 1px solid var(--border);
+      border-inline-end: 1px solid var(--border);
     }
     .prompts-modal-tab {
       padding: 12px 14px;
-      text-align: left;
+      text-align: start;
       background: none;
       border: none;
       border-bottom: 1px solid var(--border);
@@ -3375,7 +3375,7 @@
     .prompts-modal-image-compare-btn {
       position: absolute;
       top: 10px;
-      right: 10px;
+      inset-inline-end: 10px;
       z-index: 2;
       height: 30px;
       padding: 0 12px;
@@ -3399,7 +3399,7 @@
       /* Room for the scrollbar itself so it doesn't sit flush against the
          tiles (browsers that don't reserve this, e.g. macOS overlay
          scrollbars, just see a harmless bit of empty space instead). */
-      padding-right: 8px;
+      padding-inline-end: 8px;
     }
     /* Square tile via the classic padding-percentage trick (height:0 +
        padding-top:100%), not aspect-ratio:1/1 -- confirmed against real
@@ -3471,7 +3471,7 @@
     .demo-image-tile-check {
       position: absolute;
       top: 6px;
-      right: 6px;
+      inset-inline-end: 6px;
       width: 20px;
       height: 20px;
       border-radius: 50%;
@@ -3809,7 +3809,7 @@
     .report-modal-screenshot-delete-btn {
       position: absolute;
       top: 6px;
-      right: 6px;
+      inset-inline-end: 6px;
       width: 24px;
       height: 24px;
       display: inline-flex;
@@ -3872,12 +3872,12 @@
     .history-drawer {
       position: fixed;
       top: var(--header-h);
-      right: 0;
+      inset-inline-end: 0;
       bottom: 0;
       width: min(420px, 90vw);
       z-index: 1001;
       background: var(--card);
-      border-left: 1px solid var(--border);
+      border-inline-start: 1px solid var(--border);
       box-shadow: var(--shadow-lg);
       /* Extra bottom room (vs. the uniform 20px everywhere else) so
          #history-logout-btn -- absolutely positioned against this box, not
@@ -3889,6 +3889,7 @@
       transition: transform .25s ease;
     }
     .history-drawer.drawer-open { transform: translateX(0); }
+    :where([dir="rtl"]) .history-drawer { transform: translateX(-100%); }
     /* Anchored to .history-drawer's own box (its nearest positioned
        ancestor, itself position:fixed) rather than scrolling with
        #history-list/#history-empty -- stays pinned at the drawer's visual
@@ -3899,7 +3900,7 @@
        action, so it shouldn't be the biggest thing in view. */
     .history-logout-btn {
       position: absolute;
-      right: 20px;
+      inset-inline-end: 20px;
       bottom: 20px;
       z-index: 1;
       height: 32px;
@@ -3911,7 +3912,7 @@
     .history-drawer-close-btn {
       position: absolute;
       top: 20px;
-      right: 6px;
+      inset-inline-end: 6px;
       width: 30px;
       height: 30px;
       display: flex;
@@ -3926,7 +3927,7 @@
     .history-drawer-close-btn:hover { color: var(--text); }
     @media (max-width: 1200px) {
       .history-drawer {
-        top: 50%; right: auto; bottom: auto; left: 50%;
+        top: 50%; inset-inline-end: auto; bottom: auto; left: 50%;
         width: min(560px, calc(100vw - 28px));
         max-height: min(720px, calc(100vh - 40px));
         border: 1px solid var(--border); border-radius: 22px;
@@ -3943,7 +3944,7 @@
        viewport while leaving the admin reports drawer unchanged. */
     #history-drawer {
       top: 50%;
-      right: auto;
+      inset-inline-end: auto;
       bottom: auto;
       left: 50%;
       width: min(560px, calc(100vw - 28px));
@@ -3974,7 +3975,7 @@
     }
     #history-drawer .history-drawer-close-btn {
       top: 11px;
-      right: 11px;
+      inset-inline-end: 11px;
       width: 36px;
       height: 36px;
       z-index: 5;
@@ -3987,7 +3988,7 @@
       flex: 1 1 auto;
       min-height: 0;
       overflow-y: auto;
-      padding-right: 4px;
+      padding-inline-end: 4px;
       scrollbar-width: thin;
     }
     /* rows reuse .batch-sidebar-item/.rc-media/.rc-badge (defined above,
@@ -4000,7 +4001,7 @@
       margin-bottom: 20px;
       /* Room for .history-drawer-close-btn (30px, inset 6px), same reasoning
          as .batch-sidebar-header's own padding-right. */
-      padding-right: 36px;
+      padding-inline-end: 36px;
     }
     .history-header-top {
       display: flex;
@@ -4172,7 +4173,7 @@
        the badge next to the thumbnail. */
     .history-cube .rc-badge {
       position: absolute;
-      left: 6px;
+      inset-inline-start: 6px;
       bottom: 6px;
       max-width: calc(100% - 12px);
       z-index: 3;
@@ -4212,7 +4213,7 @@
     .history-cube-remove {
       position: absolute;
       top: 5px;
-      right: 5px;
+      inset-inline-end: 5px;
       z-index: 4;
       width: 20px;
       height: 20px;
@@ -4241,7 +4242,7 @@
     .history-cube-check {
       position: absolute;
       top: 5px;
-      right: 5px;
+      inset-inline-end: 5px;
       z-index: 5;
       width: 20px;
       height: 20px;
@@ -4332,7 +4333,7 @@
        fixed-dark chip as the badge, for the same reason. */
     .history-cube-count {
       position: absolute;
-      left: 6px;
+      inset-inline-start: 6px;
       top: 6px;
       z-index: 3;
       padding: 2px 8px;
@@ -4423,7 +4424,7 @@
        on touch devices. */
     .report-item-remove {
       flex-shrink: 0;
-      margin-left: auto;
+      margin-inline-start: auto;
       width: 22px;
       height: 22px;
       border: none;
@@ -4483,7 +4484,7 @@
       content: "";
       position: absolute;
       top: -3px;
-      right: -3px;
+      inset-inline-end: -3px;
       width: 9px;
       height: 9px;
       border-radius: 50%;
@@ -4568,7 +4569,7 @@
         /* top: var(--header-h) (not 0) -- sits below the sticky
            .site-header/.header-inner, same as .batch-drawer-trigger, rather
            than sliding out from underneath it. */
-        position: fixed; top: var(--header-h); left: 0; bottom: 0;
+        position: fixed; top: var(--header-h); inset-inline-start: 0; bottom: 0;
         /* min(220px, 68vw) (was min(320px, 85vw), then min(260px, 78vw)) --
            still read as covering most of the screen at typical phone
            widths; narrowed again so the backdrop clearly reads as the
@@ -4577,12 +4578,13 @@
         /* Sized by top/bottom (fixed) instead -- no desktop height or
            margins carried over into the drawer. */
         max-height: none !important; height: auto !important; margin: 0;
-        border-radius: 0; border-width: 0 1px 0 0;
+        border-radius: 0; border-block-width: 0; border-inline-width: 0 1px;
         z-index: 1001;
         transform: translateX(-100%);
         transition: transform .25s ease;
       }
       .batch-sidebar.drawer-open { transform: translateX(0); }
+      :where([dir="rtl"]) .batch-sidebar { transform: translateX(100%); }
       .results-body.batch-mode .batch-drawer-trigger { display: inline-flex; }
       .batch-sidebar-close-btn { display: flex; }
       .batch-sidebar-backdrop {
@@ -4593,7 +4595,7 @@
       .batch-sidebar-backdrop.drawer-open { display: block; }
       /* Room for .batch-sidebar-close-btn (30px, inset 14px from the aside's
          edge) so a long "全部下載" label never runs underneath it. */
-      .batch-sidebar-header { padding-right: 36px; }
+      .batch-sidebar-header { padding-inline-end: 36px; }
       /* Shrink the thumbnail so .batch-sidebar-text/.rc-badge get a bit more
          of the drawer's already-tight width (min(220px, 68vw)) -- otherwise
          a longer status string (e.g. "完成 (3/3)" for a multi-RUN image)
@@ -4648,7 +4650,7 @@
          the header row (title + count + 全部下載, plus the close button's
          room) to show in full. Same width as chat's drawer. */
       #results-body.batch-mode #batch-sidebar { width: min(204px, 64vw); max-width: none; padding: 12px; }
-      .batch-sidebar-close-btn { top: 12px; right: 8px; }
+      .batch-sidebar-close-btn { top: 12px; inset-inline-end: 8px; }
     }
 
     /* ── 面板模式的「我的照片」：跟對話模式那欄（app.tsx 的 BatchPreSidebar）同一個樣子 ──
@@ -4748,8 +4750,8 @@
     .ap-prompt-box:focus-within { box-shadow: 0 0 0 4px rgba(var(--accent-rgb),.14); }
     .ap-prompt-box .field-ta:focus { box-shadow: none; }
     .ap-prompt-box:has(> .ap-prompt-overwrite-row:not([hidden])) > .field-ta {
-      border-top-left-radius: 0;
-      border-top-right-radius: 0;
+      border-start-start-radius: 0;
+      border-start-end-radius: 0;
     }
     .ap-prompt-overwrite-row {
       --overwrite-box: 13px;
@@ -4787,7 +4789,7 @@
     .ap-prompt-overwrite-hint {
       display: block;
       margin-top: 2px;
-      padding-left: calc(var(--overwrite-box) + var(--overwrite-gap));
+      padding-inline-start: calc(var(--overwrite-box) + var(--overwrite-gap));
       font-size: 11.5px;
       line-height: 1.5;
       color: var(--text-3);
@@ -4835,7 +4837,7 @@
     @media (min-width: 601px) and (max-width: 1200px) and (orientation: portrait),
            (min-width: 901px) and (max-width: 1200px) and (orientation: landscape) {
       html:root { --header-h: 64px; }
-      .site-header .header-inner { padding: 0 20px 0 32px; }
+      .site-header .header-inner { padding-block: 0; padding-inline: 32px 20px; }
       .site-header .header-actions > :is(#reset-btn, #new-chat-btn, #account-badge, #chat-ui-btn, #changelog-btn, #header-settings-btn, #admin-reports-btn, #cost-btn, #theme-toggle-btn),
       #report-btn.btn, #report-btn-spacer.btn { height: 44px; padding: 0 16px; }
     }
@@ -4847,7 +4849,7 @@
     .header-icon-btn, #header-menu-report-btn { display: none; }
     @media (max-width: 600px) {
       html:root { --header-h: 56px; }
-      .site-header .header-inner { padding: 0 6px 0 16px; }
+      .site-header .header-inner { padding-block: 0; padding-inline: 16px 6px; }
       .site-header .logo { font-size: 20px; }
     }
     @media (max-width: 1279px) {
@@ -4858,20 +4860,20 @@
         background: transparent; color: var(--text-2); cursor: pointer;
       }
       .header-icon-btn:hover { background: rgba(var(--accent-rgb), .08); }
-      #header-new-icon { margin-left: auto; }
+      #header-new-icon { margin-inline-start: auto; }
       #header-more-btn[aria-expanded="true"] { background: rgba(var(--accent-rgb), .1); color: var(--accent); }
       /* 代按的那兩顆藏起來時，圖示也藏；第一顆不在時，下一顆接手把自己推到右邊。 */
       .site-header:has(#new-chat-btn[hidden]) #header-new-icon { display: none; }
       .site-header:has(#account-badge[hidden]) #header-history-icon { display: none; }
       .site-header:has(#new-chat-btn[hidden]) #header-history-icon,
-      .site-header:has(#new-chat-btn[hidden]):has(#account-badge[hidden]) #header-more-btn { margin-left: auto; }
+      .site-header:has(#new-chat-btn[hidden]):has(#account-badge[hidden]) #header-more-btn { margin-inline-start: auto; }
       /* 新對話、最近照片外面已經有了，選單裡不再重複；固定定位的回報改由選單裡那顆代按。 */
       #new-chat-btn.btn, #account-badge.btn, #report-btn-spacer.btn, #report-btn.btn { display: none; }
 
       .site-header .header-actions { display: none; }
       .site-header .header-actions.is-open {
         display: flex; flex-direction: column; align-items: stretch; gap: 2px;
-        position: absolute; top: calc(100% + 4px); right: 16px; z-index: 1500;
+        position: absolute; top: calc(100% + 4px); inset-inline-end: 16px; z-index: 1500;
         min-width: 200px; padding: 6px; border-radius: 16px;
         background: var(--card); border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(0,0,0,.16);
       }
@@ -4886,7 +4888,7 @@
       .header-actions.is-open :is(#header-settings-btn, .btn) .btn-label { display: inline; }
     }
     @media (max-width: 600px) {
-      .site-header .header-actions.is-open { right: 8px; min-width: 180px; }
+      .site-header .header-actions.is-open { inset-inline-end: 8px; min-width: 180px; }
     }
 
     /* ── 手機（≤600px）照片上的按鈕：跟對話模式一樣 ──
@@ -4901,7 +4903,7 @@
     @media (max-width: 600px) {
       .version-strip, #compare-hint, #compare-fullscreen-btn { display: none !important; }
       .canvas-header-row {
-        top: 8px; right: 8px; left: auto;
+        top: 8px; inset-inline-end: 8px; inset-inline-start: auto;
         display: flex; align-items: center; gap: 8px;
         pointer-events: none;
       }
@@ -4912,7 +4914,7 @@
         -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
       }
       .canvas-version-btn {
-        display: flex; align-items: center; gap: 2px; height: 100%; padding: 0 10px 0 14px;
+        display: flex; align-items: center; gap: 2px; height: 100%; padding-block: 0; padding-inline: 14px 10px;
         border: 0; background: none; color: var(--n74);
         font: inherit; font-size: 15px; font-weight: 500; white-space: nowrap; cursor: pointer;
       }
@@ -4932,7 +4934,7 @@
     }
     /* 一版生了好幾張時，檢視下排每格右上角標第幾張（沿用美化紀錄條的小標）。 */
     #photo-viewer .version-viewer-tile { position: relative; }
-    #photo-viewer .version-tile-run { top: 2px; bottom: auto; right: 2px; }
+    #photo-viewer .version-tile-run { top: 2px; bottom: auto; inset-inline-end: 2px; }
   </style>
 </head>
 <body>
@@ -6123,7 +6125,7 @@
                     <button id="ap-skip-analyze-btn" class="analysis-preview-action ap-skip-analyze-btn" type="button" hidden>幫我分析</button>
                     <button id="inline-analysis-continue-btn" class="analysis-preview-action analysis-preview-action-right" type="button" hidden>
                       <span>美化</span>
-                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                      <svg class="icon-mirror" width="14" height="14" fill="none" viewBox="0 0 24 24">
                         <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
                           stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
@@ -6386,12 +6388,12 @@
                    entirely when there's only one (see updateRunSwitcher in
                    app.js). -->
               <button id="run-switch-prev" class="photo-switch-arrow photo-switch-prev" type="button" aria-label="上一張" hidden>
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                <svg class="icon-mirror" width="16" height="16" fill="none" viewBox="0 0 24 24">
                   <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </button>
               <button id="run-switch-next" class="photo-switch-arrow photo-switch-next" type="button" aria-label="下一張" hidden>
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                <svg class="icon-mirror" width="16" height="16" fill="none" viewBox="0 0 24 24">
                   <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </button>
@@ -6812,7 +6814,7 @@
 <div class="history-drawer-backdrop" id="reports-drawer-backdrop" hidden></div>
 <aside class="history-drawer" id="reports-drawer">
   <button class="history-drawer-close-btn" id="reports-drawer-close-btn" type="button" aria-label="關閉">
-    <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+    <svg class="icon-mirror" width="16" height="16" fill="none" viewBox="0 0 24 24">
       <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   </button>
