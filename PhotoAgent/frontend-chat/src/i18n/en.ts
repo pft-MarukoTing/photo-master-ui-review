@@ -195,8 +195,8 @@ export const EN: Record<string, string> = {
   "選了這張": "Chose this photo",
   "照片選好了。想怎麼修，直接打在下面的對話框告訴我。": "Photo selected. Tell me how you'd like it retouched in the box below.",
   "要先看我對這張照片的分析，還是直接幫你美化？": "Would you like to see my analysis first, or should I go ahead and retouch it?",
-  "分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換引擎或長寬比，先按設定。":
-    "Analyze shows you what I plan to fix before I start; One-Tap Retouch does everything in one go. To change the engine or aspect ratio, tap Settings first.",
+  "「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完；想換引擎或長寬比，先按「設定」。":
+    "“Analyze” shows you what I plan to fix before I start; “One-Tap Retouch” does everything in one go. To change the engine or aspect ratio, tap “Settings” first.",
   "AI 正在回覆": "AI is replying",
   "當時的設定": "Settings at the time",
   "詳細解說：{v}": "Detailed explanations: {v}",
@@ -448,7 +448,7 @@ export const EN: Record<string, string> = {
   "最後是設定，可以改長寬比和輸出尺寸。要看一下嗎？": "Finally, settings: you can change the aspect ratio and output size. Want to take a look?",
   "這裡是這批照片的總覽：{btn}可以一次分析或美化全部，也可以先按「設定」統一換長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打字告訴我，會套用到還沒開始的每一張。": "Here's an overview of this batch. Use the buttons {btn} to analyze or retouch all photos at once, or tap “Settings” first to change the aspect ratio for all of them. To edit just one, tap that photo. You can also tell me how to edit them, and it'll apply to every photo that hasn't started yet.",
   "這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換長寬比；只想改某一張，從{where}選取那張就好。": "Here's an overview of this batch. Use the buttons {btn} to retouch all photos at once, or tap “Settings” first to change the aspect ratio for all of them. To edit just one, select it {where}.",
-  "分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換長寬比，先按設定。": "Analyze shows you what I plan to fix before I start; One-Tap Retouch does everything in one go. To change the aspect ratio, tap Settings first.",
+  "「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完；想換長寬比，先按「設定」。": "“Analyze” shows you what I plan to fix before I start; “One-Tap Retouch” does everything in one go. To change the aspect ratio, tap “Settings” first.",
   "這張照片美化時用的引擎與輸出設定，可以直接修改。": "The engine and output settings for retouching this photo. You can change them here.",
   "開或關沿用上次美化的設定，有小圓點的是看過原圖後建議調整的項目，點一下可以改。":
     "On/off settings carry over from the last retouch; a dot marks a change suggested after reviewing the original. Tap to change.",

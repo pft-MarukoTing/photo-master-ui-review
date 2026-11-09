@@ -1482,16 +1482,26 @@
       ]
     },
     "chat_analyze_shows_you_what_i": {
-      "zh": "分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換引擎或長寬比，先按設定。",
+      "zh": "「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完；想換引擎或長寬比，先按「設定」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_one_tap_retouch": "common_one_tap_retouch",
+        "button_common_analyze": "common_analyze",
+        "button_common_settings": "common_settings"
+      }
     },
     "chat_analyze_shows_you_what_i_2": {
-      "zh": "分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換長寬比，先按設定。",
+      "zh": "「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完；想換長寬比，先按「設定」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_one_tap_retouch": "common_one_tap_retouch",
+        "button_common_analyze": "common_analyze",
+        "button_common_settings": "common_settings"
+      }
     },
     "chat_analyzed": {
       "zh": "{n} 張分析好了",

@@ -732,6 +732,18 @@
         "chat"
       ]
     },
+    "「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完；想換引擎或長寬比，先按「設定」。": {
+      "en": "“Analyze” shows you what I plan to fix before I start; “One-Tap Retouch” does everything in one go. To change the engine or aspect ratio, tap “Settings” first.",
+      "where": [
+        "chat"
+      ]
+    },
+    "「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完；想換長寬比，先按「設定」。": {
+      "en": "“Analyze” shows you what I plan to fix before I start; “One-Tap Retouch” does everything in one go. To change the aspect ratio, tap “Settings” first.",
+      "where": [
+        "chat"
+      ]
+    },
     "一張照片，": {
       "en": "One photo, ",
       "where": [
@@ -2422,18 +2434,6 @@
       "en": "The composition was planned for the chosen output ratio “{label}”. ",
       "where": [
         "backend text"
-      ]
-    },
-    "分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換引擎或長寬比，先按設定。": {
-      "en": "Analyze shows you what I plan to fix before I start; One-Tap Retouch does everything in one go. To change the engine or aspect ratio, tap Settings first.",
-      "where": [
-        "chat"
-      ]
-    },
-    "分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換長寬比，先按設定。": {
-      "en": "Analyze shows you what I plan to fix before I start; One-Tap Retouch does everything in one go. To change the aspect ratio, tap Settings first.",
-      "where": [
-        "chat"
       ]
     },
     "分析照片中材質與紋理的呈現": {

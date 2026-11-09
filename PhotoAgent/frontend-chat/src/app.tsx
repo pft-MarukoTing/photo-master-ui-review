@@ -5141,8 +5141,8 @@ function PreChat(props: {
                 挑是可以做的事，不是非做不可。 */}
             <p class="chat-text">{t("要先看我對這張照片的分析，還是直接幫你美化？")}</p>
             <p class="chat-text chat-muted">{enginesVisible()
-              ? t("分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換引擎或長寬比，先按設定。")
-              : t("分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換長寬比，先按設定。")}</p>
+              ? t("「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完；想換引擎或長寬比，先按「設定」。")
+              : t("「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完；想換長寬比，先按「設定」。")}</p>
           </AssistantMsg>
           )}
           {props.previewError && <AssistantMsg><p class="chat-text chat-muted">{props.previewError}</p></AssistantMsg>}
