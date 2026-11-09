@@ -250,9 +250,9 @@ STYLE_OPTION_INSTRUCTIONS = {
         ),
         "cool": (
             "Transform the photo with a clearly visible cool blue-hour atmosphere, as daylight fades after sunset while the sky remains luminous. "
-            "Let soft blue ambient light from the scene shape subjects and background together, with cooler midtones and gently deeper shadows. "
-            "Keep faces in that ambient light, with exposure and shadow direction consistent with nearby surfaces; skin shares the cool illumination while retaining its complexion, and existing lamps keep their own color. "
-            "Preserve the same scene, material identity, and photographic realism."
+            "The only daylight left is soft blue skylight, and it is the actual illumination on everything in the frame: people, faces, hair, clothing and objects are lit by it just as the wall or ground beside them is, with the same gently deeper shadows, so white or neutral clothing reads pale blue under it rather than cleaner than its surroundings. "
+            "Skin follows this illumination like any other surface, so a face is visibly in blue light yet still reads as that person's own skin; existing lamps keep their own color and light only what they reach. "
+            "Preserve the same scene and photographic realism, with each material still recognizable under the blue light."
         ),
         "night": (
             "Transform the whole photo into a clearly recognizable night scene with dark blue ambient light and deeper, natural shadows. "

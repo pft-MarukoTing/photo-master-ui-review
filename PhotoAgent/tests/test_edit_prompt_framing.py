@@ -203,8 +203,8 @@ class FramingSections(unittest.TestCase):
     def test_blue_toned_light_reaches_the_style_section(self):
         style = self._sections({"lighting": "cool"})["style_instruction"]
         self.assertIn("Lighting: Blue Hour: Transform the photo with a clearly visible cool blue-hour atmosphere", style)
-        self.assertIn("shape subjects and background together", style)
-        self.assertIn("Keep faces in that ambient light, with exposure and shadow direction consistent with nearby surfaces", style)
+        self.assertIn("it is the actual illumination on everything in the frame", style)
+        self.assertIn("Skin follows this illumination like any other surface", style)
         self.assertIn("existing lamps keep their own color", style)
 
     def test_night_reaches_the_style_section(self):
