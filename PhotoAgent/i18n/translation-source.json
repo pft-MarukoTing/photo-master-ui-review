@@ -1199,11 +1199,11 @@
       "note": "Short style tag describing a clean, uncluttered look (adjective, not the verb)."
     },
     "亂髮偵測": {
-      "en": "Hair",
+      "en": "Stray Hairs",
       "where": [
         "panel"
       ],
-      "note": "Label for stray or flyaway hair detection and tidying; a very short label, keep it short."
+      "note": "Row label in the portrait check list, next to an on/off switch and followed by the result (e.g. 'No fix needed'); also read inside 'Adjusting {fix}: …'. A short noun phrase naming the problem checked: stray or flyaway hairs. The same feature as the setting 'Tidy Stray Hairs': name it with the same words."
     },
     "亂髮偵測：保留髮絲動態": {
       "en": "Hair: Natural",
@@ -6991,12 +6991,11 @@
       ]
     },
     "眼神對焦": {
-      "en": "Gaze",
+      "en": "Gaze Direction",
       "where": [
         "panel"
       ],
-      "en_full": "Eye contact (eyes looking at the camera)",
-      "note": "Portrait fix. 視線 is the chat page's short name for the same fix."
+      "note": "Row label in the portrait check list, next to an on/off switch and followed by the result (e.g. 'No fix needed'); also read inside 'Adjusting {fix}: …'. A short noun phrase naming what is checked: where the person's eyes look, and whether they look at the camera. The same feature as the setting 'Fix Gaze': name it with the same words."
     },
     "眼神對焦修正": {
       "en": "Fix Gaze",
@@ -9409,11 +9408,11 @@
       ]
     },
     "閉眼偵測": {
-      "en": "Eyes",
+      "en": "Closed Eyes",
       "where": [
         "panel"
       ],
-      "note": "Label for closed-eye detection and repair; a very short label, keep it to one short word."
+      "note": "Row label in the portrait check list, next to an on/off switch and followed by the result (e.g. 'No fix needed'); also read inside 'Adjusting {fix}: …'. A short noun phrase naming the problem checked: eyes caught closed (a blink). The same feature as the setting 'Fix Closed Eyes': name it with the same words."
     },
     "開": {
       "en": "On",
