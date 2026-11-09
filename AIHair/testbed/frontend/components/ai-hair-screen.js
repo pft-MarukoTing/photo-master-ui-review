@@ -1,23 +1,24 @@
 /**
- * aiHair screen — upload a photo, pick one of aiHair's nine features, 套用.
+ * aiHair screen — upload a photo, pick one of aiHair's nine features, Apply.
  *
- *   ┌──────────────────────────────────────────┬──────────────┐
- *   │ [毛躁修護][髮量豐盈] … [碎髮修整]           │ 編輯紀錄       │
- *   │ 強度 [Lv1][Lv2]            (hairline only) │  0 原圖        │
- *   │ [↶復原][↷重做] [◐原圖]  [✕取消編輯][⬇][⟳] │  1 毛躁修護    │
- *   │ ┌──────────────────────────────────────┐ │  2 柔順 ◀      │
- *   │ │                image                 │ ├──────────────┤
- *   │ └──────────────────────────────────────┘ │ 目前步驟       │
- *   │                [ 套用 ]                   │  Task ID …     │
- *   │              status line                  │  [回報問題]    │
- *   └──────────────────────────────────────────┴──────────────┘
+ *   ┌──────────────────────────────────────────────┬────────────────┐
+ *   │ [Frizz Care][Plump] … [Stray Hair]           │ Edit History   │
+ *   │  毛躁修護    髮量豐盈     碎髮修整             │  0 Original    │
+ *   │ Level [Lv1][Lv2]              (hairline only) │  1 Frizz Care  │
+ *   │ [Undo][Redo] [Original]  [Discard][⬇][Change] │  2 Soft ◀      │
+ *   │ ┌──────────────────────────────────────────┐ ├────────────────┤
+ *   │ │                  image                   │ │ Current Step   │
+ *   │ └──────────────────────────────────────────┘ │  Task ID …     │
+ *   │                  [ Apply ]                    │  [Report Issue]│
+ *   │                 status line                   │                │
+ *   └──────────────────────────────────────────────┴────────────────┘
  *
- * The edit history is the model. Every 套用 runs the selected feature on the
+ * The edit history is the model. Every Apply runs the selected feature on the
  * step the history is at and pushes the result as a new step (the steps after
- * it — the redo branch — are dropped), so edits chain. 復原 / 重做 (also
- * Ctrl/⌘+Z, Ctrl/⌘+Shift+Z, Ctrl+Y) move along it; clicking a step in 編輯紀錄
- * jumps to it; 原圖 shows the uploaded photo (hold to peek, click to toggle);
- * 取消編輯 drops every step back to the original photo.
+ * it — the redo branch — are dropped), so edits chain. Undo / Redo (also
+ * Ctrl/⌘+Z, Ctrl/⌘+Shift+Z, Ctrl+Y) move along it; clicking a step in Edit
+ * History jumps to it; Original shows the uploaded photo (hold to peek, click
+ * to toggle); Discard Edits drops every step back to the original photo.
  */
 
 import {
@@ -32,15 +33,15 @@ import { showConfirmDialog } from './dialogs/confirmation-dialogs.js';
 import { IconUndo, IconRedo, IconDownload, IconX, IconReplace, IconUpload } from '../utils/icons.js';
 
 const PAGE = 'ai-hair';
-// A press on 原圖 shorter than this is a click (toggle); longer is a peek.
+// A press on Original shorter than this is a click (toggle); longer is a peek.
 const PEEK_HOLD_MS = 300;
 
 const STAGE_LABELS = {
-  preparing:   '準備中…',
-  uploading:   '上傳照片中…',
-  queued:      '排隊中…',
-  processing:  '處理中…',
-  downloading: '下載結果中…',
+  preparing:   'Preparing…',
+  uploading:   'Uploading photo…',
+  queued:      'Queued…',
+  processing:  'Processing…',
+  downloading: 'Downloading result…',
 };
 
 // ─── State ─────────────────────────────────────────────────────────────────
@@ -69,10 +70,10 @@ const state = {
   run:       null,
   compare:   false,  // showing the original photo instead of the current step
   loadingInput: false,
-  // The status line under 套用: { text, kind: 'hint'|'ok'|'notice'|'error' }
+  // The status line under Apply: { text, kind: 'hint'|'ok'|'notice'|'error' }
   status:    null,
   // Task of a run that left no step (failed / skipped / cancelled), so
-  // 回報問題 can still report it while its message is showing.
+  // Report Issue can still report it while its message is showing.
   statusTaskId: null,
 };
 
@@ -195,13 +196,13 @@ const SCREEN_STYLE = `
   }
   .ah-chip:hover { border-color: var(--color-ring); background: var(--color-muted); }
   .ah-chip:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 1px; }
-  .ah-chip-zh { font-size: 0.875rem; font-weight: 600; }
-  .ah-chip-en { font-size: 0.6875rem; color: var(--color-muted-foreground); font-family: ui-monospace, monospace; }
+  .ah-chip-main { font-size: 0.875rem; font-weight: 600; }
+  .ah-chip-sub { font-size: 0.75rem; color: var(--color-muted-foreground); }
   .ah-chip[aria-checked="true"] {
     background: var(--color-primary); color: var(--color-primary-foreground);
     border-color: var(--color-primary);
   }
-  .ah-chip[aria-checked="true"] .ah-chip-en { color: inherit; opacity: 0.75; }
+  .ah-chip[aria-checked="true"] .ah-chip-sub { color: inherit; opacity: 0.75; }
 
   .ah-level-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; }
   .ah-level-row > span { color: var(--color-muted-foreground); }
@@ -281,7 +282,7 @@ const SCREEN_STYLE = `
   .dark .ah-status.ok     { color: #4ade80; }
   .dark .ah-status.notice { color: #fbbf24; }
 
-  /* Vivid primary button (套用), colourful in both themes. */
+  /* Vivid primary button (Apply), colourful in both themes. */
   .ah-btn-vivid {
     background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
     color: #fff; border: none;
@@ -312,7 +313,7 @@ const SCREEN_STYLE = `
 
   .ah-info { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.25rem 0.75rem; font-size: 0.8125rem; }
   .ah-info dt { color: var(--color-muted-foreground); }
-  .ah-info dd { word-break: break-all; }
+  .ah-info dd { overflow-wrap: anywhere; }
   .ah-info .mono { font-family: ui-monospace, monospace; font-size: 0.75rem; user-select: all; }
   .ah-info a { color: inherit; }
 </style>
@@ -321,16 +322,16 @@ const SCREEN_STYLE = `
 const SCREEN_HTML = `
   <!-- ── Upload view ─────────────────────────────────────────────── -->
   <section class="ah-upload" id="ah-upload">
-    <div class="ah-dropzone" id="ah-dropzone" tabindex="0" role="button" aria-label="上傳照片">
+    <div class="ah-dropzone" id="ah-dropzone" tabindex="0" role="button" aria-label="Upload photo">
       ${IconUpload('icon-lg')}
-      <span class="ah-dropzone-title">拖曳照片到這裡，或點擊選擇照片</span>
-      <span class="ah-dropzone-sub">JPG、PNG、WebP（其他格式會先轉成 JPG）</span>
+      <span class="ah-dropzone-title">Drop a photo here or click to browse</span>
+      <span class="ah-dropzone-sub">JPG, PNG, WebP (other formats are converted to JPG)</span>
     </div>
     <input type="file" id="ah-file-input" accept="image/*" hidden />
     <div class="ah-upload-msg" id="ah-upload-msg" role="status"></div>
 
     <div class="ah-card" id="ah-samples" hidden>
-      <div class="ah-card-title">範例照片</div>
+      <div class="ah-card-title">Sample Photos</div>
       <div class="ah-samples-strip" id="ah-samples-strip"></div>
     </div>
   </section>
@@ -338,22 +339,22 @@ const SCREEN_HTML = `
   <!-- ── Editor view ─────────────────────────────────────────────── -->
   <section class="ah-editor" id="ah-editor" hidden>
     <div class="ah-card ah-main">
-      <div class="ah-features" id="ah-features" role="radiogroup" aria-label="髮型功能"></div>
+      <div class="ah-features" id="ah-features" role="radiogroup" aria-label="Hair features"></div>
       <div class="ah-level-row" id="ah-level-row" hidden>
-        <span>強度</span>
-        <div class="ah-seg" id="ah-level-seg" role="radiogroup" aria-label="強度"></div>
+        <span>Level</span>
+        <div class="ah-seg" id="ah-level-seg" role="radiogroup" aria-label="Level"></div>
       </div>
 
-      <div class="ah-toolbar" role="toolbar" aria-label="編輯工具">
-        <button class="ah-tool" id="ah-undo-btn" type="button" title="復原（Ctrl/⌘+Z）">${IconUndo('icon-sm')}<span>復原</span></button>
-        <button class="ah-tool" id="ah-redo-btn" type="button" title="重做（Ctrl/⌘+Shift+Z）">${IconRedo('icon-sm')}<span>重做</span></button>
+      <div class="ah-toolbar" role="toolbar" aria-label="Edit tools">
+        <button class="ah-tool" id="ah-undo-btn" type="button" title="Undo (Ctrl/⌘+Z)">${IconUndo('icon-sm')}<span>Undo</span></button>
+        <button class="ah-tool" id="ah-redo-btn" type="button" title="Redo (Ctrl/⌘+Shift+Z)">${IconRedo('icon-sm')}<span>Redo</span></button>
         <span class="ah-toolbar-sep" aria-hidden="true"></span>
         <button class="ah-tool" id="ah-compare-btn" type="button" aria-pressed="false"
-                title="按住檢視原圖，點一下切換原圖／目前結果">${IconCompare('icon-sm')}<span>原圖</span></button>
+                title="Hold to view the original; click to toggle original / current">${IconCompare('icon-sm')}<span>Original</span></button>
         <span class="ah-toolbar-spacer"></span>
-        <button class="ah-tool" id="ah-discard-btn" type="button" title="捨棄所有編輯，回到原圖">${IconX('icon-sm')}<span>取消編輯</span></button>
-        <button class="ah-tool" id="ah-download-btn" type="button" title="下載目前的圖片">${IconDownload('icon-sm')}<span>下載</span></button>
-        <button class="ah-tool" id="ah-change-btn" type="button" title="換一張照片">${IconReplace('icon-sm')}<span>換照片</span></button>
+        <button class="ah-tool" id="ah-discard-btn" type="button" title="Discard all edits and return to the original">${IconX('icon-sm')}<span>Discard Edits</span></button>
+        <button class="ah-tool" id="ah-download-btn" type="button" title="Download the current image">${IconDownload('icon-sm')}<span>Download</span></button>
+        <button class="ah-tool" id="ah-change-btn" type="button" title="Use a different photo">${IconReplace('icon-sm')}<span>Change Photo</span></button>
       </div>
 
       <div class="ah-stage" id="ah-stage">
@@ -364,25 +365,25 @@ const SCREEN_HTML = `
           <div class="ah-busy-title" id="ah-busy-title"></div>
           <div class="ah-busy-stage" id="ah-busy-stage"></div>
           <div class="ah-busy-task" id="ah-busy-task"></div>
-          <button class="btn btn-outline btn-sm" id="ah-cancel-run-btn" type="button">取消</button>
+          <button class="btn btn-outline btn-sm" id="ah-cancel-run-btn" type="button">Cancel</button>
         </div>
       </div>
 
       <div class="ah-apply-row">
-        <button class="btn ah-btn-vivid" id="ah-apply-btn" type="button" disabled>套用</button>
+        <button class="btn ah-btn-vivid" id="ah-apply-btn" type="button" disabled>Apply</button>
         <div class="ah-status" id="ah-status" role="status" aria-live="polite"></div>
       </div>
     </div>
 
     <aside class="ah-side">
       <div class="ah-card">
-        <div class="ah-card-title">編輯紀錄</div>
+        <div class="ah-card-title">Edit History</div>
         <ol class="ah-history-list" id="ah-history-list"></ol>
       </div>
       <div class="ah-card">
-        <div class="ah-card-title">目前步驟</div>
+        <div class="ah-card-title">Current Step</div>
         <dl class="ah-info" id="ah-info"></dl>
-        <button class="btn btn-outline btn-sm" id="ah-feedback-btn" type="button" disabled>回報問題</button>
+        <button class="btn btn-outline btn-sm" id="ah-feedback-btn" type="button" disabled>Report Issue</button>
       </div>
     </aside>
   </section>
@@ -437,7 +438,7 @@ async function loadSamples() {
     btn.innerHTML = `<img src="${escapeHtml(s.url)}" alt="${escapeHtml(s.name)}" loading="lazy" />`;
     btn.addEventListener('click', () => openPhoto(async () => {
       const res = await fetch(s.url);
-      if (!res.ok) throw new Error(`範例照片載入失敗（HTTP ${res.status}）`);
+      if (!res.ok) throw new Error(`Failed to load the sample photo (HTTP ${res.status})`);
       return res.blob();
     }, s.name));
     strip.appendChild(btn);
@@ -454,7 +455,7 @@ async function openPhoto(getBlob, name) {
   if (state.loadingInput || state.run) return;
   state.loadingInput = true;
   $('#ah-dropzone').classList.add('loading');
-  setUploadMessage('讀取照片中…');
+  setUploadMessage('Reading photo…');
   try {
     const image = await toEngineImage(await getBlob());
     const original = await makeStep(image);
@@ -494,7 +495,7 @@ async function makeStep(blob, meta = {}) {
     await img.decode();
   } catch {
     URL.revokeObjectURL(url);
-    throw new Error(meta.feature ? '結果圖片無法讀取' : '無法讀取這張照片');
+    throw new Error(meta.feature ? 'The result image could not be read' : 'This photo could not be read');
   }
   return {
     blob, url,
@@ -535,9 +536,9 @@ const undo = () => moveTo(state.cursor - 1);
 const redo = () => moveTo(state.cursor + 1);
 
 function stepLabel(step, index) {
-  if (index === 0) return '原圖';
+  if (index === 0) return 'Original';
   const f = getFeature(step.feature);
-  const name = f ? f.label : step.feature;
+  const name = f ? f.en : step.feature;
   return step.level != null ? `${name} Lv${step.level}` : name;
 }
 
@@ -551,7 +552,7 @@ function wireToolbar() {
   $('#ah-change-btn').addEventListener('click', changePhoto);
 }
 
-/** 原圖: hold to peek at the original, a quick click toggles it. */
+/** Original: hold to peek at the original, a quick click toggles it. */
 function wireCompare() {
   const btn = $('#ah-compare-btn');
   let press = null;   // { at, before } while the pointer is down
@@ -588,9 +589,9 @@ function discardEdits() {
   if (state.run || state.history.length <= 1) return;
   const n = state.history.length - 1;
   showConfirmDialog({
-    title: '取消編輯？',
-    description: `將捨棄全部 ${n} 個編輯步驟（包含可重做的步驟），回到原圖。這個動作無法復原。`,
-    confirmLabel: '捨棄編輯',
+    title: 'Discard all edits?',
+    description: `This drops all ${n} edit step${n === 1 ? '' : 's'} (including any redo steps) and returns to the original photo. This can't be undone.`,
+    confirmLabel: 'Discard Edits',
     destructive: true,
     onConfirm: () => {
       resetHistory([state.history[0]]);
@@ -612,9 +613,9 @@ function changePhoto() {
   };
   if (state.history.length > 1) {
     showConfirmDialog({
-      title: '更換照片？',
-      description: '目前照片的編輯紀錄會被清除。',
-      confirmLabel: '更換照片',
+      title: 'Change photo?',
+      description: 'The edit history of the current photo will be cleared.',
+      confirmLabel: 'Change Photo',
       destructive: true,
       onConfirm: go,
     });
@@ -639,7 +640,7 @@ function downloadCurrent() {
   a.remove();
 }
 
-// ─── Features + 套用 ───────────────────────────────────────────────────────
+// ─── Features + Apply ───────────────────────────────────────────────────────
 
 function buildFeatureChips() {
   const wrap = $('#ah-features');
@@ -650,7 +651,8 @@ function buildFeatureChips() {
     chip.dataset.feature = f.name;
     chip.setAttribute('role', 'radio');
     chip.setAttribute('aria-checked', 'false');
-    chip.innerHTML = `<span class="ah-chip-zh">${escapeHtml(f.label)}</span><span class="ah-chip-en">${escapeHtml(f.name)}</span>`;
+    chip.title = `feature: ${f.name}`;
+    chip.innerHTML = `<span class="ah-chip-main">${escapeHtml(f.en)}</span><span class="ah-chip-sub" lang="zh-Hant">${escapeHtml(f.zh)}</span>`;
     chip.addEventListener('click', () => {
       state.selected = f.name;
       if (state.status?.kind === 'hint') clearStatus();
@@ -694,7 +696,7 @@ async function applySelected() {
   const feature = state.selected;
   const f = getFeature(feature);
   const level = f.levels ? state.levels[feature] : null;
-  const label = level != null ? `${f.label} Lv${level}` : f.label;
+  const label = level != null ? `${f.en} Lv${level}` : f.en;
   const source = state.history[state.cursor];
 
   const run = {
@@ -725,18 +727,18 @@ async function applySelected() {
     if (result.skipped) {
       // The engine left the photo as it was (grayHair with no grey hair,
       // hairline with the forehead covered): nothing to push.
-      setStatus(`「${label}」沒有變更照片：${result.skipped}`, 'notice', result.taskId);
+      setStatus(`${label} left the photo unchanged: ${result.skipped}`, 'notice', result.taskId);
     } else {
       pushStep(await makeStep(result.blob, {
         feature, level, durationMs, taskId: result.taskId, remoteUrl: result.remoteUrl,
       }));
-      setStatus(`已套用「${label}」（${formatDuration(durationMs)}）`, 'ok');
+      setStatus(`Applied ${label} (${formatDuration(durationMs)})`, 'ok');
     }
   } catch (err) {
     if (err?.name === 'AbortError') {
-      setStatus('已取消。遠端任務可能仍在執行，但結果不會套用。', 'notice', run.taskId);
+      setStatus("Cancelled. The remote task may still be running, but its result won't be applied.", 'notice', run.taskId);
     } else {
-      setStatus(`套用「${label}」失敗：${err?.message || err}`, 'error', run.taskId);
+      setStatus(`${label} failed: ${err?.message || err}`, 'error', run.taskId);
     }
   } finally {
     clearInterval(run.timer);
@@ -747,15 +749,17 @@ async function applySelected() {
 
 function setBusyStage(stage, info = {}) {
   let text = STAGE_LABELS[stage] || stage;
-  if (stage === 'uploading' && typeof info.pct === 'number') text = `上傳照片中… ${info.pct}%`;
-  if (stage === 'queued' && info.queuePos > 0) text = `排隊中，前面還有 ${info.queuePos} 個任務…`;
+  if (stage === 'uploading' && typeof info.pct === 'number') text = `Uploading photo… ${info.pct}%`;
+  if (stage === 'queued' && info.queuePos > 0) {
+    text = `Queued — ${info.queuePos} task${info.queuePos === 1 ? '' : 's'} ahead…`;
+  }
   $('#ah-busy-stage').textContent = text;
 }
 
 function renderBusyTitle() {
   if (!state.run) return;
   const elapsed = formatDuration(performance.now() - state.run.startedAt, true);
-  $('#ah-busy-title').textContent = `「${state.run.label}」處理中 · ${elapsed}`;
+  $('#ah-busy-title').textContent = `Running ${state.run.label} · ${elapsed}`;
 }
 
 // ─── Status line ───────────────────────────────────────────────────────────
@@ -777,8 +781,8 @@ function renderStatus() {
     const f = getFeature(state.selected);
     kind = 'hint';
     text = f
-      ? `按「套用」將「${f.label}」套用到目前的圖片${state.cursor > 0 ? `（第 ${state.cursor} 步的結果）` : ''}。`
-      : '請先在上方選擇一個功能，再按「套用」。';
+      ? `Press Apply to run ${f.en} on the current image${state.cursor > 0 ? ` (the result of step ${state.cursor})` : ''}.`
+      : 'Pick a feature above, then press Apply.';
   }
   el.textContent = text || '';
   el.className = `ah-status ${kind || ''}`;
@@ -805,7 +809,7 @@ function wireShortcuts() {
 
 // ─── Feedback ──────────────────────────────────────────────────────────────
 
-/** The task 回報問題 reports: a failed/skipped run while its message shows,
+/** The task Report Issue reports: a failed/skipped run while its message shows,
  *  else the current step's. */
 function feedbackTaskId() {
   return state.statusTaskId || state.history[state.cursor]?.taskId || null;
@@ -835,11 +839,11 @@ function render() {
   // Stage
   const img = $('#ah-image');
   if (img.getAttribute('src') !== shown.url) img.src = shown.url;
-  img.alt = state.compare ? '原圖' : stepLabel(current, state.cursor);
+  img.alt = state.compare ? 'Original' : stepLabel(current, state.cursor);
   $('#ah-stage').classList.toggle('comparing', state.compare);
   $('#ah-badge').textContent = state.compare
-    ? '原圖'
-    : (state.cursor === 0 ? '原圖' : `第 ${state.cursor} 步：${stepLabel(current, state.cursor)}`);
+    ? 'Original'
+    : (state.cursor === 0 ? 'Original' : `Step ${state.cursor}: ${stepLabel(current, state.cursor)}`);
   $('#ah-busy').hidden = !busy;
   if (busy) renderBusyTitle();
 
@@ -851,14 +855,14 @@ function render() {
   $('#ah-discard-btn').disabled  = busy || state.history.length <= 1;
   $('#ah-change-btn').disabled   = busy;
 
-  // Features + 套用
+  // Features + Apply
   for (const chip of $root.querySelectorAll('.ah-chip')) {
     chip.setAttribute('aria-checked', String(chip.dataset.feature === state.selected));
   }
   renderLevelRow();
   const applyBtn = $('#ah-apply-btn');
   applyBtn.disabled = busy || !state.selected;
-  applyBtn.textContent = busy ? '處理中…' : '套用';
+  applyBtn.textContent = busy ? 'Processing…' : 'Apply';
   renderStatus();
 
   // Side panel
@@ -905,16 +909,17 @@ function renderHistory(busy) {
 function renderInfo(step) {
   const rows = [];
   if (state.cursor === 0) {
-    rows.push(['檔名', escapeHtml(state.fileName || '—')]);
+    rows.push(['File', escapeHtml(state.fileName || '—')]);
   } else {
-    rows.push(['功能', `${escapeHtml(stepLabel(step, state.cursor))} <span class="mono">(${escapeHtml(step.feature)})</span>`]);
+    const f = getFeature(step.feature);
+    rows.push(['Feature', `${escapeHtml(stepLabel(step, state.cursor))}${f ? ` <span lang="zh-Hant">${escapeHtml(f.zh)}</span>` : ''} <span class="mono">(${escapeHtml(step.feature)})</span>`]);
     rows.push(['Task ID', `<span class="mono">${escapeHtml(step.taskId || '—')}</span>`]);
-    rows.push(['耗時', escapeHtml(formatDuration(step.durationMs))]);
+    rows.push(['Time', escapeHtml(formatDuration(step.durationMs))]);
   }
-  rows.push(['尺寸', `${step.width} × ${step.height}`]);
-  rows.push(['格式', escapeHtml(step.blob.type || '—')]);
+  rows.push(['Size', `${step.width} × ${step.height}`]);
+  rows.push(['Format', escapeHtml(step.blob.type || '—')]);
   if (step.remoteUrl) {
-    rows.push(['原始結果', `<a href="${escapeHtml(step.remoteUrl)}" target="_blank" rel="noopener">開啟</a>`]);
+    rows.push(['Raw result', `<a href="${escapeHtml(step.remoteUrl)}" target="_blank" rel="noopener">Open</a>`]);
   }
   $('#ah-info').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
 }

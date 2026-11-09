@@ -1,7 +1,7 @@
 """API routes for the aiHair testbed.
 
 One photo, one of aiHair's nine features per run, through the remote AIPoC
-API (effect "aiHair"). The browser keeps the edit history; every "套用" is one
+API (effect "aiHair"). The browser keeps the edit history; every Apply is one
 run on the image the history is at, so edits chain:
 
     GET  /api/hair/get_job_id?content_type=image/jpeg   -> { job_id }

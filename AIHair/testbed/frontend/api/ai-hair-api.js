@@ -21,19 +21,19 @@ export const API_BASE = getApiBase();
 
 /**
  * aiHair's nine features, in the engine's order (ai_hair/features.py
- * FEATURE_NAMES). `name` is what the API's `feature` param takes; `levels` is
- * set for the features that take a `level`.
+ * FEATURE_NAMES). `name` is what the API's `feature` param takes; `en` / `zh`
+ * are the display names; `levels` is set for the features that take a `level`.
  */
 export const FEATURES = [
-  { name: 'frizzCare',   label: '毛躁修護' },
-  { name: 'plump',       label: '髮量豐盈' },
-  { name: 'fluffy',      label: '髮根蓬鬆' },
-  { name: 'hairline',    label: '髮際線', levels: [1, 2] },
-  { name: 'soft',        label: '柔順' },
-  { name: 'hairpart',    label: '補髮縫' },
-  { name: 'grayHair',    label: '白髮修飾' },
-  { name: 'rootRetouch', label: '補染髮根' },
-  { name: 'strayHair',   label: '碎髮修整' },
+  { name: 'frizzCare',   en: 'Frizz Care',   zh: '毛躁修護' },
+  { name: 'plump',       en: 'Plump',        zh: '髮量豐盈' },
+  { name: 'fluffy',      en: 'Fluffy',       zh: '髮根蓬鬆' },
+  { name: 'hairline',    en: 'Hairline',     zh: '髮際線', levels: [1, 2] },
+  { name: 'soft',        en: 'Soft',         zh: '柔順' },
+  { name: 'hairpart',    en: 'Hair Part',    zh: '補髮縫' },
+  { name: 'grayHair',    en: 'Gray Hair',    zh: '白髮修飾' },
+  { name: 'rootRetouch', en: 'Root Retouch', zh: '補染髮根' },
+  { name: 'strayHair',   en: 'Stray Hair',   zh: '碎髮修整' },
 ];
 
 export function getFeature(name) {
@@ -58,7 +58,7 @@ export async function toEngineImage(blob) {
   try {
     bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
   } catch {
-    throw new Error('無法讀取這個檔案格式，請使用 JPG、PNG 或 WebP 照片');
+    throw new Error('Unsupported file format — please use a JPG, PNG or WebP photo');
   }
   const canvas = document.createElement('canvas');
   canvas.width = bitmap.width;
@@ -66,7 +66,7 @@ export async function toEngineImage(blob) {
   canvas.getContext('2d').drawImage(bitmap, 0, 0);
   bitmap.close?.();
   const out = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.95));
-  if (!out) throw new Error('照片轉換為 JPEG 失敗');
+  if (!out) throw new Error('Converting the photo to JPEG failed');
   return out;
 }
 

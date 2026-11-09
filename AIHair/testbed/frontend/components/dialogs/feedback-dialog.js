@@ -36,7 +36,7 @@ async function submitFeedback({ taskId, description, page }) {
  */
 export function showFeedbackDialog({ taskId, page }) {
   if (!taskId) {
-    window.alert('還沒有可回報的任務，請先套用一個功能。');
+    window.alert('No task to attach feedback to yet — apply a feature first.');
     return;
   }
 
@@ -49,14 +49,14 @@ export function showFeedbackDialog({ taskId, page }) {
 
   const label = document.createElement('label');
   label.htmlFor = 'feedback-description';
-  label.textContent = '問題描述';
+  label.textContent = 'Description';
   label.style.fontSize = '0.875rem';
   label.style.fontWeight = '500';
 
   const textarea = document.createElement('textarea');
   textarea.id = 'feedback-description';
   textarea.rows = 4;
-  textarea.placeholder = '請盡量詳細描述遇到的問題…';
+  textarea.placeholder = 'Describe the issue in as much detail as possible…';
   textarea.style.width = '100%';
   textarea.style.padding = '0.625rem 0.75rem';
   textarea.style.borderRadius = '6px';
@@ -92,23 +92,23 @@ export function showFeedbackDialog({ taskId, page }) {
     const description = textarea.value.trim();
     if (!description) {
       statusLine.style.color = 'var(--color-destructive)';
-      statusLine.textContent = '請先填寫問題描述再送出。';
+      statusLine.textContent = 'Please describe the issue before submitting.';
       textarea.focus();
       return;
     }
     submitting = true;
     statusLine.style.color = 'var(--color-muted-foreground)';
-    statusLine.textContent = '儲存中…';
+    statusLine.textContent = 'Saving feedback…';
     textarea.disabled = true;
     if (cancelBtn) cancelBtn.disabled = true;
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.textContent = '送出中…';
+      submitBtn.textContent = 'Submitting…';
     }
     try {
       await submitFeedback({ taskId, description, page });
       statusLine.style.color = 'var(--color-foreground)';
-      statusLine.textContent = '已送出，感謝回報！';
+      statusLine.textContent = 'Submitted! Thank you for helping us improve.';
       setTimeout(() => closeDialog(FEEDBACK_DIALOG_ID), 600);
     } catch (err) {
       submitting = false;
@@ -116,21 +116,21 @@ export function showFeedbackDialog({ taskId, page }) {
       if (cancelBtn) cancelBtn.disabled = false;
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.textContent = '送出';
+        submitBtn.textContent = 'Submit';
       }
       statusLine.style.color = 'var(--color-destructive)';
-      statusLine.textContent = err?.message || '回報送出失敗。';
+      statusLine.textContent = err?.message || 'Failed to submit feedback.';
     }
   };
 
   const footer = createDialogFooter([
     {
-      label: '取消',
+      label: 'Cancel',
       className: 'btn btn-outline btn-default-size',
       onClick: onCancel,
     },
     {
-      label: '送出',
+      label: 'Submit',
       className: 'btn btn-primary btn-default-size',
       onClick: onSubmit,
     },
@@ -140,8 +140,8 @@ export function showFeedbackDialog({ taskId, page }) {
 
   openDialog({
     id: FEEDBACK_DIALOG_ID,
-    title: '回報問題',
-    description: '回報會連同這一步的輸入照片與結果一起存到伺服器。',
+    title: 'Report Issue',
+    description: "This step's input photo and result are saved together with your report.",
     body,
     footer,
   });

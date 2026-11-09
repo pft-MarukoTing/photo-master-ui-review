@@ -36,7 +36,7 @@ export function createDialogFooter(buttons) {
  * }} options
  */
 export function showConfirmDialog({
-  title, description, confirmLabel = '確定', cancelLabel = '取消', destructive = false, onConfirm,
+  title, description, confirmLabel = 'OK', cancelLabel = 'Cancel', destructive = false, onConfirm,
 }) {
   const footer = createDialogFooter([
     {
