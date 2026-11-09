@@ -810,7 +810,7 @@ export const EN: Record<string, string> = {
   "顯示全部": "Show All",
   "第 {ordinal} 版完成・由第 {from} 版調整": "Version {ordinal} ready · adjusted from version {from}",
   "第 {ordinal} 版・由第 {from} 版調整": "Version {ordinal} · adjusted from version {from}",
-  "想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」；想接續某一版修改，在輸入框上方把「原圖」換成那一版。也可以直接打字跟我說。": "To change the enhancements, tap \"Review Edits\"; for another version with the same settings, tap \"Retouch Again\"; to build on a finished version, switch “Original” above the message box to that version. You can also just type to me.",
+  "想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」；想接續某一版修改，在輸入框上方把「原圖」換成那一版。也可以直接打字跟我說。": "To change the enhancements, tap “Review Edits”; for another version with the same settings, tap “Retouch Again”; to build on a finished version, switch “Original” above the message box to that version. You can also just type to me.",
   "接著這張調整": "Adjust This One",
   "下一次從 {base} 美化": "Next retouch from {base}",
   "換一張當底": "Start from a different image",

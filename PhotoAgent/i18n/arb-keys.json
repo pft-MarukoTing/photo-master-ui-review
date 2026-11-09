@@ -2,6 +2,7 @@
   "_about": [
     "The English id each Chinese key has in the ARB files of the doc repo. Ids are kept once given: the Hub stores translations by id.",
     "`where` is the catalog the id's text goes back into: panel = frontend/i18n-*.js, chat = frontend-chat/src/i18n/*.ts, backend = photo_agent LABELS / TEXT.",
+    "`buttons`: the button names a sentence quotes, sent to the Hub as {button_<id>} and filled in with that id's translation when catalogs are made.",
     "`manual`: text with no letters, written by hand for each language (i18n/locales.json) instead of being translated.",
     "Refreshed by scripts/translation_source.py; do not edit by hand."
   ],
@@ -106,7 +107,11 @@
       "zh": "還有其他想改的地方嗎？沒有的話，可以從下面選「分析」或「一鍵美化」喔！",
       "where": [
         "backend text"
-      ]
+      ],
+      "buttons": {
+        "button_common_one_tap_retouch": "common_one_tap_retouch",
+        "button_common_analyze": "common_analyze"
+      }
     },
     "backend_anything_else_youd_like_to_3": {
       "zh": "還有其他想改的地方嗎？沒有的話，可以按下面的{buttons}。",
@@ -382,13 +387,19 @@
       "zh": "長寬比也幫你換成「{ratio}」了，在「設定」裡隨時可以改。",
       "where": [
         "backend text"
-      ]
+      ],
+      "buttons": {
+        "button_common_settings": "common_settings"
+      }
     },
     "backend_ive_also_you_can_change": {
       "zh": "另外{said}了，在「設定」裡隨時可以改。",
       "where": [
         "backend text"
-      ]
+      ],
+      "buttons": {
+        "button_common_settings": "common_settings"
+      }
     },
     "backend_ive_applied_it": {
       "zh": "先幫你套用了。",
@@ -400,7 +411,10 @@
       "zh": "先幫你套用了，想改的話按「修改」。",
       "where": [
         "backend text"
-      ]
+      ],
+      "buttons": {
+        "button_common_edit": "common_edit"
+      }
     },
     "backend_ive_updated_the_earlier_request": {
       "zh": "前面跟這句衝突的需求，已經照這句改掉了。",
@@ -544,19 +558,28 @@
       "zh": "好，已經切到第 {n} 版，接著在這版上改。想改哪裡直接打在下面，我會先幫你看過、記下來；想換光線、角度這類效果，可以按「風格」。都好了再按「接續第 {n} 版美化」。",
       "where": [
         "backend text"
-      ]
+      ],
+      "buttons": {
+        "button_common_style_2": "common_style_2"
+      }
     },
     "backend_ok_ive_switched_to_version_2": {
       "zh": "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的個人化需求了，沒問題就按「接續第 {n} 版美化」；想換光線、角度這類效果，可以先按「風格」。",
       "where": [
         "backend text"
-      ]
+      ],
+      "buttons": {
+        "button_common_style_2": "common_style_2"
+      }
     },
     "backend_ok_ive_you_can_change": {
       "zh": "好，{said}了，在「設定」裡隨時可以改。",
       "where": [
         "backend text"
-      ]
+      ],
+      "buttons": {
+        "button_common_settings": "common_settings"
+      }
     },
     "backend_ok_my_requests_has_been": {
       "zh": "好，個人化需求更新好了。",
@@ -586,13 +609,19 @@
       "zh": "好，改回從原圖美化，剛剛記下的需求都留著。想再加什麼直接打在下面，好了就按「再美化」。",
       "where": [
         "backend text"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch_again": "common_retouch_again"
+      }
     },
     "backend_ok_the_aspect_ratio_is": {
       "zh": "好，長寬比幫你換成「{ratio}」了，在「設定」裡隨時可以改。",
       "where": [
         "backend text"
-      ]
+      ],
+      "buttons": {
+        "button_common_settings": "common_settings"
+      }
     },
     "backend_on": {
       "zh": "開",
@@ -1102,7 +1131,10 @@
       "zh": "這張照片還沒分析，只能依照個人化需求修圖；要整張美化請先按「幫我分析」。",
       "where": [
         "backend text"
-      ]
+      ],
+      "buttons": {
+        "button_common_analyze_for_me": "common_analyze_for_me"
+      }
     },
     "backend_this_photo_is_still_processing": {
       "zh": "這張照片正在處理中，完成後再試一次。",
@@ -1138,7 +1170,10 @@
       "zh": "想照這樣重新產生一版，可以按「再美化」。",
       "where": [
         "backend text"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch_again": "common_retouch_again"
+      }
     },
     "backend_turn_on_ai_retouch_to": {
       "zh": "若要檢查生成式修圖品質，請開啟 AI 修圖。",
@@ -1408,13 +1443,19 @@
       "zh": "這張開始分析了，結果頁裡可以看進度。其他照片從{where}「我的照片」回來接著弄。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_my_photos": "common_my_photos"
+      }
     },
     "chat_analysis_has_started_you_can_2": {
       "zh": "這張開始分析了，結果頁裡可以看進度。其他照片從左邊「我的照片」回來接著弄。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_my_photos": "common_my_photos"
+      }
     },
     "chat_analyze_all": {
       "zh": "全部分析",
@@ -1492,13 +1533,19 @@
       "zh": "沒成功的在{where}會標「失敗」，選取那張可以看原因。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_failed": "common_failed"
+      }
     },
     "chat_any_that_failed_are_marked_2": {
       "zh": "沒成功的在上面會標「失敗」，點那張可以看原因。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_failed": "common_failed"
+      }
     },
     "chat_applied_retouch_now_or_adjust": {
       "zh": "已套用，想直接美化，還是再調下面這幾項？",
@@ -1690,7 +1737,10 @@
       "zh": "左側可比較 Before / After，也可從「美化紀錄」切換版本。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_version_history": "common_version_history"
+      }
     },
     "chat_compare_with_the_original_above": {
       "zh": "上方照片可以跟原圖比，點右上的版本也能切換。",
@@ -1846,13 +1896,19 @@
       "zh": "這張開始調整了，結果頁裡可以看進度。其他照片從{where}「我的照片」回來接著弄。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_my_photos": "common_my_photos"
+      }
     },
     "chat_editing_has_started_you_can_2": {
       "zh": "這張開始調整了，結果頁裡可以看進度。其他照片從左邊「我的照片」回來接著弄。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_my_photos": "common_my_photos"
+      }
     },
     "chat_editing_the_photo": {
       "zh": "正在調整照片",
@@ -2026,13 +2082,19 @@
       "zh": "這裡是這批照片的總覽：{btn}可以一次分析或美化全部，也可以先按「設定」統一換引擎或長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打字告訴我，會套用到還沒開始的每一張。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_settings": "common_settings"
+      }
     },
     "chat_heres_an_overview_of_this_2": {
       "zh": "這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換美化引擎或長寬比；只想改某一張，從{where}選取那張就好。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_settings": "common_settings"
+      }
     },
     "chat_heres_an_overview_of_this_3": {
       "zh": "這裡是這批照片的總覽：{btn}可以一次處理全部，也可以從{where}選取某一張個別調整。",
@@ -2044,7 +2106,10 @@
       "zh": "這裡是這批照片的總覽：上面可以一次分析或美化全部，也可以先按「設定」統一換引擎或長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打在下面，會套用到還沒開始的每一張。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_settings": "common_settings"
+      }
     },
     "chat_heres_an_overview_of_this_5": {
       "zh": "這裡是這批照片的總覽：上面可以一次處理全部，也可以點某一張個別調整。",
@@ -2056,13 +2121,19 @@
       "zh": "這裡是這批照片的總覽：{btn}可以一次分析或美化全部，也可以先按「設定」統一換長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打字告訴我，會套用到還沒開始的每一張。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_settings": "common_settings"
+      }
     },
     "chat_heres_an_overview_of_this_7": {
       "zh": "這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換長寬比；只想改某一張，從{where}選取那張就好。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_settings": "common_settings"
+      }
     },
     "chat_heres_the_you_just_applied": {
       "zh": "先看剛套用的{v1}，改動的地方已經標起來了。",
@@ -2200,7 +2271,10 @@
       "zh": "左邊的「我的照片」@@照片位置",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_my_photos": "common_my_photos"
+      }
     },
     "chat_it_wont_apply_to_the": {
       "zh": "已經在美化或美化好的 {n} 張不會套用。",
@@ -2314,7 +2388,10 @@
       "zh": "另外 {n} 張分析好了，還沒美化，按上面的「全部一鍵美化」就會接著美化，也可以點上面的照片個別調整。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_chat_retouch_all": "chat_retouch_all"
+      }
     },
     "chat_more_photos_havent_been_analyzed": {
       "zh": "另外還有 {n} 張還沒分析。",
@@ -2332,7 +2409,10 @@
       "zh": "左邊的「我的照片」",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_my_photos": "common_my_photos"
+      }
     },
     "chat_my_requests": {
       "zh": "個人化需求：「{v1}」",
@@ -2374,7 +2454,10 @@
       "zh": "還沒有照片，按「開始對話」挑一張吧。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_chat_start_a_chat": "chat_start_a_chat"
+      }
     },
     "chat_no_portrait_adjustments_for_now": {
       "zh": "人像目前都不修。",
@@ -2512,13 +2595,19 @@
       "zh": "好，已套用。想再改什麼直接告訴我，或按下面的「美化」我就開始。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch": "common_retouch"
+      }
     },
     "chat_ok_applied_to_see_what": {
       "zh": "好，已套用。想看改了什麼、或接著調整其他項目，點下面的項目；改好按「美化」我就開始。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch": "common_retouch"
+      }
     },
     "chat_ok_back_to_where_you": {
       "zh": "好，回到上一步。",
@@ -2656,7 +2745,11 @@
       "zh": "好，這個我記下來了。還有其他想改的地方嗎？沒有的話，可以從下面選「分析」或「一鍵美化」喔！",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_one_tap_retouch": "common_one_tap_retouch",
+        "button_common_analyze": "common_analyze"
+      }
     },
     "chat_ok_retouching_photos_again_ill": {
       "zh": "好，{n} 張開始重新美化了，全部完成後我會在這裡說；想看哪張的進度，從{where}選取那張。",
@@ -2698,7 +2791,10 @@
       "zh": "好，這幾張還在美化，等美化好我會把這句套用到每一張，到時按「全部再美化」就會照這樣重新美化。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_chat_retouch_all_again": "chat_retouch_all_again"
+      }
     },
     "chat_ok_these_have_been_added": {
       "zh": "好，加進來了，這幾張加到{where}裡了。",
@@ -2872,7 +2968,10 @@
       "zh": "第 {v1} 張有需求，還沒選要整體美化還是僅依需求修改，會用「整體美化」送出。要繼續嗎？",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_full_retouch": "common_full_retouch"
+      }
     },
     "chat_photo_selected_tell_me_how": {
       "zh": "照片選好了。想怎麼修，直接打在下面的對話框告訴我。",
@@ -2986,7 +3085,11 @@
       "zh": "還有 {n} 張沒開始，可以按上面的「全部分析」先看我打算怎麼修，或按上面的「全部一鍵美化」直接美化，也可以點上面的照片個別調整。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_chat_retouch_all": "chat_retouch_all",
+        "button_chat_analyze_all": "chat_analyze_all"
+      }
     },
     "chat_photos_in_this_chat": {
       "zh": "這段對話的照片",
@@ -3178,7 +3281,11 @@
       "zh": "按上面的「全部一鍵美化」會把還沒美化的都美化好；只想先看分析，按上面的「全部分析」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_chat_retouch_all": "chat_retouch_all",
+        "button_chat_analyze_all": "chat_analyze_all"
+      }
     },
     "chat_retouch_all_again": {
       "zh": "全部再美化",
@@ -3262,13 +3369,19 @@
       "zh": "這張開始美化了，結果頁裡可以看進度。其他照片從{where}「我的照片」回來接著弄。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_my_photos": "common_my_photos"
+      }
     },
     "chat_retouching_has_started_you_can_2": {
       "zh": "這張開始美化了，結果頁裡可以看進度。其他照片從左邊「我的照片」回來接著弄。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_my_photos": "common_my_photos"
+      }
     },
     "chat_retouching_the_photo": {
       "zh": "正在美化照片",
@@ -3484,13 +3597,19 @@
       "zh": "要開新對話處理另一張照片嗎？已經開始的照片可以從「最近照片」再打開，還沒開始的 {parkedLeft} 張會清掉。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_recent_photos": "common_recent_photos"
+      }
     },
     "chat_start_a_new_chat_for_2": {
       "zh": "要開新對話處理另一張照片嗎？目前這段對話可以從「最近照片」再打開。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_recent_photos": "common_recent_photos"
+      }
     },
     "chat_started": {
       "zh": "已開始",
@@ -3628,7 +3747,11 @@
       "zh": "可以按上面的「全部分析」先看我打算怎麼修，或按上面的「全部一鍵美化」直接美化；想怎麼修也可以打在下面，會套用到每一張。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_chat_retouch_all": "chat_retouch_all",
+        "button_chat_analyze_all": "chat_analyze_all"
+      }
     },
     "chat_tap_below_to_change_it": {
       "zh": "點下面的「{v1}」就可以改。",
@@ -3676,7 +3799,10 @@
       "zh": "按「從原圖美化」會從原圖重做一版，這裡的需求會一起套用，要調整的話可以先編輯。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch_from_original": "common_retouch_from_original"
+      }
     },
     "chat_text": {
       "zh": "{done} / {total} 張 · {pct}%",
@@ -3736,7 +3862,10 @@
       "zh": "長寬比也改回「AI 建議」了。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_ai_suggested": "common_ai_suggested"
+      }
     },
     "chat_the_engine_and_output_settings": {
       "zh": "這張照片美化時用的引擎與輸出設定，可以直接修改。",
@@ -3850,7 +3979,10 @@
       "zh": "這幾張還在美化，等美化好我會把這句套用到每一張，到時按「全部再美化」就會照這樣重新美化。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_chat_retouch_all_again": "chat_retouch_all_again"
+      }
     },
     "chat_these_are_your_requests_from": {
       "zh": "這是上次的個人化需求，可以直接修改或清除。",
@@ -3922,7 +4054,10 @@
       "zh": "這一項已在「設定」的人像修正關閉",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_settings": "common_settings"
+      }
     },
     "chat_this_person": {
       "zh": "就是這位",
@@ -3970,19 +4105,29 @@
       "zh": "剛剛在美化項目改的{v1}，這版沒有用到，還幫你留著。想修改的話，按「看美化項目」再看一次，或直接按「再美化」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch_again": "common_retouch_again",
+        "button_common_review_edits": "common_review_edits"
+      }
     },
     "chat_this_version_follows_only_your": {
       "zh": "這版只照你的需求改，所以這輪只能改個人化需求，或加個風格。想整張一起美化的話，按「幫我分析」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_analyze_for_me": "common_analyze_for_me"
+      }
     },
     "chat_this_version_follows_only_your_2": {
       "zh": "這版只照你的需求改，所以這輪只要改個人化需求就好。想整張一起美化的話，按「幫我分析」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_analyze_for_me": "common_analyze_for_me"
+      }
     },
     "chat_this_version_follows_only_your_3": {
       "zh": "這版只照你的需求改，沒有分析整張照片。需要我幫你分析，看看還有哪些地方可以修嗎？",
@@ -4030,13 +4175,20 @@
       "zh": "想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch_again": "common_retouch_again",
+        "button_common_review_edits": "common_review_edits"
+      }
     },
     "chat_to_adjust_the_edits_tap_2": {
       "zh": "想調整美化項目，按「看美化項目」；想直接開始美化，按「{goLabel}」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_review_edits": "common_review_edits"
+      }
     },
     "chat_to_change_just_one_select": {
       "zh": "只想改某一張，從{where}選取那張調整。",
@@ -4054,13 +4206,21 @@
       "zh": "想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」；想接續某一版修改，在輸入框上方把「原圖」換成那一版。也可以直接打字跟我說。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch_again": "common_retouch_again",
+        "button_common_original": "common_original",
+        "button_common_review_edits": "common_review_edits"
+      }
     },
     "chat_to_make_version_again_the": {
       "zh": "想照第 {n} 版當初的做法再做一版，按「再美化」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch_again": "common_retouch_again"
+      }
     },
     "chat_to_retouch_them_next_tap": {
       "zh": "要接著美化，按{btn}的{render}。",
@@ -4072,19 +4232,29 @@
       "zh": "要接著美化，按上面的「全部一鍵美化」",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_chat_retouch_all": "chat_retouch_all"
+      }
     },
     "chat_to_retouch_them_next_tap_3": {
       "zh": "要接著美化，按上面的「全部一鍵美化」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_chat_retouch_all": "chat_retouch_all"
+      }
     },
     "chat_to_return_here_later_tap": {
       "zh": "之後想回來這裡，點{where}「我的照片」最上面的「總覽」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_my_photos": "common_my_photos",
+        "button_chat_overview": "chat_overview"
+      }
     },
     "chat_to_see_a_result_select": {
       "zh": "想看哪張的結果，從{where}選取那張。",
@@ -4138,7 +4308,10 @@
       "zh": "想改的地方可以一句一句打在下面，我會先幫你看過、記下來；也可以按「風格」換光線、角度這類效果。都好了再按「接續第 {n} 版美化」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_style_2": "common_style_2"
+      }
     },
     "chat_type_your_answer": {
       "zh": "直接打字回答",
@@ -4276,13 +4449,22 @@
       "zh": "第 {n} 版好了，接下來從這一版接著改。想改的地方可以告訴我，也可以按下方的「風格」調整；想看原圖的美化項目，在輸入框上方換回「原圖」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_original": "common_original",
+        "button_common_style_2": "common_style_2"
+      }
     },
     "chat_version_is_ready_and_changes_2": {
       "zh": "第 {n} 版好了，接下來從這一版接著改。想改的地方可以告訴我，也可以按下方的「風格」調整；照一樣的需求再來一版，按「再美化」；想看原圖的美化項目，在輸入框上方換回「原圖」。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch_again": "common_retouch_again",
+        "button_common_original": "common_original",
+        "button_common_style_2": "common_style_2"
+      }
     },
     "chat_version_ready_adjusted_from_version": {
       "zh": "第 {ordinal} 版完成・由第 {from} 版調整",
@@ -4372,25 +4554,37 @@
       "zh": "調整好後，可以接著看其他項目，或按下面的「美化」我就開始",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch": "common_retouch"
+      }
     },
     "chat_when_youre_ready_review_another_2": {
       "zh": "調整好後，可以接著看其他項目，或按下面的「美化」我就開始。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch": "common_retouch"
+      }
     },
     "chat_when_youre_ready_tap_retouch": {
       "zh": "改好後按下面的「美化」我就開始",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch": "common_retouch"
+      }
     },
     "chat_when_youre_ready_tap_retouch_2": {
       "zh": "改好後按下面的「美化」我就開始。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch": "common_retouch"
+      }
     },
     "chat_when_youre_ready_tap_to": {
       "zh": "改好了按{btn}的{redo}重新美化。",
@@ -4474,7 +4668,10 @@
       "zh": "也可以點「風格」，幫這版調整光線、角度之類的風格。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_style_2": "common_style_2"
+      }
     },
     "chat_you_can_choose_up_to": {
       "zh": "一次最多只能選 {MAX_BATCH} 張，先放前 {v2} 張。",
@@ -4492,7 +4689,10 @@
       "zh": "可以回到首頁換一張照片，或按「看美化項目」換個方式再試。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_review_edits": "common_review_edits"
+      }
     },
     "chat_you_can_start_once_the": {
       "zh": "上傳完就可以開始了，先稍等一下。",
@@ -4552,7 +4752,10 @@
       "zh": "已經選滿 {MAX_BATCH} 張了。想新增照片的話，建議先移除幾張，或按「全部清除」重新選，再新增其他照片。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_chat_clear_all": "chat_clear_all"
+      }
     },
     "common_a_new_version_of_the": {
       "zh": "網站有新版本，請重新整理頁面以取得最新內容。",
@@ -6120,7 +6323,10 @@
       "where": [
         "chat",
         "backend text"
-      ]
+      ],
+      "buttons": {
+        "button_common_analyze_for_me": "common_analyze_for_me"
+      }
     },
     "common_today": {
       "zh": "今天",
@@ -6395,7 +6601,10 @@
       "zh": "已分析完成，按「美化」就會產生這一組",
       "where": [
         "panel"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch": "common_retouch"
+      }
     },
     "panel_analysis_cost": {
       "zh": "分析花費",
@@ -8003,7 +8212,10 @@
       "zh": "已勾選「僅依需求修改」，這裡的建議這次不會套用。",
       "where": [
         "panel"
-      ]
+      ],
+      "buttons": {
+        "button_common_only_my_requests": "common_only_my_requests"
+      }
     },
     "panel_open": {
       "zh": "待解決",
@@ -9161,7 +9373,10 @@
       "zh": "指定比例{ratio}需重新構圖，若需取消請把長寬比改成「原圖比例」",
       "where": [
         "panel"
-      ]
+      ],
+      "buttons": {
+        "button_common_original_2": "common_original_2"
+      }
     },
     "panel_the_request_timed_out_please": {
       "zh": "系統回應逾時，請稍後再試一次。",
@@ -9239,13 +9454,21 @@
       "zh": "{text}這張照片還沒分析過。「幫我分析」會分析原圖並整理修圖建議，完成後會換成從原圖美化。",
       "where": [
         "panel"
-      ]
+      ],
+      "buttons": {
+        "button_common_analyze_for_me": "common_analyze_for_me"
+      }
     },
     "panel_this_photo_hasnt_been_analyzed_2": {
       "zh": "{text}這張照片還沒分析過。想先看 AI 的修圖建議，請按「幫我分析」；或取消勾選「僅依需求修改」，按「美化」時會一起分析。",
       "where": [
         "panel"
-      ]
+      ],
+      "buttons": {
+        "button_common_only_my_requests": "common_only_my_requests",
+        "button_common_analyze_for_me": "common_analyze_for_me",
+        "button_common_retouch": "common_retouch"
+      }
     },
     "panel_this_photo_was_processed_with": {
       "zh": "這張照片還沒套用最新版本，重新處理一次就能得到更好的美化結果。",
@@ -9275,7 +9498,10 @@
       "zh": "這一組是用舊版分析產生的，無法以它繼續美化。請在「美化紀錄」切回最新一組後再美化。",
       "where": [
         "panel"
-      ]
+      ],
+      "buttons": {
+        "button_common_version_history": "common_version_history"
+      }
     },
     "panel_this_usually_happens_when_the": {
       "zh": "這通常是因為照片中包含平台內容政策不允許編輯的元素（例如可辨識的受著作權保護角色/商標，或其他敏感內容），",
@@ -9299,7 +9525,11 @@
       "zh": "這個版本只依照個人化需求修圖，沒有分析整張照片，所以沒有 AI 的修圖建議。可以直接在下方修改個人化需求；想要 AI 給建議的話，請按「美化」左邊的「幫我分析」。",
       "where": [
         "panel"
-      ]
+      ],
+      "buttons": {
+        "button_common_analyze_for_me": "common_analyze_for_me",
+        "button_common_retouch": "common_retouch"
+      }
     },
     "panel_this_versions_result_is_no": {
       "zh": "這一版的結果已經無法取得。",
@@ -9317,7 +9547,10 @@
       "zh": "要換底的話，可以從下方挑一張，或直接點美化紀錄裡的照片，底會跟著換。按「返回」就不調整了，還沒美化的調整會清掉。",
       "where": [
         "panel"
-      ]
+      ],
+      "buttons": {
+        "button_common_back": "common_back"
+      }
     },
     "panel_total": {
       "zh": "合計",
@@ -9563,7 +9796,12 @@
       "zh": "開啟後，按下「分析」「一鍵美化」「美化」時會先跳出預計花費供確認；關閉則直接送出，不再顯示相關內容。",
       "where": [
         "panel"
-      ]
+      ],
+      "buttons": {
+        "button_common_one_tap_retouch": "common_one_tap_retouch",
+        "button_common_analyze": "common_analyze",
+        "button_common_retouch": "common_retouch"
+      }
     },
     "panel_why_this_ratio": {
       "zh": "比例理由",

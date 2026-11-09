@@ -89,7 +89,8 @@ def mismatch(reference, text, backend):
     if not balanced(text):
         return "unbalanced braces"
     want, got = set(l10n_arb.placeholders(reference)), set(l10n_arb.placeholders(text))
-    if want != got:
+    # A translation made before a button name became {button_…} still names the button itself.
+    if got - want or any(not name.startswith(l10n_arb.BUTTON) for name in want - got):
         return f"placeholders {sorted(got)}, the English has {sorted(want)}"
     for name, forms in plurals(text):
         if "other" not in forms:
@@ -100,6 +101,16 @@ def mismatch(reference, text, backend):
         except (KeyError, ValueError, IndexError) as error:
             return f"the backend cannot fill it ({error})"
     return ""
+
+
+def fill_buttons(text, buttons, arb, source, quote):
+    """`text` with each {button_…} replaced by that button's name in this language, quoted; English when untranslated."""
+    for name, label_id in buttons.items():
+        label = arb.get(label_id)
+        if not isinstance(label, str) or not label.strip() or mismatch(source[label_id], label, False):
+            label = source[label_id]
+        text = text.replace("{%s}" % name, f"{quote[0]}{label}{quote[1]}")
+    return text
 
 
 def current_english():
@@ -113,7 +124,7 @@ def current_english():
 def translate(code, meta, arb, keys_doc, source, problems):
     """({where: {Chinese: text}}, report line) for one language."""
     per = {where: {} for where in WHERES}
-    translated = gone = 0
+    translated = gone = own_words = 0
     for key_id, text in arb.items():
         if key_id.startswith("@"):
             continue
@@ -131,6 +142,9 @@ def translate(code, meta, arb, keys_doc, source, problems):
             problems.append(f"{code}: {key_id} has {why}: {text!r}")
             continue
         translated += 1
+        buttons = item.get("buttons") or {}
+        own_words += any("{%s}" % name not in text for name in buttons)
+        text = fill_buttons(text, buttons, arb, source, meta["format"]["quote"])
         for where in item["where"]:
             per[where][item["zh"]] = text
     manual = meta.get("manual") or {}
@@ -147,6 +161,8 @@ def translate(code, meta, arb, keys_doc, source, problems):
             f"{written}/{len(keys_doc['manual'])} manual; the rest show in English")
     if gone:
         line += f"; {gone} ids no longer in the code ignored"
+    if own_words:
+        line += f"; {own_words} still name buttons in their own words"
     return {where: dict(sorted(texts.items())) for where, texts in per.items()}, line
 
 

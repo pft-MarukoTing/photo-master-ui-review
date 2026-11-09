@@ -27,9 +27,13 @@ SURFACE = {"panel": "panel", "chat": "chat", "backend labels": "backend", "backe
 KEYS_ABOUT = [
     "The English id each Chinese key has in the ARB files of the doc repo. Ids are kept once given: the Hub stores translations by id.",
     "`where` is the catalog the id's text goes back into: panel = frontend/i18n-*.js, chat = frontend-chat/src/i18n/*.ts, backend = photo_agent LABELS / TEXT.",
+    "`buttons`: the button names a sentence quotes, sent to the Hub as {button_<id>} and filled in with that id's translation when catalogs are made.",
     "`manual`: text with no letters, written by hand for each language (i18n/locales.json) instead of being translated.",
     "Refreshed by scripts/translation_source.py; do not edit by hand.",
 ]
+
+BUTTON = "button_"
+_QUOTED = re.compile(r"「([^「」{}]+)」")
 
 _PLURAL_HEAD = re.compile(r"\{(\w+),\s*plural\s*,")
 _PLURAL_FORM = re.compile(r"\s*(=\d+|zero|one|two|few|many|other)\s*\{")
@@ -146,6 +150,27 @@ def assign_ids(entries, old_keys):
     return dict(sorted(keys.items()))
 
 
+def _buttons(keys):
+    """{sentence id: {placeholder: label id}}: a label the Chinese quotes in 「」 whose English the sentence quotes in “”."""
+    labels = {}
+    for key_id, item in keys.items():
+        if "{" not in item["en"]:
+            labels.setdefault(item["zh"].split("@@")[0], []).append(key_id)
+    def where(key_id):
+        return {SURFACE[w] for w in keys[key_id]["where"]}
+
+    found = {}
+    for key_id, item in keys.items():
+        shown_on = where(key_id) - {"backend"}
+        for name in sorted(set(_QUOTED.findall(item["zh"]))):
+            options = [i for i in labels.get(name, []) if i != key_id and f"“{keys[i]['en']}”" in item["en"]]
+            if options:
+                # The button the user sees: on the sentence's own surface first, then chat, then the panel.
+                best = max(sorted(options), key=lambda i: (bool(where(i) & shown_on), "chat" in where(i), "panel" in where(i)))
+                found.setdefault(key_id, {})[BUTTON + best] = best
+    return found
+
+
 def _description(entry, english):
     """What a translator needs beyond the English: "" when it reads clearly alone."""
     def adds(text):
@@ -158,6 +183,9 @@ def _description(entry, english):
         parts.append(f"Full meaning: {entry['en_full']}")
     if entry.get("max"):
         parts.append(f"Room on screen: {entry['max']}")
+    if BUTTON in english:
+        parts.append("Each {button_…} is a button name the app fills in with its quotes; keep it as it is and word the "
+                     "sentence so the name does not need to change form")
     if re.search(r"</?\w+>", english):
         parts.append("Keep the HTML tags as they are")
     return ". ".join(parts) + "." if parts else ""
@@ -166,10 +194,15 @@ def _description(entry, english):
 def build(entries, old_keys):
     """(arb-keys.json, intl_en.arb, intl_zh_Hant.arb) as dicts."""
     keys = assign_ids(entries, old_keys)
+    buttons = _buttons(keys)
+    labels = {key_id: item["en"] for key_id, item in keys.items()}
     source = {"@@locale": SOURCE_LOCALE}
     chinese = {"@@locale": CHINESE_LOCALE}
     for key_id, item in keys.items():
         zh, english = item["zh"], item.pop("en")
+        for name, label_id in buttons.get(key_id, {}).items():
+            english = english.replace(f"“{labels[label_id]}”", "{%s}" % name)
+            item["buttons"] = buttons[key_id]
         meta = {}
         description = _description(entries[zh], english)
         if description:
@@ -177,6 +210,8 @@ def build(entries, old_keys):
         found = placeholders(english)
         if found:
             meta["placeholders"] = {name: {"type": kind} for name, kind in found.items()}
+            for name, label_id in buttons.get(key_id, {}).items():
+                meta["placeholders"][name]["example"] = f"“{labels[label_id]}”"
         source[key_id] = english
         if meta:
             source[f"@{key_id}"] = meta
