@@ -18,19 +18,31 @@
 (function () {
   const SOURCE = "zh-TW";
   const L10N = window.PHOTOAGENT_L10N || { languages: [], catalogs: {} };
+  const isChinese = (code) => code.split("-")[0] === "zh";
   const LANGS = [
     { code: SOURCE, name: "繁體中文" },
+    ...L10N.languages.filter((l) => isChinese(l.code)),
     { code: "en", name: "English" },
-    ...L10N.languages,
+    ...L10N.languages.filter((l) => !isChinese(l.code)),
   ];
   const CATALOGS = { ...(window.PHOTOAGENT_CATALOGS || {}), ...L10N.catalogs };
   const ENGLISH = CATALOGS.en || {};
   const KEY = "photoagent.lang";
 
+  // Subtags that make a Chinese tag Traditional; any other Chinese (zh, zh-CN, zh-SG) is Simplified.
+  const TRADITIONAL = new Set(["hant", "tw", "hk", "mo"]);
+
   function normalize(value) {
-    const wanted = String(value || "").trim().toLowerCase();
+    const wanted = String(value || "").trim().toLowerCase().replace(/_/g, "-");
     if (!wanted) return "";
-    const hit = LANGS.find((l) => l.code.toLowerCase() === wanted || l.code.toLowerCase().split("-")[0] === wanted.split("-")[0]);
+    const parts = wanted.split("-");
+    const exact = LANGS.find((l) => l.code.toLowerCase() === wanted);
+    if (exact) return exact.code;
+    if (parts[0] === "zh") {
+      const simplified = LANGS.some((l) => l.code === "zh-Hans");
+      return simplified && !parts.some((p) => TRADITIONAL.has(p)) ? "zh-Hans" : SOURCE;
+    }
+    const hit = LANGS.find((l) => l.code.toLowerCase().split("-")[0] === parts[0]);
     return hit ? hit.code : SOURCE;
   }
 
@@ -47,8 +59,16 @@
 
   const lang = resolve();
   const catalog = CATALOGS[lang] || null;
-  const lookup = (key) => (catalog ? catalog[key] || ENGLISH[key] : undefined);
+  // A language whose fallback is "source" shows what it lacks in Chinese, not English.
+  const toEnglish = (LANGS.find((l) => l.code === lang) || {}).fallback !== "source";
+  const lookup = (key) => (catalog ? catalog[key] || (toEnglish ? ENGLISH[key] : undefined) : undefined);
   document.documentElement.lang = lang === SOURCE ? "zh-Hant" : lang;
+  if (lang === "zh-Hans") {
+    const font = document.createElement("link");
+    font.rel = "stylesheet";
+    font.href = "https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap";
+    document.head.appendChild(font);
+  }
 
   const PLURAL_RULES = new Intl.PluralRules(lang === SOURCE ? "zh-Hant" : lang);
 

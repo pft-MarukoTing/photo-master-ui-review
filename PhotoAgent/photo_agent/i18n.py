@@ -18,7 +18,8 @@ same as the chat page's frontend-chat/src/i18n.ts), TEXT (every other fixed
 sentence), FORMAT (how a sentence lists items, quotes a button, joins
 sentences) and PATTERNS (how the code reads the model's replies in that
 language; a pattern a catalog leaves out is simply not looked for). A made
-catalog takes FORMAT from i18n/locales.json and has no PATTERNS.
+catalog takes FORMAT from i18n/locales.json and has no PATTERNS; its FALLBACK
+"source" shows text it lacks in Chinese instead of English (Simplified Chinese).
 """
 
 import contextlib
@@ -41,6 +42,7 @@ def _made():
         return [], None
     catalogs = [types.SimpleNamespace(
         CODE=lang["code"], NAME=lang["name"], LABELS=lang["labels"], TEXT=lang["text"], PATTERNS={},
+        FALLBACK=lang.get("fallback"),
         FORMAT={key: tuple(value) if isinstance(value, list) else value for key, value in lang["format"].items()})
         for lang in data["languages"]]
     return catalogs, data["version"]
@@ -48,6 +50,9 @@ def _made():
 
 _MADE_CATALOGS, MADE_VERSION = _made()
 SOURCE = "zh-TW"
+SIMPLIFIED = "zh-Hans"
+# Subtags that make a Chinese tag Traditional; any other Chinese (zh, zh-CN, zh-SG) is Simplified.
+_TRADITIONAL = {"hant", "tw", "hk", "mo"}
 CATALOGS = {catalog.CODE: catalog for catalog in (i18n_en, *_MADE_CATALOGS)}
 LANGS = (SOURCE, *CATALOGS)
 HEADER = "X-PhotoAgent-Lang"
@@ -75,12 +80,19 @@ _LANG = contextvars.ContextVar("photoagent_lang", default=SOURCE)
 
 
 def normalize(value):
-    """One of LANGS for whatever a header or a job param says ("en-US" is en)."""
-    if isinstance(value, str) and value.strip():
-        wanted = value.strip().lower()
-        for code in CATALOGS:
-            if wanted == code.lower() or wanted.split("-")[0] == code.lower().split("-")[0]:
-                return code
+    """One of LANGS for whatever a header or a job param says ("en-US" is en, "zh-CN" is zh-Hans)."""
+    if not (isinstance(value, str) and value.strip()):
+        return SOURCE
+    wanted = value.strip().lower().replace("_", "-")
+    parts = wanted.split("-")
+    for code in CATALOGS:
+        if wanted == code.lower():
+            return code
+    if parts[0] == "zh":
+        return SIMPLIFIED if SIMPLIFIED in CATALOGS and not _TRADITIONAL & set(parts) else SOURCE
+    for code in CATALOGS:
+        if parts[0] == code.lower().split("-")[0]:
+            return code
     return SOURCE
 
 
@@ -111,11 +123,15 @@ def use(value):
         _LANG.reset(token)
 
 
+def _english_fallback(catalog):
+    return getattr(catalog, "FALLBACK", None) != "source"
+
+
 def tr(text, **values):
     """`text` in the current language, with {name} filled from `values`."""
     catalog = _catalog()
     if catalog:
-        text = catalog.TEXT.get(text) or i18n_en.TEXT.get(text, text)
+        text = catalog.TEXT.get(text) or (i18n_en.TEXT.get(text, text) if _english_fallback(catalog) else text)
     return text.format(**values) if values else text
 
 
@@ -124,7 +140,7 @@ def label(text):
     catalog = _catalog()
     if catalog:
         return (catalog.LABELS.get(text) or catalog.TEXT.get(text)
-                or i18n_en.LABELS.get(text, i18n_en.TEXT.get(text, text)))
+                or (i18n_en.LABELS.get(text, i18n_en.TEXT.get(text, text)) if _english_fallback(catalog) else text))
     return text
 
 
@@ -208,7 +224,7 @@ def language_note():
             f"The user reads {name}. Write every user-visible string in plain everyday {name}, "
             "whatever language ANALYSIS, PLAN or the rules above are written in. The Chinese sentences "
             "quoted in the rules are examples of what to say and how it should sound: say the same "
-            f"thing in natural {name}, never the Chinese. When a rule quotes a button or panel name "
+            f"thing in natural {name}, never copying the quoted Chinese. When a rule quotes a button or panel name "
             f"in 「」, the user sees it in {name}, so quote that name in {name}, as {left}…{right}. "
             f"The names: {_names()}. Fields that take a fixed value from a list (an enum "
             "in the schema) keep that value exactly as the schema lists it.")
@@ -230,7 +246,7 @@ def localized_prompt(prompt):
 # Their field descriptions and examples stay Chinese; the values the code
 # branches on stay Chinese too, so the analysis is read the same way.
 ANALYSIS_NOTE = """LANGUAGE
-The user reads {name}. Write every user-visible free-text value in natural {name}, even where the field descriptions or examples above are written in Chinese. That includes every retouch_recipe item (the user-facing version of correction_plan: write it in {name} even when you write correction_plan in another language; an alignment item starts "Straighten:" instead of 「水平／透視校正：」), photo_summary, main_subject, detected_issues, subjects[].label and every reason. Exceptions -- these are fixed values the program reads, so write them exactly as listed, in Chinese: subject_category (人物 / 食物 / 產品 / 風景 / 建築 / 寵物 / 其他), scene_category (室內 / 戶外 / 街拍 / 商業 / 旅行 / 日常 / 其他), and 「不適用」 for a field that does not apply. A retouch_recipe item that reframes still starts with the exact prefix 「重新構圖：」, and everything after that prefix is {name} too, never Chinese (e.g. 「重新構圖：Trim the empty left edge so she sits on the right third.」). Keep JSON keys and English enum values (such as should_fix states or framing names) as specified."""
+The user reads {name}. Write every user-visible free-text value in natural {name}, even where the field descriptions or examples above are written in Chinese. That includes every retouch_recipe item (the user-facing version of correction_plan: write it in {name} even when you write correction_plan in another language; an alignment item starts "Straighten:" instead of 「水平／透視校正：」), photo_summary, main_subject, detected_issues, subjects[].label and every reason. Exceptions -- these are fixed values the program reads, so write them exactly as listed, in Chinese, character for character: subject_category (人物 / 食物 / 產品 / 風景 / 建築 / 寵物 / 其他), scene_category (室內 / 戶外 / 街拍 / 商業 / 旅行 / 日常 / 其他), and 「不適用」 for a field that does not apply. A retouch_recipe item that reframes still starts with the exact prefix 「重新構圖：」, and everything after that prefix is {name} too, never the quoted Chinese (e.g. 「重新構圖：Trim the empty left edge so she sits on the right third.」). Keep JSON keys and English enum values (such as should_fix states or framing names) as specified."""
 
 
 def localize_analysis(prompt):
@@ -243,3 +259,20 @@ def localize_analysis(prompt):
     for rule in ("must be", "in", "is", "are"):
         prompt = prompt.replace(f"{rule} Traditional Chinese", f"{rule} {name}")
     return prompt + "\n\n" + ANALYSIS_NOTE.format(name=name)
+
+
+# Fixed values the code compares in Traditional Chinese, as a reply in Simplified Chinese may write them.
+_SIMPLIFIED_FIXED = ((re.compile(r"^(\s*)重新构图(\s*[:：])"), r"\1重新構圖\2"), (re.compile(r"^不适用$"), "不適用"))
+
+
+def restore_fixed_values(data):
+    """A model's JSON reply with the values the code compares (「重新構圖：」, 「不適用」)
+    back in Traditional characters where a Simplified Chinese reply wrote them."""
+    if isinstance(data, dict):
+        return {key: restore_fixed_values(value) for key, value in data.items()}
+    if isinstance(data, list):
+        return [restore_fixed_values(value) for value in data]
+    if isinstance(data, str) and ("重新构图" in data or data == "不适用"):
+        for found, replacement in _SIMPLIFIED_FIXED:
+            data = found.sub(replacement, data)
+    return data

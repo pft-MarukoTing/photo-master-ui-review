@@ -166,9 +166,11 @@ def _parse_json_from_text(text: str) -> dict:
         for variant in (candidate, _strip_trailing_commas(candidate)):
             for strict in (True, False):
                 try:
-                    return json.loads(variant, strict=strict)
+                    parsed = json.loads(variant, strict=strict)
                 except Exception as e:
                     last_error = e
+                else:
+                    return i18n.restore_fixed_values(parsed)
 
     raise ValueError(i18n.tr("AI 回應沒有包含有效 JSON。")) from last_error
 

@@ -16,9 +16,10 @@ ARB files committed under i18n/ (intl_zh_Hans.arb, made by
 scripts/translation_source.py) are ours: they are read from there, whatever
 the doc repo has.
 
-A string a language has not translated falls back to English, then Chinese,
-and is only counted: new strings never fail it. It fails, writing nothing,
-when an enabled language has no ARB file or incomplete metadata, an ARB file
+A string a language has not translated falls back to English, then Chinese
+(straight to Chinese for a language whose fallback is "source"), and is only
+counted: new strings never fail it. It fails, writing nothing, when an
+enabled language has no ARB file or incomplete metadata, an ARB file
 is malformed, or a translation's placeholders or plurals differ from the
 current English. Run from PhotoAgent/.
 """
@@ -60,6 +61,8 @@ def check_language(code, meta):
         value = fmt.get(field)
         if not isinstance(value, kind) or (length and len(value) != length):
             problems.append(f"{code}: format.{field} should be a {kind.__name__}" + (f" of {length}" if length else ""))
+    if meta.get("fallback") not in (None, "source"):
+        problems.append(f"{code}: fallback should be \"source\" or left out")
     return problems
 
 
@@ -128,6 +131,8 @@ def translate(code, meta, arb, keys_doc, source, problems):
     """({where: {Chinese: text}}, report line) for one language."""
     per = {where: {} for where in WHERES}
     translated = gone = own_words = 0
+    # A "source" fallback language is made from the Chinese, so its placeholders follow the Chinese.
+    from_chinese = meta.get("fallback") == "source"
     for key_id, text in arb.items():
         if key_id.startswith("@"):
             continue
@@ -140,13 +145,14 @@ def translate(code, meta, arb, keys_doc, source, problems):
             continue
         if not text.strip():
             continue
-        why = mismatch(source[key_id], text, any(w.startswith("backend") for w in item["where"]))
+        reference = item["zh"].split("@@")[0] if from_chinese else source[key_id]
+        why = mismatch(reference, text, any(w.startswith("backend") for w in item["where"]))
         if why:
             problems.append(f"{code}: {key_id} has {why}: {text!r}")
             continue
         translated += 1
         buttons = item.get("buttons") or {}
-        own_words += any("{%s}" % name not in text for name in buttons)
+        own_words += not from_chinese and any("{%s}" % name not in text for name in buttons)
         text = fill_buttons(text, buttons, arb, source, meta["format"]["quote"])
         for where in item["where"]:
             per[where][item["zh"]] = text
@@ -161,7 +167,8 @@ def translate(code, meta, arb, keys_doc, source, problems):
             per[where][zh] = manual[zh]
     written = len(set(manual) & set(keys_doc["manual"]))
     line = (f"{code} {meta['name']}: {translated}/{len(keys_doc['keys'])} translated, "
-            f"{written}/{len(keys_doc['manual'])} manual; the rest show in English")
+            f"{written}/{len(keys_doc['manual'])} manual; the rest show in "
+            + ("Chinese" if meta.get("fallback") == "source" else "English"))
     if gone:
         line += f"; {gone} ids no longer in the code ignored"
     if own_words:
@@ -200,11 +207,13 @@ def generate(arbs, languages, keys_doc, source, version):
 
 
 def render(made, languages, version):
-    names = [{"code": code, "name": languages[code]["name"]} for code in made]
+    names = [{"code": code, "name": languages[code]["name"],
+              **({"fallback": languages[code]["fallback"]} if languages[code].get("fallback") else {})} for code in made]
     page = lambda where: {"version": version, "languages": names,
                           "catalogs": {code: texts[where] for code, texts in made.items()}}
     backend = {"version": version, "languages": [
         {"code": code, "name": languages[code]["prompt_name"], "format": languages[code]["format"],
+         "fallback": languages[code].get("fallback"),
          "labels": texts["backend labels"], "text": texts["backend text"]} for code, texts in made.items()]}
     dump = lambda data: json.dumps(data, ensure_ascii=False, indent=1) + "\n"
     return {

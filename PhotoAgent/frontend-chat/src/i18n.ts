@@ -17,25 +17,37 @@
 
 import { EN } from "./i18n/en";
 
-type Made = { languages: { code: string; name: string }[]; catalogs: Record<string, Record<string, string>> };
+type Made = { languages: { code: string; name: string; fallback?: string }[]; catalogs: Record<string, Record<string, string>> };
 // Absent until scripts/l10n_prepare.py runs: then Chinese and English only.
 const MADE: Made = Object.values(import.meta.glob<Made>("./generated/l10n.json", { eager: true, import: "default" }))[0]
   || { languages: [], catalogs: {} };
 
 export const SOURCE = "zh-TW";
 // What the language picker offers, each named in its own language.
-export const LANGS: { code: string; name: string }[] = [
+const isChinese = (code: string) => code.split("-")[0] === "zh";
+export const LANGS: { code: string; name: string; fallback?: string }[] = [
   { code: SOURCE, name: "繁體中文" },
+  ...MADE.languages.filter((l) => isChinese(l.code)),
   { code: "en", name: "English" },
-  ...MADE.languages,
+  ...MADE.languages.filter((l) => !isChinese(l.code)),
 ];
 const CATALOGS: Record<string, Record<string, string>> = { en: EN, ...MADE.catalogs };
 const KEY = "photoagent.lang";
 
+// Subtags that make a Chinese tag Traditional; any other Chinese (zh, zh-CN, zh-SG) is Simplified.
+const TRADITIONAL = new Set(["hant", "tw", "hk", "mo"]);
+
 function normalize(value: string | null | undefined): string {
-  const wanted = (value || "").trim().toLowerCase();
+  const wanted = (value || "").trim().toLowerCase().replace(/_/g, "-");
   if (!wanted) return "";
-  const hit = LANGS.find((l) => l.code.toLowerCase() === wanted || l.code.toLowerCase().split("-")[0] === wanted.split("-")[0]);
+  const parts = wanted.split("-");
+  const exact = LANGS.find((l) => l.code.toLowerCase() === wanted);
+  if (exact) return exact.code;
+  if (parts[0] === "zh") {
+    const simplified = LANGS.some((l) => l.code === "zh-Hans");
+    return simplified && !parts.some((p) => TRADITIONAL.has(p)) ? "zh-Hans" : SOURCE;
+  }
+  const hit = LANGS.find((l) => l.code.toLowerCase().split("-")[0] === parts[0]);
   return hit ? hit.code : SOURCE;
 }
 
@@ -63,7 +75,15 @@ function resolve(): string {
 export const lang = resolve();
 document.documentElement.lang = lang === SOURCE ? "zh-Hant" : lang;
 const catalog = CATALOGS[lang];
-if (catalog) document.title = document.title.replace("對話", catalog["對話"] || EN["對話"] || "對話");
+// A language whose fallback is "source" shows what it lacks in Chinese, not English.
+const english: Record<string, string> = LANGS.find((l) => l.code === lang)?.fallback === "source" ? {} : EN;
+if (catalog) document.title = document.title.replace("對話", catalog["對話"] || english["對話"] || "對話");
+if (lang === "zh-Hans") {
+  const font = document.createElement("link");
+  font.rel = "stylesheet";
+  font.href = "https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;600&display=swap";
+  document.head.appendChild(font);
+}
 
 const pluralRules = new Intl.PluralRules(lang === SOURCE ? "zh-Hant" : lang);
 
@@ -106,7 +126,7 @@ function fillPlurals(text: string, values: Record<string, string | number>): str
  *  the close button, and a switch's off state); the context is never shown.
  *  A catalog's text may hold ICU plurals (fillPlurals). */
 export function t(text: string, values?: Record<string, string | number>): string {
-  const out = (catalog && (catalog[text] || EN[text])) || text.split("@@")[0];
+  const out = (catalog && (catalog[text] || english[text])) || text.split("@@")[0];
   if (!values) return out;
   return fillPlurals(out, values).replace(/\{(\w+)\}/g, (m, k) => (k in values ? String(values[k]) : m));
 }

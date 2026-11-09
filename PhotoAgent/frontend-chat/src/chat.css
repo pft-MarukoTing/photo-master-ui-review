@@ -77,7 +77,8 @@ body[data-theme="sky"]{--accent-text:#04769B}
 /* One display face, used only for the headline and panel titles. Anything
    longer than a line stays on the sans -- a serif at 15px/1.8 in Traditional
    Chinese gets muddy on a non-retina screen. */
-:root{--chat-serif:'Noto Serif TC',Georgia,'Songti TC',serif}
+:root{--cjk-sans:'Noto Sans TC';--chat-serif:'Noto Serif TC',Georgia,'Songti TC',serif}
+:root:lang(zh-Hans){--cjk-sans:'Noto Sans SC';--chat-serif:'Noto Serif SC',Georgia,'Songti SC',serif}
 
 /* Emphasis without a dark button.
 
@@ -160,7 +161,7 @@ body[data-theme="peach"]{--cta:linear-gradient(135deg,#B3453B 0%,#9B322C 55%,#7E
    fall through to whatever the OS happened to have -- PingFang, JhengHei, or
    a Simplified face on Linux. Naming Noto Sans TC pins it. Scoped to /chat/;
    styles.css's own stack is untouched. */
-body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-serif}
+body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-serif}
 :lang(ja){word-break:auto-phrase}
 
 .chat-panel{display:flex;flex-direction:column;height:100%;min-height:0;box-sizing:border-box;
@@ -320,7 +321,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 /* min-height, not height: the touch block below needs to raise it, and 14px
    text must not clip. */
 .chat-chip{display:inline-flex;align-items:center;gap:var(--sp-1);min-height:32px;padding:var(--sp-1) var(--sp-3);border-radius:999px;
-  font:600 var(--chat-fs-md)/1.3 Inter,'Noto Sans TC',system-ui,sans-serif;
+  font:600 var(--chat-fs-md)/1.3 Inter,var(--cjk-sans),system-ui,sans-serif;
   background:var(--card);color:var(--n84);border:1px solid var(--n34);cursor:pointer}
 .chat-chip svg{width:14px;height:14px}
 .chat-chip.is-primary{background:var(--tonal);color:var(--accent-text);border-color:var(--accent);font-weight:700;
@@ -462,7 +463,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);overflow:hidden}
 .sample-modal-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);
   padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--border)}
-.sample-modal-head h2{margin:0;font:600 var(--chat-fs-lg)/1.4 Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n100)}
+.sample-modal-head h2{margin:0;font:600 var(--chat-fs-lg)/1.4 Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n100)}
 .sample-modal-close{flex:none;display:flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;
   border:none;border-radius:50%;background:none;color:var(--n64);cursor:pointer}
 .sample-modal-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp-5)}
@@ -482,7 +483,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .sample-tile{position:relative}
 .sample-tile-order{position:absolute;top:var(--sp-2);right:var(--sp-2);min-width:24px;height:24px;padding:0 6px;box-sizing:border-box;
   display:flex;align-items:center;justify-content:center;border-radius:999px;background:var(--accent);color:#fff;
-  font:700 13px/1 Inter,'Noto Sans TC',system-ui,sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+  font:700 13px/1 Inter,var(--cjk-sans),system-ui,sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 .sample-tile.is-full{opacity:.45;cursor:not-allowed}
 .sample-modal-foot{flex:none;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);
   padding:var(--sp-3) var(--sp-5);border-top:1px solid var(--border)}
@@ -1151,7 +1152,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 
 /* Faces the chat points at */
 .chat-face-chip{display:inline-flex;align-items:center;gap:var(--sp-1);min-height:30px;padding:0 var(--sp-3) 0 var(--sp-1);border-radius:999px;background:var(--card);
-  border:1px solid var(--n34);font:600 var(--chat-fs-sm) Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n84);flex-shrink:0}
+  border:1px solid var(--n34);font:600 var(--chat-fs-sm) Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n84);flex-shrink:0}
 .chat-face-chip img,.chat-face-blank{width:24px;height:24px;border-radius:50%;object-fit:cover;display:block;background:var(--n14)}
 button.chat-face-chip{cursor:pointer}
 button.chat-face-chip:not([disabled]):hover{border-color:var(--accent);color:var(--accent-text)}
@@ -1193,7 +1194,7 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
 .chat-face-picker{position:relative}
 .chat-face-fold{display:inline-flex;align-items:center;gap:var(--sp-1);flex-shrink:0;padding:3px var(--sp-2) 3px 3px;
   border:1px solid var(--n34);border-radius:999px;background:var(--card);color:var(--n64);cursor:pointer;
-  font:600 var(--chat-fs-sm)/1 Inter,'Noto Sans TC',system-ui,sans-serif}
+  font:600 var(--chat-fs-sm)/1 Inter,var(--cjk-sans),system-ui,sans-serif}
 .chat-face-fold:hover,.chat-face-fold.is-open{border-color:var(--accent);color:var(--accent-text)}
 .chat-face-fold-faces{display:inline-flex;align-items:center}
 .chat-face-fold .chat-face-chip.is-avatar{padding:0;border:0;background:none}
@@ -1309,7 +1310,7 @@ div.chat-proposal-row{cursor:default}
    藥丸看起來點得下去，但這裡沒有要點 -- 指定對象在輸入列上面那一排。長相跟人
    多時展開的那一列對齊，同一件事只有一種樣子。 */
 .chat-opt-person-label{display:flex;align-items:center;gap:var(--sp-2);min-height:32px;
-  font:600 var(--chat-fs-sm) Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n100)}
+  font:600 var(--chat-fs-sm) Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n100)}
 .chat-opt-person-label img,.chat-opt-person-label .chat-face-blank{width:24px;height:24px;border-radius:50%;
   object-fit:cover;display:block;background:var(--n14);flex-shrink:0}
 .chat-opt-person+.chat-opt-person{padding-top:var(--sp-3);border-top:1px solid var(--border)}
@@ -1320,7 +1321,7 @@ div.chat-proposal-row{cursor:default}
 .chat-opt-people{display:flex;flex-direction:column;gap:var(--sp-1)}
 .chat-opt-person-fold{display:flex;flex-direction:column;gap:var(--sp-2)}
 .chat-opt-person-head{display:flex;align-items:center;gap:var(--sp-2);width:100%;min-height:32px;padding:var(--sp-1) var(--sp-2);
-  border:0;border-radius:999px;background:none;font:600 var(--chat-fs-sm) Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n84);text-align:left;cursor:pointer}
+  border:0;border-radius:999px;background:none;font:600 var(--chat-fs-sm) Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n84);text-align:left;cursor:pointer}
 .chat-opt-person-head:hover{background:var(--n04);color:var(--n100)}
 .chat-opt-person-head.is-open{color:var(--n100)}
 .chat-opt-person-head img,.chat-opt-person-head .chat-face-blank{width:24px;height:24px;border-radius:50%;object-fit:cover;display:block;background:var(--n14);flex-shrink:0}
@@ -1378,7 +1379,7 @@ div.chat-proposal-row{cursor:default}
   font-size:var(--chat-fs-md);line-height:1.5;color:var(--n100);white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty}
 .chat-opt-list{display:flex;flex-direction:column;gap:var(--sp-1);margin:0;padding:0;list-style:none}
 .chat-opt-row{display:flex;align-items:flex-start;gap:var(--sp-2);width:100%;padding:var(--sp-2) var(--sp-3);border:1px solid transparent;border-radius:8px;background:var(--n04);
-  font:var(--chat-fs-md)/1.5 Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n64);text-align:left;cursor:pointer}
+  font:var(--chat-fs-md)/1.5 Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n64);text-align:left;cursor:pointer}
 .chat-opt-row.is-on{color:var(--n100)}
 .chat-opt-row:not([disabled]):hover{border-color:var(--n34)}
 .chat-opt-row[disabled]{cursor:not-allowed;opacity:.6}
@@ -1401,7 +1402,7 @@ div.chat-proposal-row{cursor:default}
   border:1px dashed var(--n24);border-radius:8px;background:var(--card)}
 .chat-line-own:focus-within{border-style:solid;border-color:var(--accent)}
 .chat-line-own input{flex:1;min-width:0;padding:var(--sp-1) 0;border:0;outline:0;background:transparent;
-  font:var(--chat-fs-md)/1.5 Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n100)}
+  font:var(--chat-fs-md)/1.5 Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n100)}
 .chat-line-own input::placeholder{color:var(--n34)}
 .chat-line-send{width:28px;height:28px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;
   border:0;background:var(--tonal);color:var(--accent-text);box-shadow:inset 0 0 0 1px var(--accent)}
@@ -1410,7 +1411,7 @@ div.chat-proposal-row{cursor:default}
 .chat-line-send svg{width:14px;height:14px}
 .chat-opt-style-row{display:flex;gap:var(--sp-2);overflow-x:auto;padding-bottom:var(--sp-1)}
 .chat-opt-style-none,.chat-opt-style-btn{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:var(--sp-1);padding:var(--sp-1);border-radius:10px;
-  border:2px solid transparent;background:none;font:600 var(--chat-fs-sm) Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n64);cursor:pointer}
+  border:2px solid transparent;background:none;font:600 var(--chat-fs-sm) Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n64);cursor:pointer}
 .chat-opt-style-btn img{width:64px;height:64px;object-fit:cover;border-radius:8px;display:block;background:var(--n14)}
 .chat-opt-style-btn span{max-width:64px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .chat-opt-style-none{width:64px;height:64px;box-sizing:content-box;justify-content:center;border:2px dashed var(--n34)}
@@ -1443,7 +1444,7 @@ div.chat-proposal-row{cursor:default}
 .history-drawer .history-empty{margin:0 0 20px}
 .history-drawer .history-day-group+.history-day-group{margin-top:var(--sp-4)}
 .history-drawer .history-day-heading{margin:0 0 var(--sp-1);
-  font:600 var(--chat-fs-sm)/1.4 Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n64);letter-spacing:.02em}
+  font:600 var(--chat-fs-sm)/1.4 Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n64);letter-spacing:.02em}
 .history-drawer .chat-history-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:auto;grid-auto-flow:dense;gap:6px}
 .history-drawer .chat-history-grid>.demo-image-tile{display:block;width:100%;height:auto;min-height:0;aspect-ratio:1/1;margin:0;padding-top:0;
   border:1px solid var(--border-2);border-radius:8px;box-shadow:none}
@@ -1495,7 +1496,7 @@ div.chat-proposal-row{cursor:default}
 .demo-image-tile.is-selected .demo-image-tile-check{opacity:1;background:var(--mv-grad);border-color:transparent}
 /* 範例照片勾了兩張以上，勾勾換成第幾張（多張頁照這個順序）。兩位數時圓圈往橫向撐開。 */
 .demo-image-tile-check.is-order{width:auto;min-width:20px;padding:0 5px;box-sizing:border-box;border-radius:999px;
-  font:700 11px/1 Inter,'Noto Sans TC',system-ui,sans-serif;font-variant-numeric:tabular-nums}
+  font:700 11px/1 Inter,var(--cjk-sans),system-ui,sans-serif;font-variant-numeric:tabular-nums}
 /* 選取的那格：最上層一圈主題色內框（抽屜那邊框本身已經有 1px，所以只補 1px；首頁的磚沒有框，補 2px）。 */
 .demo-image-tile.is-selected::after{content:"";position:absolute;inset:0;z-index:2;border-radius:inherit;pointer-events:none;
   box-shadow:inset 0 0 0 var(--tile-ring,2px) var(--accent)}
