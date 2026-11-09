@@ -1,6 +1,7 @@
 """strayHair: HairFeatures' strayHairWithFace, step 3's mask the face (its
 _1's and _2's other masks left out). Its switches, as HairFeatures set
-them: colour match on, in the hair; lined up --align global; --blend by
+them: colour match on, in the hair (aiHair: taken in the render's hair
+only, colour_match_area "render_hair"); lined up --align global; --blend by
 shifted_composite through the face it drew (hairfx/common.py), off by
 default.
 
@@ -391,6 +392,10 @@ class StrayHairFeature(Composited):
     Options = StrayHairOptions
     default_n_images = 4  # strayHair_use_mask_gen_only.py's
     colour_match = True
+    # The hair's colour matrix taken in the render's hair only: taken in the
+    # photo's too, the strands the render took off the face, skin now, took
+    # it, a pale streak where each was (subject25's forehead, 2026-11-09).
+    colour_match_area = "render_hair"
     blend_mask = "face"
 
     def __init__(self):

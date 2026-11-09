@@ -332,6 +332,9 @@ def colour_algorithm(area: str, shift: bool) -> str:
         "hair_inset": "imaging.colour_matched: one 3x3 colour matrix fitted in the hair, taken "
                       "in it drawn in from its outline and the face's skin "
                       "(imaging.inset_weight)",
+        "render_hair": "imaging.colour_matched: one 3x3 colour matrix fitted in the shared "
+                       "hair, taken in the output's hair only, not the photo's the render "
+                       "took off",
     }.get(area, area)
     if shift and area != "whole":
         text += "; the hair the fit leaves out shifted as the hair round it (shift_left_out)"
@@ -426,8 +429,10 @@ class Feature(ABC):
     colour_match says whether run pulls its outputs' hair's colours back to
     the photo's before anything else (each feature's class
     sets it), colour_match_area where that match's matrix is fitted and
-    taken: "hair", "whole" (the whole picture) or "hair_inset" (the hair
-    drawn in from its outline and the face's skin),
+    taken: "hair", "whole" (the whole picture), "hair_inset" (the hair
+    drawn in from its outline and the face's skin) or "render_hair" (fitted
+    as "hair", taken in the output's hair only: strayHair's, which takes
+    hair off),
     unless the context says (Context.colour_match_area), and colour_shift
     whether the hair that match's fit leaves out — what the effect
     recoloured — is shifted as the hair round it instead."""
@@ -644,6 +649,13 @@ def _colour_match_outputs(ctx: Context, photo: Photo, result: EffectResult,
                     skin = (imaging.face_skin(either, face["points"]) if face is not None
                             else None)
                     weights[name] = imaging.inset_weight(either, skin)
+            elif area == "render_hair":
+                # strayHair's: the photo's hair the render took off (strands
+                # across the face, skin now) would take the hair's matrix,
+                # a pale or dark streak where each strand was.
+                for name, render_hair in hair.items():
+                    weights[name] = np.clip(2 * imaging.feathered(
+                        render_hair, imaging._MATCH_FEATHER * max(render_hair.shape)) - 1, 0, 1)
             matched = {name: imaging.colour_matched(image, photo.image, photo_hair, hair[name],
                                                     shift_left_out, weights[name])
                        for name, image in result.outputs.items()}

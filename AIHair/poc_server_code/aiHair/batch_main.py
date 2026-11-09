@@ -8,7 +8,7 @@ returns: its results, and everything it made on the way, for debugging.
         [--keep-rendered-size] [--quality low|medium|high|xhigh|max|auto]
         [--model ID] [--align global|local|local_flow|regions_flow] [--no-align]
         [--blend|--no-blend [--blend-grow S]]
-        [--no-colour-match] [--colour-match-area hair|whole|hair_inset]
+        [--no-colour-match] [--colour-match-area hair|whole|hair_inset|render_hair]
         [--workers N] [--overwrite] [--debug] [--dry-run]
     python batch_main.py --list
 
@@ -768,15 +768,17 @@ def main() -> int:
                         help="keep each result's colours as the model drew them, instead of "
                              "pulled back to the photo's (the effects that do it: --list)")
     parser.add_argument("--colour-match-area", default=None,
-                        choices=("hair", "whole", "hair_inset"),
+                        choices=("hair", "whole", "hair_inset", "render_hair"),
                         help="where the colour match's matrix is fitted and taken: the hair; "
                              "the whole picture, as run_Fluffy_samples.py's and "
                              "run_HairPart_samples.py's _colour_match (no colour shift "
                              "there); or hair_inset, fitted in the hair and taken in it "
                              "drawn in from its outline and further from the face's skin "
-                             "(the face model runs in --face-python); default: the "
-                             "effect's own, the hair but frizzCare_2's, _3's and _4's "
-                             "hair_inset (--list)")
+                             "(the face model runs in --face-python); or render_hair, "
+                             "fitted as the hair, taken in the result's hair only, not "
+                             "the photo's it took off; default: the effect's own, the "
+                             "hair but frizzCare_2's, _3's and _4's hair_inset and "
+                             "strayHair's render_hair (--list)")
     parser.add_argument("--face-python", default=str(landmarks.FACE_PYTHON), metavar="PATH",
                         help="the python the face model (face_alignment, torch) and the "
                              "OpenCV steps run in: this one (the default, HAIR_FACE_PYTHON "
