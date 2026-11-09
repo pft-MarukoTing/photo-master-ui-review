@@ -2663,6 +2663,29 @@ window.PhotoAgentResults = (() => {
     }
   }
 
+  let faceIssueNameFit = null;
+
+  // Widens the issue-name column to this language's longest name (up to 40% of the list), measured
+  // whenever the list is laid out, since a hidden panel has no width yet.
+  function fitFaceIssueNames(list) {
+    faceIssueNameFit?.disconnect();
+    faceIssueNameFit = new ResizeObserver(() => {
+      const names = [...list.querySelectorAll(".ap-face-issue-name")];
+      if (!names.length || !list.clientWidth) return;
+      list.style.removeProperty("--face-issue-name-w");
+      const column = names[0].getBoundingClientRect().width;
+      names.forEach((name) => { name.style.whiteSpace = "nowrap"; });
+      const widest = Math.max(...names.map((name) => {
+        const range = document.createRange();
+        range.selectNodeContents(name);
+        return range.getBoundingClientRect().width;
+      }));
+      names.forEach((name) => { name.style.whiteSpace = ""; });
+      if (widest > column) list.style.setProperty("--face-issue-name-w", `${Math.ceil(Math.min(widest, list.clientWidth * 0.4))}px`);
+    });
+    faceIssueNameFit.observe(list);
+  }
+
   // Fills #ap-face-detail with whichever one person renderFaceReviewCards
   // last selected (selectedFaceIndex) -- the name heading plus the same
   // buildPersonIssueItems output a per-person card used to show directly.
@@ -2688,6 +2711,7 @@ window.PhotoAgentResults = (() => {
     list.className = "step-inline-list step-inline-list--readonly";
     buildPersonIssueItems(entry).forEach((li) => list.appendChild(li));
     detail.appendChild(list);
+    fitFaceIssueNames(list);
     // New analyses render Body Reshape as this person's own issue row below
     // 笑容調整. Keep the old holistic host only for legacy top-level records,
     // so it cannot duplicate a per-person switch or prompt.

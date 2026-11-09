@@ -2311,23 +2311,21 @@ body[data-theme-mode="light"] .ios-thumb {
   gap: 10px;
   min-height: 28px;
 }
-/* Fixed width, not just a min-width -- FACE_ISSUE_CATEGORIES' four labels
-   (results.js) are always exactly four Chinese characters, so pinning this
-   keeps the icon+verdict text that follows lined up in its own column across
-   every row instead of drifting with each label's own rendered width. */
+/* One width for every row's label -- the longest label in the page's language
+   (--face-issue-name-w, set by results.js fitFaceIssueNames) -- so the icon and
+   verdict after it line up in one column. */
 /* Was var(--text-2) at inherited weight -- came out dimmer and lighter than
    the verdict text right next to it (.step-cb-label: var(--text-3)/500),
    so the row read as "the verdict is the point" rather than naming which
    feature it's about. Bumped to the brightest text token + bold so this
    label reads as this row's primary heading, the verdict as its detail. */
-.ap-face-issue-name { color: var(--text); font-weight: 700; flex: 0 0 76px; }
-.ap-face-issue-row .step-cb-label { white-space: nowrap; }
+.ap-face-issue-name { color: var(--text); font-weight: 700; flex: 0 0 var(--face-issue-name-w, 76px); }
 /* Hair/smile only (results.js wraps just the row and its selector in this):
    the level selector sits inline to the right of .step-cb-label (the verdict
    text) whenever the panel is wide enough, and wraps onto its own line when
    it isn't, indented to line up under that same verdict text rather than
-   under the toggle/label/icon columns before it -- 34px toggle + 10px gap +
-   76px .ap-face-issue-name + 10px gap + 20px .adherence-icon + 10px gap.
+   under the toggle/label/icon columns before it -- 34px toggle + 20px
+   .adherence-icon + three 10px gaps (84px), plus the label column.
    The wrap is the flex container's own doing, so it follows the panel's real
    width rather than a viewport breakpoint: this padding-left is where a
    wrapped line starts, and .ap-face-issue-row's matching negative margin
@@ -2337,7 +2335,7 @@ body[data-theme-mode="light"] .ios-thumb {
    plain block sibling below, so it can never be pulled onto the selector's
    own flex line. */
 .ap-face-issue-main {
-  --face-issue-indent: 160px;
+  --face-issue-indent: calc(84px + var(--face-issue-name-w, 76px));
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2473,11 +2471,10 @@ body[data-theme-mode="light"] .ios-thumb {
 
 @media (max-width: 560px) {
   .ap-face-issue-row { gap: 6px; }
-  .ap-face-issue-name { flex-basis: 64px; }
-  /* Narrower toggle-row gap (6px) and .ap-face-issue-name (64px) at this
-     width shift the indent that lines a wrapped .ap-face-issue-level-row up
-     under .step-cb-label: 34 + 3*6 + 64 + 20 = 136, vs. the 160px default. */
-  .ap-face-issue-main { --face-issue-indent: 136px; }
+  .ap-face-issue-name { flex-basis: var(--face-issue-name-w, 64px); }
+  /* Narrower gaps (6px) and a 64px default label column at this width:
+     34 + 3*6 + 20 = 72px before the label column, vs. 84px by default. */
+  .ap-face-issue-main { --face-issue-indent: calc(72px + var(--face-issue-name-w, 64px)); }
 }
 @media (max-width: 380px) {
   /* Below this the panel is too narrow to hold the indent and the 96px
