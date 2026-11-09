@@ -1,5 +1,5 @@
 // The language the page is shown in: Traditional Chinese (the source), or a
-// language with a catalog in ./i18n/ or ./generated/ (scripts/l10n_prepare.py).
+// language with a catalog in ./i18n/ or virtual:l10n (scripts/l10n_prepare.py).
 // The Chinese text is the key: t() returns it as it is in Chinese, so the
 // Chinese page never goes through a catalog; text a language has not
 // translated shows in English, then in Chinese.
@@ -16,22 +16,18 @@
 // with t(), send them without.
 
 import { EN } from "./i18n/en";
-
-type Made = { languages: { code: string; name: string; fallback?: string }[]; catalogs: Record<string, Record<string, string>> };
-// Absent until scripts/l10n_prepare.py runs: then Chinese and English only.
-const MADE: Made = Object.values(import.meta.glob<Made>("./generated/l10n.json", { eager: true, import: "default" }))[0]
-  || { languages: [], catalogs: {} };
+// Empty until scripts/l10n_prepare.py runs: then Chinese and English only.
+import { catalogs as MADE_CATALOGS, languages as MADE_LANGUAGES } from "virtual:l10n";
 
 export const SOURCE = "zh-TW";
 // What the language picker offers, each named in its own language.
 const isChinese = (code: string) => code.split("-")[0] === "zh";
 export const LANGS: { code: string; name: string; fallback?: string }[] = [
   { code: SOURCE, name: "繁體中文" },
-  ...MADE.languages.filter((l) => isChinese(l.code)),
+  ...MADE_LANGUAGES.filter((l) => isChinese(l.code)),
   { code: "en", name: "English" },
-  ...MADE.languages.filter((l) => !isChinese(l.code)),
+  ...MADE_LANGUAGES.filter((l) => !isChinese(l.code)),
 ];
-const CATALOGS: Record<string, Record<string, string>> = { en: EN, ...MADE.catalogs };
 const KEY = "photoagent.lang";
 
 // Subtags that make a Chinese tag Traditional; any other Chinese (zh, zh-CN, zh-SG) is Simplified.
@@ -74,7 +70,18 @@ function resolve(): string {
 
 export const lang = resolve();
 document.documentElement.lang = lang === SOURCE ? "zh-Hant" : lang;
-const catalog = CATALOGS[lang];
+// Only the chosen language's catalog is downloaded; every module importing t() waits for it.
+async function loadCatalog(): Promise<Record<string, string> | undefined> {
+  if (lang === "en") return EN;
+  if (!MADE_CATALOGS[lang]) return undefined;
+  try {
+    return (await MADE_CATALOGS[lang]()).default;
+  } catch {
+    // Download failed: the page shows the fallback language instead.
+    return {};
+  }
+}
+const catalog = await loadCatalog();
 // A language whose fallback is "source" shows what it lacks in Chinese, not English.
 const english: Record<string, string> = LANGS.find((l) => l.code === lang)?.fallback === "source" ? {} : EN;
 if (catalog) document.title = document.title.replace("對話", catalog["對話"] || english["對話"] || "對話");
