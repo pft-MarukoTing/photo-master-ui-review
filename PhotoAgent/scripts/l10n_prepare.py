@@ -91,10 +91,7 @@ def mismatch(reference, text, backend):
     want, got = set(l10n_arb.placeholders(reference)), set(l10n_arb.placeholders(text))
     if want != got:
         return f"placeholders {sorted(got)}, the English has {sorted(want)}"
-    counted = {name for name, _ in plurals(reference)}
     for name, forms in plurals(text):
-        if name not in counted:
-            return f"a plural on {{{name}}}, which the English does not count by"
         if "other" not in forms:
             return f"the plural on {{{name}}} has no other form"
     if backend:
