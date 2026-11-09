@@ -4213,7 +4213,8 @@
       "where": [
         "panel"
       ],
-      "note": "Hint under the 4:3 aspect-ratio option: the typical tablet screen shape; keep very short."
+      "note": "Hint under the 4:3 aspect-ratio option: the typical tablet screen shape; keep very short.",
+      "max": "one word, about 9 Latin letters or 5 CJK characters"
     },
     "平衡": {
       "en": "Balance",
@@ -4337,7 +4338,8 @@
         "panel",
         "chat"
       ],
-      "note": "Status badge on a photo: analyzed but not yet retouched."
+      "note": "Status badge on a photo: analyzed but not yet retouched.",
+      "max": "about 10 Latin letters or 5 CJK characters"
     },
     "待美化的照片": {
       "en": "Photo to retouch",
@@ -4660,7 +4662,8 @@
       "where": [
         "panel"
       ],
-      "note": "Hint under the 3:4 aspect-ratio option: the typical phone photo shape; keep very short."
+      "note": "Hint under the 3:4 aspect-ratio option: the typical phone photo shape; keep very short.",
+      "max": "one word, about 9 Latin letters or 5 CJK characters"
     },
     "打不開這筆回報：可能沒有管理者權限，或回報已經刪掉了。": {
       "en": "Couldn't open this report. You may not have admin access, or the report has been deleted.",
@@ -5233,7 +5236,8 @@
         "panel",
         "chat"
       ],
-      "note": "Aspect-ratio option for a square (1:1) frame shape."
+      "note": "Aspect-ratio option for a square (1:1) frame shape.",
+      "max": "one word, about 9 Latin letters or 5 CJK characters"
     },
     "旅行": {
       "en": "Travel",
@@ -5326,7 +5330,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "max": "about 14 Latin letters or 6 CJK characters"
     },
     "最近照片／範例照片排列方式": {
       "en": "Recent / Sample Photos Layout",
@@ -5610,7 +5615,8 @@
       "where": [
         "panel"
       ],
-      "note": "Hint under the 16:9 aspect-ratio option: desktop wallpaper shape; keep very short."
+      "note": "Hint under the 16:9 aspect-ratio option: desktop wallpaper shape; keep very short.",
+      "max": "one word, about 9 Latin letters or 5 CJK characters"
     },
     "梳整俐落": {
       "en": {
@@ -5697,7 +5703,8 @@
         "panel"
       ],
       "en_full": "Landscape (horizontal)",
-      "note": "Horizontal photo orientation, as in 5:4（橫幅）. Not scenery."
+      "note": "Horizontal photo orientation, as in 5:4（橫幅）. Not scenery.",
+      "max": "one word, about 9 Latin letters or 5 CJK characters"
     },
     "橫式 →": {
       "en": "Landscape →",
@@ -6935,7 +6942,8 @@
       "where": [
         "panel"
       ],
-      "note": "Hint beside the 3:2 aspect ratio: the standard camera photo shape."
+      "note": "Hint beside the 3:2 aspect ratio: the standard camera photo shape.",
+      "max": "one word, about 9 Latin letters or 5 CJK characters"
     },
     "看{v1}": {
       "en": "See {v1}",
@@ -7333,7 +7341,8 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "max": "about 14 Latin letters or 6 CJK characters"
     },
     "精修": {
       "en": "Refined",
@@ -7536,7 +7545,8 @@
         "panel",
         "chat"
       ],
-      "note": "Status badge on a photo: retouching is finished (not a past-tense action)."
+      "note": "Status badge on a photo: retouching is finished (not a past-tense action).",
+      "max": "about 10 Latin letters or 5 CJK characters"
     },
     "美化完成（{doneCount}/{length}）": {
       "en": "Retouched ({doneCount}/{length})",
@@ -9587,7 +9597,8 @@
       "where": [
         "panel"
       ],
-      "note": "Hint under the 9:16 aspect-ratio option: the social-media Stories format; keep very short."
+      "note": "Hint under the 9:16 aspect-ratio option: the social-media Stories format; keep very short.",
+      "max": "one word, about 9 Latin letters or 5 CJK characters"
     },
     "雜誌 editorial": {
       "en": "Magazine Editorial",
