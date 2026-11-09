@@ -161,6 +161,7 @@ body[data-theme="peach"]{--cta:linear-gradient(135deg,#B3453B 0%,#9B322C 55%,#7E
    a Simplified face on Linux. Naming Noto Sans TC pins it. Scoped to /chat/;
    styles.css's own stack is untouched. */
 body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-serif}
+:lang(ja){word-break:auto-phrase}
 
 .chat-panel{display:flex;flex-direction:column;height:100%;min-height:0;box-sizing:border-box;
   background:var(--n09);border:0;border-radius:20px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)}
@@ -626,6 +627,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    flex-start column), so it is the button's width and the meta centers
    under it while the box itself stays flush with the headline. */
 .home-intro .home-start{margin-top:var(--sp-5)}
+.home-intro .home-start-btn{align-self:flex-start}
 /* Before/after: the after image is clipped from the left at --pos */
 .home-compare{position:relative;width:100%;max-width:400px;justify-self:center;aspect-ratio:4/5;overflow:hidden;border-radius:20px;
   background:var(--n14);box-shadow:0 24px 56px rgba(0,0,0,.16),0 2px 8px rgba(0,0,0,.06);user-select:none}

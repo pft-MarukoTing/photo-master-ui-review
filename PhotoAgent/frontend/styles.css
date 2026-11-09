@@ -508,6 +508,7 @@ body {
 
 button, input, select, textarea { font: inherit; }
 a { text-decoration: none; color: inherit; }
+:lang(ja) { word-break: auto-phrase; }
 
 /* Native checkboxes (box-type-row, step-cb, prompt-overwrite, ...) have no
    explicit accent-color, so they fall back
@@ -1695,16 +1696,16 @@ body[data-theme-mode="light"] .upload-main-col {
 }
 .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 7px;
 }
 .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .upload-inline-settings-menu,
 .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .option-pill-group,
 .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > #advanced-settings-fold,
 .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .split-run {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   width: fit-content;
   min-width: 0;
 }
@@ -1732,29 +1733,14 @@ body[data-theme-mode="light"] .upload-main-col {
     max-width: 100%;
     box-sizing: border-box;
     justify-self: stretch;
-    /* Grid, not flex -- flex-basis:100% could force .split-run onto its own
-       row but always stretched it to fill that row's full width, since
-       flex's own shrink/grow math has nothing narrower to settle on once
-       basis is 100%. Grid placement (grid-column below) separates "which
-       row" from "how wide": .split-run spans both columns (its own row,
-       guaranteed) while justify-self:center keeps it sized to its own
-       content instead of stretching across the span. */
-    display: grid;
-    grid-template-columns: repeat(3, auto);
-    justify-content: center;
     column-gap: 4px;
     row-gap: 8px;
-    align-items: center;
   }
   .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .upload-inline-settings-menu,
   .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .option-pill-group,
   .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > #advanced-settings-fold {
     min-width: 0;
     max-width: 100%;
-  }
-  .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .split-run {
-    grid-column: 1 / -1;
-    justify-self: center;
   }
   .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) .ap-style-trigger {
     min-width: 0;
@@ -2366,6 +2352,7 @@ body[data-theme-mode="light"] .ios-thumb {
   position: static;
   transform: none;
   margin: 0;
+  max-width: 100%;
 }
 .ap-face-issue-toggle.ios-switch { width: 34px; height: 20px; cursor: pointer; flex-shrink: 0; }
 .ap-face-issue-toggle .ios-thumb { width: 14px; height: 14px; top: 3px; left: 3px; }
@@ -2387,14 +2374,15 @@ body[data-theme-mode="light"] .ios-thumb {
 
 .ap-face-issue-note { color: var(--text-2); font-size: 13px; margin-bottom: 4px; }
 .quality-select.ap-face-issue-level-select {
-  flex: 0 0 96px;
-  width: 96px;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 96px;
+  max-width: 100%;
   height: 28px;
   padding: 3px 21px 3px 6px;
   font-size: 11.5px;
   line-height: 1.2;
 }
-:lang(en) .quality-select.ap-face-issue-level-select { flex-basis: 118px; width: 118px; }
 .ap-face-issue-level-select:disabled { opacity: .45; cursor: not-allowed; }
 
 /* Holistic Body Reshape review control (#ap-body-reshape-control, results.js):
