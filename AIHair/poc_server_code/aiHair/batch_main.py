@@ -665,6 +665,11 @@ def _report(record: dict, name: str, k: int, total: int) -> str:
                      + ", ".join(record["intermediates"]))
     if record.get("sheet"):
         lines.append(f"sheet:     {record['sheet']}")
+    face_mask_model = (record.get("info") or {}).get("face_mask_model")
+    if face_mask_model:
+        mask = (record.get("intermediates") or {}).get("face_mask")
+        lines.append(f"face mask: {face_mask_model}"
+                     + (f"  debug/{name}/{mask}" if mask else ""))
     calls = record.get("calls", [])
     if calls:
         lines.append("calls:     " + "\n           ".join(map(_call_line, calls)))

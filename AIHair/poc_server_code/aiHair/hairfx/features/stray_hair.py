@@ -61,15 +61,31 @@ that says what its white area is (_MASK_TEXT):
       by -o features_grow of the face's width first), so the model is
       shown only the face's skin.
 
-Billed calls: two renders per photo, step 1's and step 3's (whose cost
-grows with --n-images); one with -o analyze_only=true, which stops after
-step 2. _1 the same, and a third render with -o hair_source=gpt; _2 three,
-with the features' render.
+aiHair: step 1's face is, by default (-o face_source=skinmap), not drawn by
+gpt-image but made from the skin-map model's skin (hairfx/skinmap.py:
+WrinkleWorseEmulation's skin map, on the face FAN's 68 landmarks align) and
+the face those landmarks outline, their convex hull (skinmap.face), for no
+billed call; intermediates skinmap_prob, skinmap_crop.jpg (what the model
+saw) and skinmap_face.jpg (the skin kept tinted, the landmarks' face in
+yellow, the face in cyan). The skin alone leaves out the strands across
+the face, and wanted growing twice as far; with the landmarks' face and the
+hull it takes in about 98% of gpt-image's face (rst_pub_by_feature's 19
+photos with one, 2026-11-09), so it is grown as gpt-image's is (-o grow).
+Where the face model or the skin map fails (a face in profile, whose eyes
+FAN finds too close together for the skin map's crop), step 1 falls back to
+gpt-image's face, with a warning. -o face_source=gpt is HairFeatures' step
+1. record.json's info.face_mask_model says which made face_mask.
+
+Billed calls: one render per photo, step 3's (whose cost grows with
+--n-images), and none with -o analyze_only=true, which stops after step 2;
+-o face_source=gpt (or its fallback) adds step 1's. HairFeatures': two
+renders per photo, step 1's and step 3's. _1 the same, and a third render
+with -o hair_source=gpt; _2 three, with the features' render.
 """
 
 from dataclasses import dataclass
 
-from .. import imaging
+from .. import imaging, landmarks, skinmap
 from ..common import (_LOCAL_SIZE, _MATCH_EDGE, Composited, _gaussian, _hair_pulled,
                       shifted_composite)
 from ..core import edit, option
@@ -205,6 +221,12 @@ class StrayHairOptions:
                                         "as a share of its width")
     analyze_only: bool = option(False, "stop after step 2: the face and its mask, no step 3 "
                                        "render")
+    face_source: str = option("skinmap", "where step 1's face comes from: skinmap, the "
+                                         "skin-map model's skin and FAN's landmarks' face "
+                                         "(hairfx/skinmap.py; no billed call, gpt where it "
+                                         "fails); gpt, the render model drawing it as a mask "
+                                         "(a billed call)",
+                              choices=("skinmap", "gpt"))
 
     def __post_init__(self):
         if self.grow < 0:
@@ -240,6 +262,49 @@ def _drawn_mask(ctx, result, photo, step: str, prompt: str):
     return region
 
 
+def _skin_face(ctx, result, photo):
+    """-o face_source=skinmap's step 1: the face's skin from the skin-map model
+    (hairfx/skinmap.py) on the face FAN's 68 landmarks align, tidied as a
+    drawn mask is (_FACE_TIDY), made the whole face with the face the
+    landmarks outline (skinmap.face); intermediates skinmap_prob (its
+    probability on the photo), skinmap_crop.jpg (the aligned crop the model
+    saw, the skin tinted) and skinmap_face.jpg (the skin kept tinted, the
+    landmarks' face outlined in yellow, the face in cyan). Raises where FAN
+    finds no face, or the model no skin."""
+    import numpy as np
+
+    found = landmarks.face_landmarks([photo.image], ctx.face_python)[0]
+    if found is None:
+        raise RuntimeError("no face found for the skin map")
+    result.info["face"] = {"score": round(found["score"], 4),
+                           "bbox": [round(v, 1) for v in found["bbox"]]}
+    skin, prob, crop, crop_prob = skinmap.skin_map(photo.image, found["points"])
+    result.intermediates["skinmap_prob"] = imaging.as_image(
+        np.dstack([np.round(prob * 255).astype(np.uint8)] * 3))
+    result.intermediates["skinmap_crop.jpg"] = imaging.as_image(
+        imaging.tinted(imaging.as_image(crop), crop_prob >= skinmap.THRESHOLD))
+    skin = imaging.tidied(skin, _FACE_TIDY * max(photo.size))
+    if not skin.any():
+        raise RuntimeError("the skin-map model found no skin")
+    face, outline, kept = skinmap.face(skin, found["points"])
+    result.info["skin_share_of_face"] = float((kept & face).sum() / max(1, face.sum()))
+    drawn = imaging.tinted(photo.image, kept)
+    width = max(2, round(0.003 * max(photo.size)))
+    for region, colour in ((outline, (255, 220, 0)), (face, (40, 200, 255))):
+        drawn[_edge(region, width)] = colour
+    result.intermediates["skinmap_face.jpg"] = imaging.as_image(drawn)
+    return face
+
+
+def _edge(region, width: int):
+    """`region`'s pixels within about `width` of its edge."""
+    import numpy as np
+    from PIL import ImageFilter
+
+    inner = np.asarray(imaging.mask_image(region).filter(ImageFilter.GaussianBlur(width / 2))) >= 251
+    return region & ~inner
+
+
 def _face_width(face) -> float:
     """The face's width in px: between _WIDTH_PERCENTILES of its pixels'
     columns."""
@@ -252,14 +317,9 @@ def _face_width(face) -> float:
 def _overlay(upright, region, face):
     """Step 2 drawn on the photo, for the sheet: the mask in red, and the
     face step 1 found outlined in cyan."""
-    import numpy as np
-    from PIL import ImageFilter
-
     tinted = imaging.tinted(upright, region)
     # The outline: the face's pixels within about `width` of its edge.
-    width = max(2, round(0.003 * max(upright.size)))
-    inner = np.asarray(imaging.mask_image(face).filter(ImageFilter.GaussianBlur(width / 2))) >= 251
-    tinted[face & ~inner] = (40, 200, 255)
+    tinted[_edge(face, max(2, round(0.003 * max(upright.size))))] = (40, 200, 255)
     return imaging.as_image(tinted)
 
 
@@ -335,12 +395,13 @@ class StrayHairFeature(Composited):
 
     def __init__(self):
         super().__init__("strayHair")
-        self.description = ("strayHair inside the face: gpt-image draws the face as a mask, "
-                            "dilated it goes with the photo as a second image; 2 render calls "
-                            "per photo")
+        self.description = ("strayHair inside the face: the face from the skin-map model and "
+                            "FAN's landmarks (-o face_source=gpt: gpt-image draws it as a "
+                            "mask), dilated it goes with the photo as a second image; 1 render "
+                            "call per photo (2 with gpt's face)")
 
     def prompts(self, opts) -> dict[str, str]:
-        out = {"face": _FACE_PROMPT}
+        out = {"face": _FACE_PROMPT} if opts.face_source == "gpt" else {}
         if not opts.analyze_only:
             out["stray"] = _STRAY_PROMPT
         return out
@@ -351,10 +412,21 @@ class StrayHairFeature(Composited):
         result.sheet = [["input", "overlay.jpg", *(f"result_{i}" for i in range(n))]]
 
         result.step = "step 1 (face)"
-        face = _drawn_mask(ctx, result, photo, "face", _FACE_PROMPT)
-        # Which model drew face_mask: always the render model (GPT) here; the
-        # face model (FAN, hairfx/landmarks.py) isn't used for it.
-        result.info["face_mask_model"] = f"GPT ({ctx.render.model})"
+        source = opts.face_source
+        if source == "skinmap":
+            try:
+                face = _skin_face(ctx, result, photo)
+                result.info["face_mask_model"] = (f"face-model ({skinmap.SKIN_MAP_MODEL.name}, "
+                                                  "aligned by FAN's 68 landmarks)")
+            except Exception as e:  # noqa: BLE001 — gpt-image's face instead
+                result.warnings.append(f"skin-map face failed — {type(e).__name__}: {e}; "
+                                       f"the face drawn by {ctx.render.model} instead")
+                source = "gpt"
+        if source == "gpt":
+            face = _drawn_mask(ctx, result, photo, "face", _FACE_PROMPT)
+            result.info["face_mask_model"] = (f"GPT ({ctx.render.model})"
+                                              + (" (skin map's fallback)"
+                                                 if opts.face_source != "gpt" else ""))
         result.info["face_share"] = float(face.mean())
         result.intermediates["face_mask"] = imaging.mask_image(face)
 

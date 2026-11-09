@@ -16,7 +16,7 @@ import aiserver_utils.health_checker as health_checker
 from aiserver_utils.health_checker import HeartBeatV2
 
 from config import *
-from hairfx import hairseg, landmarks
+from hairfx import hairseg, landmarks, skinmap
 from ai_hair import EFFECT_NAME
 from artifact_store import S3ArtifactStore
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
@@ -91,6 +91,9 @@ def init():
     # The hair model, loaded once for every worker (hairfx/hairseg.py).
     hairseg.preload()
     logger.info('', "Hair model loaded: %s" % hairseg.SEG_MODEL)
+    # The skin-map model (strayHair's face, hairfx/skinmap.py), loaded once.
+    skinmap.preload()
+    logger.info('', "Skin-map model loaded: %s" % skinmap.SKIN_MAP_MODEL)
     # The face model (frizzCare, hairline, grayHair, rootRetouch), loaded once
     # where it runs in this process (hairfx/landmarks.py); without it those
     # features fail their tasks, the rest run.
