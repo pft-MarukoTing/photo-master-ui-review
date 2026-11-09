@@ -2852,10 +2852,11 @@
       ]
     },
     "另外{said}了，在「設定」裡隨時可以改。": {
-      "en": "I've also {said}. You can change this anytime in “Settings”.",
+      "en": "Settings also updated: {said}. You can change them anytime in “Settings”.",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "{said} is a comma-separated list of settings with their new state, e.g. 'aspect ratio “9:16”, “Fix Gaze” off'. Said after another reply, so 'also'."
     },
     "另外有 {n} 張沒有成功，選取那張可以看原因。": {
       "en": "{n} {n, plural, =1{photo} other{photos}} failed; select one to see why.",
@@ -3361,10 +3362,11 @@
       ]
     },
     "好，{said}了，在「設定」裡隨時可以改。": {
-      "en": "OK, I've {said}. You can change this anytime in “Settings”.",
+      "en": "OK, settings updated: {said}. You can change them anytime in “Settings”.",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "{said} is a comma-separated list of settings with their new state, e.g. 'aspect ratio “9:16”, “Fix Gaze” off'."
     },
     "好，{v1}的改動先幫你留著，還沒美化。": {
       "en": "OK, I’ve kept your changes to {v1}. They haven’t been applied yet.",
@@ -4713,11 +4715,11 @@
       ]
     },
     "打開「{name}」": {
-      "en": "turned on “{name}”",
+      "en": "“{name}” on",
       "where": [
         "backend text"
       ],
-      "note": "Fragment completing 'OK, …': the retouching switch {name} was turned on."
+      "note": "One item in a comma-separated list of changed settings that follows 'Settings updated:'. Give the setting and its new state only, with no verb. Here: the retouching switch {name} is now on."
     },
     "打開另一張": {
       "en": "Open Another",
@@ -9360,10 +9362,11 @@
       ]
     },
     "長寬比換成「{ratio}」": {
-      "en": "set the aspect ratio to “{ratio}”",
+      "en": "aspect ratio “{ratio}”",
       "where": [
         "backend text"
-      ]
+      ],
+      "note": "One item in a comma-separated list of changed settings that follows 'Settings updated:'. Give the setting and its new state only, with no verb. Here: the aspect ratio is now {ratio}."
     },
     "長寬比改成 {v1}": {
       "en": "aspect ratio set to {v1}",
@@ -9528,11 +9531,11 @@
       ]
     },
     "關掉「{name}」": {
-      "en": "turned off “{name}”",
+      "en": "“{name}” off",
       "where": [
         "backend text"
       ],
-      "note": "Fragment completing 'OK, …': the retouching switch {name} was turned off."
+      "note": "One item in a comma-separated list of changed settings that follows 'Settings updated:'. Give the setting and its new state only, with no verb. Here: the retouching switch {name} is now off."
     },
     "關閉": {
       "en": "Close",

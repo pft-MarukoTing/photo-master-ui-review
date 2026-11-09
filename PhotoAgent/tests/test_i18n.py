@@ -95,7 +95,7 @@ class EnglishTest(unittest.TestCase):
         swapped = chat_assistant.review_line("Use 16:9", "", history, model=lambda c: self.fail("no model"))
         # The ratio goes to 「設定」; only the rest stays a wish.
         self.assertEqual((swapped["aspect_ratio"], swapped["line"]), ("16:9", "brighten the background"))
-        self.assertIn("set the aspect ratio to “16:9 (Wallpaper)”", swapped["reply"])
+        self.assertIn("aspect ratio “16:9 (Wallpaper)”", swapped["reply"])
         dropped = chat_assistant.review_line("Let the AI decide", "", history, model=lambda c: self.fail("no model"))
         self.assertEqual(dropped["line"], "brighten the background")
 
