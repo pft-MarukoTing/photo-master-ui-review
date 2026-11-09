@@ -61,6 +61,11 @@ _WHOLE_STRIDE = 7
 # reach.
 _INSET_HAIR = 0.004
 _INSET_FACE = 0.03
+# inset_weight: the hair's blur, set so its outline takes this much of the
+# matrix (a Gaussian's share past r / its z-score): at half the erosion,
+# the outline took 0.02, and the photo's frizz the render combed away,
+# background now, took all of it (frizzCare's subject10, 2026-11-09).
+_INSET_EDGE = 0.25
 _HAIRLINE_SOLID = 0.9
 _FACE_SKIN_ABOVE = 0.05
 
@@ -298,15 +303,19 @@ def face_skin(hair, points):
 
 def inset_weight(hair, skin=None):
     """colour_matched's weight for --colour-match-area hair_inset: `hair`
-    eroded by _INSET_HAIR of the long side and blurred by half that, times
-    `hair` (0 off it), times, where `skin` (face_skin) is given, the share
+    (the output's: core._colour_match_outputs) eroded by _INSET_HAIR of the
+    long side and blurred so its outline takes _INSET_EDGE, times `hair` (0
+    off it), times, where `skin` (face_skin) is given, the share
     at least _INSET_FACE from it, blurred by half that. The skin the hair
     mask takes in round its outline, and between a fringe's strands, takes
     none of the matrix, and the hair's outline away from the face (the
     crown's against the background) is drawn in as the rest of it is."""
+    from statistics import NormalDist
+
     long_side = max(hair.shape)
     r = max(1, round(_INSET_HAIR * long_side))
-    weight = feathered(~dilated(~hair, r), r / 2) * hair
+    sigma = r / NormalDist().inv_cdf(1 - _INSET_EDGE)
+    weight = feathered(~dilated(~hair, r), sigma) * hair
     if skin is not None and skin.any():
         r = max(1, round(_INSET_FACE * long_side))
         weight = weight * feathered(~dilated(skin, r), r / 2)

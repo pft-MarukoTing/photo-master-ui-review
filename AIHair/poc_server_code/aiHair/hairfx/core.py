@@ -330,8 +330,8 @@ def colour_algorithm(area: str, shift: bool) -> str:
                  "pixel then refitted on the 70% the render changed least, taken over the "
                  "whole picture",
         "hair_inset": "imaging.colour_matched: one 3x3 colour matrix fitted in the hair, taken "
-                      "in it drawn in from its outline and the face's skin "
-                      "(imaging.inset_weight)",
+                      "in the output's hair drawn in from its outline (0.25 on it) and the "
+                      "face's skin (imaging.inset_weight)",
         "render_hair": "imaging.colour_matched: one 3x3 colour matrix fitted in the shared "
                        "hair, taken in the output's hair only, not the photo's the render "
                        "took off",
@@ -621,8 +621,9 @@ def _colour_match_outputs(ctx: Context, photo: Photo, result: EffectResult,
     samples' own: one matrix fitted and taken over the whole picture
     (imaging.whole_colour_matched), no hair model, `shift_left_out` not
     taken. With `area` "hair_inset" (frizzCare_3's), fitted as in the hair
-    but taken in it drawn in from its outline and, with `face` (the photo's,
-    _find_face), further from the face's skin above the eyes
+    but taken in the output's hair drawn in from its outline and, with
+    `face` (the photo's, _find_face), further from the face's skin above
+    the eyes
     (imaging.inset_weight, face_skin), so neither the skin the hair mask
     takes in round its outline nor that between a fringe's strands takes
     it. The output as drawn is kept as <name>_uncorrected, and how far
@@ -648,7 +649,10 @@ def _colour_match_outputs(ctx: Context, photo: Photo, result: EffectResult,
                     either = photo_hair | render_hair
                     skin = (imaging.face_skin(either, face["points"]) if face is not None
                             else None)
-                    weights[name] = imaging.inset_weight(either, skin)
+                    # The output's hair, not either's: the photo's frizz
+                    # the render combed away, background now, took the
+                    # hair's matrix (frizzCare's subject10, 2026-11-09).
+                    weights[name] = imaging.inset_weight(render_hair, skin)
             elif area == "render_hair":
                 # strayHair's: the photo's hair the render took off (strands
                 # across the face, skin now) would take the hair's matrix,

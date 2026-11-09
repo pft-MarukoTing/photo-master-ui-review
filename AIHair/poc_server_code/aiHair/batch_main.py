@@ -35,10 +35,12 @@ What aiHair adds to main.py:
       models/model_input_none_tf115.hdf5, or HAIR_SEG_MODEL); --seg-python is
       kept as another name for it. The face model still runs in
       --face-python (HAIR_FACE_PYTHON).
-  .env.default and .env
+  .env.openai.enc and .env.default
       read from aiHair's folder before anything else, the environment
-      winning; OPENAI_API_KEY may be as the server takes it (encrypted with
-      aiserver_utils.aescipher.AESCipher) or a plain sk-... key.
+      winning, then .env.openai.enc (the OpenAI key, encrypted, kept out of
+      the image) over .env.default; OPENAI_API_KEY may be as the server
+      takes it (encrypted with aiserver_utils.aescipher.AESCipher) or a
+      plain sk-... key.
 
 Each effect is a Feature (hairfx/core.py) in hairfx/features, and decides
 for itself whether it is one images.edit call or a pipeline of calls;
@@ -200,7 +202,7 @@ every 7th pixel, refitted on the 70% the render changed least), the face,
 the lips and the background with the hair; rootRetouch(_1)'s shift of the
 hair the fit leaves out isn't taken there. frizzCare_2's, _3's and _4's, and
 every effect's with --colour-match-area hair_inset, is fitted in the hair but
-taken in it drawn in from its outline and further from the face's skin
+taken in the result's hair drawn in from its outline and further from the face's skin
 above the eyes (imaging.inset_weight; FAN's landmarks, in --face-python),
 so neither the skin round the hair nor that between a fringe's strands
 takes it; --colour-match-area hair takes theirs as the rest's.
@@ -772,8 +774,9 @@ def main() -> int:
                         help="where the colour match's matrix is fitted and taken: the hair; "
                              "the whole picture, as run_Fluffy_samples.py's and "
                              "run_HairPart_samples.py's _colour_match (no colour shift "
-                             "there); or hair_inset, fitted in the hair and taken in it "
-                             "drawn in from its outline and further from the face's skin "
+                             "there); or hair_inset, fitted in the hair and taken in the "
+                             "result's hair drawn in from its outline and further from the "
+                             "face's skin "
                              "(the face model runs in --face-python); or render_hair, "
                              "fitted as the hair, taken in the result's hair only, not "
                              "the photo's it took off; default: the effect's own, the "
