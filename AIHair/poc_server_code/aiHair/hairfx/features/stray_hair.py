@@ -352,6 +352,9 @@ class StrayHairFeature(Composited):
 
         result.step = "step 1 (face)"
         face = _drawn_mask(ctx, result, photo, "face", _FACE_PROMPT)
+        # Which model drew face_mask: always the render model (GPT) here; the
+        # face model (FAN, hairfx/landmarks.py) isn't used for it.
+        result.info["face_mask_model"] = f"GPT ({ctx.render.model})"
         result.info["face_share"] = float(face.mean())
         result.intermediates["face_mask"] = imaging.mask_image(face)
 

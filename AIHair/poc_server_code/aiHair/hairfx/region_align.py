@@ -85,6 +85,17 @@ REGIONS_HAIR_FLOW = 0.01
 # hair bent where the render redrew it.
 REGIONS_HAIR_FADE = 0.06
 REGIONS_HAIR_CAP = 0.01
+# aiHair: regions' two ECC fits (the rest's and the face's affine) on the
+# photo and the render shrunk to this short side (INTER_AREA), the affine
+# taken back to full size exactly (pixel centres kept); a photo whose short
+# side is this or less is fitted at full size, as HairFeatures fits them
+# all (None: every photo so). The masks are shrunk the same way; a region's
+# MIN_PIXELS is still counted at full size. On subject25 and subject20
+# upscaled 3x (6.8 and 7.8 MP), each warped by a known affine, the two fits
+# took 0.6-0.9 s at 1024 against 5.5-6.1 s at full size, off the true
+# affine by 0.03-0.12 px on average (0.25 at most) against 0.01-0.03; at
+# 512 up to 2.4 px off, at 256 up to 7.5 (output/ecc_256_check, 2026-11-09).
+REGIONS_ECC_SHORT = 1024
 # One run at a time: each holds every render's flow fields.
 _LOCK = threading.Lock()
 
@@ -377,12 +388,51 @@ def field(m):  # photo -> render affine as an offset field
                       m[1, 0] * xs + m[1, 1] * ys + m[1, 2] - ys]).astype(np.float32)
 
 
+# ECC's scale (aiHair, REGIONS_ECC_SHORT): the greys shrunk to ecc_short on
+# the short side, the affine taken between the two frames with pixel centres
+# kept (x_small = s * (x + 0.5) - 0.5).
+scale = min(1.0, k["ecc_short"] / min(h, w)) if k.get("ecc_short") else 1.0
+if scale < 1:
+    small = (max(1, round(w * scale)), max(1, round(h * scale)))
+    scale_x, scale_y = small[0] / w, small[1] / h
+    ecc0 = cv2.resize(grey0.astype(np.float32), small, interpolation=cv2.INTER_AREA)
+    ecc1 = cv2.resize(grey1.astype(np.float32), small, interpolation=cv2.INTER_AREA)
+else:
+    scale_x = scale_y = 1.0
+    ecc0, ecc1 = grey0.astype(np.float32), grey1.astype(np.float32)
+S = np.diag([scale_x, scale_y])
+c_small = 0.5 * np.array([scale_x, scale_y]) - 0.5  # x_small = S x + c_small
+
+
+def to_small(m):  # an affine of the full frame in the shrunk one: S M S^-1, offsets kept
+    A, t = m[:, :2].astype(np.float64), m[:, 2].astype(np.float64)
+    As = S @ A @ np.linalg.inv(S)
+    return np.hstack([As, (S @ t + c_small - As @ c_small)[:, None]]).astype(np.float32)
+
+
+def to_full(m):
+    A, t = m[:, :2].astype(np.float64), m[:, 2].astype(np.float64)
+    Si = np.linalg.inv(S)
+    Af = Si @ A @ S
+    return np.hstack([Af, (Si @ (t + A @ c_small - c_small))[:, None]]).astype(np.float32)
+
+
 def ecc(mask, start):
     if mask.sum() < k["min_pixels"]:
         return start, f"{int(mask.sum())} px to fit to, under {k['min_pixels']}: none"
+    if scale < 1:
+        small_mask = cv2.resize(mask.astype(np.uint8) * 255, (ecc0.shape[1], ecc0.shape[0]),
+                                interpolation=cv2.INTER_AREA) > 127
+        if not small_mask.any():
+            return start, "no pixel left to fit to at the ECC scale: none"
+        try:
+            _, m = cv2.findTransformECC(ecc0, ecc1, to_small(start), cv2.MOTION_AFFINE,
+                                        criteria, small_mask.astype(np.uint8), 5)
+            return to_full(m), f"ECC at {ecc0.shape[1]}x{ecc0.shape[0]}"
+        except cv2.error:
+            return start, "ECC didn't converge: none"
     try:
-        _, m = cv2.findTransformECC(grey0.astype(np.float32), grey1.astype(np.float32),
-                                    start.copy(), cv2.MOTION_AFFINE, criteria,
+        _, m = cv2.findTransformECC(ecc0, ecc1, start.copy(), cv2.MOTION_AFFINE, criteria,
                                     mask.astype(np.uint8), 5)
         return m, "ECC"
     except cv2.error:
@@ -428,7 +478,8 @@ d = wf[..., None] * d_face + wh[..., None] * (under + g * beyond) + wr[..., None
 aligned = cv2.remap(render, xs + d[..., 0], ys + d[..., 1], cv2.INTER_LINEAR,
                     borderMode=cv2.BORDER_REPLICATE)
 before, after = changed(photo, render), changed(photo, aligned)
-report = {"rest": rest_how, "face": face_how, "hair": hair_how}
+report = {"rest": rest_how, "face": face_how, "hair": hair_how,
+          "m_rest": m_rest.tolist(), "m_face": m_face.tolist()}
 for name, mask in (("rest", rest), ("face", skin), ("hair", photo_hair & render_hair)):
     if mask.any():
         report[f"{name} mean |diff|"] = [round(float(before[mask].mean()), 2),
@@ -454,8 +505,10 @@ def regions(photo, render, photo_hair, render_hair, face, forehead, face_python:
     feathered over FEATHER, the
     face first, then the hair. Also a report: how each affine was found, how
     the hair's flow was capped and faded in, and each region's mean
-    difference from the photo before and after. Raises RuntimeError if the
-    face python fails."""
+    difference from the photo before and after; aiHair: each affine
+    (m_rest, m_face). The two ECC fits run on the photo shrunk to
+    REGIONS_ECC_SHORT where set. Raises RuntimeError if the face python
+    fails."""
     import numpy as np
 
     if not Path(face_python).is_file():
@@ -469,7 +522,7 @@ def regions(photo, render, photo_hair, render_hair, face, forehead, face_python:
                  forehead=np.asarray(forehead, bool))
         settings = json.dumps({"feather": FEATHER, "hair_flow": REGIONS_HAIR_FLOW,
                                "hair_fade": REGIONS_HAIR_FADE, "hair_cap": REGIONS_HAIR_CAP,
-                               "min_pixels": MIN_PIXELS})
+                               "min_pixels": MIN_PIXELS, "ecc_short": REGIONS_ECC_SHORT})
         with _LOCK:
             done = subprocess.run([face_python, "-c", _REGIONS_JOB, str(tmp), settings],
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
