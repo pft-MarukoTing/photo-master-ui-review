@@ -737,8 +737,10 @@ def main() -> int:
                              "effect's own, the hair but frizzCare_2's, _3's and _4's "
                              "hair_inset (--list)")
     parser.add_argument("--face-python", default=str(landmarks.FACE_PYTHON), metavar="PATH",
-                        help="python of an env with face_alignment, for --align local and the "
-                             f"hair_brow blend mask (default: {landmarks.FACE_PYTHON})")
+                        help="the python the face model (face_alignment, torch) and the "
+                             "OpenCV steps run in: this one (the default, HAIR_FACE_PYTHON "
+                             "unset) runs the model in this process, loaded once; another "
+                             f"runs it there each call (default: {landmarks.FACE_PYTHON})")
     parser.add_argument("--seg-model", "--seg-python", dest="seg_python",
                         default=str(hairseg.SEG_MODEL), metavar="PATH",
                         help="the in-house hair model (.hdf5), run in this process, for the "
@@ -835,11 +837,10 @@ def main() -> int:
     needs_face = ((how in ("local", "local_flow", "regions_flow"))
                   or (blends and feature.blend_face(opts))
                   or (colours and colour_area == "hair_inset"))
-    if needs_face and not args.dry_run and not Path(args.face_python).is_file():
+    face_ok, face_why = landmarks.available(args.face_python)
+    if needs_face and not args.dry_run and not face_ok:
         parser.error(f"--align other than global, the hair_brow and head blends and the "
-                     f"hair_inset colour match run the face model in --face-python, which "
-                     f"isn't there: "
-                     f"{args.face_python}")
+                     f"hair_inset colour match need the face model: {face_why}")
     prompts = feature.prompts(opts)
     # What a photo's results depend on, kept in its record.json: a photo is
     # run again where any of it changes.
@@ -970,6 +971,15 @@ def main() -> int:
             print(f"hair model: loaded in {time.perf_counter() - started:.1f}s")
         except Exception as e:  # noqa: BLE001
             print(f"warning: the hair model didn't load — {type(e).__name__}: {e}")
+    # The face model too, where this effect needs it and it runs in this
+    # process (hairfx/landmarks.py).
+    if needs_face:
+        try:
+            started = time.perf_counter()
+            if landmarks.preload(args.face_python):
+                print(f"face model: loaded in {time.perf_counter() - started:.1f}s")
+        except Exception as e:  # noqa: BLE001
+            print(f"warning: the face model didn't load — {type(e).__name__}: {e}")
 
     records, todo = {}, []
     for ref in inputs:

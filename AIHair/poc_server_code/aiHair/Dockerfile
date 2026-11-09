@@ -28,6 +28,19 @@ RUN chmod +x /usr/bin/tini
 RUN mkdir /app
 WORKDIR /app
 
+# The face model (hairfx/landmarks.py: face_alignment's FAN, CPU torch), run
+# in this python, in the process. face-alignment without its deps: it asks
+# for opencv-python, which would clash with requirements.txt's
+# opencv-python-headless (the same cv2, and it needs libGL). Its weights
+# (s3fd, 2DFAN4) are fetched here into TORCH_HOME, so a container needn't
+# download them, whichever user it runs as.
+ENV TORCH_HOME=/app/torch_cache HAIR_FACE_PYTHON=/usr/bin/python3
+RUN pip3 install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 && \
+    pip3 install --no-deps face-alignment==1.5.0 && \
+    pip3 install numpy==2.2.6 scipy==1.15.3 scikit-image==0.25.2 numba==0.68.1 \
+        tqdm==4.70.1 packaging && \
+    python3 -c "import face_alignment as fa; fa.FaceAlignment(fa.LandmarksType.TWO_D, device='cpu', face_detector='sfd', flip_input=False, compile=False)"
+
 # Copy your file list into the container
 COPY aiserver_utils /app/aiserver_utils
 COPY server_logger.py /app/
@@ -42,7 +55,6 @@ COPY ai_hair /app/ai_hair
 COPY hairfx /app/hairfx
 COPY bundle /app/bundle
 COPY models /app/models
-COPY c2pa /workspace/c2pa
 COPY secret_manager /app/secret_manager
 COPY engine_result_code.py /app/
 COPY set_task_to_redis.py /app/
@@ -53,9 +65,8 @@ COPY supervisord.conf /app/
 COPY load_env.py /app/
 RUN chmod +x /app/entrypoint.sh
 RUN mkdir -p /app/log
-# The hair model (models/, TensorFlow) runs in the server; the face model
-# (face_alignment, OpenCV) in a python of its own: point HAIR_FACE_PYTHON at
-# it (.env.default).
+# The hair model (models/, TensorFlow) and the face model (face_alignment,
+# above) both run in the server, each loaded once at its start.
 ENV AIHAIR_TIMING_LOG=/app/log/aihair_timing.jsonl
 
 EXPOSE 80
