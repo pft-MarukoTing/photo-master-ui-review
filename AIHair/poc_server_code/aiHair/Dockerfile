@@ -1,6 +1,12 @@
 FROM ubuntu:22.04
 
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+# numpy asks the kernel for transparent hugepages on every large array
+# (madvise); with THP defrag=madvise, as Ubuntu has it, each such allocation
+# may stall on memory compaction. Off, the features' local steps ran about 9x
+# faster on the dev server (output/profile_20261109/algorithms), their
+# results unchanged.
+ENV NUMPY_MADVISE_HUGEPAGE=0
 
 RUN apt-get clean && apt-get update --fix-missing && \
     DEBIAN_FRONTEND=noninteractive \
