@@ -12,7 +12,9 @@ have hand-written fields, kept as they are on every sync:
 
 It also refreshes i18n/arb-keys.json, the English id each key has in the
 ARB files the Localization Hub reads (scripts/l10n_arb.py); the ARB files
-themselves are made when they are sent (scripts/l10n_doc.py push).
+themselves are made when they are sent (scripts/l10n_doc.py push). And it
+writes i18n/intl_zh_Hans.arb, the Simplified Chinese we make from the Chinese
+(scripts/l10n_zh_hans.py, needs OpenCC); --check skips it without OpenCC.
 
   python scripts/translation_source.py          # refresh the files
   python scripts/translation_source.py --check  # exit 1 if any is out of step
@@ -32,6 +34,7 @@ import subprocess
 import sys
 
 import l10n_arb
+import l10n_zh_hans
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "i18n" / "translation-source.json"
@@ -141,6 +144,11 @@ def main():
             print(f"  {en!r} <= {keys}")
 
     files = {OUT: text, l10n_arb.KEYS: l10n_arb.keys_file(entries)}
+    if not args.check or l10n_zh_hans.available():
+        chinese = json.loads(l10n_arb.arb_files(entries)[f"intl_{l10n_arb.CHINESE_LOCALE}.arb"])
+        files[l10n_zh_hans.ARB] = l10n_arb.dump(l10n_zh_hans.arb(chinese))
+    else:
+        print(f"not checked: {l10n_zh_hans.ARB.relative_to(ROOT)} (pip install opencc=={l10n_zh_hans.OPENCC_VERSION})")
     if args.check:
         stale = [path for path, body in files.items() if not path.exists() or path.read_text("utf-8") != body]
         for path in stale:

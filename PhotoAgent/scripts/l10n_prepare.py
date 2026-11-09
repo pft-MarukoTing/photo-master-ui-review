@@ -12,6 +12,9 @@ writes these gitignored files, each naming that commit:
   frontend/generated/l10n.js              panel, loaded before frontend/i18n.js
   frontend-chat/src/generated/l10n.json   chat, bundled by scripts/build_chat_bundle.sh
   photo_agent/generated/l10n.json         backend, copied into the worker image
+ARB files committed under i18n/ (intl_zh_Hans.arb, made by
+scripts/translation_source.py) are ours: they are read from there, whatever
+the doc repo has.
 
 A string a language has not translated falls back to English, then Chinese,
 and is only counted: new strings never fail it. It fails, writing nothing,
@@ -307,6 +310,7 @@ def main():
                 ref = os.environ.get("PHOTOAGENT_L10N_REF", "").strip() or None
                 commit, arbs = fetch(ref)
                 version = {"doc_commit": commit, "ref": ref or "latest"}
+            arbs.update(read_dir(ROOT / "i18n"))
             texts, report = generate(arbs, languages, keys_doc, source, version)
     except Failed as error:
         sys.exit("l10n: cannot make the other languages' catalogs; nothing was written.\n  "
