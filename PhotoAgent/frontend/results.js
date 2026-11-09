@@ -200,6 +200,9 @@ window.PhotoAgentResults = (() => {
       .filter(Boolean);
   }
 
+  // A reframing item reaches the Editor rewritten as the framing goal (food: composition goal), never verbatim.
+  const FRAMING_GOAL_PROMPT_MARKER = /(?:^|\n)[ \t]*-[ \t]*(?:Framing|Composition) goal:|fall where the framing goal places them:/i;
+
   // Only retained, approved items whose command appears in this run's Editor
   // prompt qualify. Do not infer execution from the original review list.
   function buildExecutedRecipeItems(analysis, pending = false) {
@@ -208,8 +211,12 @@ window.PhotoAgentResults = (() => {
     if (!prompt) return [];
     const plan = Array.isArray(analysis?.correction_plan) ? analysis.correction_plan : [];
     const recipes = Array.isArray(analysis?.retouch_recipe) ? analysis.retouch_recipe : [];
+    const axes = Array.isArray(analysis?.correction_axes) ? analysis.correction_axes : [];
+    const framingGoalSent = FRAMING_GOAL_PROMPT_MARKER.test(prompt);
     return [...new Set(plan.flatMap((command, index) => {
-      if (typeof command !== "string" || !command.trim() || !prompt.includes(command.trim())) return [];
+      if (typeof command !== "string" || !command.trim()) return [];
+      const reframed = framingGoalSent && index < axes.length && axesIncludeReframing(axes[index]);
+      if (!reframed && !prompt.includes(command.trim())) return [];
       const label = recipes[index];
       return [typeof label === "string" && label.trim() ? shownRecipe(label.trim()) : command.trim()];
     }))];
