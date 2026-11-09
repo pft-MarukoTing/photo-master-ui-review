@@ -109,114 +109,47 @@ window.PhotoAgentResults = (() => {
       .filter(Boolean);
   }
 
-  // Result labels describe work that reached an actual image-editor prompt,
-  // not merely a review toggle or an analyzer recommendation.  The prompt is
-  // stored on analysis.prompts by pipeline.finish_stage; the second prompt is
-  // included because a two-pass run executes gaze in Step 5b.
-  function actualEditorPromptText(analysis) {
-    const prompts = analysis?.prompts;
-    if (!prompts || typeof prompts !== "object") return "";
-    return [prompts.image_edit, prompts.gaze_repair_pass]
-      .filter((value) => typeof value === "string" && value.trim())
-      .map((value) => value.trim())
-      .join("\n");
+  // Result labels describe work that reached the actual Editor prompt, as
+  // reported by the backend (backend/services/redaction.py executed_evidence).
+  function executedEvidence(analysis) {
+    const executed = analysis?.executed;
+    return executed && typeof executed === "object" ? executed : null;
   }
 
-  const EXECUTED_STYLE_PROMPT_MARKERS = {
-    pose: /(?:^|\n)-\s*Pose\s*:/i,
-    angle: /(?:^|\n)-\s*Angle\s*:/i,
-    lighting: /(?:^|\n)-\s*Lighting\s*:/i,
-    size: /(?:^|\n)-\s*Framing size\s*:/i,
-  };
-
-  // These markers identify positive execution blocks.  Preservation blocks
-  // intentionally use different headings, so an analyzer note or a disabled
-  // topic cannot create a completed label by itself.
-  const EXECUTED_FACE_PROMPT_TAGS = [
-    {
-      field: "blink_issue",
-      option: "eye_closed_detection",
-      label: tr("閉眼偵測"),
-      markers: [
-        /Accidental blink repair priority:/i,
-        /PRIMARY EYE-PAIR REPAIR/i,
-        /\beyelid correction\b/i,
-        /^\s*-\s*Eye-pair repair\s*\([^\n]*\):\s*(?:open|use)\b/im,
-      ],
-    },
-    {
-      field: "gaze_issue",
-      option: "gaze_contact_detection",
-      label: tr("眼神對焦"),
-      markers: [
-        /Approved gaze repair execution instructions:/i,
-        /ONLY task for this edit:[\s\S]{0,180}redirect[^\n]*gaze/i,
-        /Use a .* eyes-(?:only|plus-head\/face) correction[\s\S]{0,240}direct lens contact/i,
-        /Required change:[\s\S]{0,900}(?:direct(?:ly)?|camera lens)[^\n]*/i,
-        /^\s*-\s*Use a [^\n]*eyes-(?:only|plus-head\/face) correction[^\n]*;\s*reach clear direct lens contact\./im,
-      ],
-    },
-    {
-      field: "hair_issue",
-      option: "hair_mess_detection",
-      label: tr("亂髮偵測"),
-      markers: [
-        /Hair tidying priority:/i,
-        /Still-air hair \(user-selected, mandatory\):/i,
-        /Hair level — (?:local cleanup|fully groomed|preserve motion)/i,
-        /Hair (?:correction plan|target) —?/i,
-      ],
-    },
-    {
-      field: "smile_issue",
-      option: "smile_adjustment",
-      label: tr("笑容調整"),
-      markers: [
-        /Smile adjustment \(user-selected, mandatory\)/i,
-        /target_smile:/i,
-        /(?:Transform this person's existing|Render) .*? smile on the existing face/i,
-      ],
-    },
+  const EXECUTED_FACE_TAGS = [
+    { field: "blink_issue", option: "eye_closed_detection", label: tr("閉眼偵測") },
+    { field: "gaze_issue", option: "gaze_contact_detection", label: tr("眼神對焦") },
+    { field: "hair_issue", option: "hair_mess_detection", label: tr("亂髮偵測") },
+    { field: "smile_issue", option: "smile_adjustment", label: tr("笑容調整") },
   ];
-
-  function promptMatchesAny(prompt, markers) {
-    return markers.some((marker) => marker.test(prompt));
-  }
 
   function buildExecutedStyleOptionTagLabels(styleOptions, analysis, pending = false) {
     // 只照需求改也會把挑的風格接在需求後面送出，照樣以實際 prompt 為準。
     if (pending) return [];
-    const prompt = actualEditorPromptText(analysis);
-    if (!prompt) return [];
+    const executed = executedEvidence(analysis);
+    if (!executed) return [];
     return Object.entries(styleOptions || {})
       .map(([key, value]) => {
         if (!value || value === "default") return "";
         const group = STYLE_OPTION_GROUPS[key];
-        const marker = EXECUTED_STYLE_PROMPT_MARKERS[key];
-        if (!group || !marker || !marker.test(prompt)) return "";
+        if (!group || !executed.style?.[key]) return "";
         const option = group.options.find((item) => item.value === value);
         return option ? option.label : "";
       })
       .filter(Boolean);
   }
 
-  // A reframing item reaches the Editor rewritten as the framing goal (food: composition goal), never verbatim.
-  const FRAMING_GOAL_PROMPT_MARKER = /(?:^|\n)[ \t]*-[ \t]*(?:Framing|Composition) goal:|fall where the framing goal places them:/i;
-
   // Only retained, approved items whose command appears in this run's Editor
   // prompt qualify. Do not infer execution from the original review list.
   function buildExecutedRecipeItems(analysis, pending = false) {
     if (pending || analysis?.user_instruction?.overwrite_prompt) return [];
-    const prompt = actualEditorPromptText(analysis);
-    if (!prompt) return [];
+    const executed = executedEvidence(analysis);
+    if (!executed) return [];
     const plan = Array.isArray(analysis?.correction_plan) ? analysis.correction_plan : [];
     const recipes = Array.isArray(analysis?.retouch_recipe) ? analysis.retouch_recipe : [];
-    const axes = Array.isArray(analysis?.correction_axes) ? analysis.correction_axes : [];
-    const framingGoalSent = FRAMING_GOAL_PROMPT_MARKER.test(prompt);
+    const ran = Array.isArray(executed.recipe) ? executed.recipe : [];
     return [...new Set(plan.flatMap((command, index) => {
-      if (typeof command !== "string" || !command.trim()) return [];
-      const reframed = framingGoalSent && index < axes.length && axesIncludeReframing(axes[index]);
-      if (!reframed && !prompt.includes(command.trim())) return [];
+      if (typeof command !== "string" || !command.trim() || ran[index] !== true) return [];
       const label = recipes[index];
       return [typeof label === "string" && label.trim() ? shownRecipe(label.trim()) : command.trim()];
     }))];
@@ -224,11 +157,11 @@ window.PhotoAgentResults = (() => {
 
   function buildExecutedFaceEditTagLabels(analysis, pending = false) {
     if (pending || analysis?.user_instruction?.overwrite_prompt) return [];
-    const prompt = actualEditorPromptText(analysis);
-    if (!prompt) return [];
+    const executed = executedEvidence(analysis);
+    if (!executed) return [];
     const advanced = analysis?._advanced_options || {};
-    return EXECUTED_FACE_PROMPT_TAGS
-      .filter((entry) => advanced[entry.option] !== false && promptMatchesAny(prompt, entry.markers))
+    return EXECUTED_FACE_TAGS
+      .filter((entry) => advanced[entry.option] !== false && executed.face?.[entry.field] === true)
       .map((entry) => entry.label);
   }
 
@@ -1783,8 +1716,6 @@ window.PhotoAgentResults = (() => {
     }).filter(Boolean);
   }
 
-  const EXECUTED_BODY_RESHAPE_PROMPT_MARKER = /Body reshape execution instructions \(analysis-approved\):/i;
-
   // Build the same person-to-face association used by 人像檢查, but without
   // mutating the review tabs.  Result labels need this lightweight read even
   // when the inline review panel has not been opened yet.
@@ -1829,39 +1760,13 @@ window.PhotoAgentResults = (() => {
     return sources;
   }
 
-  function escapePromptRegExp(value) {
-    return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }
-
-  // Editor prompts group commands under `Subject: <label>` (the gaze-only
-  // pass uses the same heading with a leading dash).  Restrict marker checks
-  // to that subject block so a command for one person cannot become a label
-  // on every other person's face merely because their names occur elsewhere
-  // in the holistic prompt.
-  function promptSubjectSection(prompt, subject) {
-    const label = String(subject?.label || "").trim();
-    if (!label) return "";
-    const heading = new RegExp(
-      `(?:^|\\n)[ \t]*(?:-\\s*)?Subject:[ \t]*${escapePromptRegExp(label)}[ \t]*(?:\\n|$)`,
-      "i"
-    );
-    const match = heading.exec(prompt);
-    if (!match) return "";
-    const start = match.index;
-    const restStart = start + match[0].length;
-    const rest = prompt.slice(restStart);
-    const end = rest.search(
-      /\n[ \t]*(?:-\s*)?Subject:[ \t]*|\n[ \t]*(?:Shared facial execution rules|Body reshape execution instructions|Targets|Other approved corrections|Finished light and color target|Scope is limited|Execution by method):/i
-    );
-    return prompt.slice(start, end >= 0 ? restStart + end : prompt.length);
-  }
-
-  function promptHasSubjectMarker(prompt, subject, markers, allowGeneric = false, subjectCount = 1) {
-    const scopedPrompt = promptSubjectSection(prompt, subject)
-      || (subjectCount <= 1 ? prompt : "");
-    if (promptMatchesAny(scopedPrompt, markers)) return true;
-    return allowGeneric && subjectCount <= 1
-      && /For every person whose expression is readable:\s*target_smile:/i.test(prompt);
+  // A person's own `Subject:` block in the Editor prompt decides; without one,
+  // the whole prompt counts only when there is a single person.
+  function executedForSubject(executed, subjectIndex, field, allowGeneric, subjectCount) {
+    const scoped = Array.isArray(executed.subjects) ? executed.subjects[subjectIndex] : null;
+    const hit = scoped?.has_section ? scoped[field] === true
+      : subjectCount <= 1 && executed.face?.[field] === true;
+    return hit || (allowGeneric && subjectCount <= 1 && executed.generic_smile === true);
   }
 
   // Return only items that both have an allowed per-person verdict and are
@@ -1870,8 +1775,8 @@ window.PhotoAgentResults = (() => {
   // active, and Body Reshape is independently approved per person.
   function buildPortraitInspectionEntries(analysis, pending = false) {
     if (pending || analysis?.user_instruction?.overwrite_prompt) return [];
-    const prompt = actualEditorPromptText(analysis);
-    if (!prompt) return [];
+    const executed = executedEvidence(analysis);
+    if (!executed) return [];
     const advanced = analysis?._advanced_options || {};
     const bodyEnabled = bodyReshapeEnabled && analysis?._body_reshape_enabled !== false;
     const disabledBodies = new Set(
@@ -1883,26 +1788,17 @@ window.PhotoAgentResults = (() => {
     return sources.map(({ subject, subjectIndex, box, thumbnailBox }) => {
       const issues = faceIssueEntries(subject, subjectIndex, disabledBodies.has(subjectIndex));
       const tags = [];
-      EXECUTED_FACE_PROMPT_TAGS.forEach((definition) => {
+      EXECUTED_FACE_TAGS.forEach((definition) => {
         const issue = issues.find((item) => item.category === definition.field);
         if (!issue || !issue.allowed || advanced[definition.option] === false) return;
         const genericSmile = definition.field === "smile_issue";
-        if (promptHasSubjectMarker(prompt, subject, definition.markers, genericSmile, sources.length)) {
+        if (executedForSubject(executed, subjectIndex, definition.field, genericSmile, sources.length)) {
           tags.push(definition.label);
         }
       });
       const body = subject.body_reshape;
       const bodyIssue = issues.find((item) => item.category === "body_reshape");
-      const bodyPromptText = typeof body?.edit_prompt === "string" ? body.edit_prompt.trim() : "";
-      const bodyLabelInPrompt = String(subject.label || "").trim();
-      // The body block names every active subject, so a label-only check would
-      // mark a second person's body row merely because that person's face
-      // correction appears elsewhere in the same Editor prompt. Prefer the
-      // exact approved body sentence; retain the label fallback for old
-      // records whose saved prompt was normalized without the sentence.
-      const bodyTargetInPrompt = bodyPromptText
-        ? prompt.includes(bodyPromptText)
-        : (bodyLabelInPrompt ? prompt.includes(bodyLabelInPrompt) : true);
+      const bodyTargetInPrompt = executed.subjects?.[subjectIndex]?.body_targeted === true;
       if (
         bodyEnabled
         && bodyIssue?.allowed
@@ -1911,7 +1807,7 @@ window.PhotoAgentResults = (() => {
         && body.should_edit !== false
         && typeof body.edit_prompt === "string"
         && body.edit_prompt.trim()
-        && EXECUTED_BODY_RESHAPE_PROMPT_MARKER.test(prompt)
+        && executed.body_marker === true
         && bodyTargetInPrompt
       ) {
         tags.push(tr("身形調整"));

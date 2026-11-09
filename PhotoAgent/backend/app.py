@@ -4,6 +4,7 @@ from flask import Flask, request
 from flask_cors import CORS
 
 from backend.compression import init_compression
+from backend.services.redaction import init_redaction
 from backend.routes.api import api_bp
 from backend.routes.chat import chat_bp, start_watcher
 from backend.routes.static import static_bp
@@ -29,6 +30,8 @@ def create_app(config=None):
         i18n.set_current(request.headers.get(i18n.HEADER))
 
     init_compression(app)
+    # Registered after compression so it runs first (after_request runs in reverse order).
+    init_redaction(app)
     app.register_blueprint(static_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(chat_bp)

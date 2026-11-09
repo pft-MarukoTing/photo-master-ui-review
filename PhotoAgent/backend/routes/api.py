@@ -21,6 +21,7 @@ from backend.services import chat_session, continuation as continuation_svc
 from backend.services.account import attach_case_analysis, create_account, clear_history, delete_history_entry, delete_version, get_history, get_history_entry, get_history_entry_for_job, HISTORY_MAX_LEN, normalize_username, record_history
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
+from backend.services.redaction import redact
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, derive_preview_key, derive_view_key, cache_thumbnail, upload_report_screenshot, lost_job_error
 from backend.services.report import REPORT_CHAT_FIELDS, REPORT_PAGES, delete_report, get_report, get_report_by_id, get_reported_job_info, get_report_chat, get_report_page, get_reports, is_admin, record_report, save_report_chat, save_report_page, update_report_status
 from backend.services.template_params import get_engine_params_template
@@ -942,6 +943,8 @@ def result_pre_edit_image(job_id):
     layout (job_processor.py), not in AIPoC's separate deployment of this
     pipeline.
     """
+    if not current_app.config.get("DEBUG_UI", False):
+        return jsonify({"error": "Not found"}), 404
     info = _readable_job_info(job_id, ["status", "error", "0_res0"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
@@ -1471,6 +1474,9 @@ def rerun():
     conditions the folder recorded; only code changes since then move the
     result.
     """
+    # Takes a whole analysis from the client, so it is a debug-mode tool only.
+    if not current_app.config.get("DEBUG_UI", False):
+        return jsonify({"error": "Not found"}), 404
     image = request.files.get("image")
     if image is None or not image.filename:
         return jsonify({"error": "image file is required"}), 400
@@ -1510,6 +1516,17 @@ def rerun():
     _record_history_safely(request.form.get("user"), job_id, "local", engine_params["srcKeys"][0], action_id, params=params,
                            extra=_selections_extra(request.form.get("selections")))
     return jsonify({"job_id": job_id}), 202
+
+
+@api_bp.post("/debug/annotate")
+def annotate_analysis():
+    """Debug only: an imported result.json's analysis plus the fields API responses add (executed)."""
+    if not current_app.config.get("DEBUG_UI", False):
+        return jsonify({"error": "Not found"}), 404
+    analysis = (request.get_json(silent=True) or {}).get("analysis")
+    if not isinstance(analysis, dict):
+        return jsonify({"error": "analysis is required"}), 400
+    return jsonify({"analysis": redact(analysis, debug=True)})
 
 
 def _reframe_request(body, analysis):

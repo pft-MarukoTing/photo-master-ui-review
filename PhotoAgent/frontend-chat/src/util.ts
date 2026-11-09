@@ -1,5 +1,5 @@
 import { shownRecipe, t } from "./i18n";
-import type { Analysis, Capabilities, Dict, Message, Plan, Version } from "./types";
+import type { Analysis, Capabilities, Dict, Executed, Message, Plan, Version } from "./types";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -219,47 +219,35 @@ export function renderMeta(caps: Capabilities, plan: Plan): string {
 // the photo's plan as it is now -- a photo's plan moves on with every round of
 // adjusting, while these describe the one version on screen.
 
-// Port of the old result row's read-out (results.js actualEditorPromptText /
+// Port of the old result row's read-out (results.js executedEvidence /
 // buildExecutedStyleOptionTagLabels / buildExecutedRecipeItems): a label only
-// counts once its command reached the Editor prompt the finish job stored on
-// analysis.prompts, not merely because it was picked or recommended. The
-// gaze-only second pass is included because a two-pass run executes gaze there.
-export function editorPromptText(a: Analysis | null | undefined): string {
-  const prompts = a?.prompts;
-  if (!prompts || typeof prompts !== "object") return "";
-  return [prompts.image_edit, prompts.gaze_repair_pass]
-    .filter((v): v is string => typeof v === "string" && !!v.trim())
-    .map((v) => v.trim())
-    .join("\n");
+// counts once its command reached the Editor prompt, as the backend reports it
+// on analysis.executed (backend/services/redaction.py), not merely because it
+// was picked or recommended.
+export function executedEvidence(a: Analysis | null | undefined): Executed | null {
+  const executed = a?.executed;
+  return executed && typeof executed === "object" ? (executed as Executed) : null;
 }
 
 // A prompt written over by the user (overwrite_prompt) no longer carries any
 // of the commands below, so it reads as nothing executed rather than a guess.
-export function executedPrompt(a: Analysis | null | undefined): string {
-  if ((a?.user_instruction as Dict | undefined)?.overwrite_prompt) return "";
-  return editorPromptText(a);
+export function executedCommands(a: Analysis | null | undefined): Executed | null {
+  if ((a?.user_instruction as Dict | undefined)?.overwrite_prompt) return null;
+  return executedEvidence(a);
 }
-
-const EXECUTED_STYLE_MARKERS: Record<string, RegExp> = {
-  pose: /(?:^|\n)-\s*Pose\s*:/i,
-  angle: /(?:^|\n)-\s*Angle\s*:/i,
-  lighting: /(?:^|\n)-\s*Lighting\s*:/i,
-  size: /(?:^|\n)-\s*Framing size\s*:/i,
-};
 
 // The non-default 修圖風格 picks the Editor prompt actually carried, as bare
 // option labels ("俯拍", "夜色") -- the labels the option cards offered.
 // 風格例外：使用者自己寫的需求（僅依需求修改、接著這張調整）後面，edit_prompt.py 照樣會接上
 // 挑的風格那段，所以這裡直接讀實際送出的 prompt，不管 overwrite_prompt。
 export function executedStyleLabels(caps: Capabilities, a: Analysis | null | undefined): string[] {
-  const prompt = editorPromptText(a);
+  const executed = executedEvidence(a);
   const picks = (a?.style_options || {}) as Dict;
-  if (!prompt) return [];
+  if (!executed) return [];
   return caps.style_options
     .map((g) => {
       const value = picks[g.id];
-      const marker = EXECUTED_STYLE_MARKERS[g.id];
-      if (!value || value === g.default || !marker || !marker.test(prompt)) return "";
+      if (!value || value === g.default || executed.style?.[g.id] !== true) return "";
       return g.choices.find((c) => c.value === value)?.label || "";
     })
     .filter(Boolean);
@@ -268,12 +256,13 @@ export function executedStyleLabels(caps: Capabilities, a: Analysis | null | und
 // The approved 美化項目 whose command appears in the Editor prompt, named by
 // their retouch_recipe line (falling back to the command itself).
 export function executedRecipeItems(a: Analysis | null | undefined): string[] {
-  const prompt = executedPrompt(a);
-  if (!prompt) return [];
+  const executed = executedCommands(a);
+  if (!executed) return [];
   const plan: unknown[] = Array.isArray(a?.correction_plan) ? a!.correction_plan : [];
   const recipes: unknown[] = Array.isArray(a?.retouch_recipe) ? a!.retouch_recipe : [];
+  const ran: unknown[] = Array.isArray(executed.recipe) ? executed.recipe : [];
   const out = plan.flatMap((command, i) => {
-    if (typeof command !== "string" || !command.trim() || !prompt.includes(command.trim())) return [];
+    if (typeof command !== "string" || !command.trim() || ran[i] !== true) return [];
     const label = recipes[i];
     return [typeof label === "string" && label.trim() ? shownRecipe(label.trim()) : command.trim()];
   });

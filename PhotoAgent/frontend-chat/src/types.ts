@@ -173,12 +173,23 @@ export interface Capabilities {
   presets: Dict[];
 }
 
+// Which parts of the Editor prompt ran (backend/services/redaction.py executed_evidence).
+export interface Executed {
+  style?: Record<string, boolean>;
+  recipe?: boolean[];
+  face?: Record<string, boolean>;
+  subjects?: ({ has_section?: boolean; body_targeted?: boolean; [field: string]: boolean | undefined } | null)[];
+  generic_smile?: boolean;
+  body_marker?: boolean;
+}
+
 export interface Analysis {
   subjects?: Dict[];
   local_face_review?: Dict[];
   _local_face_boxes?: Dict[];
   _face_crop_boxes?: number[][];
   retouch_recipe?: string[];
+  executed?: Executed | null;
   [key: string]: any;
 }
 

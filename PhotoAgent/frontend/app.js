@@ -30,6 +30,7 @@
     continueJob,
     continueVersionJob,
     rerunJob,
+    annotateAnalysis,
     reframeJob,
     analyzeAipoc,
     analyzeAipocBatch,
@@ -928,8 +929,7 @@
   }
 
   // Testbed-only UI: some rows/panels are hidden unless the backend was
-  // started with `--debug-ui` (or the page URL contains "debug", for quick
-  // local checks without a real backend). isDebug=false is the shape a
+  // started with `--debug-ui`. isDebug=false is the shape a
   // normal user sees -- the processing-path and QA-verification rows (true
   // internal/testing knobs) and every deep-dive section (analysis breakdown,
   // workflow steps, timing, prompts) disappear. Image quality/model choices
@@ -1059,49 +1059,27 @@
     document.title = `[${label}] ${document.title}`;
   }
 
-  // Fetch the feature flag even on a ?debug page.  Debug mode may expose
-  // inspection controls, but it must not bypass an internally disabled Body
-  // Reshape feature.
-  if (window.location.href.includes("debug")) {
-    applyDebugUiVisibility(true);
-    getUiConfig().then((cfg) => {
-      applyEnvLabel(cfg.envLabel);
-      if (typeof cfg.enableBodyReshape === "boolean") {
-        applyBodyReshapeVisibility(cfg.enableBodyReshape);
-      }
-      if (typeof cfg.compatibilityVersion === "number") {
-        currentCompatibilityVersion = cfg.compatibilityVersion;
-        renderCurrentCaseTimes();
-      }
-      if (typeof cfg.minCompatibleVersion === "number") {
-        minCompatibleVersion = cfg.minCompatibleVersion;
-      }
-      renderFromVersionEnabled = cfg.renderFromVersion === true;
-      syncVersionStripCurrent();
-    });
-  } else {
-    getUiConfig().then((cfg) => {
-      applyEnvLabel(cfg.envLabel);
-      applyDebugUiVisibility(!!cfg.debugUi);
-      if (typeof cfg.enableBodyReshape === "boolean") {
-        applyBodyReshapeVisibility(cfg.enableBodyReshape);
-      }
-      if (typeof cfg.compatibilityVersion === "number") {
-        currentCompatibilityVersion = cfg.compatibilityVersion;
-        renderCurrentCaseTimes();
-      }
-      if (typeof cfg.minCompatibleVersion === "number") {
-        minCompatibleVersion = cfg.minCompatibleVersion;
-      }
-      renderFromVersionEnabled = cfg.renderFromVersion === true;
-      syncVersionStripCurrent();
-      if (!cfg.debugUi && cfg.aipocDefault && els.processingPathSelect) {
-        // Non-debug deployment started with `--aipoc`: the selector stays
-        // hidden, but its value still drives the default processing path.
-        els.processingPathSelect.value = "aipoc";
-      }
-    });
-  }
+  getUiConfig().then((cfg) => {
+    applyEnvLabel(cfg.envLabel);
+    applyDebugUiVisibility(!!cfg.debugUi);
+    if (typeof cfg.enableBodyReshape === "boolean") {
+      applyBodyReshapeVisibility(cfg.enableBodyReshape);
+    }
+    if (typeof cfg.compatibilityVersion === "number") {
+      currentCompatibilityVersion = cfg.compatibilityVersion;
+      renderCurrentCaseTimes();
+    }
+    if (typeof cfg.minCompatibleVersion === "number") {
+      minCompatibleVersion = cfg.minCompatibleVersion;
+    }
+    renderFromVersionEnabled = cfg.renderFromVersion === true;
+    syncVersionStripCurrent();
+    if (!cfg.debugUi && cfg.aipocDefault && els.processingPathSelect) {
+      // Non-debug deployment started with `--aipoc`: the selector stays
+      // hidden, but its value still drives the default processing path.
+      els.processingPathSelect.value = "aipoc";
+    }
+  });
 
   // Account bootstrap: ?user_id=<ciphertext>, decrypted via a backend round
   // trip (account.js), identifies who's using the tool when linked in from
@@ -15438,6 +15416,7 @@
           // An unreadable prompts.json only costs the one overlay box.
         }
       }
+      result.analysis = await annotateAnalysis(result.analysis);
 
       const imageEntry = entries.find((e) => e.isFile && /^result\.(png|jpe?g|webp)$/i.test(e.name));
       runs.push({

@@ -4,8 +4,8 @@
 import { t } from "./i18n";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
-import type { Analysis, Dict, FaceOverride, Plan, PoseFaceChanges } from "./types";
-import { executedPrompt } from "./util";
+import type { Analysis, Dict, Executed, FaceOverride, Plan, PoseFaceChanges } from "./types";
+import { executedCommands } from "./util";
 
 // Named for what was found, not for the finding of it: by the time a chip is on
 // screen the detection has happened, and the dot on the chip says so. The switches
@@ -229,56 +229,16 @@ export function faceEntries(a: Analysis, overrides: Record<string, FaceOverride>
 // ── What a finished version actually did to each person ─────────────────────
 // Port of the old result row's 人像調整 read-out (results.js
 // buildPortraitInspectionEntries). Same rule as the other result tags
-// (util.ts executedPrompt): a fix counts only when it was allowed for that
+// (util.ts executedCommands): a fix counts only when it was allowed for that
 // person AND its execution block is in the Editor prompt -- inside that
 // person's own `Subject:` section when there is more than one, so a fix for one
 // person never lands on everyone. Labels are this UI's own (FACE_CATEGORIES,
 // plus 身形調整 as the assistant names it), not the old row's 閉眼偵測 etc.
 const EXECUTED_FACE_TAGS = [
-  {
-    field: "blink_issue",
-    option: "eye_closed_detection",
-    label: t("閉眼"),
-    markers: [
-      /Accidental blink repair priority:/i,
-      /PRIMARY EYE-PAIR REPAIR/i,
-      /\beyelid correction\b/i,
-      /^\s*-\s*Eye-pair repair\s*\([^\n]*\):\s*(?:open|use)\b/im,
-    ],
-  },
-  {
-    field: "gaze_issue",
-    option: "gaze_contact_detection",
-    label: t("視線"),
-    markers: [
-      /Approved gaze repair execution instructions:/i,
-      /ONLY task for this edit:[\s\S]{0,180}redirect[^\n]*gaze/i,
-      /Use a .* eyes-(?:only|plus-head\/face) correction[\s\S]{0,240}direct lens contact/i,
-      /Required change:[\s\S]{0,900}(?:direct(?:ly)?|camera lens)[^\n]*/i,
-      /^\s*-\s*Use a [^\n]*eyes-(?:only|plus-head\/face) correction[^\n]*;\s*reach clear direct lens contact\./im,
-    ],
-  },
-  {
-    field: "hair_issue",
-    option: "hair_mess_detection",
-    label: t("髮絲"),
-    markers: [
-      /Hair tidying priority:/i,
-      /Still-air hair \(user-selected, mandatory\):/i,
-      /Hair level — (?:local cleanup|fully groomed|preserve motion)/i,
-      /Hair (?:correction plan|target) —?/i,
-    ],
-  },
-  {
-    field: "smile_issue",
-    option: "smile_adjustment",
-    label: t("笑容"),
-    markers: [
-      /Smile adjustment \(user-selected, mandatory\)/i,
-      /target_smile:/i,
-      /(?:Transform this person's existing|Render) .*? smile on the existing face/i,
-    ],
-  },
+  { field: "blink_issue", option: "eye_closed_detection", label: t("閉眼") },
+  { field: "gaze_issue", option: "gaze_contact_detection", label: t("視線") },
+  { field: "hair_issue", option: "hair_mess_detection", label: t("髮絲") },
+  { field: "smile_issue", option: "smile_adjustment", label: t("笑容") },
 ];
 
 const FLAG_FIELD: Record<string, string> = {
@@ -288,31 +248,12 @@ const FLAG_FIELD: Record<string, string> = {
   smile_issue: "adjust_safe",
 };
 
-const EXECUTED_BODY_MARKER = /Body reshape execution instructions \(analysis-approved\):/i;
-
-const escapeRegExp = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-// The Editor prompt groups commands under `Subject: <label>` (the gaze-only
-// pass with a leading dash); this is that person's block, or "" if absent.
-function subjectSection(prompt: string, subject: Dict): string {
-  const label = String(subject?.label || "").trim();
-  if (!label) return "";
-  const heading = new RegExp(`(?:^|\\n)[ \\t]*(?:-\\s*)?Subject:[ \\t]*${escapeRegExp(label)}[ \\t]*(?:\\n|$)`, "i");
-  const match = heading.exec(prompt);
-  if (!match) return "";
-  const restStart = match.index + match[0].length;
-  const end = prompt
-    .slice(restStart)
-    .search(
-      /\n[ \t]*(?:-\s*)?Subject:[ \t]*|\n[ \t]*(?:Shared facial execution rules|Body reshape execution instructions|Targets|Other approved corrections|Finished light and color target|Scope is limited|Execution by method):/i,
-    );
-  return prompt.slice(match.index, end >= 0 ? restStart + end : prompt.length);
-}
-
-function hasSubjectMarker(prompt: string, subject: Dict, markers: RegExp[], allowGeneric: boolean, count: number) {
-  const scoped = subjectSection(prompt, subject) || (count <= 1 ? prompt : "");
-  if (markers.some((m) => m.test(scoped))) return true;
-  return allowGeneric && count <= 1 && /For every person whose expression is readable:\s*target_smile:/i.test(prompt);
+// The person's own `Subject:` block decides; without one, the whole prompt
+// counts only when there is a single person.
+function executedForSubject(executed: Executed, index: number, field: string, allowGeneric: boolean, count: number) {
+  const scoped = executed.subjects?.[index];
+  const hit = scoped?.has_section ? scoped[field] === true : count <= 1 && executed.face?.[field] === true;
+  return hit || (allowGeneric && count <= 1 && executed.generic_smile === true);
 }
 
 export interface PortraitDone {
@@ -323,8 +264,8 @@ export interface PortraitDone {
 }
 
 export function executedPortraits(a: Analysis | null | undefined): PortraitDone[] {
-  const prompt = executedPrompt(a);
-  if (!a || !prompt) return [];
+  const executed = executedCommands(a);
+  if (!a || !executed) return [];
   const advanced = (a._advanced_options || {}) as Dict;
   const bodyEnabled = a._body_reshape_enabled !== false;
   const disabledBodies = new Set(Array.isArray(a._disabled_body_reshape_subjects) ? a._disabled_body_reshape_subjects : []);
@@ -354,16 +295,14 @@ export function executedPortraits(a: Analysis | null | undefined): PortraitDone[
         const match = subject[def.field];
         if (!match || typeof match !== "object" || advanced[def.option] === false) continue;
         const allowed = (analyzerSuggests(def.field, match) || !!match._user_forced) && !match._user_disabled;
-        if (allowed && hasSubjectMarker(prompt, subject, def.markers, def.field === "smile_issue", people.length)) {
+        if (allowed && executedForSubject(executed, index, def.field, def.field === "smile_issue", people.length)) {
           tags.push(def.label);
         }
       }
       const body = subject.body_reshape;
       const bodyPrompt = typeof body?.edit_prompt === "string" ? body.edit_prompt.trim() : "";
       const name = String(subject.label || "").trim();
-      // Prefer the exact approved body sentence: every active subject is named
-      // in the body block, so a name-only check would tick a second person.
-      const targeted = bodyPrompt ? prompt.includes(bodyPrompt) : name ? prompt.includes(name) : true;
+      const targeted = executed.subjects?.[index]?.body_targeted === true;
       if (
         bodyEnabled &&
         body &&
@@ -373,7 +312,7 @@ export function executedPortraits(a: Analysis | null | undefined): PortraitDone[
         body.analysis_status !== "error" &&
         !disabledBodies.has(index) &&
         bodyPrompt &&
-        EXECUTED_BODY_MARKER.test(prompt) &&
+        executed.body_marker === true &&
         targeted
       ) {
         tags.push(t("身形調整"));

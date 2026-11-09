@@ -454,6 +454,22 @@ window.PhotoAgentApi = (() => {
     return data.job_id;
   }
 
+  // Debug only: an imported result.json's analysis gains the fields API
+  // responses add (executed). Falls back to the analysis as read.
+  async function annotateAnalysis(analysis) {
+    try {
+      const response = await fetch(`${BASE_URL}/api/photo-agent/debug/annotate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ analysis })
+      });
+      if (!response.ok) return analysis;
+      return (await response.json()).analysis || analysis;
+    } catch {
+      return analysis;
+    }
+  }
+
   // continueJob's sibling for an imported result folder: same stage="finish"
   // job, but the photo rides along with the request because there is no
   // earlier job holding it.
@@ -922,6 +938,7 @@ window.PhotoAgentApi = (() => {
     continueJob,
     continueVersionJob,
     rerunJob,
+    annotateAnalysis,
     reframeJob,
     analyzeAipoc,
     analyzeAipocBatch,
