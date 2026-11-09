@@ -8317,10 +8317,12 @@
     },
     "輸出尺寸": {
       "en": {
+        "panel": "Output Size",
         "chat": "Output Size",
         "backend text": "Output size"
       },
       "where": [
+        "panel",
         "chat",
         "backend text"
       ]

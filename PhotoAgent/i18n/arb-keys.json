@@ -2913,6 +2913,7 @@
     "chat_output_size": {
       "zh": "輸出尺寸",
       "where": [
+        "panel",
         "chat"
       ]
     },

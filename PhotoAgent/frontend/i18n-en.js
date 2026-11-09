@@ -48,6 +48,7 @@ window.PHOTOAGENT_CATALOGS.en = {
   "分析引擎": "Analysis Engine",
   "美化引擎": "Retouch Engine",
   "長寬比": "Aspect Ratio",
+  "輸出尺寸": "Output Size",
   "一鍵美化": "One-Tap Retouch",
   "正在分析照片": "Analyzing the photo",
   "取消": "Cancel",
