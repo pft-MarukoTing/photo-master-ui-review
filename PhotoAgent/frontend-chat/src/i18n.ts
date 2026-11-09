@@ -131,6 +131,15 @@ export function listOf(items: string[]): string {
   return t("{v1}和{v2}", { v1: items.slice(0, -1).join(t("、")), v2: items[items.length - 1] });
 }
 
+// Languages whose nouns keep their capital letter inside a sentence.
+const KEEPS_CASE = new Set(["de"]);
+
+/** A button name as it reads inside a sentence: lowercased by the language's rules, all-caps words (AI) kept. */
+export function midSentence(label: string): string {
+  if (lang === SOURCE || KEEPS_CASE.has(lang.split("-")[0])) return label;
+  return label.split(" ").map((w) => (/^\p{Lu}{2,}$/u.test(w) ? w : w.toLocaleLowerCase(lang))).join(" ");
+}
+
 /** Switches the page's language: remembered, then the page reloads in it. */
 export function setLang(code: string) {
   try {

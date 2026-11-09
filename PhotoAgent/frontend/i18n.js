@@ -178,7 +178,16 @@
     if (el) el.appendChild(languageRow(id));
   }
 
+  // Languages whose nouns keep their capital letter inside a sentence.
+  const KEEPS_CASE = new Set(["de"]);
+  // A button name as it reads inside a sentence: lowercased by the language's rules, all-caps words (AI) kept.
+  function midSentence(label) {
+    if (lang === SOURCE || KEEPS_CASE.has(lang.split("-")[0])) return label;
+    return String(label).split(" ").map((w) => (/^\p{Lu}{2,}$/u.test(w) ? w : w.toLocaleLowerCase(lang))).join(" ");
+  }
+
   window.tr = tr;
+  window.midSentence = midSentence;
   window.trLeads = trLeads;
   window.shownRecipe = shownRecipe;
   window.REFRAME_LABEL_RE = REFRAME_LABEL_RE;

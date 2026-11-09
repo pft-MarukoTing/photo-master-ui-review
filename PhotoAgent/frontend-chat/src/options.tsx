@@ -3,7 +3,7 @@
 // the extra instruction (個人化需求) once there is one, and the render settings
 // (設定) while adjusting or once a typed request changed them.
 // Every click is saved to the photo's plan right away as a patch.
-import { lang, listOf, SOURCE, t } from "./i18n";
+import { lang, listOf, midSentence, SOURCE, t } from "./i18n";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { urls } from "./api";
 import { fillNoteBox, noteBoxKeys, promptFaces, promptSections, PromptEditor, readPromptBox, type FaceRef } from "./chat";
@@ -83,8 +83,8 @@ export function categoriesFor(a: Analysis, caps: Capabilities, plan: Plan): Cate
 // 幾項要修」任何一張照片都講得出來，就等於沒看過這一張。只有名稱本身長到會蓋掉
 // 這句話的（畫面建議），才退回用項目數帶過。
 const short = (s: string, n = 14) => (s.length > n ? `${s.slice(0, n)}…` : s);
-// 一個人要修的項目。英文在句中要小寫（"eyes and hair"），中文不變。
-const fixList = (labels: string[]) => listOf(lang === SOURCE ? labels : labels.map((l) => l.toLowerCase()));
+// 一個人要修的項目，放在句中的寫法（"eyes and hair"）。
+const fixList = (labels: string[]) => listOf(labels.map(midSentence));
 
 export function topicLead(cat: Category, a: Analysis, caps: Capabilities, plan: Plan): string {
   switch (cat) {

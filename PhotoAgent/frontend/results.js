@@ -1947,8 +1947,8 @@ window.PhotoAgentResults = (() => {
           || selections.body_reshape_enabled === false || (selections.body_reshape_enabled == null && analysis?._body_reshape_enabled === false)
           || !issue.controllable)) return [];
         const levelLabel = FACE_ISSUE_LEVEL_CHOICES[issue.category]?.find(([value]) => value === level)?.[1];
-        // Lowercase so the fix reads mid-sentence in English ("Adjusting hair: ...").
-        return [sentence(tr("為{who}進行{fix}", { who: subject.label || tr("人物 {n}", { n: index + 1 }), fix: issue.label.toLowerCase() }) + (levelLabel ? tr("（{level}）", { level: levelLabel }) : ""))];
+        // The fix reads mid-sentence ("Adjusting hair: ...").
+        return [sentence(tr("為{who}進行{fix}", { who: subject.label || tr("人物 {n}", { n: index + 1 }), fix: midSentence(issue.label) }) + (levelLabel ? tr("（{level}）", { level: levelLabel }) : ""))];
       });
     });
     const messages = [];
