@@ -53,19 +53,58 @@ _BODY_ERODE = 0.003
 # _BODY_FEATHER, so the paste's seam falls inside the hair.
 _BODY_FEATHER = 0.003
 
+# aiHair: how _gaussian runs — "opencv", the same kernel under 3 px
+# (cv2.sepFilter2D) and the same three boxes from there (cv2.blur), the edges
+# reflected alike (BORDER_REFLECT_101, np.pad's "reflect"); or "numpy",
+# _gaussian_axis, as HairFeatures runs it. On subject1 (2.4 MP) each blur
+# took 5-30x less time, the boxes' exactly the same, the kernels' within
+# 1e-4 of a level; soft's post_process 3.8x faster (6x at 9.8 MP), its
+# result at most 1 level off (output/soft_check, 2026-11-09). All nine
+# features on subject1 and subject20 (hairline at both levels, fake
+# renders): 19 of the 20 results the same to the pixel, soft's on subject1
+# 1 level off on 0.0001% of them; soft 2.2-2.9x faster, frizzCare's smooth
+# 2.5x, the rest as before (output/gaussian_check).
+_GAUSSIAN_BY = "opencv"
+
 
 def _gaussian(a, sigma: float):
     """`a` (height x width, or x channels; float) blurred by a Gaussian of
     `sigma` px, its edges reflected: a direct kernel under 3 px, three box
-    passes (from running sums) from there."""
+    passes (from running sums) from there; run as _GAUSSIAN_BY says."""
     import numpy as np
 
     out = np.asarray(a, np.float32)
     if sigma <= 0:
         return out
+    if _GAUSSIAN_BY == "opencv" and (out.ndim == 2 or (out.ndim == 3 and out.shape[2] <= 4)):
+        return _gaussian_opencv(out, sigma)
     for axis in (0, 1):
         out = _gaussian_axis(out, sigma, axis)
     return out
+
+
+def _gaussian_opencv(a, sigma: float):
+    """_gaussian by OpenCV (aiHair): _gaussian_axis' kernel or boxes, down
+    the rows and then along them, its edges."""
+    import cv2
+    import numpy as np
+
+    src = np.ascontiguousarray(a, np.float32)
+    if sigma < 3:
+        r = max(1, int(np.ceil(3 * sigma)))
+        x = np.arange(-r, r + 1, dtype=np.float32)
+        kernel = np.exp(-0.5 * (x / sigma) ** 2)
+        kernel /= kernel.sum()
+        out = cv2.sepFilter2D(src, cv2.CV_32F, kernel, kernel,
+                              borderType=cv2.BORDER_REFLECT_101)
+    else:
+        # Three boxes of an odd width whose variances add up to sigma's.
+        width = int(np.sqrt(4 * sigma * sigma + 1))
+        width += width % 2 == 0
+        out = src
+        for ksize in ((1, width),) * 3 + ((width, 1),) * 3:
+            out = cv2.blur(out, ksize, borderType=cv2.BORDER_REFLECT_101)
+    return out.reshape(a.shape)
 
 
 def _gaussian_axis(a, sigma: float, axis: int):
