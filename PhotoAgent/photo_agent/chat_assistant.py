@@ -1289,7 +1289,7 @@ def _judged_reply(reply, screen, prompt_only):
         # 其他語言的「確認後套用」。
         reason = tail.sub("", reason).strip()
     end = i18n.fmt("sentence_end")
-    reason = reason + ("" if not reason or reason[-1] in end else end[0])
+    reason = reason + ("" if not reason or reason[-1] in end else end[0].strip())
     # 只動個人化需求的卡可以直接在卡上改；其他的不畫卡，要改就到美化項目裡改。
     done = i18n.tr("先幫你記進個人化需求了，下面可以直接修改。") if prompt_only else i18n.tr("先幫你套用了。")
     return _cat(reason, done, _next_step(screen, edit=not prompt_only))
