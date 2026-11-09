@@ -219,6 +219,15 @@ _GAIN_WHITE = 2.0
 # The bands measured in info, by the Gaussians that split them.
 _BANDS = (0.0, 0.7, 1.4, 3.0, 6.0)
 
+# aiHair: how step 1 (_line_blur) takes the image at each sample along the
+# flow — "remap", by cv2.remap (_remapped), or "numpy", by _sampled, as
+# HairFeatures does. On subject1, 7, 20, 22 and 25 and subject1 upscaled 2x
+# (9.8 MP), remap took step 1 from 1.1-75 s to 0.07-5 s and smoothed()
+# 2.7-5.1x faster (2.7-4.5x on one OpenCV thread); the results, as saved
+# (uint8), at most 1 level off numpy's, on 0.05-1.5% of the pixels
+# (output/remap_check, 2026-11-09).
+_LINE_SAMPLER = "remap"
+
 
 def _flow(grey, k: float):
     """Unit vectors along the hair's flow and across it, per pixel (each an
@@ -248,18 +257,32 @@ def _sampled(img, xs, ys):
     return (top * (1 - fy) + bottom * fy).reshape(img.shape)
 
 
-def _line_blur(img, v, sigma: float):
-    """`img` blurred by a 1D Gaussian of `sigma` px along `v`, per pixel:
-    sampled every px, every 2 px from 4 px up, every 3 from 12."""
+def _remapped(img, xs, ys):
+    """`img` at (`xs`, `ys`) as _sampled takes it, by cv2.remap (aiHair):
+    bilinear, a px's fraction in 32nds (OpenCV's INTER_LINEAR), the edges
+    replicated."""
+    import cv2
     import numpy as np
 
+    out = cv2.remap(img, np.asarray(xs, np.float32), np.asarray(ys, np.float32),
+                    cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    return out.reshape(img.shape)
+
+
+def _line_blur(img, v, sigma: float):
+    """`img` blurred by a 1D Gaussian of `sigma` px along `v`, per pixel:
+    sampled every px, every 2 px from 4 px up, every 3 from 12, each sample
+    taken as _LINE_SAMPLER says."""
+    import numpy as np
+
+    sample = _remapped if _LINE_SAMPLER == "remap" else _sampled
     reach = max(1, math.ceil(3 * sigma))
     step = 1 if sigma < 4 else 2 if sigma < 12 else 3
     ys, xs = np.mgrid[0:img.shape[0], 0:img.shape[1]].astype(np.float32)
     out, total = np.zeros_like(img), 0.0
     for t in range(-(reach // step) * step, reach + 1, step):
         w = math.exp(-0.5 * (t / sigma) ** 2)
-        out += w * (img if t == 0 else _sampled(img, xs + t * v[0], ys + t * v[1]))
+        out += w * (img if t == 0 else sample(img, xs + t * v[0], ys + t * v[1]))
         total += w
     return out / total
 
