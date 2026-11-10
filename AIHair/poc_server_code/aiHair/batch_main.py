@@ -32,7 +32,7 @@ What aiHair adds to main.py:
       entry, printed, and one JSON line per photo in <effect dir>/timing.jsonl.
   the hair model
       run in this process (hairfx/hairseg.py), from --seg-model (default
-      models/model_input_none_tf115.hdf5, or HAIR_SEG_MODEL); --seg-python is
+      models/hair/hair_model_input_none_tf115.hdf5, or HAIR_SEG_MODEL); --seg-python is
       kept as another name for it. The face model still runs in
       --face-python (HAIR_FACE_PYTHON).
   .env.openai.enc and .env.default

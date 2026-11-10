@@ -1,4 +1,4 @@
-"""The in-house hair model (model_input_none_tf115.hdf5, coarse + refinement
+"""The in-house hair model (hair/hair_model_input_none_tf115.hdf5, coarse + refinement
 in one Keras model), run in this process: the hair masks that outputs are
 lined up outside of (Feature.run), the blends, the colour match and
 hairline's hair_source model.
@@ -24,7 +24,7 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent
 # HAIR_SEG_MODEL sets it; unset, the one shipped in models/.
 SEG_MODEL = Path(os.environ.get("HAIR_SEG_MODEL")
-                 or _ROOT / "models" / "model_input_none_tf115.hdf5")
+                 or _ROOT / "models" / "hair" / "hair_model_input_none_tf115.hdf5")
 # What Context.seg_python defaults to and hair_masks takes: the model.
 SEG_PYTHON = SEG_MODEL
 THRESHOLD = 0.5  # make_hair_masks.py's --threshold
@@ -63,7 +63,7 @@ def _load(path: Path):
 
 def _any_size(keras, model):
     """`model` with its inputs' height and width left open, its weights as
-    they are. model_input_none_tf115.hdf5 was saved for 640x512 and 160x128
+    they are. hair_model_input_none_tf115.hdf5 was saved for 640x512 and 160x128
     only, and refuses any other size (Keras' input check), though every
     layer takes any size whose sides are multiples of 16: rebuilt so, each
     photo goes in at its own aspect, as make_hair_masks.py's model took it."""
