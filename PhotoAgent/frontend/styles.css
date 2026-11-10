@@ -802,7 +802,6 @@ html[data-env-label] .logo::after {
   color: var(--text);
   font-size: clamp(16px, 1.15vw, 20px);
   line-height: 1.2;
-  white-space: nowrap;
 }
 .upload-flow-text small {
   color: var(--text-4);
@@ -1165,6 +1164,12 @@ body[data-theme-mode="light"] .upload-gallery-col {
    just deliberately made, not a low-priority utility action. */
 #demo-images-confirm-btn.btn {
   color: var(--text);
+  height: auto;
+  min-height: 38px;
+  padding-block: 6px;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
 }
 .upload-main-copy {
   order: 0;

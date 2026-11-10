@@ -1441,6 +1441,8 @@ div.chat-proposal-row{cursor:default}
    有了間距就不再需要陰影把磚撐開。 */
 .history-drawer{display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}
 .history-drawer .history-header{flex:none}
+.history-drawer .history-header-top{flex-wrap:wrap;row-gap:8px}
+.history-drawer .history-header-actions{flex-wrap:wrap}
 /* 「選取」和多選時的三顆都是有字的 28px 高按鈕，跟「取消」同一款。「刪除」舊頁面是 28px 見方的垃圾桶，
    這裡改成文字：紅字、跟前面多隔一點，沒勾東西時淡掉但外框還看得到。 */
 #history-select-btn.btn,#history-select-all-btn.btn,#history-delete-selected-btn.btn{height:28px;width:auto;padding:0 10px;font-size:13px;flex-shrink:0}
