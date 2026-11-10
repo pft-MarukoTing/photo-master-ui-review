@@ -5,7 +5,8 @@ import { nextDisplayOrder } from "./display-order";
 // from the server's messages). Every action is one of the chat API calls;
 // typed messages go to /ask, whose replies may carry a plan change to confirm.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { Fragment, type ComponentChildren } from "preact";
+import { createPortal } from "preact/compat";
+import { Fragment, type ComponentChildren, type VNode } from "preact";
 import { api, ApiError, setUser, urls, type AskFace, type ReviewTurn, type Screen } from "./api";
 import { isHeic, previewBlob, previewBlobs } from "./heic";
 import {
@@ -98,7 +99,6 @@ import {
   analyzeSubMessages,
   timeLabel,
   versionsFromMessages,
-  downloadPhotosZip,
 } from "./util";
 
 type Phase = "home" | "chat" | "session";
@@ -4142,6 +4142,7 @@ export function BatchPreSidebar(props: {
   reveal?: number;
 }) {
   const { sources, runs, current, pending, live } = props;
+  const [download, downloading, downloadUi] = useBatchDownload();
   const isFresh = useFreshTiles();
   const [open, setOpen] = useState(false);
   const [ping, setPing] = useState(false);
@@ -4207,6 +4208,7 @@ export function BatchPreSidebar(props: {
   };
   return (
     <>
+      {downloadUi}
       <div class={`batch-sidebar-backdrop${open ? " drawer-open" : ""}`} onClick={close} />
       <aside class={`batch-sidebar${open ? " drawer-open" : ""}${props.overview ? " is-overview" : ""}`} id="batch-sidebar">
         <button type="button" class="batch-sidebar-close-btn" aria-label={t("收起照片列表")} onClick={close}>
@@ -4216,6 +4218,7 @@ export function BatchPreSidebar(props: {
           <h2 class="batch-sidebar-title">{t("我的照片")}</h2>
           <div class="batch-sidebar-actions">
           {props.onAdd && <BatchAddButton full={full} onAdd={props.onAdd} onSamples={props.onSamples} onBefore={() => setOpen(false)} />}
+          <BatchDownloadButton plan={sourcesDownload(sources, runs, live, props.failed)} busy={downloading} onDownload={download} />
           {props.onClear && (
             <button type="button" class="batch-download-all-btn" title={t("全部清除")} aria-label={t("全部清除")} data-danger onClick={props.onClear}>
               <Icon name="trash" size={14} />
@@ -4433,6 +4436,7 @@ function BatchOverviewGrid(props: {
 }) {
   const [picked, setFilter] = useState<BatchProgress | "all">("all");
   const [open, setOpen] = useState(false);
+  const [download, downloading, downloadUi] = useBatchDownload();
   const [cols, setCols] = useState(6);
   const isFresh = useFreshTiles();
   // 成品縮圖載不出來的那幾張（job 的檔案可能比對話先過期）改放原圖，跟最近照片的磚一樣。
@@ -4482,9 +4486,10 @@ function BatchOverviewGrid(props: {
     addEventListener("keydown", esc);
     return () => removeEventListener("keydown", esc);
   }, [open]);
-  const tools = (props.onAdd || props.onClear) && (
+  const tools = (
     <div class="batch-sidebar-actions batch-grid-tools">
       {props.onAdd && <BatchAddButton full={items.length >= MAX_BATCH} onAdd={props.onAdd} onSamples={props.onSamples} onBefore={() => setOpen(false)} end />}
+      <BatchDownloadButton plan={sourcesDownload(props.sources, props.runs, props.live, props.failed)} busy={downloading} onDownload={download} />
       {props.onClear && (
         <button type="button" class="batch-download-all-btn" title={t("全部清除")} aria-label={t("全部清除")} data-danger onClick={props.onClear}>
           <Icon name="trash" size={14} />
@@ -4540,6 +4545,7 @@ function BatchOverviewGrid(props: {
   };
   return (
     <section class="batch-grid" aria-label={t("這批照片")}>
+      {downloadUi}
       <div class="batch-grid-head">
         {filters}
         {tools}
@@ -4714,6 +4720,156 @@ function SidebarRemove({ index, onRemove }: { index: number; onRemove: (i: numbe
   );
 }
 
+// 「全部下載」：每張美化完成的照片存它目前那一版，一張一個檔；還沒美化完成的不下載。
+// 跟面板模式（app.js saveBatchResults）同一套字和流程，存檔本身在 ../save-images.js。
+type BatchDownload = { results: { url: string; name: string }[]; finished: number; total: number };
+
+declare global {
+  interface Window {
+    PhotoAgentSave?: {
+      sharesToPhotos: () => boolean;
+      saveImages: (
+        items: { url: string; name: string }[],
+        opts: {
+          onProgress: (done: number, total: number) => void;
+          askShare: (
+            step: { count: number; from: number; to: number; total: number; failed: number; chunked: boolean },
+            doShare: () => Promise<boolean>,
+          ) => Promise<boolean>;
+        },
+      ) => Promise<{ saved: number; failed: number; shared: boolean; cancelled: boolean }>;
+    };
+  }
+}
+
+const downloadOf = (done: Photo[], total: number): BatchDownload => ({
+  results: done.map((p) => ({ url: urls.resultImage(p.active_version!.job_id, p.active_version!.run), name: `photomaster_${p.photo_id}` })),
+  finished: done.length,
+  total,
+});
+
+const sourcesDownload = (sources: Source[], runs: Record<string, BatchRun>, live?: Record<string, Photo>, failed?: Record<string, boolean>) =>
+  downloadOf(
+    sources.flatMap((s) => {
+      const key = sourceSrc(s);
+      const p = live?.[key];
+      return p?.active_version && batchProgress(runs[key], p, !!failed?.[key]) === "done" ? [p] : [];
+    }),
+    sources.length,
+  );
+
+function batchDownloadHint({ finished, total }: BatchDownload): string {
+  if (!finished) return t("還沒有美化完成的照片");
+  return finished === total
+    ? t("下載全部 {count} 張成品", { count: finished })
+    : t("下載已完成的 {count} 張（{rest} 張還沒美化）", { count: finished, rest: total - finished });
+}
+
+function useBatchDownload(): [(plan: BatchDownload) => void, boolean, VNode] {
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [ask, setAsk] = useState<{ message: string; label: string; answer: (ok: boolean) => void } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const start = async ({ results, finished, total }: BatchDownload) => {
+    const save = window.PhotoAgentSave;
+    if (busy || !save) return;
+    if (!finished) {
+      setNotice(t("還沒有美化完成的照片"));
+      return;
+    }
+    setBusy(true);
+    setProgress({ done: 0, total: 0 });
+    const skipped = total - finished;
+    let outcome;
+    try {
+      outcome = await save.saveImages(results, {
+        onProgress: (done, count) => setProgress({ done, total: count }),
+        askShare: (step, doShare) =>
+          new Promise<boolean>((resolve) => {
+            setProgress(null);
+            const lines = [t("{count} 張照片已準備好。", { count: step.total })];
+            if (skipped) lines.push(t("另外 {count} 張還沒美化，不會下載。", { count: skipped }));
+            if (step.failed) lines.push(t("{count} 張下載失敗，請稍後再試。", { count: step.failed }));
+            setAsk({
+              message: lines.join("\n"),
+              label: step.chunked
+                ? t("儲存第 {from}–{to} 張到照片", { from: step.from, to: step.to })
+                : t("儲存 {count} 張到照片", { count: step.count }),
+              // 分享面板一定要在點的當下叫出來，所以 doShare 不能等 setState 之後才跑。
+              answer: (ok) => {
+                setAsk(null);
+                if (ok) void doShare().then(resolve);
+                else resolve(false);
+              },
+            });
+          }),
+      });
+    } catch {
+      outcome = { saved: 0, failed: results.length, shared: false, cancelled: false };
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
+    if (outcome.cancelled) return;
+    if (!outcome.saved) {
+      setNotice(t("下載失敗，請稍後再試。"));
+      return;
+    }
+    if (outcome.shared) {
+      setNotice(t("已下載完成。"));
+      return;
+    }
+    const lines = [
+      outcome.saved > 1
+        ? t("已下載 {count} 張。如果只收到一張，請在網址列允許這個網站下載多個檔案。", { count: outcome.saved })
+        : t("已下載完成。"),
+    ];
+    if (skipped) lines.push(t("另外 {count} 張還沒美化，所以沒有下載。", { count: skipped }));
+    if (outcome.failed) lines.push(t("{count} 張下載失敗，請稍後再試。", { count: outcome.failed }));
+    setNotice(lines.join("\n"));
+  };
+  const toPhotos = !!window.PhotoAgentSave?.sharesToPhotos();
+  const label = progress && progress.total
+    ? toPhotos
+      ? t("準備中…（{done}/{total}）", { done: progress.done, total: progress.total })
+      : t("下載中…（{done}/{total}）", { done: progress.done, total: progress.total })
+    : toPhotos ? t("準備中…") : t("下載中…");
+  const ui = (
+    <>
+      {progress &&
+        createPortal(
+          <div class="download-progress-toast" role="status">
+            <span class="download-progress-label">{label}</span>
+            <div class="download-progress-track">
+              <div class="download-progress-fill" style={{ width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 5}%` }} />
+            </div>
+          </div>,
+          document.body,
+        )}
+      {ask ? <ConfirmModal message={ask.message} confirmLabel={ask.label} cancelLabel={t("取消")} onAnswer={ask.answer} /> : null}
+      {notice ? <ConfirmModal message={notice} confirmLabel={t("確定")} onAnswer={() => setNotice(null)} /> : null}
+    </>
+  );
+  return [start, busy, ui];
+}
+
+function BatchDownloadButton(props: { plan: BatchDownload; busy: boolean; onDownload: (plan: BatchDownload) => void }) {
+  const hint = props.busy ? t("下載中…") : batchDownloadHint(props.plan);
+  return (
+    <button
+      type="button"
+      class="batch-download-all-btn"
+      title={hint}
+      aria-label={hint}
+      aria-disabled={!props.plan.finished || props.busy}
+      aria-busy={props.busy}
+      onClick={() => props.onDownload(props.plan)}
+    >
+      <Icon name="down" size={14} />
+    </button>
+  );
+}
+
 // 同一段對話裡有好幾張時，最左邊那欄「我的照片」：點哪張就看哪張的對話和結果。
 // 跟舊版批次的 .batch-sidebar 同一套 class 和樣子；每張是歷史紀錄那種方塊（.history-cube），
 // 狀態疊在照片左下角。窄螢幕一樣收成從左邊拉出來的抽屜。
@@ -4730,34 +4886,8 @@ export function BatchSidebar(props: {
 }) {
   const { photos, current } = props;
   const [open, setOpen] = useState(false);
-  const [zipping, setZipping] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [download, downloading, downloadUi] = useBatchDownload();
   const list = useRef<HTMLDivElement>(null);
-  // 每張美化過的照片要放進 ZIP 的所有版本。對話紀錄裡找不到版本（例如只在面板模式美化過）
-  // 就退回目前那張結果。
-  const resultsOf = (p: Photo) => {
-    const versions = versionsFromMessages(props.messages, p.photo_id);
-    if (versions.length) return versions.map((v) => ({ url: urls.resultImage(versionJob(v)), name: `result_v${v.ordinal}` }));
-    const v = p.active_version;
-    return v ? [{ url: urls.resultImage(v.job_id, v.run), name: `result_${v.run || 1}` }] : [];
-  };
-  // 提示字跟面板模式的全部下載一樣：看有幾張已經美化過，說清楚會拿到原圖還是結果。
-  const doneCount = photos.filter((p) => p.active_version).length;
-  const zipHint =
-    doneCount === 0
-      ? t("下載所有原圖（{length} 張）", { length: photos.length })
-      : doneCount === photos.length
-        ? t("下載所有已完成的結果，含每一版（{length} 張）", { length: photos.length })
-        : t("下載全部（已完成 {doneCount} 張含每一版，其餘為原圖，共 {length} 張）", { doneCount, length: photos.length });
-  const downloadAll = async () => {
-    if (zipping) return;
-    setZipping(true);
-    const ok = await downloadPhotosZip(
-      photos.map((p) => ({ source: urls.sourceImage(p.analyze_job_id), results: resultsOf(p) })),
-    );
-    setZipping(false);
-    setNotice(ok ? t("已下載完成。") : t("打包下載失敗，請稍後再試。"));
-  };
   // 換到的那張不在列表看得到的範圍裡（例如從底下那排點進來、或一開就停在後面那張），
   // 就把列表捲到剛好露出它。只動列表自己的 scrollTop，不帶著整頁跑。
   useEffect(() => {
@@ -4783,17 +4913,7 @@ export function BatchSidebar(props: {
         </button>
         <div class="batch-sidebar-header">
           <h2 class="batch-sidebar-title">{t("我的照片")}</h2>
-          <button
-            type="button"
-            class="batch-download-all-btn"
-            title={zipping ? t("打包中…") : zipHint}
-            aria-label={zipping ? t("打包中") : zipHint}
-            disabled={zipping}
-            aria-busy={zipping}
-            onClick={() => void downloadAll()}
-          >
-            <Icon name="down" size={14} />
-          </button>
+          <BatchDownloadButton plan={downloadOf(photos.filter((p) => photoState(p).key === "done"), photos.length)} busy={downloading} onDownload={download} />
         </div>
         {todo.length ? (
           <div class="batch-sidebar-all">
@@ -4842,7 +4962,7 @@ export function BatchSidebar(props: {
         <Icon name="photos" size={18} />
         <span class="batch-drawer-trigger-count">{photos.length}</span>
       </button>
-      {notice ? <ConfirmModal message={notice} confirmLabel={t("確定")} onAnswer={() => setNotice(null)} /> : null}
+      {downloadUi}
     </>
   );
 }

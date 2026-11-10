@@ -337,6 +337,20 @@
         "chat"
       ]
     },
+    "{count} 張下載失敗，請稍後再試。": {
+      "en": "{count} {count, plural, one{photo} other{photos}} failed to download. Please try again later.",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "{count} 張照片已準備好。": {
+      "en": "{count} {count, plural, one{photo is} other{photos are}} ready.",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
     "{done} / {total} 張 · {pct}%": {
       "en": "{done} / {total} · {pct}%",
       "where": [
@@ -926,17 +940,27 @@
         "chat"
       ]
     },
-    "下載全部（已完成 {doneCount} 張含每一版，其餘為原圖，共 {length} 張）": {
-      "en": "Download all ({doneCount} finished with every version, originals for the rest; {length} total)",
+    "下載中…": {
+      "en": "Downloading…",
       "where": [
+        "panel",
         "chat"
       ]
     },
-    "下載全部（已完成 {doneCount} 張，其餘為原圖，共 {length} 張）": {
-      "en": "Download all ({doneCount} finished, originals for the rest; {length} total)",
+    "下載中…（{done}/{total}）": {
+      "en": "Downloading… ({done}/{total})",
       "where": [
-        "panel"
+        "panel",
+        "chat"
       ]
+    },
+    "下載全部 {count} 張成品": {
+      "en": "Download all {count} {count, plural, one{result} other{results}}",
+      "where": [
+        "panel",
+        "chat"
+      ],
+      "note": "Tooltip on the batch “download all” icon button: every photo is retouched and all results will be downloaded."
     },
     "下載原圖": {
       "en": "Download Original",
@@ -951,22 +975,10 @@
         "chat"
       ]
     },
-    "下載所有原圖（{length} 張）": {
-      "en": "Download all originals ({length})",
+    "下載已完成的 {count} 張（{rest} 張還沒美化）": {
+      "en": "Download {count} finished {count, plural, one{result} other{results}} ({rest} not retouched yet)",
       "where": [
         "panel",
-        "chat"
-      ]
-    },
-    "下載所有已完成的結果（{doneCount} 張）": {
-      "en": "Download all finished results ({doneCount})",
-      "where": [
-        "panel"
-      ]
-    },
-    "下載所有已完成的結果，含每一版（{length} 張）": {
-      "en": "Download all finished results, including every version ({length})",
-      "where": [
         "chat"
       ]
     },
@@ -1990,6 +2002,14 @@
         "backend text"
       ]
     },
+    "儲存 {count} 張到照片": {
+      "en": "Save {count} to Photos",
+      "where": [
+        "panel",
+        "chat"
+      ],
+      "note": "Button on iPhone/iPad after a batch download is prepared: opens the share sheet to save the images into the Photos app. “Photos” is Apple's Photos app."
+    },
     "儲存中…": {
       "en": "Saving…",
       "where": [
@@ -2001,6 +2021,14 @@
       "where": [
         "chat"
       ]
+    },
+    "儲存第 {from}–{to} 張到照片": {
+      "en": "Save {from}–{to} to Photos",
+      "where": [
+        "panel",
+        "chat"
+      ],
+      "note": "Button on iPhone/iPad after a batch download is prepared: opens the share sheet to save the images into the Photos app. “Photos” is Apple's Photos app. Used when the photos are saved in several groups; {from}–{to} is the range of photo numbers."
     },
     "允許 AI 修正此項目": {
       "en": "Allow the AI to fix this",
@@ -2847,6 +2875,20 @@
         "chat"
       ],
       "note": "Tooltip on a face: stop aiming the request at {v1}, a person's name."
+    },
+    "另外 {count} 張還沒美化，不會下載。": {
+      "en": "{count} {count, plural, one{photo hasn't} other{photos haven't}} been retouched yet and won't be saved.",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "另外 {count} 張還沒美化，所以沒有下載。": {
+      "en": "{count} {count, plural, one{photo wasn't} other{photos weren't}} downloaded because {count, plural, one{it hasn't} other{they haven't}} been retouched yet.",
+      "where": [
+        "panel",
+        "chat"
+      ]
     },
     "另外 {n} 張分析好了，還沒美化，按{btn}的{render}就會接著美化，也可以從{where}選取照片個別調整。": {
       "en": "{n} more {n, plural, one{photo has} other{photos have}} been analyzed but not retouched. Tap {render} {btn} to retouch them next, or select a photo {where} to adjust it individually.",
@@ -3942,6 +3984,13 @@
         "chat"
       ]
     },
+    "已下載 {count} 張。如果只收到一張，請在網址列允許這個網站下載多個檔案。": {
+      "en": "Downloaded {count} {count, plural, one{photo} other{photos}}. If only one arrived, allow this site to download multiple files from the address bar.",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
     "已下載完成。": {
       "en": "Download complete.",
       "where": [
@@ -4736,24 +4785,8 @@
     "打包下載失敗，請稍後再試。": {
       "en": "Couldn't prepare the download. Please try again later.",
       "where": [
-        "panel",
-        "chat"
+        "panel"
       ]
-    },
-    "打包中": {
-      "en": "Preparing",
-      "where": [
-        "chat"
-      ],
-      "note": "Download button state: the photos are being packed into a ZIP file."
-    },
-    "打包中…": {
-      "en": "Preparing…",
-      "where": [
-        "chat"
-      ],
-      "en_full": "Packing the photos into a zip…",
-      "note": "Download-all button tooltip while zipping."
     },
     "打字回答，或點上面的選項": {
       "en": "Type or tap an option above",
@@ -6351,7 +6384,15 @@
     "準備中…": {
       "en": "Preparing…",
       "where": [
-        "panel"
+        "panel",
+        "chat"
+      ]
+    },
+    "準備中…（{done}/{total}）": {
+      "en": "Preparing… ({done}/{total})",
+      "where": [
+        "panel",
+        "chat"
       ]
     },
     "為{who}進行{fix}": {
@@ -9213,6 +9254,13 @@
     "還沒有照片，按「開始對話」挑一張吧。": {
       "en": "No photos yet. Tap “Start a Chat” to choose one.",
       "where": [
+        "chat"
+      ]
+    },
+    "還沒有美化完成的照片": {
+      "en": "No retouched photos yet",
+      "where": [
+        "panel",
         "chat"
       ]
     },

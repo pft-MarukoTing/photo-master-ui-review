@@ -1878,18 +1878,6 @@
         "chat"
       ]
     },
-    "chat_download_all_finished_results_including": {
-      "zh": "下載所有已完成的結果，含每一版（{length} 張）",
-      "where": [
-        "chat"
-      ]
-    },
-    "chat_download_all_finished_with_every": {
-      "zh": "下載全部（已完成 {doneCount} 張含每一版，其餘為原圖，共 {length} 張）",
-      "where": [
-        "chat"
-      ]
-    },
     "chat_drag_to_compare_before_and": {
       "zh": "拖曳比較修圖前後",
       "where": [
@@ -3219,18 +3207,6 @@
     },
     "chat_portrait_adjustments_for_people": {
       "zh": "人像會修 {length} 個人。",
-      "where": [
-        "chat"
-      ]
-    },
-    "chat_preparing": {
-      "zh": "打包中",
-      "where": [
-        "chat"
-      ]
-    },
-    "chat_preparing_2": {
-      "zh": "打包中…",
       "where": [
         "chat"
       ]
@@ -5163,8 +5139,7 @@
     "common_couldnt_prepare_the_download_please": {
       "zh": "打包下載失敗，請稍後再試。",
       "where": [
-        "panel",
-        "chat"
+        "panel"
       ]
     },
     "common_couldnt_send_the_report_please": {
@@ -5286,8 +5261,8 @@
         "chat"
       ]
     },
-    "common_download_all_originals": {
-      "zh": "下載所有原圖（{length} 張）",
+    "common_download_all_results": {
+      "zh": "下載全部 {count} 張成品",
       "where": [
         "panel",
         "chat"
@@ -5307,8 +5282,36 @@
         "chat"
       ]
     },
+    "common_download_finished_results_not_retouched": {
+      "zh": "下載已完成的 {count} 張（{rest} 張還沒美化）",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
     "common_download_result": {
       "zh": "下載結果",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_downloaded_photos_if_only_one": {
+      "zh": "已下載 {count} 張。如果只收到一張，請在網址列允許這個網站下載多個檔案。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_downloading": {
+      "zh": "下載中…",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_downloading_2": {
+      "zh": "下載中…（{done}/{total}）",
       "where": [
         "panel",
         "chat"
@@ -5752,6 +5755,13 @@
         "chat"
       ]
     },
+    "common_no_retouched_photos_yet": {
+      "zh": "還沒有美化完成的照片",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
     "common_no_smile": {
       "zh": "不笑",
       "where": [
@@ -5896,6 +5906,34 @@
         "chat"
       ]
     },
+    "common_photos_are_ready": {
+      "zh": "{count} 張照片已準備好。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_photos_failed_to_download_please": {
+      "zh": "{count} 張下載失敗，請稍後再試。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_photos_havent_been_retouched_yet": {
+      "zh": "另外 {count} 張還沒美化，不會下載。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_photos_werent_downloaded_because_they": {
+      "zh": "另外 {count} 張還沒美化，所以沒有下載。",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
     "common_playful": {
       "zh": "俏皮",
       "where": [
@@ -5958,6 +5996,13 @@
       "where": [
         "panel",
         "backend text"
+      ]
+    },
+    "common_preparing": {
+      "zh": "準備中…（{done}/{total}）",
+      "where": [
+        "panel",
+        "chat"
       ]
     },
     "common_product": {
@@ -6119,6 +6164,20 @@
     },
     "common_sample_photos": {
       "zh": "範例照片",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_save_to_photos": {
+      "zh": "儲存 {count} 張到照片",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
+    "common_save_to_photos_2": {
+      "zh": "儲存第 {from}–{to} 張到照片",
       "where": [
         "panel",
         "chat"
@@ -7537,18 +7596,6 @@
         "panel"
       ]
     },
-    "panel_download_all_finished_originals_for": {
-      "zh": "下載全部（已完成 {doneCount} 張，其餘為原圖，共 {length} 張）",
-      "where": [
-        "panel"
-      ]
-    },
-    "panel_download_all_finished_results": {
-      "zh": "下載所有已完成的結果（{doneCount} 張）",
-      "where": [
-        "panel"
-      ]
-    },
     "panel_download_all_zip": {
       "zh": "全部下載（ZIP）",
       "where": [
@@ -8449,7 +8496,8 @@
     "panel_preparing": {
       "zh": "準備中…",
       "where": [
-        "panel"
+        "panel",
+        "chat"
       ]
     },
     "panel_preparing_download": {

@@ -5612,12 +5612,16 @@
     return { ext: "jpg", mime: "image/jpeg" };
   }
 
-  function buildDownloadImageFilename(extension = "jpg") {
+  function buildDownloadImageBasename() {
     const pad = (n) => String(n).padStart(2, "0");
     const now = new Date();
     const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
     const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-    return `PhotoMaster-${dateStr}-${timeStr}.${extension}`;
+    return `PhotoMaster-${dateStr}-${timeStr}`;
+  }
+
+  function buildDownloadImageFilename(extension = "jpg") {
+    return `${buildDownloadImageBasename()}.${extension}`;
   }
 
   const PROMPT_KEYS = [
@@ -5739,33 +5743,6 @@
     return [{ run: 1, result: lastResult.resultText, jobId: lastResult.jobId, status: "done" }];
   }
 
-  // pendingResultsActive's own download bundle -- source photo only (the
-  // edit stage hasn't run yet, so there's no result image/token usage to
-  // include), plus whatever the analyze stage itself already produced in
-  // --debug-ui mode (the raw analysis + its own prompts, same JSON shape
-  // buildNestedImageFiles writes per-RUN, just without a run_N/ subfolder
-  // since there's only ever one of these per photo). selectedFile is null
-  // for a history record reopened at this same pending-review stage
-  // (viewAnalyzeHistoryRecord) -- falls back to fetching selectedFileSourceUrl
-  // instead, same as fetchImageDownloadData's own file/sourceUrl fallback.
-  async function buildPendingSourceZip() {
-    const sourceBuf = selectedFile
-      ? await selectedFile.arrayBuffer()
-      : selectedFileSourceUrl
-        ? await fetchWithRetry(selectedFileSourceUrl).then((response) => response.arrayBuffer())
-        : null;
-    const files = sourceBuf ? [{ name: selectedFile?.name || "source.jpg", data: new Uint8Array(sourceBuf) }] : [];
-    if (isDebugUiActive && singleFlowState?.analysis) {
-      const analysisBytes = new TextEncoder().encode(JSON.stringify(singleFlowState.analysis, null, 2));
-      const promptsBytes = new TextEncoder().encode(buildPromptsJson(singleFlowState.analysis.prompts || {}));
-      files.push(
-        { name: "analysis.json", data: analysisBytes },
-        { name: "prompts.json", data: promptsBytes }
-      );
-    }
-    return window.PhotoAgentZip.createZip(files);
-  }
-
   // iOS Safari has no web API to write directly into the Photos app (no
   // requestable "save to camera roll" permission for a plain page, unlike
   // PHPhotoLibrary for a native app) -- its <a download> handling for an
@@ -5815,18 +5792,9 @@
 
   async function downloadPendingSource() {
     if (!selectedFile && !selectedFileSourceUrl) return;
-    // --debug-ui mode still zips (source + analysis.json + prompts.json),
-    // same reasoning as downloadCurrentResultOnly's split below -- plain
-    // mode just wants the one photo, no zip overhead for a single file.
-    if (isDebugUiActive) {
-      await downloadZip(buildPendingSourceZip, buildDownloadZipFilename());
-      return;
-    }
     try {
       // selectedFile is null for a history record reopened at this same
-      // pending-review stage (viewAnalyzeHistoryRecord) -- fetch its own
-      // source photo (selectedFileSourceUrl) into a blob instead, same
-      // fallback buildPendingSourceZip's debug-mode path applies.
+      // pending-review stage (viewAnalyzeHistoryRecord).
       const blob = selectedFile || await fetchWithRetry(selectedFileSourceUrl).then((response) => response.blob());
       await saveImageToDevice(blob, (selectedFile && selectedFile.name) || buildDownloadImageFilename());
       showNoticeModal(tr("已下載完成。"));
@@ -5835,43 +5803,16 @@
     }
   }
 
-  // downloadPendingSource's batch counterpart -- for a batch record still at
-  // "analyzed" (reviewed but not yet edited), #download-link has the same
-  // "only the source photo exists" situation as the single-image flow's own
-  // pending-review screen, just keyed off this record's file/analysis
-  // instead of selectedFile/singleFlowState. Reuses buildBatchSourceFiles
-  // (buildAllBatchResultsZip's own per-image fallback) for the debug-mode
-  // zip so the analysis.json/prompts.json inclusion logic isn't duplicated.
+  // downloadPendingSource's batch counterpart: a batch record still at
+  // "analyzed" (reviewed but not yet edited) only has its source photo.
   async function downloadPendingBatchSource(record) {
     if (!record.file) return;
-    if (isDebugUiActive) {
-      await downloadZip(
-        async () => window.PhotoAgentZip.createZip(await buildBatchSourceFiles(record, "", () => {})),
-        buildDownloadZipFilename()
-      );
-      return;
-    }
     try {
       await saveImageToDevice(record.file, record.file.name || buildDownloadImageFilename());
       showNoticeModal(tr("已下載完成。"));
     } catch (error) {
       showError(tr("下載失敗，請稍後再試。"));
     }
-  }
-
-  async function buildResultZip(onProgress) {
-    const runs = lastResultRuns();
-    // A combined multi-RUN job (job_processor.py's run_count loop) shares ONE
-    // jobId across every RUN of that image, so jobId alone no longer
-    // identifies "the currently displayed RUN" -- match on the RUN number
-    // lastResult was set with instead (see showSingleResult/syncRecordMirror).
-    const current = runs.find((run) => run.run === lastResult.runNumber) || runs[0];
-    let done = 0;
-    const files = await buildImageFiles({ file: lastResult.file, sourceUrl: lastResult.sourceUrl, path: lastResult.path }, [current], () => {
-      done += 1;
-      if (onProgress) onProgress(done, 1);
-    });
-    return window.PhotoAgentZip.createZip(files);
   }
 
   async function buildAllRunsZip(onProgress) {
@@ -6165,10 +6106,14 @@
   // showDownloadProgress bumps to a small interim value right away so it's
   // moving immediately, and hideDownloadProgress holds briefly at 100% on
   // success so the "reaching completion" moment is actually seen.
-  function showDownloadProgress() {
+  // Label for the toast's (done, total) ticks; null = the zip wording.
+  let downloadProgressText = null;
+
+  function showDownloadProgress(text = null) {
     if (!els.downloadProgressToast) return;
+    downloadProgressText = text;
     if (els.downloadProgressFill) els.downloadProgressFill.style.width = "0%";
-    if (els.downloadProgressLabel) els.downloadProgressLabel.textContent = tr("打包下載中…");
+    if (els.downloadProgressLabel) els.downloadProgressLabel.textContent = text ? text(0, 0) : tr("打包下載中…");
     els.downloadProgressToast.hidden = false;
     // A short delay so the 0% state is painted before transitioning to 25%
     // -- rAF would be the "proper" way to wait for that paint, but it never
@@ -6186,9 +6131,11 @@
     const pct = total > 0 ? Math.round((done / total) * 100) : 0;
     if (els.downloadProgressFill) els.downloadProgressFill.style.width = `${pct}%`;
     if (els.downloadProgressLabel) {
-      els.downloadProgressLabel.textContent = total > 1
-        ? tr("打包下載中…（{done}/{total}）", { done, total })
-        : tr("打包下載中…");
+      els.downloadProgressLabel.textContent = downloadProgressText
+        ? downloadProgressText(done, total)
+        : total > 1
+          ? tr("打包下載中…（{done}/{total}）", { done, total })
+          : tr("打包下載中…");
     }
   }
 
@@ -6225,12 +6172,7 @@
     if (success) showNoticeModal(tr("已下載完成。"));
   }
 
-  // Single current-result download: just the generated image itself, not a
-  // zip -- there's only ever one file involved here, so bundling it into a
-  // zip (source image + result) was unnecessary overhead for the common
-  // case. --debug-ui mode still gets the full zip (source + result.json +
-  // prompts.json via buildResultZip), since exposing that raw data is the
-  // whole point of that mode.
+  // Single current-result download: just the generated image, debug mode included.
   async function downloadCurrentResultImage() {
     const runs = lastResultRuns();
     const current = runs.find((run) => run.run === lastResult.runNumber) || runs[0];
@@ -6248,11 +6190,7 @@
   }
 
   function downloadCurrentResultOnly() {
-    if (isDebugUiActive) {
-      downloadZip(buildResultZip, buildDownloadZipFilename());
-    } else {
-      downloadCurrentResultImage();
-    }
+    downloadCurrentResultImage();
   }
 
   // #download-link only asks "current RUN or all RUNs?" when there's an
@@ -8366,18 +8304,6 @@
     await Promise.all(runners);
   }
 
-  // Batch counterpart of buildResultZip/buildAllRunsZip: bundles every
-  // image's *every done RUN* into one zip, each image under its own
-  // "image N/" folder (1-indexed by position in the batch) -- if an image
-  // was revised with a higher RUN count, all of those RUNs are included, not
-  // just the currently mirrored one, so the zip's file count actually
-  // matches how many results were generated instead of silently dropping to
-  // one per image. An image with no done RUN yet (still under analysis
-  // review, or its edit is running/failed) falls back to just its original
-  // source photo -- same reasoning as buildPendingSourceZip for the
-  // single-image flow -- so "download all" has something to offer from the
-  // analysis page onward instead of staying hidden until every image is
-  // fully edited.
   function doneBatchRecordsWithResult() {
     return batchRecords.filter((r) => r.status === "done" && r.result);
   }
@@ -8387,7 +8313,7 @@
   // safe to call on a record that's actually done (record.runs empty/absent
   // otherwise just means "no edit attempted yet", not "one implicit done
   // run") -- callers that iterate every batchRecords entry regardless of
-  // status (buildAllBatchResultsZip) must check that themselves first.
+  // status must check that themselves first.
   function batchRecordRuns(record) {
     if (Array.isArray(record.runs) && record.runs.length) return record.runs;
     return [{ run: 1, result: record.result, jobId: record.jobId, status: "done" }];
@@ -8408,96 +8334,122 @@
     return (record.status === "done" && record.result) ? batchRecordRuns(record) : [];
   }
 
-  // --debug-ui parity with buildPendingSourceZip's own source-only bundle:
-  // an image with no done RUN yet still has whatever the analyze stage
-  // already produced, so include that under this image's own prefix folder
-  // instead of leaving debug mode's "download all" no more informative than
-  // normal mode's.
-  async function buildBatchSourceFiles(record, prefix, onItemDone) {
-    const sourceBuf = await record.file.arrayBuffer();
-    const files = [{ name: prefix + (record.file.name || "source.jpg"), data: new Uint8Array(sourceBuf) }];
-    if (isDebugUiActive && record.analysis) {
-      const analysisBytes = new TextEncoder().encode(JSON.stringify(record.analysis, null, 2));
-      const promptsBytes = new TextEncoder().encode(buildPromptsJson(record.analysis.prompts || {}));
-      files.push(
-        { name: prefix + "analysis.json", data: analysisBytes },
-        { name: prefix + "prompts.json", data: promptsBytes }
-      );
-    }
-    onItemDone();
-    return files;
+  // 全部下載: each finished photo's newest result as its own file; unfinished photos are skipped.
+  function batchDownloadHint(finished, total) {
+    if (!finished) return tr("還沒有美化完成的照片");
+    return finished === total
+      ? tr("下載全部 {count} 張成品", { count: finished })
+      : tr("下載已完成的 {count} 張（{rest} 張還沒美化）", { count: finished, rest: total - finished });
   }
 
-  async function buildAllBatchResultsZip(onProgress) {
-    const runsPerRecord = batchRecords.map((r) => doneRunsForBatchRecord(r));
-    // Aggregate across every image's RUNs (or the one source-photo fallback
-    // "item" for an image with no done RUN yet), not just one image's --
-    // each image's fetches run in parallel, so this is a shared counter
-    // rather than a per-image local count.
-    const total = runsPerRecord.reduce((sum, runs) => sum + (runs.length || 1), 0);
-    let done = 0;
-    const tick = () => {
-      done += 1;
-      if (onProgress) onProgress(done, total);
-    };
+  function setBatchDownloadHint(finished, total) {
+    const btn = els.batchDownloadAllBtn;
+    const hint = batchDownloadHint(finished, total);
+    btn.title = hint;
+    btn.setAttribute("aria-label", hint);
+    btn.setAttribute("aria-disabled", String(!finished));
+  }
 
-    // mapWithConcurrency (not a bare Promise.all) -- same reasoning as
-    // buildSelectedHistoryZip's own: a large batch firing every image's
-    // fetches at once can overwhelm the browser's connection/TLS handling
-    // (net::ERR_HTTP2_PROTOCOL_ERROR, net::ERR_CERT_VERIFIER_CHANGED),
-    // failing the whole zip over what's really just too much concurrency.
-    const groups = await mapWithConcurrency(batchRecords, 3, (r, i) => {
-      const prefix = `image ${i + 1}/`;
-      const runs = runsPerRecord[i];
-      return runs.length
-        ? buildImageFiles({ file: r.file, path: batchSettings.path, prefix }, runs, tick)
-        : buildBatchSourceFiles(r, prefix, tick);
+  function batchRecordsDownload() {
+    const results = [];
+    let finished = 0;
+    batchRecords.forEach((r) => {
+      const runs = doneRunsForBatchRecord(r);
+      if (runs.length) finished += 1;
+      runs.forEach((run) => results.push(resultImageUrl(run.jobId, { path: batchSettings.path, run: run.sourceRun != null ? run.sourceRun : run.run })));
     });
-    return window.PhotoAgentZip.createZip(groups.flat());
+    return { results, finished, total: batchRecords.length };
+  }
+
+  function caseGroupDownload() {
+    const photos = caseGroupSidebarPhotos;
+    const done = photos.filter((p) => p.active_version?.job_id);
+    const results = done.map((p) => resultImageUrl(p.active_version.job_id, { path: "local", run: p.active_version.run || 1 }));
+    return { results, finished: done.length, total: photos.length };
   }
 
   function updateBatchDownloadAllVisibility() {
     if (!els.batchDownloadAllBtn) return;
     els.batchDownloadAllBtn.hidden = batchRecords.length === 0;
     if (batchRecords.length === 0) return;
-    const doneCount = doneBatchRecordsWithResult().length;
-    const hint = doneCount === 0
-      ? tr("下載所有原圖（{length} 張）", { length: batchRecords.length })
-      : doneCount === batchRecords.length
-        ? tr("下載所有已完成的結果（{doneCount} 張）", { doneCount })
-        : tr("下載全部（已完成 {doneCount} 張，其餘為原圖，共 {length} 張）", { doneCount, length: batchRecords.length });
-    els.batchDownloadAllBtn.title = hint;
-    els.batchDownloadAllBtn.setAttribute("aria-label", hint);
+    setBatchDownloadHint(doneBatchRecordsWithResult().length, batchRecords.length);
   }
 
-  // 全部下載 for a batch listed from the chat page: same `image N/` layout as
-  // buildAllBatchResultsZip, with the photo's current version as its result.
-  async function buildCaseGroupZip(onProgress) {
-    const photos = caseGroupSidebarPhotos;
-    const total = photos.reduce((sum, p) => sum + (p.active_version?.job_id ? 2 : 1), 0);
-    let done = 0;
-    const tick = () => {
-      done += 1;
-      if (onProgress) onProgress(done, total);
-    };
-    const groups = await mapWithConcurrency(photos, 3, async (photo, i) => {
-      const v = photo.active_version;
-      const runs = v?.job_id ? [{ run: v.run || 1, jobId: v.job_id, status: "done" }] : [];
-      const { sourceBuf, runData } = await fetchImageDownloadData(
-        { sourceUrl: sourceImageUrl(photo.analyze_job_id), path: "local" }, runs, tick);
-      tick();
-      return buildFlatImageFiles({ prefix: `image ${i + 1}/` }, sourceBuf, runData);
+  function askShareInNoticeModal(message, actionLabel, doShare) {
+    return new Promise((resolve) => {
+      showNoticeModal(message, {
+        dismissLabel: tr("取消"),
+        actionLabel,
+        onAction: async () => {
+          resolve(await doShare());
+          closeNoticeModal();
+        },
+        onClose: () => resolve(false),
+      });
     });
-    return window.PhotoAgentZip.createZip(groups.flat());
+  }
+
+  let batchDownloadBusy = false;
+
+  async function saveBatchResults({ results, finished, total }) {
+    if (batchDownloadBusy) return;
+    if (!finished) {
+      showNoticeModal(tr("還沒有美化完成的照片"));
+      return;
+    }
+    batchDownloadBusy = true;
+    const skipped = total - finished;
+    const stamp = buildDownloadImageBasename();
+    const items = results.map((url, i) => ({ url, name: results.length > 1 ? `${stamp}-${i + 1}` : stamp }));
+    const toPhotos = window.PhotoAgentSave.sharesToPhotos();
+    showDownloadProgress((done, count) => count
+      ? (toPhotos ? tr("準備中…（{done}/{total}）", { done, total: count }) : tr("下載中…（{done}/{total}）", { done, total: count }))
+      : (toPhotos ? tr("準備中…") : tr("下載中…")));
+    let outcome = null;
+    try {
+      outcome = await window.PhotoAgentSave.saveImages(items, {
+        onProgress: updateDownloadProgress,
+        askShare: (step, doShare) => {
+          hideDownloadProgress(true);
+          const lines = [tr("{count} 張照片已準備好。", { count: step.total })];
+          if (skipped) lines.push(tr("另外 {count} 張還沒美化，不會下載。", { count: skipped }));
+          if (step.failed) lines.push(tr("{count} 張下載失敗，請稍後再試。", { count: step.failed }));
+          const label = step.chunked
+            ? tr("儲存第 {from}–{to} 張到照片", { from: step.from, to: step.to })
+            : tr("儲存 {count} 張到照片", { count: step.count });
+          return askShareInNoticeModal(lines.join("\n"), label, doShare);
+        },
+      });
+    } catch {
+      outcome = { saved: 0, failed: items.length, shared: false, cancelled: false };
+    } finally {
+      batchDownloadBusy = false;
+      hideDownloadProgress(!!outcome && outcome.saved > 0);
+    }
+    if (outcome.cancelled) return;
+    if (!outcome.saved) {
+      showError(tr("下載失敗，請稍後再試。"));
+      return;
+    }
+    if (outcome.shared) {
+      showNoticeModal(tr("已下載完成。"));
+      return;
+    }
+    const lines = [outcome.saved > 1
+      ? tr("已下載 {count} 張。如果只收到一張，請在網址列允許這個網站下載多個檔案。", { count: outcome.saved })
+      : tr("已下載完成。")];
+    if (skipped) lines.push(tr("另外 {count} 張還沒美化，所以沒有下載。", { count: skipped }));
+    if (outcome.failed) lines.push(tr("{count} 張下載失敗，請稍後再試。", { count: outcome.failed }));
+    showNoticeModal(lines.join("\n"));
   }
 
   function handleDownloadAllBatchClick() {
     if (caseGroupSidebarSession) {
-      if (caseGroupSidebarPhotos.length) downloadZip(buildCaseGroupZip, buildDownloadZipFilename());
+      if (caseGroupSidebarPhotos.length) saveBatchResults(caseGroupDownload());
       return;
     }
     if (!batchRecords.length) return;
-    downloadZip(buildAllBatchResultsZip, buildDownloadZipFilename());
+    saveBatchResults(batchRecordsDownload());
   }
 
   function renderBatchSidebarList() {
@@ -8724,20 +8676,12 @@
       els.batchDrawerTriggerCount.hidden = false;
     }
     // 全部美化 acts on a batch uploaded on this page (batchRecords), not on
-    // one listed from the chat page. 全部下載 works for both -- here it zips
-    // each photo's source plus its current version (buildCaseGroupZip).
+    // one listed from the chat page. 全部下載 works for both (caseGroupDownload).
     if (els.batchContinueAllBtn) els.batchContinueAllBtn.hidden = true;
     caseGroupSidebarPhotos = photos;
     if (els.batchDownloadAllBtn) {
-      const doneCount = photos.filter((p) => p.active_version?.job_id).length;
-      const hint = doneCount === 0
-        ? tr("下載所有原圖（{length} 張）", { length: photos.length })
-        : doneCount === photos.length
-          ? tr("下載所有已完成的結果（{doneCount} 張）", { doneCount })
-          : tr("下載全部（已完成 {doneCount} 張，其餘為原圖，共 {length} 張）", { doneCount, length: photos.length });
       els.batchDownloadAllBtn.hidden = false;
-      els.batchDownloadAllBtn.title = hint;
-      els.batchDownloadAllBtn.setAttribute("aria-label", hint);
+      setBatchDownloadHint(photos.filter((p) => p.active_version?.job_id).length, photos.length);
     }
     const list = els.batchSidebarList;
     const keepScroll = list.scrollTop;
@@ -8823,6 +8767,7 @@
   // notice (重新分析 / 重新一鍵美化), but kept generic like the first one in
   // case another caller needs a two-choice notice later.
   let noticeModalAction2 = null;
+  let noticeModalOnClose = null;
 
   function showNoticeModal(message, {
     dismissLabel = "OK",
@@ -8830,8 +8775,12 @@
     onAction = null,
     action2Label = "",
     onAction2 = null,
+    onClose = null,
   } = {}) {
     if (!els.noticeModal) return;
+    const replaced = noticeModalOnClose;
+    noticeModalOnClose = typeof onClose === "function" ? onClose : null;
+    if (replaced) replaced();
     if (els.noticeModalMsg) els.noticeModalMsg.textContent = message;
     noticeModalAction = typeof onAction === "function" ? onAction : null;
     noticeModalAction2 = typeof onAction2 === "function" ? onAction2 : null;
@@ -8855,6 +8804,8 @@
   }
 
   function closeNoticeModal() {
+    const onClose = noticeModalOnClose;
+    noticeModalOnClose = null;
     noticeModalAction = null;
     noticeModalAction2 = null;
     if (els.noticeModal) els.noticeModal.hidden = true;
@@ -8873,6 +8824,7 @@
       els.noticeModalAction2Btn.disabled = false;
       els.noticeModalAction2Btn.textContent = "";
     }
+    if (onClose) onClose();
   }
 
   // Thrown by a notice action that shows its own nested confirm/estimate step
@@ -9515,8 +9467,7 @@
     return results;
   }
 
-  // History counterpart of buildAllBatchResultsZip: bundles every selected
-  // job's done runs into one zip, each under its own "image N/" folder.
+  // Zips every selected job's done runs into one zip, each under its own "image N/" folder.
   // Reuses fetchAllHistoryRuns (the same per-job_id fetch viewHistoryRecord
   // itself calls) to get each job's flattened, run-numbered result list,
   // rather than duplicating that fetch-and-flatten logic here.

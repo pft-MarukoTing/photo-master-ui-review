@@ -2790,6 +2790,8 @@
       transition: border-color .15s, color .15s;
     }
     .batch-download-all-btn:hover { border-color: var(--border-2); color: var(--text); }
+    .batch-download-all-btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+    .batch-download-all-btn[aria-disabled="true"]:hover { border-color: var(--border); color: var(--text-2); }
     .batch-sidebar-list {
       display: flex; flex-direction: column; gap: 8px;
       flex: 1 1 auto; min-height: 0; overflow-y: auto;
@@ -3023,7 +3025,7 @@
     }
     .error-modal-close:hover { color: var(--text); }
     .error-modal-file { font-size: 13px; color: var(--text-2); margin-bottom: 8px; word-break: break-all; }
-    .error-modal-msg { font-size: 15px; color: var(--text); line-height: 1.5; word-break: break-word; }
+    .error-modal-msg { font-size: 15px; color: var(--text); line-height: 1.5; word-break: break-word; white-space: pre-line; }
     /* #cost-modal's 分析/修圖/總金額 breakdown -- plain label/value rows, the
        last one (總金額) set off with a divider + bolder weight since it's
        the sum of the two above it, not another line item. */
@@ -7730,6 +7732,7 @@
 <script src="dom.js"></script>
 <script src="image-tools.js"></script>
 <script src="zip-tool.js"></script>
+<script src="save-images.js"></script>
 <script src="photo-agent-api.js"></script>
 <script src="results.js"></script>
 <script src="app.js"></script>
