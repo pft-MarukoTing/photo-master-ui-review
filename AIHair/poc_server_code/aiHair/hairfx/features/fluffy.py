@@ -1,6 +1,8 @@
-"""fluffy: HairFeatures' fluffy. Its switches, as HairFeatures set them:
-colour match on, in the hair; lined up --align global; --blend by its own
-crown composite, off by default. What it shares with grayHair, rootRetouch
+"""fluffy: HairFeatures' fluffy. Its switches: colour match on, in the hair;
+--blend by its own crown composite, on by default since 2026-11-10 (aiHair;
+HairFeatures had it off), so only the raised crown is the render's and the
+rest the photo's; --no-blend keeps the renders whole, lined up --align
+global. What it shares with grayHair, rootRetouch
 and strayHair (the face lock, the pyramid blend, the Lab colour helpers) is
 in hairfx/common.py.
 
@@ -67,9 +69,14 @@ instead (FluffyFeature.composite), as fluffy_composite.py does:
 
 The options' defaults are pipeline_fluffy.py's fluffy_composite.py flags
 as of 2026-11-02 (_COMPOSITE_FLAGS, "V14": --only-changed --match-hair
---roots-only --lock-face --align-regions --whole-cap) but -o align_regions,
-off since 2026-11-02, so the renders are lined up by one transform, as
-hairPart's, unless it is asked for. V11-2, the same without --whole-cap
+--roots-only --lock-face --align-regions --whole-cap), which made
+sample_for_Fluffy/result_fluffy. -o align_regions was off from 2026-11-02
+and is on again since 2026-11-10: on 5 saved renders (subject0/3/21/22/25,
+output/fluffy_align_check) it lined the render's strands up with the
+photo's better than the one transform where the paste fades on all 5 (mean
+high-pass |diff| there 8.40 -> 7.84), for 1–2 s more per render;
+-o align_regions=false lines them up by one transform, as hairPart's.
+V11-2, the same without --whole-cap
 (-o whole_cap=false), made demo_fluffy.zip: on 4 of its
 photos, 3 renders each, no pixel below the root zone changed (0.16% at
 most, the zone from FAN's landmarks here, not the in-house model's), and
@@ -219,7 +226,7 @@ def _fluffy_prompt(direction: str) -> str:
 class FluffyOptions:
     language: str = option("en", "the language of the prompt's CHANGE ONLY",
                            choices=("en", "zh"))
-    align_regions: bool = option(False, "with --blend, line each render up region by region — "
+    align_regions: bool = option(True, "with --blend, line each render up region by region — "
                                  "the face by its landmarks, the hair by optical flow (the "
                                  "lift on top kept), the rest by ECC — instead of one "
                                  "transform (needs the face; OpenCV, run in --face-python)")
@@ -383,11 +390,15 @@ def _paste(photo, render, photo_hair, render_hair, roots, cap, lock, opts):
 
 class FluffyFeature(CompositeFeature):
     description = ("the roots on top of the head lifted (蓬鬆): 1 render call per photo, "
-                   "colour-matched to the photo; with --blend, pasted into it on top of the head "
-                   "where it reshaped the hair, the face kept the photo's")
+                   "colour-matched to the photo; by default (--no-blend keeps it whole), pasted "
+                   "into it on top of the head where it reshaped the hair, lined up region by "
+                   "region, the face kept the photo's")
     Options = FluffyOptions
     colour_match = True
     blend_mask = "crown"
+    # aiHair: pasted by the crown composite by default (--no-blend keeps the
+    # renders whole), so only the raised crown is the render's.
+    blend_default = True
 
     def __init__(self):
         super().__init__("fluffy")

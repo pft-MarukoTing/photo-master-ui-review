@@ -137,9 +137,10 @@ for itself whether it is one images.edit call or a pipeline of calls;
       the parting, its colour fixed to the hair round it.
   fluffy
       one call: single-prompt_Fluffy.py's prompt (-o language en or zh), as
-      run_Fluffy_samples.py renders it. With --blend, fluffy_composite.py's
-      composite with pipeline_fluffy.py's flags: lined up by one transform
-      (region by region with -o align_regions; OpenCV, in --face-python),
+      run_Fluffy_samples.py renders it. By default (--no-blend keeps it as
+      drawn), fluffy_composite.py's composite with pipeline_fluffy.py's
+      flags: lined up region by region (-o align_regions; OpenCV, in
+      --face-python; -o align_regions=false: by one transform),
       the hair's colour matched place by place (-o match_hair), the render's
       hair taken on top of the head, from about the eyes up (-o
       roots_only), only where it reshaped the hair (-o only_changed) and
@@ -213,8 +214,8 @@ photo's and the result's hair from the in-house hair model (--seg-model,
 run in this process), the render as drawn kept as debug/<photo>/<name>_raw.png
 where it moved. hairline's and soft_1's results, pasted into the photo
 already, aren't, nor hairPart's, fluffy's, strayHairWithFace's,
-rootRetouch_1's and grayHairTwoStep(_1)'s when blended (--blend; those last
-two by default), which line them up themselves; nor are any with
+rootRetouch_1's and grayHairTwoStep(_1)'s when blended (--blend; fluffy's and
+those last two by default), which line them up themselves; nor are any with
 --no-align or --keep-rendered-size.
 That is one affine transform of the whole render (--align global, every
 effect's default but hairline_simple_lv1/1.5's); with --align local it is
@@ -251,7 +252,7 @@ crown, the face kept; face: the face it drew; hair_shifted: the hair, the
 face kept but for it, the renders lined up region by region). Each result as
 it was is kept as debug/<photo>/<name>_unblended.png, the mask as
 blend_mask_<name>.png and blend_<name>.jpg. The other effects' results are
-left as they are. rootRetouch_1's, grayHairTwoStep(_1)'s and
+left as they are. fluffy's, rootRetouch_1's, grayHairTwoStep(_1)'s and
 hairline_simple_lv1/1.5's are pasted so without --blend too, by default;
 --no-blend keeps them as drawn.
 
