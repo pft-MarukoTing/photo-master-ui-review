@@ -2008,8 +2008,9 @@ def _points_at_screen_translated(reply, options, labels):
     if any(p in labels or (verbs and verbs.sub("", p).strip() in labels) for p in plain):
         return True
     before, after = i18n.pattern("offer_before"), i18n.pattern("offer_after")
-    question = re.split(r"(?<=[.!;。！；])\s*", reply.strip())[-1].strip()
-    if not (before or after) or not question.endswith(("?", "？")):
+    ends = "".join(c for c in ".!;。！；" if c not in i18n.question_marks())
+    question = re.split(rf"(?<=[{re.escape(ends)}])\s*", reply.strip())[-1].strip()
+    if not (before or after) or not question.endswith(tuple(i18n.question_marks())):
         return False
     question = question.lower()
     quoted = lambda label: rf"[\"{left}]{re.escape(label)}[\"{right}]"
@@ -2029,6 +2030,11 @@ OFFER_WORDS = {"幫我分析": "分析", "一鍵美化": "一鍵美化"}
 # The start buttons under the conversation, typed out word for word. These
 # need no model to read: typing a button's name is pressing it.
 REVIEW_CHIP_STARTS = {"一鍵美化": "render", "分析": "analyze"}
+
+
+def _asks(reply):
+    """Whether `reply` asks the user something."""
+    return any(mark in reply for mark in i18n.question_marks())
 
 
 def _offer_question(reply, options, batch=False, redo=False):
@@ -2074,7 +2080,7 @@ def _offer_question_translated(reply, options, batch=False, redo=False):
     body = reply.rstrip()
     if not offer:
         return body
-    end = max(body.rfind("?"), body.rfind("？"))
+    end = max(body.rfind(mark) for mark in i18n.question_marks())
     if end < 0:
         return _cat(body, offer)
     cut = max(body.rfind(c, 0, end) for c in i18n.fmt("sentence_end"))
@@ -2513,7 +2519,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
             else BATCH_REDO_OFFER_REPLY if redo else BATCH_RENDER_OFFER_REPLY)
     elif offer:
         reply = _offer_question(reply, options, bool(batch), redo)
-    elif (verdict == "answer" and reply and not after_offer and not continuation and "？" not in reply and "?" not in reply
+    elif (verdict == "answer" and reply and not after_offer and not continuation and not _asks(reply)
           and (not batch or batch.get("analyze") or batch.get("render"))):
         # An answer that just stops leaves the user with nothing to tap; 分析
         # is always a next step on this page. One that asks something
@@ -2567,7 +2573,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None,
         reply = i18n.tr(WITHDRAWN_REPLY)
     if setting:
         reply = _cat(_settings_reply(ratio, switches, scale), _kept_next(batch, continuation))
-    elif kept and "？" not in reply and "?" not in reply:
+    elif kept and not _asks(reply):
         reply = _cat(reply or i18n.tr(KEPT_REPLY), replaced, _settings_note(ratio, switches, scale), _kept_next(batch, continuation))
     elif ratio or scale or switches or replaced:
         reply = _cat(replaced, _settings_note(ratio, switches, scale), reply)

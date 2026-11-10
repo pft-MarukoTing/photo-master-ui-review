@@ -173,6 +173,14 @@ def fmt(key):
     return catalog.FORMAT[key] if catalog else SOURCE_FORMAT[key]
 
 
+_QUESTION_MARKS = "?？؟;;"
+
+
+def question_marks():
+    """The characters that end a question in the current language: Arabic adds 「؟」, Greek writes 「;」."""
+    return "?？" + "".join(c for c in fmt("sentence_end") if c in _QUESTION_MARKS and c not in "?？")
+
+
 def quote(text):
     """A button name quoted the way a sentence in this language quotes it."""
     left, right = fmt("quote")

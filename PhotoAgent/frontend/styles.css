@@ -993,13 +993,11 @@ html[data-env-label] .logo::after {
     container-type: inline-size;
   }
   .upload-content-row > .upload-main-copy .upload-headline {
-    width: max-content;
     max-width: none;
-    white-space: nowrap;
-    /* cqw (this column's own width), not vw -- keeps the single-line
-       headline from ever outgrowing the column it actually has to fit in,
-       regardless of how .upload-main-copy's own width clamp changes across
-       breakpoints (see the >=1600px rule below). */
+    text-wrap: balance;
+    /* cqw (this column's own width), not vw -- sizes the headline off the
+       column it actually has to fit in, regardless of how .upload-main-copy's
+       own width clamp changes across breakpoints (see the >=1600px rule below). */
     font-size: clamp(20px, 7cqw, 30px);
   }
   .upload-content-row > .upload-main-col,

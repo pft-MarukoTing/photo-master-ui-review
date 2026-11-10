@@ -1828,7 +1828,7 @@ window.PhotoAgentResults = (() => {
   function buildPlannedEditMessages({ analysis, selections = {}, userPrompt = "", overwritePrompt = false, aiPhotoEditing = true } = {}) {
     const sentence = (text) => {
       const value = typeof text === "string" ? text.trim() : "";
-      return value ? (/[。！？.!?…]$/.test(value) ? value : value + tr("。")) : "";
+      return value ? (/[。！？.!?…।؟;;]$/.test(value) ? value : value + tr("。")) : "";
     };
     const direction = typeof userPrompt === "string" ? userPrompt.trim() : "";
     if (!aiPhotoEditing) return []; // These controls describe AI editing, not local processing.
