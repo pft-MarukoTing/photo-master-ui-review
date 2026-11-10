@@ -83,6 +83,7 @@ def _run(params):
             params["line"], params.get("prompt", ""), params.get("history", []), params.get("people", []),
             sections=params.get("sections", []), deadline=params.get('deadline'), batch=params.get("batch"),
             continuation=params.get("continuation") or False, versions=params.get("versions") or 0,
+            screen=params.get("screen"),
             debug=bool(params.get("debug")))
     if stage == STAGE_OPENING:
         return chat_assistant.write_opening(params.get("analysis"), params.get("wishes") or "")

@@ -2040,6 +2040,41 @@ class ChatRoutesTest(unittest.TestCase):
             res = self.client.post(self.url(sid, f"/photos/{photo['photo_id']}/ask"), json={"user": USER, "text": text, **extra})
         return res, seen
 
+    def test_ask_screen_counts_the_photo_list_and_ignores_client_counts(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        answer = {"reply": "照片上方的下載鍵可以存下這一版。", "action": "none",
+                  "patch_json": "", "options": [], "ui_guidance": True}
+        res, seen = self.ask(sid, photo, "下載", answer,
+            screen={"bar": ["幫我分析"], "topics": [], "photos": 99, "has_result": True})
+        screen = json.loads(next(s.removeprefix("SCREEN: ") for s in seen[0].splitlines() if s.startswith("SCREEN: ")))
+        self.assertEqual((screen["photos"], screen["has_result"]), (1, False))
+        self.assertEqual(res.get_json()["messages"][-1]["card"]["text"], answer["reply"])
+        self.add_photos(sid)
+        _, seen = self.ask(sid, photo, "全部下載", answer)
+        self.assertEqual(json.loads(next(s[8:] for s in seen[0].splitlines() if s.startswith("SCREEN: ")))["photos"], 2)
+
+    def test_download_context_includes_sibling_sessions_in_ask_and_continuation(self):
+        batch_id = uuid.uuid4().hex
+        sid, sibling = [chat_session.create_session(USER, batch_id=batch_id)["session_id"] for _ in range(2)]
+        photo = self.ready_photo(sid)
+        self.ready_photo(sibling)
+        other = chat_session.create_session("another-user", batch_id=batch_id)
+        self.assertIsNotNone(other)
+        reply = "從「我的照片」旁的下載鍵可以存下已完成的成品。"
+        _, seen = self.ask(sid, photo, "全部下載", {
+            "reply": reply, "action": "none", "options": [], "ui_guidance": True})
+        self.assertEqual(json.loads(next(s[8:] for s in seen[0].splitlines() if s.startswith("SCREEN: ")))["photos"], 2)
+        seen = []
+        with patch.object(chat.chat_assistant, "_call", lambda c, *a, **k: seen.append(c) or {
+                "verdict": "answer", "reply": reply, "options": [], "ui_guidance": True}):
+            res = self.client.post("/api/photo-agent/chat/prompt-review", json={
+                "user": USER, "text": "全部下載", "continuation": 1, "versions": 1,
+                "session_id": sid, "photo_id": photo["photo_id"]})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(json.loads(next(s[8:] for s in seen[0].splitlines() if s.startswith("SCREEN: ")))["photos"], 2)
+        self.assertEqual(res.get_json(), {"accepted": False, "reply": reply})
+
     def test_ask_reply_with_several_changes_is_applied(self):
         sid = self.new_session()
         photo = self.ready_photo(sid)

@@ -4715,7 +4715,7 @@
       "where": [
         "panel",
         "chat",
-        "backend text"
+        "backend labels"
       ]
     },
     "我的照片（{length} 張）": {

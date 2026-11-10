@@ -2002,6 +2002,14 @@ def _round_to_open(log, photo_id):
     return rendered and not opened
 
 
+def _download_screen(user, session_id, photo):
+    """Count the photo list, including sessions joined by a multi-photo upload."""
+    session = _session(user, session_id)
+    members = store.batch_sessions(user, session["batch_id"]) if session.get("batch_id") else [session]
+    return {"photos": sum(len(s["photos"]) for s in members),
+            "has_result": bool(photo.get("active_version"))}
+
+
 def _answer(user, session_id, photo, history, screen, messages, answers=None):
     """The model's reply to the last line of `history`, appended to the log
     after `messages` (the question itself, when it is new)."""
@@ -2015,6 +2023,7 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
             analysis = None
     tag = {"answers": answers} if answers else {}
     base_plan = copy.deepcopy(photo["plan"])
+    screen = {**(screen or {}), **_download_screen(user, session_id, photo)}
     try:
         answer = chat_queue.run({
             "stage": chat_jobs.STAGE_ASK, "analysis": analysis, "plan": photo["plan"],
@@ -2131,6 +2140,11 @@ def prompt_review():
     versions = body.get("versions")
     if not (type(continuation) is int and type(versions) is int and continuation <= versions <= 999):
         versions = 0
+    screen = None
+    if continuation and isinstance(body.get("session_id"), str) and isinstance(body.get("photo_id"), str):
+        user, session_id = _user(body.get("user")), body["session_id"]
+        photo = _photo(_session(user, session_id), body["photo_id"])
+        screen = _download_screen(user, session_id, photo)
     try:
         answer = chat_queue.run({
             "stage": chat_jobs.STAGE_REVIEW, "line": text, "prompt": prompt,
@@ -2139,6 +2153,7 @@ def prompt_review():
             **({"batch": batch} if batch else {}),
             **({"continuation": continuation} if continuation else {}),
             **({"versions": versions} if versions else {}),
+            **({"screen": screen} if screen else {}),
             "deadline": time.time() + chat_assistant.TIMEOUT_SECONDS}, wait_seconds=PROMPT_REVIEW_WAIT_SECONDS)
     except Exception:
         current_app.logger.exception("chat prompt review failed")

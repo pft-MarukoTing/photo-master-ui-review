@@ -77,7 +77,7 @@ class ChatJobsRunTest(unittest.TestCase):
             self.assertEqual(chat_jobs.run({"stage": chat_jobs.STAGE_REVIEW, "line": "瘦臉", "people": ["左"]}),
                              {"kept": True})
         review.assert_called_once_with("瘦臉", "", [], ["左"], sections=[], deadline=None, batch=None,
-                                       continuation=False, versions=0, debug=False)
+                continuation=False, versions=0, screen=None, debug=False)
         # 總覽打的帶著那一批的樣子過去。
         batch = {"photos": 2, "unrendered": 2, "analyze": "全部分析", "render": "全部一鍵美化", "where": "上面的照片"}
         with patch.object(chat_jobs.chat_assistant, "review_line", return_value={"kept": True}) as review:

@@ -698,6 +698,38 @@ class AskTest(unittest.TestCase):
 
 
 class ReviewLineTest(unittest.TestCase):
+    def test_control_directions_do_not_get_an_unrelated_start_offer(self):
+        for lang, reply in (("zh-TW", "照片上方的下載鍵可以存下這一版。"),
+                            ("en", "Use the download arrow above the photo to save this version."),
+                            ("ar", "اضغط على سهم التنزيل أعلى الصورة لحفظ هذه النسخة.")):
+            for batch, continuation in ((None, False), (self.BATCH, False),
+                                        ({**self.BATCH, "redo": True, "analyze": "", "render": "全部再美化"}, False),
+                                        (None, 1)):
+                with self.subTest(lang=lang, batch=batch, continuation=continuation), chat_assistant.i18n.use(lang):
+                    result = chat_assistant.review_line("save all", "", batch=batch, continuation=continuation,
+                        model=lambda c: {"verdict": "answer", "reply": reply, "options": [], "ui_guidance": True})
+                    self.assertEqual(result["reply"], reply)
+                    self.assertFalse(any(result[k] for k in ("kept", "start", "ask", "offer", "later", "options")))
+
+    def test_no_result_answer_still_offers_retouching_without_starting_it(self):
+        result, _ = self.batch_review({"verdict": "answer", "ui_guidance": False,
+            "reply": "美化完成後才能下載。", "options": []}, line="下載")
+        self.assertIn("美化完成後才能下載", result["reply"])
+        self.assertTrue(result["offer"])
+        self.assertFalse(result["kept"] or result["start"])
+        self.assertIn("全部一鍵美化", result["options"])
+
+    def test_offer_repair_preserves_the_download_prerequisite_before_a_semicolon(self):
+        for batch, reply, options in (
+                (None, "要先一鍵美化完成後，才能存圖；要直接幫你一鍵美化嗎？", ["一鍵美化", "幫我分析"]),
+                (self.BATCH, "這幾張都還沒有完成美化，所以目前無法下載；要幫這幾張全部一鍵美化嗎？", ["全部一鍵美化", "全部分析"])):
+            with self.subTest(batch=batch):
+                result = chat_assistant.review_line("下載", "", batch=batch, model=lambda c: {
+                    "verdict": "answer", "reply": reply, "options": options, "ui_guidance": False})
+                self.assertTrue(result["reply"].startswith(reply.split("；")[0]))
+                self.assertTrue(result["offer"])
+                self.assertFalse(result["kept"] or result["start"])
+
     def test_deferred_recommendation_survives_a_clarification_in_either_language(self):
         cases = (("zh", "幫這張照片想一句話", "想用自己的文字嗎？也可以分析後讓我建議。"),
                  ("en", "Please suggest words for this photo", "Have your own words? I can also suggest some after analysis."),
