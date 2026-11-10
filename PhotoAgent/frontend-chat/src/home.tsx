@@ -1,6 +1,6 @@
 // Header, the home page's intro, the 最近照片 / 範例照片 gallery and the
 // 最近照片 drawer -- old markup and classes throughout.
-import { t, lang, LANGS, setLang } from "./i18n";
+import { t, lang, LANGS, selectableLanguages, setLang } from "./i18n";
 import type { ComponentChildren } from "preact";
 import { createPortal } from "preact/compat";
 import { useEffect, useRef, useState } from "preact/hooks";
@@ -269,7 +269,7 @@ export function ConfirmModal(props: {
 // showHistory is off on 首頁, whose gallery has its own 最近照片 tab.
 // 右上角的語言切換：一顆地球，點開列出每個語言（用它自己的寫法），選了就換並重新載入。
 // 偏好設定裡的「介面語言」照樣在，這顆是給還沒進對話、找不到設定的人。
-function LangSwitch() {
+function LangSwitch(props: { debugUi: boolean }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -300,7 +300,7 @@ function LangSwitch() {
       </button>
       {open && (
         <div class="lang-switch-menu" role="menu">
-          {LANGS.map((l) => (
+          {selectableLanguages(props.debugUi).map((l) => (
             <button
               key={l.code}
               type="button"
@@ -339,6 +339,7 @@ export function Header(props: {
   beforeLeave?: () => Promise<boolean>;
   // 首頁右上那顆地球：選介面語言。
   showLang?: boolean;
+  debugUi?: boolean;
 }) {
   const [reporting, setReporting] = useState(false);
   const [changelog, setChangelog] = useState(false);
@@ -375,7 +376,7 @@ export function Header(props: {
             <Icon name="clock" size={22} />
           </button>
         )}
-        {props.showLang && <LangSwitch />}
+        {props.showLang && <LangSwitch debugUi={!!props.debugUi} />}
         <button
           type="button"
           class="chat-header-more"

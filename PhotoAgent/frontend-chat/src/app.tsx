@@ -3172,6 +3172,7 @@ export function App() {
       showHistory={phase !== "home"}
       showChangelog={phase === "home"}
       showLang={phase === "home"}
+      debugUi={debugUi}
       onSettings={phase === "home" ? undefined : () => setPrefsOpen(true)}
       beforeLeave={() => confirmLeave(t("打開回報"))}
     />
@@ -3182,6 +3183,7 @@ export function App() {
   const prefsEl = prefsOpen && prefs && (
     <PrefsModal
       prefs={prefs}
+      debugUi={debugUi}
       onChange={(p) => {
         setPrefs(p);
         savePrefs(p);

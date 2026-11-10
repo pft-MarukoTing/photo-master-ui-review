@@ -1,4 +1,4 @@
-import { lang, LANGS, setLang, t } from "./i18n";
+import { lang, selectableLanguages, setLang, t } from "./i18n";
 import { createPortal } from "preact/compat";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { Capabilities, Plan } from "./types";
@@ -365,6 +365,7 @@ export function SettingsEditor({
 // 跟上傳頁的設定卡一樣；對話中切換也是當下就套用（app.tsx）。
 export function PrefsModal(props: {
   prefs: Prefs;
+  debugUi: boolean;
   onChange: (p: Prefs) => void;
   onClose: () => void;
 }) {
@@ -411,8 +412,8 @@ export function PrefsModal(props: {
               <span class="option-desc">{t("切換後頁面會重新載入；之前的對話和分析維持原本的語言。")}</span>
             </div>
             <select class="quality-select" value={lang} onChange={(e) => setLang((e.currentTarget as HTMLSelectElement).value)}>
-              {LANGS.map((l) => (
-                <option value={l.code}>{l.name}</option>
+              {selectableLanguages(props.debugUi).map((l) => (
+                <option key={l.code} value={l.code}>{l.name}</option>
               ))}
             </select>
           </label>

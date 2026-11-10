@@ -942,6 +942,7 @@
   // debug" gate on top; it never replaces that logic.
   function applyDebugUiVisibility(isDebug) {
     isDebugUiActive = isDebug;
+    window.setLanguageDebugUi(isDebug);
     if (processingPathRow) processingPathRow.style.display = isDebug ? "" : "none";
     if (isDebug && els.processingPathSelect) els.processingPathSelect.value = "local";
     if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";

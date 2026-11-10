@@ -28,6 +28,23 @@
   const CATALOGS = { ...(window.PHOTOAGENT_CATALOGS || {}), ...L10N.catalogs };
   const ENGLISH = CATALOGS.en || {};
   const KEY = "photoagent.lang";
+  let debugUi = false;
+  const isReleaseLanguage = (code) => code === SOURCE || code === "en";
+
+  function populateLanguageSelect(select) {
+    const languages = LANGS.filter((l) => debugUi || isReleaseLanguage(l.code));
+    select.replaceChildren(...languages.map((l) => new Option(l.name, l.code)));
+    select.value = lang;
+  }
+
+  function setLanguageDebugUi(isDebug) {
+    debugUi = !!isDebug;
+    for (const id of ["language-row", "ap-language-row"]) {
+      const select = document.querySelector(`#${id} select`);
+      if (!select) continue;
+      populateLanguageSelect(select);
+    }
+  }
 
   // Subtags that make a Chinese tag Traditional; any other Chinese (zh, zh-CN, zh-SG) is Simplified.
   const TRADITIONAL = new Set(["hant", "tw", "hk", "mo"]);
@@ -183,7 +200,7 @@
     row.querySelector(".option-label").textContent = tr("介面語言");
     row.querySelector(".option-desc").textContent = tr("切換後頁面會重新載入；之前的對話和分析維持原本的語言。");
     const select = row.querySelector("select");
-    for (const l of LANGS) select.add(new Option(l.name, l.code, false, l.code === lang));
+    populateLanguageSelect(select);
     select.addEventListener("change", () => {
       try { localStorage.setItem(KEY, select.value); } catch { /* falls back to the URL */ }
       const url = new URL(location.href);
@@ -213,4 +230,5 @@
   window.shownRecipe = shownRecipe;
   window.REFRAME_LABEL_RE = REFRAME_LABEL_RE;
   window.PHOTOAGENT_LANG = lang;
+  window.setLanguageDebugUi = setLanguageDebugUi;
 })();

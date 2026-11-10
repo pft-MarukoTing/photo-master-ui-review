@@ -28,6 +28,9 @@ export const LANGS: { code: string; name: string; fallback?: string; dir?: strin
   { code: "en", name: "English" },
   ...MADE_LANGUAGES.filter((l) => !isChinese(l.code)),
 ];
+export function selectableLanguages(debugUi: boolean) {
+  return LANGS.filter((l) => debugUi || l.code === SOURCE || l.code === "en");
+}
 const KEY = "photoagent.lang";
 
 // Subtags that make a Chinese tag Traditional; any other Chinese (zh, zh-CN, zh-SG) is Simplified.
