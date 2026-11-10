@@ -65,8 +65,8 @@ class CallTimer:
 
 
 class _TimedGroup:
-    def __init__(self, group, name: str, timer: CallTimer):
-        self._group, self._name, self._timer = group, name, timer
+    def __init__(self, group, name: str, timer: CallTimer, cpu=None):
+        self._group, self._name, self._timer, self._cpu = group, name, timer, cpu
 
     def __getattr__(self, attr):
         target = getattr(self._group, attr)
@@ -74,11 +74,15 @@ class _TimedGroup:
             return target
 
         def timed(*args, **kwargs):
+            if self._cpu is not None:
+                self._cpu.call_started()
             start = time.perf_counter()
             try:
                 return target(*args, **kwargs)
             finally:
                 self._timer.record(f"{self._name}.{attr}", start, time.perf_counter())
+                if self._cpu is not None:
+                    self._cpu.call_ended()
 
         return timed
 
@@ -86,18 +90,20 @@ class _TimedGroup:
 class TimedClient:
     """An OpenAI client whose images.edit/generate and responses.parse/create
     calls are timed into `timer`; with_options (core.Context.analyst's)
-    keeps them timed. Everything else passes through."""
+    keeps them timed. With `cpu` (a cpu_slots.TaskCpu), the task's CPU slot
+    goes back while each such call is in flight. Everything else passes
+    through."""
 
-    def __init__(self, client, timer: CallTimer):
-        self._client, self._timer = client, timer
+    def __init__(self, client, timer: CallTimer, cpu=None):
+        self._client, self._timer, self._cpu = client, timer, cpu
 
     def with_options(self, **kwargs):
-        return TimedClient(self._client.with_options(**kwargs), self._timer)
+        return TimedClient(self._client.with_options(**kwargs), self._timer, self._cpu)
 
     def __getattr__(self, attr):
         target = getattr(self._client, attr)
         if attr in _TIMED:
-            return _TimedGroup(target, attr, self._timer)
+            return _TimedGroup(target, attr, self._timer, self._cpu)
         return target
 
 

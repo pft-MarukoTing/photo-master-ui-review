@@ -19,6 +19,11 @@ AIHAIR_MAX_PIXELS = max(int(os.getenv("AIHAIR_MAX_PIXELS", "4000000")), 0)
 # Billed OpenAI calls one task may have in flight at once (HairFeatures'
 # main.py --workers).
 AIHAIR_CALLS_PER_TASK = max(int(os.getenv("AIHAIR_CALLS_PER_TASK", "4")), 1)
+# Tasks that may compute at once (the feature's own steps and its
+# post-processing), whatever ENGINE_WORKER_NUM is: each lets its slot go
+# while it waits on OpenAI (ai_hair/cpu_slots.py). 1 suits a 2 vCPU server;
+# 0: no limit.
+AIHAIR_CPU_SLOTS = max(int(os.getenv("AIHAIR_CPU_SLOTS", "1")), 0)
 # The OpenAI client's timeout and retries; HairFeatures' policy is no SDK
 # retries, so a slow call fails at the timeout instead of re-billing.
 AIHAIR_OPENAI_TIMEOUT_S = os.getenv("AIHAIR_OPENAI_TIMEOUT_S") or None

@@ -191,7 +191,8 @@ def launch_checking_queue_thread():
         thread.daemon = True
         thread.start()
         threads.append(thread)
-    logger.info('', f'Launched {ENGINE_WORKER_NUM} worker thread(s)')
+    logger.info('', f'Launched {ENGINE_WORKER_NUM} worker thread(s), '
+                    f'{AIHAIR_CPU_SLOTS or "unlimited"} CPU slot(s)')
     return threads
 
 

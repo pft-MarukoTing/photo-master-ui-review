@@ -16,6 +16,7 @@ from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
 from hairfx import core
 from hairfx.features import EFFECTS
 
+from .cpu_slots import CpuSlots, TaskCpu
 from .exceptions import AiHairError, NonRetryableError
 from .features import feature_options
 from .timing import CallTimer, TaskTiming, TimedClient
@@ -25,6 +26,9 @@ import infer  # noqa: E402 — bundle/infer.py, on sys.path via hairfx.core
 
 _CLIENT = None
 _CLIENT_LOCK = threading.Lock()
+# The CPU slots every task in this process shares (ai_hair/cpu_slots.py);
+# None (AIHAIR_CPU_SLOTS=0): no limit.
+CPU_SLOTS = CpuSlots(config.AIHAIR_CPU_SLOTS) if config.AIHAIR_CPU_SLOTS else None
 
 
 def _openai_api_key() -> str:
@@ -119,13 +123,17 @@ def run_ai_hair_pipeline(*, params: dict, src_paths: list[str], n_images: int, t
     input_size and photo_size), so a failed task's is there too. Returns
     {"outputs": [PIL images, in order], "photo": the photo (PIL, as run:
     shrunk where it was), "skipped": why the effect left the photo as it
-    is, or None, "metadata": {..., "input_size", "photo_size"}}."""
+    is, or None, "metadata": {..., "input_size", "photo_size"}}.
+    Computes in a CPU slot (CPU_SLOTS, ai_hair/cpu_slots.py) from its first
+    OpenAI call's end, letting it go during later calls; cpu_wait_sec, the
+    seconds it waited for one, is in generate_sec and postprocess_sec."""
     timing = timing if timing is not None else TaskTiming()
     feature_name = params["feature"]
     feature = EFFECTS[feature_name]
     opts = core.parse_options(feature, feature_options(feature_name, params.get("level")))
     timer = CallTimer()
-    ctx = build_context(TimedClient(client or get_openai_client(), timer), n_images)
+    cpu = TaskCpu(CPU_SLOTS)
+    ctx = build_context(TimedClient(client or get_openai_client(), timer, cpu), n_images)
     check_models(ctx, feature, opts)
 
     with timing.section("load"):
@@ -157,8 +165,12 @@ def run_ai_hair_pipeline(*, params: dict, src_paths: list[str], n_images: int, t
             finally:
                 timing["process_steps"] = core.process_steps(result, time.perf_counter())
         with timing.section("postprocess"):
+            if result.outputs:
+                cpu.take()  # held since the last call ended, where it made one
             feature.finish(ctx, photo, opts, result)
     finally:
+        cpu.close()
+        timing["cpu_wait_sec"] = round(cpu.wait_sec, 3)
         timing["api_sec"] = round(timer.busy_seconds(), 3)
         timing["api_calls"] = timer.summary()
         timing["cost_usd"] = round(result.cost, 6)

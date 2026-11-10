@@ -18,7 +18,8 @@ _SAVE_FORMATS = {
 }
 # The timing fields the server log's one-line summary shows, in order (the
 # JSON line in the timing log has them all).
-_TIMING_SUMMARY = ("download", "load", "generate", "postprocess", "upload", "total")
+_TIMING_SUMMARY = ("download", "load", "generate", "postprocess", "cpu_wait", "upload",
+                   "total")
 
 
 def build_job_metadata(task_info):
@@ -57,6 +58,9 @@ def timing_summary(timing):
             parts.append(f"{name}={timing[f'{name}_sec']:.3f}s")
             if name == "generate" and "api_sec" in timing:
                 parts.append(f"(api {timing['api_sec']:.3f}s)")
+            if name == "postprocess" and timing.get("postprocess_breakdown"):
+                parts.append("(" + " ".join(f"{k} {v:.3f}s" for k, v
+                                            in timing["postprocess_breakdown"].items()) + ")")
     return " ".join(parts)
 
 
