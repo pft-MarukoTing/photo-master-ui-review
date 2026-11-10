@@ -18,20 +18,24 @@ roots, the analyst decides first:
 
   1. The analyst (-o analyst_model) is given the photo, at most
      -o long_side on its long side, with _ANALYSIS_PROMPT: is there grey
-     hair mixed into darker hair, where, how much of the hair, and is the
-     whole head grey. It answers in GrayReading's fields, judging grey hair
-     by the prompt's strict criteria.
-  2. Wherever it finds grey hair, 明確 or 可能, or the head grey all over,
-     the render model edits the photo, for --n-images images (result_<i>):
-     with grayHair's prompt (single_prompt.EFFECT_PROMPTS), or, for a head
-     grey all over, with _WHOLE_GRAY_PROMPT, which grayHair's leaves as it
-     is. A photo with grey hair 沒有 is skipped and left as it is, unless
-     -o render_all.
+     hair mixed into darker hair, where, how much of the hair, is the
+     whole head grey, and if so, is that grey grown in, or a light colour
+     dyed or bleached (platinum, light blonde) or blonde by nature. It
+     answers in GrayReading's fields, judging grey hair by the prompt's
+     strict criteria.
+  2. Wherever it finds grey hair, 明確 or 可能, or the head grey all over
+     and grown in, the render model edits the photo, for --n-images images
+     (result_<i>): with grayHair's prompt (single_prompt.EFFECT_PROMPTS), or,
+     for a head grey all over and grown in, with _WHOLE_GRAY_PROMPT, which
+     grayHair's leaves as it is. A head light all over by dye or nature
+     counts as not grey all over: _PROMPT where it has grey hair 明確 or
+     可能, skipped where 沒有. A photo with grey hair 沒有 is skipped and
+     left as it is, unless -o render_all.
 
 With -o asks=N, step 1 is asked up to N times (core.ask_majority): the
 photo goes on where more than half of the answers say so, and takes
 _WHOLE_GRAY_PROMPT where more than half of those asked find the head grey
-all over.
+all over and grown in.
 
 grayHairTwoStep_1 takes _WHOLE_GRAY_PROMPT for every photo that goes on,
 whatever step 1 says of the whole head. grayHair's prompt changes grey hair
@@ -119,13 +123,19 @@ _DEFAULT_DETAIL = "original"
 # Step 1, sent with the photo; GrayReading's fields take its answers.
 # Question 1 is judged by the criteria after them, which list what grayHair
 # alone took for grey hair: light that falls on the hair, hair that is light
-# by nature or dye, and fine hairs the light shows through.
+# by nature or dye, and fine hairs the light shows through. Question 5 sets
+# a head light all over by dye or nature apart from one grey all over: a
+# platinum blonde (samples_261102_gray's 66DD7EE7029A51725791975) Luna at
+# 720 read grey hair 沒有 but the head grey all over in 4 of 5 asks
+# (output/grayHairPromptTune_261109, 2026-11-09), and _WHOLE_GRAY_PROMPT
+# turned it light brown; Sol at full size read it not grey all over.
 _ANALYSIS_PROMPT = (
     "請觀察這張照片中人物的頭髮，不要修改圖片，只回答：\n"
     "1. 頭髮裡有沒有夾雜白髮或灰白髮？\n"
     "2. 白髮在哪些位置（頭頂、分線、髮際線、兩鬢、後腦、髮身、髮尾）？\n"
     "3. 白髮大約佔看得到的頭髮的百分之多少？\n"
     "4. 是不是整頭幾乎都是灰白或銀白，看不出原本較深的髮色？\n"
+    "5. 如果第 4 題是：整頭的淺色看起來是自然長出來的白髮，還是刻意染成或漂成的白金、淺金等淺色，或天生的金髮？\n"
     "\n"
     "第 1 題從嚴判斷。算是白髮，要同時符合：\n"
     "- 髮絲本身褪成銀白、灰白，沒有顏色，不是因為照到光才看起來比較亮\n"
@@ -135,7 +145,11 @@ _ANALYSIS_PROMPT = (
     "- 天生的淺色頭髮（金髮、淺棕髮、紅髮）、染髮、挑染、漸層染、較淺或褪色的髮尾\n"
     "- 細髮、碎髮或髮際線的胎毛透光看起來比較淺\n"
     "- 分線處露出的頭皮\n"
-    "- 照片壓縮、模糊或雜訊造成的淺色斑點"
+    "- 照片壓縮、模糊或雜訊造成的淺色斑點\n"
+    "\n"
+    "第 5 題看髮色本身的色調與髮根：\n"
+    "- 長出來的白髮：沒有顏色的灰、銀白，或略帶黃的白；常常深淺不一，夾雜灰色或較深的髮絲；髮根和髮身一樣灰白\n"
+    "- 染色或天生淺色：帶金、香檳、奶油、冷白或粉彩等色調，整頭顏色均勻；髮根可能露出較深的原生髮色；或是天生的金髮、淺金髮"
 )
 
 # Step 2 for a head grey all over, where grayHair's prompt leaves the photo
@@ -186,12 +200,18 @@ class GrayReading(BaseModel):
     whole_head_gray: bool = Field(description=(
         "4. 整頭幾乎都是灰白或銀白：白色就是整體的髮色，看不出原本較深的髮色。"
     ))
+    whole_head_cause: Literal["長出來的白髮", "染色或天生淺色", "不適用"] = Field(description=(
+        "5. 第 4 題「是」時，整頭淺色的來源，照題目後的第 5 題標準判斷："
+        "「長出來的白髮」= 自然長出的白髮、灰白髮；「染色或天生淺色」= 刻意染成或漂成的白金、"
+        "淺金等淺色，或天生的金髮；第 4 題「否」就填「不適用」。"
+    ))
 
 
 @dataclass
 class GrayHairOptions:
     render_all: bool = option(False, "go on to step 2 for every photo, not only where step 1 "
-                                     "finds grey hair (明確 or 可能) or the head grey all over")
+                                     "finds grey hair (明確 or 可能) or the head grey all over "
+                                     "and grown in")
     analyze_only: bool = option(False, "step 1 only: read the photo, render nothing")
     asks: int = option(1, "times step 1 is asked at most: the photo goes on where more than "
                           "half of the answers say so, a tie not; asked one after another, "
@@ -211,20 +231,29 @@ class GrayHairOptions:
             raise ValueError(f"option long_side: must be at least 1; got {self.long_side}")
 
 
+def _whole_gray(reading: GrayReading) -> bool:
+    """Step 1 finds the head grey all over and that grey grown in, for
+    _WHOLE_GRAY_PROMPT. A head light all over by dye or nature (question 5)
+    counts as not grey all over; one read grey all over with question 5
+    不適用 counts as grown in, as before question 5 was asked."""
+    return reading.whole_head_gray and reading.whole_head_cause != "染色或天生淺色"
+
+
 def _skip_reason(reading: GrayReading) -> str | None:
     """Why step 1's answers keep a photo from step 2, or None: step 2 takes
-    any grey hair, 明確 or 可能, and a head grey all over."""
-    if reading.gray_hair == "沒有" and not reading.whole_head_gray:
-        return "grey hair 沒有"
+    any grey hair, 明確 or 可能, and a head grey all over and grown in."""
+    if reading.gray_hair == "沒有" and not _whole_gray(reading):
+        return "grey hair 沒有" + ("（整頭淺色是染色或天生淺色）" if reading.whole_head_gray else "")
     return None
 
 
 class GrayHairFeature(HairShifted, SinglePromptFeature):
     """grayHair: HairFeatures' grayHairTwoStep (whole_gray_always off, as
     it ran): GPT reads the photo for grey hair (step 1); a photo with grey
-    hair 明確 or 可能 gets _PROMPT's render, one grey all over
-    _WHOLE_GRAY_PROMPT's, one with none is skipped; then pasted back by
-    HairShifted's composite (hairfx/common.py) by default."""
+    hair 明確 or 可能 gets _PROMPT's render, one grey all over and grown in
+    _WHOLE_GRAY_PROMPT's, one with none (a head light all over by dye or
+    nature included) is skipped; then pasted back by HairShifted's composite
+    (hairfx/common.py) by default."""
 
     Options = GrayHairOptions
     blend_mask = "hair_shifted"
@@ -234,8 +263,9 @@ class GrayHairFeature(HairShifted, SinglePromptFeature):
         super().__init__("grayHair", _PROMPT)
         self.description = (
             "grayHair with GPT checking the hair first: a photo with grey hair 明確 or 可能 "
-            "gets grayHair's render, one grey all over its own; per photo 1 analyst call (up "
-            "to -o asks), and 1 render call where it goes on")
+            "gets grayHair's render, one grey all over and grown in its own (one light all "
+            "over by dye or nature as not grey all over); per photo 1 analyst call (up to "
+            "-o asks), and 1 render call where it goes on")
 
     def prompts(self, opts) -> dict[str, str]:
         out = {"detect": _ANALYSIS_PROMPT}
@@ -253,14 +283,15 @@ class GrayHairFeature(HairShifted, SinglePromptFeature):
                                       reasoning=opts.reasoning, detail=opts.detail, n=opts.asks,
                                       skip_reason=_skip_reason)
         result.info["has_gray_hair"] = skip is None
+        whole_gray = majority(_whole_gray(r) for r in readings)
         if opts.analyze_only:
             found = "、".join(r.gray_hair for r in readings)
-            raise Skip("analyze_only: " + (skip or f"grey hair {found}, would go on to step 2"))
+            raise Skip("analyze_only: " + (skip or f"grey hair {found}, would go on to step 2 ("
+                                           + ("edit_whole_gray" if whole_gray else "edit") + ")"))
         if skip and not opts.render_all:
             raise Skip(skip)
 
-        step, prompt = (("edit_whole_gray", _WHOLE_GRAY_PROMPT)
-                        if majority(r.whole_head_gray for r in readings)
+        step, prompt = (("edit_whole_gray", _WHOLE_GRAY_PROMPT) if whole_gray
                         else ("edit", self.prompt))
         result.step = step
         renders = edit(ctx, result, step, [photo.file], prompt, photo.size,
