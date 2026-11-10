@@ -146,6 +146,7 @@ def _signing_context():
     settings = Settings()
     settings.set("sign.reject_self_signed_certs", "false")
     settings.set("sign.add_timestamp", "false")
+    settings.set("builder.thumbnail.enabled", "false")
     return Context(settings)
 
 
