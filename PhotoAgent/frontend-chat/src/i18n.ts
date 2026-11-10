@@ -71,6 +71,8 @@ function resolve(): string {
 export const lang = resolve();
 document.documentElement.lang = lang === SOURCE ? "zh-Hant" : lang;
 document.documentElement.dir = LANGS.find((l) => l.code === lang)?.dir || "ltr";
+// A right-to-left page mirrors the layout, so text naming a side of the screen names the other one.
+export const rtl = document.documentElement.dir === "rtl";
 // Only the chosen language's catalog is downloaded; every module importing t() waits for it.
 async function loadCatalog(): Promise<Record<string, string> | undefined> {
   if (lang === "en") return EN;

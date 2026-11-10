@@ -1,4 +1,4 @@
-import { t, shownLabel } from "./i18n";
+import { t, shownLabel, rtl } from "./i18n";
 import { nextDisplayOrder } from "./display-order";
 // The chat page: home (intro + gallery), the pre-session chat that picks a
 // photo and settings, and a session (compare canvas + chat timeline built
@@ -2238,7 +2238,7 @@ export function App() {
     const pending = keys.filter(unstarted).length;
     const unrendered = keys.filter(needsRender).length;
     // Labels and places as the user reads them: the reply quotes them.
-    const where = drawerLayout ? t("上面的照片") : t("左邊的「我的照片」");
+    const where = drawerLayout ? t("上面的照片") : rtl ? t("右邊的「我的照片」") : t("左邊的「我的照片」");
     // 每張都美化過了：不提分析，這句發到每一張，鍵是「全部再美化」。
     const finished = overviewFinished();
     const doneN = keys.filter((k) => !!doneLive(k)).length;
@@ -3410,9 +3410,9 @@ export function App() {
     const firstUpload = first?.kind === "upload" ? first.srcs : batch.map(sourceSrc);
     const have = new Set(batch.map(sourceSrc));
     // 照片在哪：手機和直拿的平板在對話上面那格，桌機在左邊「我的照片」。
-    const spot = drawerLayout ? t("上面@@按鈕位置") : t("左邊@@按鈕位置");
+    const spot = drawerLayout ? t("上面@@按鈕位置") : rtl ? t("右邊@@按鈕位置") : t("左邊@@按鈕位置");
     // 叫人去點照片時講畫面上看得到的名字；手機上那格沒有標題，說「上面」就夠。
-    const where = drawerLayout ? t("上面@@照片位置") : t("左邊的「我的照片」@@照片位置");
+    const where = drawerLayout ? t("上面@@照片位置") : rtl ? t("右邊的「我的照片」@@照片位置") : t("左邊的「我的照片」@@照片位置");
     const thumbOf = new Map(batch.map((s) => [sourceSrc(s), thumbSrc(s)]));
     const uploadThumbs = (srcs: string[]) => srcs.filter((s) => have.has(s)).map((s) => thumbOf.get(s) || s);
     // 最底下那句跟著現在的進度，點出接下來能做什麼：還在跑的等它們、沒開始的按哪顆、開始過一些
@@ -4045,7 +4045,8 @@ function PreStage({ source }: { source: Source }) {
 // 桌機是左邊那一欄。
 const DRAWER_LAYOUT = "(max-width:900px),(max-width:1200px) and (orientation:portrait)";
 function photosSpot() {
-  return matchMedia(DRAWER_LAYOUT).matches ? t("左上角") : t("左邊");
+  if (matchMedia(DRAWER_LAYOUT).matches) return rtl ? t("右上角") : t("左上角");
+  return rtl ? t("右邊") : t("左邊");
 }
 
 // 跟著視窗變：轉平板或拉寬視窗時，版面和對話裡的「上面／左邊」一起換。

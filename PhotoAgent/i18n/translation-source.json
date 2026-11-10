@@ -859,6 +859,12 @@
         "chat"
       ]
     },
+    "上方照片可以跟原圖比，點左上的版本也能切換。": {
+      "en": "Compare with the original above, or tap the version label at the top left to switch.",
+      "where": [
+        "chat"
+      ]
+    },
     "上面@@按鈕位置": {
       "en": "above",
       "where": [
@@ -2982,6 +2988,44 @@
         "panel"
       ],
       "note": "Badge on a history photo processed with an older app version; reprocessing gives better results."
+    },
+    "右上角": {
+      "en": "at the top right",
+      "where": [
+        "chat"
+      ]
+    },
+    "右側可比較 Before / After，也可從「美化紀錄」切換版本。": {
+      "en": "Compare Before / After on the right, or switch between versions in “Version History”.",
+      "where": [
+        "chat"
+      ]
+    },
+    "右邊": {
+      "en": "on the right",
+      "where": [
+        "chat"
+      ],
+      "note": "Inserted into a sentence saying where the photo list is on screen: on the right side."
+    },
+    "右邊@@按鈕位置": {
+      "en": "on the right",
+      "where": [
+        "chat"
+      ],
+      "note": "Where a button is, joined into a sentence: 'on the right'."
+    },
+    "右邊的「我的照片」": {
+      "en": "“My Photos” on the right",
+      "where": [
+        "chat"
+      ]
+    },
+    "右邊的「我的照片」@@照片位置": {
+      "en": "in “My Photos” on the right",
+      "where": [
+        "chat"
+      ]
     },
     "合計": {
       "en": "Total",

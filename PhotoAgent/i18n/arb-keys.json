@@ -1593,6 +1593,12 @@
         "chat"
       ]
     },
+    "chat_at_the_top_right": {
+      "zh": "右上角",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_back_to_original": {
       "zh": "換回原圖",
       "where": [
@@ -1752,8 +1758,23 @@
         "button_common_version_history": "common_version_history"
       }
     },
+    "chat_compare_before_after_on_the_2": {
+      "zh": "右側可比較 Before / After，也可從「美化紀錄」切換版本。",
+      "where": [
+        "chat"
+      ],
+      "buttons": {
+        "button_common_version_history": "common_version_history"
+      }
+    },
     "chat_compare_with_the_original_above": {
       "zh": "上方照片可以跟原圖比，點右上的版本也能切換。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_compare_with_the_original_above_2": {
+      "zh": "上方照片可以跟原圖比，點左上的版本也能切換。",
       "where": [
         "chat"
       ]
@@ -2286,6 +2307,15 @@
         "button_common_my_photos": "common_my_photos"
       }
     },
+    "chat_in_my_photos_on_the_2": {
+      "zh": "右邊的「我的照片」@@照片位置",
+      "where": [
+        "chat"
+      ],
+      "buttons": {
+        "button_common_my_photos": "common_my_photos"
+      }
+    },
     "chat_it_wont_apply_to_the": {
       "zh": "已經在美化或美化好的 {n} 張不會套用。",
       "where": [
@@ -2417,6 +2447,15 @@
     },
     "chat_my_photos_on_the_left": {
       "zh": "左邊的「我的照片」",
+      "where": [
+        "chat"
+      ],
+      "buttons": {
+        "button_common_my_photos": "common_my_photos"
+      }
+    },
+    "chat_my_photos_on_the_right": {
+      "zh": "右邊的「我的照片」",
       "where": [
         "chat"
       ],
@@ -2880,6 +2919,18 @@
     },
     "chat_on_the_left_2": {
       "zh": "左邊@@按鈕位置",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_on_the_right": {
+      "zh": "右邊",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_on_the_right_2": {
+      "zh": "右邊@@按鈕位置",
       "where": [
         "chat"
       ]

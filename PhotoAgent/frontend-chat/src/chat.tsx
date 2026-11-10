@@ -1,6 +1,6 @@
 // Building blocks of the chat panel: the panel shell, message rows, chips and
 // the few cards that are new to the chat (working / result / collapsed).
-import { shownLabel, shownRecipe, t } from "./i18n";
+import { rtl, shownLabel, shownRecipe, t } from "./i18n";
 import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { api, urls } from "./api";
@@ -901,8 +901,8 @@ export function ResultCard({ job, ordinal, from, failed, next, continuable, note
         )}
         {!noting && <p class="chat-text chat-muted">
           {failed > 0 && t("有 {failed} 張沒有成功，已略過。", { failed })}
-          <span class="chat-result-hint-wide">{t("左側可比較 Before / After，也可從「美化紀錄」切換版本。")}</span>
-          <span class="chat-result-hint-narrow">{t("上方照片可以跟原圖比，點右上的版本也能切換。")}</span>
+          <span class="chat-result-hint-wide">{rtl ? t("右側可比較 Before / After，也可從「美化紀錄」切換版本。") : t("左側可比較 Before / After，也可從「美化紀錄」切換版本。")}</span>
+          <span class="chat-result-hint-narrow">{rtl ? t("上方照片可以跟原圖比，點左上的版本也能切換。") : t("上方照片可以跟原圖比，點右上的版本也能切換。")}</span>
         </p>}
         {next && !noting && <p class="chat-text">{continuable
           ? t("想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」；想接續某一版修改，在輸入框上方把「原圖」換成那一版。也可以直接打字跟我說。")
