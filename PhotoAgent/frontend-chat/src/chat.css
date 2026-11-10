@@ -1166,11 +1166,11 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
   border:1px solid var(--n34);font:600 var(--chat-fs-sm) Inter,var(--cjk-sans),system-ui,sans-serif;color:var(--n84);flex-shrink:0}
 .chat-face-chip img,.chat-face-blank{width:24px;height:24px;border-radius:50%;object-fit:cover;display:block;background:var(--n14)}
 button.chat-face-chip{cursor:pointer}
-button.chat-face-chip:not([disabled]):hover{border-color:var(--accent);color:var(--accent-text)}
+@media (hover:hover){button.chat-face-chip:not([disabled]):hover{border-color:var(--accent);color:var(--accent-text)}}
 .chat-face-chip.is-picked{border-color:var(--accent);color:var(--accent-text);background:var(--tonal-lo);box-shadow:0 0 0 2px rgba(var(--accent-rgb),.18)}
 .chat-face-chip.is-small{min-height:0;height:auto;padding:0;border:0;background:none;gap:0}
 .chat-face-chip.is-small img,.chat-face-chip.is-small .chat-face-blank{width:22px;height:22px;box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--n34)}
-button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--accent)}
+@media (hover:hover){button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 0 2.5px var(--accent)}}
 
 /* In the picker the crop is the label -- no name beside it -- so the chip is a
    disc big enough to actually recognise a face in: 40px of photo, a mat, and a
@@ -1206,7 +1206,8 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
 .chat-face-fold{display:inline-flex;align-items:center;gap:var(--sp-1);flex-shrink:0;padding-block:3px;padding-inline:3px var(--sp-2);
   border:1px solid var(--n34);border-radius:999px;background:var(--card);color:var(--n64);cursor:pointer;
   font:600 var(--chat-fs-sm)/1 Inter,var(--cjk-sans),system-ui,sans-serif}
-.chat-face-fold:hover,.chat-face-fold.is-open{border-color:var(--accent);color:var(--accent-text)}
+.chat-face-fold.is-open{border-color:var(--accent);color:var(--accent-text)}
+@media (hover:hover){.chat-face-fold:hover{border-color:var(--accent);color:var(--accent-text)}}
 .chat-face-fold-faces{display:inline-flex;align-items:center}
 .chat-face-fold .chat-face-chip.is-avatar{padding:0;border:0;background:none}
 .chat-face-fold .chat-face-chip.is-avatar img,.chat-face-fold .chat-face-chip.is-avatar .chat-face-blank{width:40px;height:40px;
