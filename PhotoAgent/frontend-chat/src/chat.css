@@ -1545,8 +1545,9 @@ div.chat-proposal-row{cursor:default}
   background:transparent;color:var(--text-2);cursor:pointer}
 .lang-switch-btn:hover,.lang-switch-btn[aria-expanded="true"]{background:rgba(var(--accent-rgb),.1);color:var(--accent)}
 .lang-switch-menu{position:absolute;top:calc(100% + 6px);inset-inline-end:0;z-index:1500;min-width:160px;padding:6px;display:flex;flex-direction:column;gap:2px;
+  max-height:min(420px,calc(100dvh - var(--header-h) - 16px));overflow-y:auto;overscroll-behavior-y:contain;
   border-radius:14px;background:var(--card);border:1px solid var(--border);box-shadow:0 12px 32px rgba(0,0,0,.16)}
-.lang-switch-item{display:flex;align-items:center;justify-content:space-between;gap:12px;height:40px;padding:0 12px;border:0;border-radius:10px;
+.lang-switch-item{display:flex;flex-shrink:0;align-items:center;justify-content:space-between;gap:12px;height:40px;padding:0 12px;border:0;border-radius:10px;
   background:transparent;color:var(--text);font:inherit;font-size:14px;text-align:start;cursor:pointer}
 .lang-switch-item:hover{background:rgba(var(--accent-rgb),.08)}
 .lang-switch-item.is-on{color:var(--accent-text);font-weight:700}
