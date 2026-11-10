@@ -737,6 +737,8 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    對話內容和輸入框收在中間 1040px 一欄，太寬一行讀不完，再窄兩邊又空太多。
    跟左欄的 40px 欄距不動，跟 session 頁一樣，切過去版面才不會跳。 */
 .upload-content-row>.home-chat.is-overview{flex:1 1 0%;width:auto;max-width:none}
+.home-chat.is-overview .chat-panel-sub{margin-inline-start:0;font-size:var(--chat-fs-lg);white-space:nowrap}
+.home-chat.is-overview .chat-panel-sub::before{content:"·";margin-inline-end:var(--sp-2)}
 .home-chat.is-overview .chat-timeline{padding-inline:max(var(--sp-5),calc((100% - 1040px) / 2))}
 .home-chat.is-overview .chat-composer{padding-inline:max(var(--sp-3),calc((100% - 1064px) / 2))}
 .chat-list{margin:0;padding-inline-start:1.2em;font-size:15px;line-height:1.8;color:var(--n84)}
