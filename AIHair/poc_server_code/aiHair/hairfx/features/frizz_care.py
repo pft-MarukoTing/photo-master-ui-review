@@ -157,6 +157,7 @@ renders.
 """
 
 import math
+import os
 from dataclasses import dataclass
 
 from .. import hairseg, imaging
@@ -354,6 +355,13 @@ def smoothed(image, hair, blur: float, fine: float, gain=1.0):
 
 @dataclass
 class FrizzCareOptions:
+    smooth_at: str = option(
+        os.environ.get("HAIRFX_FRIZZ_SMOOTH_AT", "photo"),
+        "aiHair: the size the render is smoothed at: the photo's (it grown to it first), or "
+        "the render's own where that is smaller (~1.6 MP; the hair model and the smoothing "
+        "run there, and the result is grown to the photo's as a render is); "
+        "HAIRFX_FRIZZ_SMOOTH_AT sets the default",
+        choices=("photo", "render"))
     blur: float = option(4.0, "frizzCare_3's -o blur: step 1's Gaussian along the hair's "
                          "flow, px on a 1024 px short side")
     fine: float = option(2.0, "frizzCare_3's -o fine: step 2 puts back the detail step 1 "
@@ -465,16 +473,36 @@ class FrizzCareFeature(SinglePromptFeature):
 
     def process(self, ctx, photo, opts, result) -> None:
         result.step = "edit"
+        # smooth_at=render: the renders as drawn, each grown to the photo's
+        # size after it is smoothed (smooth's fit_to).
+        at_render = opts.smooth_at == "render" and not ctx.render.keep_rendered_size
         renders = edit(ctx, result, "edit", [photo.file], self.prompt, photo.size,
-                       n=self.n_images(ctx.render), keep_size=ctx.render.keep_rendered_size)
-        self.smooth(ctx, renders, opts, result)
+                       n=self.n_images(ctx.render),
+                       keep_size=ctx.render.keep_rendered_size or at_render)
+        self.smooth(ctx, renders, opts, result, fit_to=photo.size if at_render else None)
 
     def step2_gain(self, opts):
         """smoothed's gain: local_gain's, per pixel."""
         return lambda blurred, back, body, k: local_gain(blurred, back, body, k, opts)
 
-    def smooth(self, ctx, renders, opts, result) -> None:
-        """Steps 2 and 3 on `renders`, frizzCare_2's, into `result`."""
+    def smooth(self, ctx, renders, opts, result, fit_to=None) -> None:
+        """Steps 2 and 3 on `renders`, frizzCare_2's, into `result`. With
+        `fit_to` (the photo's size; renders as drawn), a render with fewer
+        pixels than that is smoothed at its own size and the result grown to
+        it (imaging.fit_image, as edit grows a render); any other is grown
+        to it first."""
+        grow = []
+        if fit_to is not None:
+            fitted = []
+            for render in renders:
+                small = render.width * render.height < fit_to[0] * fit_to[1]
+                if not small:
+                    render, warning = imaging.fit_image(render, fit_to)
+                    if warning:
+                        result.warnings.append(f"edit: {warning}")
+                fitted.append(render)
+                grow.append(small)
+            renders = fitted
         result.step = "hair mask"
         hair = hairseg.hair_masks(renders, ctx.seg_python)
 
@@ -496,6 +524,13 @@ class FrizzCareFeature(SinglePromptFeature):
                 imaging.tinted(render, body > 0.5)))
             del base, added, body, taken, maps
             result.info[f"result_{i}"] = notes
-            result.outputs[f"result_{i}"] = imaging.as_image(rgb)
+            output = imaging.as_image(rgb)
+            del rgb
+            if grow and grow[i]:
+                output, warning = imaging.fit_image(output, fit_to)
+                if warning:
+                    result.warnings.append(f"edit: {warning}")
+                notes["smoothed_at"] = list(render.size)
+            result.outputs[f"result_{i}"] = output
             result.sheet.append(["input", f"render_{i}", f"base_{i}", f"added_{i}",
                                  f"result_{i}"])

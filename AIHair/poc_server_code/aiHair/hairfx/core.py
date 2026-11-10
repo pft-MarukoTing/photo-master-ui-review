@@ -132,6 +132,39 @@ def load_photo(infer, ref: str) -> Photo:
     return Photo(ref, (f"ref_0.{ext}", buf.getvalue(), mime), upright)
 
 
+def capped_photo(photo: Photo, max_pixels: int | None) -> Photo:
+    """`photo` shrunk, its aspect kept, to at most `max_pixels` pixels (area
+    averaging, OpenCV's INTER_AREA), its file re-encoded to match (JPEG at
+    95 where it was a JPEG, else PNG); as it is where it has no more, or
+    `max_pixels` is 0 or None (aiHair: every step's time and memory go with
+    the photo's pixels, a 9.8 MP photo's task 2-3x a 4 MP one's, while the
+    render is ~1.6 MP whatever the photo)."""
+    import math
+
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    width, height = photo.size
+    if not max_pixels or width * height <= max_pixels:
+        return photo
+    scale = math.sqrt(max_pixels / (width * height))
+    size = (max(1, math.floor(width * scale)), max(1, math.floor(height * scale)))
+    image = photo.image
+    if image.mode not in ("L", "RGB", "RGBA"):
+        image = image.convert("RGBA" if "A" in image.getbands()
+                              or "transparency" in image.info else "RGB")
+    small = Image.fromarray(cv2.resize(np.asarray(image), size, interpolation=cv2.INTER_AREA),
+                            image.mode)
+    fmt, ext = ("JPEG", "jpg") if photo.file[2] == "image/jpeg" else ("PNG", "png")
+    if fmt == "JPEG" and small.mode == "RGBA":
+        small = small.convert("RGB")
+    buf = io.BytesIO()
+    small.save(buf, format=fmt, quality=95)
+    mime = "image/jpeg" if fmt == "JPEG" else "image/png"
+    return Photo(photo.ref, (f"ref_0.{ext}", buf.getvalue(), mime), small)
+
+
 @dataclass
 class RenderSettings:
     """main.py's render flags, for every images.edit call an effect makes.

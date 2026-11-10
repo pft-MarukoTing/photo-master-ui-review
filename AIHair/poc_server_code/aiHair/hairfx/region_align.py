@@ -274,6 +274,23 @@ wh = blur_within(photo_hair.astype(np.float32), photo_hair, f) * (1 - wf)
 wr = np.clip(1 - wf - wh, 0, 1)
 np.save(tmp / "weights.npy", np.dstack([wf, wh, wr]))
 near_face = cv2.dilate(face.astype(np.uint8), disc).astype(bool)
+# aiHair: the shifts fitted and checked on the photo and the render shrunk
+# by k["scale"] (1: as they are), each taken back to the full frame's px.
+scale = k.get("scale", 1.0)
+if scale < 1:
+    small = (max(1, round(w * scale)), max(1, round(h * scale)))
+    sx, sy = small[0] / w, small[1] / h
+
+    def shrink(a):
+        if a.dtype == bool:
+            return cv2.resize(a.astype(np.uint8) * 255, small, interpolation=cv2.INTER_AREA) > 127
+        return cv2.resize(a, small, interpolation=cv2.INTER_AREA)
+else:
+    sx = sy = 1.0
+
+    def shrink(a):
+        return a
+photo_s, grey0_s = shrink(photo), shrink(grey0)
 
 reports = []
 for i in range(k["n"]):
@@ -285,11 +302,14 @@ for i in range(k["n"]):
     regions = {"face": face & ~photo_hair & ~render_hair,
                "hair": photo_hair & render_hair & ~keep_out,
                "rest": ~either & ~near_face & ~keep_out}
-    before = changed(photo, render)
+    render_s, grey1_s = shrink(render), shrink(grey1)
+    before = changed(photo_s, render_s)
     report, shifts = {}, {}
     for name, mask in regions.items():
-        d, how = ecc(grey0, grey1, mask)
-        entry = {"how": how}
+        mask = shrink(mask)
+        d_s, how = ecc(grey0_s, grey1_s, mask)
+        d = None if d_s is None else (d_s[0] / sx, d_s[1] / sy)
+        entry = {"how": how if scale == 1 else f"{how} at {small[0]}x{small[1]}"}
         if d is None:
             d = (0.0, 0.0)
         else:
@@ -298,7 +318,7 @@ for i in range(k["n"]):
                 d, entry["kept"] = (0.0, 0.0), f"none: past {k['max_shift']:.0%} of the long side"
             else:
                 b = float(before[mask].mean())
-                a = float(changed(photo, translated(render, d))[mask].mean())
+                a = float(changed(photo_s, translated(render_s, d_s))[mask].mean())
                 entry["mean |diff|"] = [round(b, 2), round(a, 2)]
                 if a >= b:
                     d, entry["kept"] = (0.0, 0.0), "none: no closer to the photo"
@@ -334,9 +354,14 @@ def shifted(photo, renders: list, photo_hair, render_hairs: list, face, keep_out
     pixel; a report of each region's shift and its mean difference from the
     photo before and after), and the regions' weights (height x width x 3:
     face, hair, rest), or None without `weights` (aiHair: they are only drawn,
-    for regions.jpg). Raises RuntimeError if the face python fails."""
+    for regions.jpg). aiHair: over imaging.ESTIMATE_MAX_PIXELS, the shifts
+    are fitted and checked on the photo and the renders shrunk to that, and
+    the renders moved at full size. Raises RuntimeError if the face python
+    fails."""
     import numpy as np
     from PIL import Image
+
+    from . import imaging
 
     if not Path(face_python).is_file():
         raise RuntimeError(f"the face model's python, which has OpenCV, isn't there: "
@@ -348,7 +373,8 @@ def shifted(photo, renders: list, photo_hair, render_hairs: list, face, keep_out
         for i, (render, hair) in enumerate(zip(renders, render_hairs)):
             np.savez(tmp / f"render_{i}.npz", render=np.asarray(render.convert("RGB")), hair=hair)
         settings = json.dumps({"n": len(renders), "feather": FEATHER, "max_shift": MAX_SHIFT,
-                               "min_pixels": MIN_PIXELS})
+                               "min_pixels": MIN_PIXELS,
+                               "scale": imaging.estimate_scale(*photo.size)})
         with _LOCK:
             done = subprocess.run([face_python, "-c", _SHIFT_JOB, str(tmp), settings],
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -508,13 +534,26 @@ def regions(photo, render, photo_hair, render_hair, face, forehead, face_python:
     the hair's flow was capped and faded in, and each region's mean
     difference from the photo before and after; aiHair: each affine
     (m_rest, m_face). The two ECC fits run on the photo shrunk to
-    REGIONS_ECC_SHORT where set. Raises RuntimeError if the face python
-    fails."""
+    REGIONS_ECC_SHORT where set. aiHair: over imaging.ESTIMATE_MAX_PIXELS,
+    all of it is found on the photo, the render and the masks shrunk to
+    that (imaging.estimate_scale) and the field grown back to the photo's
+    size (imaging.field_grown; the report says at what size). Raises
+    RuntimeError if the face python fails."""
     import numpy as np
+
+    from . import imaging
 
     if not Path(face_python).is_file():
         raise RuntimeError(f"the face model's python, which has OpenCV, isn't there: "
                            f"{face_python}")
+    full = photo.size
+    scale = imaging.estimate_scale(*full)
+    if scale < 1:
+        size = imaging.scaled_size(*full, scale)
+        photo, render = imaging.shrunk(photo, size), imaging.shrunk(render, size)
+        photo_hair, render_hair, face, forehead = (
+            imaging.shrunk(np.asarray(m, bool), size)
+            for m in (photo_hair, render_hair, face, forehead))
     with tempfile.TemporaryDirectory(prefix="regions_") as tmp:
         tmp = Path(tmp)
         np.savez(tmp / "photo.npz", photo=np.asarray(photo.convert("RGB")),
@@ -531,8 +570,12 @@ def regions(photo, render, photo_hair, render_hair, face, forehead, face_python:
         if done.returncode:
             raise RuntimeError(f"lining up by region failed (exit {done.returncode}):\n"
                                f"{(done.stderr or '')[-2000:]}")
-        return (np.load(tmp / "field.npy"),
-                json.loads((tmp / "report.json").read_text(encoding="utf-8")))
+        field = np.load(tmp / "field.npy")
+        report = json.loads((tmp / "report.json").read_text(encoding="utf-8"))
+    if scale < 1:
+        field = imaging.field_grown(field, full)
+        report["fitted at"] = f"{size[0]}x{size[1]}"
+    return field, report
 
 
 # Run in the face python: face_flow's work.
@@ -577,13 +620,24 @@ def face_flow(photo, image, hair, weight, face_python: str):
     on their grey blurred by FACE_FLOW_BLUR, averaged over a Gaussian of
     FACE_FLOW_SIGMA weighted by the photo's edges outside `hair` (a mask:
     the photo's and the image's), faded out where few edges are near,
-    capped at FACE_FLOW_CAP, times `weight`. Raises RuntimeError if the face
-    python fails."""
+    capped at FACE_FLOW_CAP, times `weight`. aiHair: over
+    imaging.ESTIMATE_MAX_PIXELS, found on them shrunk to that and grown back
+    to the photo's size (imaging.field_grown). Raises RuntimeError if the
+    face python fails."""
     import numpy as np
+
+    from . import imaging
 
     if not Path(face_python).is_file():
         raise RuntimeError(f"the face model's python, which has OpenCV, isn't there: "
                            f"{face_python}")
+    full = photo.size
+    scale = imaging.estimate_scale(*full)
+    if scale < 1:
+        size = imaging.scaled_size(*full, scale)
+        photo, image = imaging.shrunk(photo, size), imaging.shrunk(image, size)
+        hair = imaging.shrunk(np.asarray(hair, bool), size)
+        weight = imaging.shrunk(np.asarray(weight, np.float32), size)
     with tempfile.TemporaryDirectory(prefix="face_flow_") as tmp:
         tmp = Path(tmp)
         np.savez(tmp / "photo.npz", photo=np.asarray(photo.convert("RGB")),
@@ -598,4 +652,5 @@ def face_flow(photo, image, hair, weight, face_python: str):
         if done.returncode:
             raise RuntimeError(f"the face's flow failed (exit {done.returncode}):\n"
                                f"{(done.stderr or '')[-2000:]}")
-        return np.load(tmp / "flow.npy")
+        flow = np.load(tmp / "flow.npy")
+    return imaging.field_grown(flow, full) if scale < 1 else flow

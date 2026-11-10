@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 
 import config
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
@@ -75,10 +76,12 @@ def build_context(client, n_images: int) -> core.Context:
 
 def check_models(ctx: core.Context, feature: core.Feature, opts) -> None:
     """main.py's checks that the hair model (ctx.seg_python: its path) and
-    the face model's python are there where the effect's post-processing
-    needs them; without them hairfx would leave the results as drawn with
-    only a warning."""
+    the face model (in ctx.face_python: hairfx/landmarks.available) are
+    there where the effect's post-processing needs them; without them hairfx
+    would leave the results as drawn with only a warning."""
     from pathlib import Path
+
+    from hairfx import landmarks
 
     aligns, blends = feature.aligns(ctx, opts), feature.blends(ctx, opts)
     how = feature.align_how(ctx) if aligns else None
@@ -89,9 +92,11 @@ def check_models(ctx: core.Context, feature: core.Feature, opts) -> None:
     needs_face = (how in ("local", "local_flow", "regions_flow")
                   or (blends and feature.blend_face(opts))
                   or (colours and feature.colour_area(ctx) == "hair_inset"))
-    if needs_face and not Path(ctx.face_python).is_file():
-        raise AiHairError(f"the face model's python isn't there: {ctx.face_python} "
-                          "(set HAIR_FACE_PYTHON)", RESULT_UNKNOWN_INTERNAL_ERROR)
+    if needs_face:
+        ok, why = landmarks.available(ctx.face_python)
+        if not ok:
+            raise AiHairError(f"{feature.name} needs the face model: {why}",
+                              RESULT_UNKNOWN_INTERNAL_ERROR)
 
 
 def _failed(result: core.EffectResult, e: Exception) -> AiHairError:
@@ -108,11 +113,13 @@ def run_ai_hair_pipeline(*, params: dict, src_paths: list[str], n_images: int, t
                          logger=None, timing: TaskTiming | None = None,
                          client=None) -> dict:
     """The request's feature on the photo at src_paths[0], `n_images` results
-    asked for. Fills `timing` as it goes (generate_sec, postprocess_sec,
-    api_sec, the calls by kind), so a failed task's is there too. Returns
-    {"outputs": [PIL images, in order], "photo": the photo (PIL),
-    "skipped": why the effect left the photo as it is, or None,
-    "metadata": {...}}."""
+    asked for. A photo over config.AIHAIR_MAX_PIXELS is shrunk to it first
+    (core.capped_photo), so its results are that size. Fills `timing` as it
+    goes (generate_sec, postprocess_sec, api_sec, the calls by kind,
+    input_size and photo_size), so a failed task's is there too. Returns
+    {"outputs": [PIL images, in order], "photo": the photo (PIL, as run:
+    shrunk where it was), "skipped": why the effect left the photo as it
+    is, or None, "metadata": {..., "input_size", "photo_size"}}."""
     timing = timing if timing is not None else TaskTiming()
     feature_name = params["feature"]
     feature = EFFECTS[feature_name]
@@ -123,13 +130,22 @@ def run_ai_hair_pipeline(*, params: dict, src_paths: list[str], n_images: int, t
 
     with timing.section("load"):
         photo = core.load_photo(infer, src_paths[0])
+        input_size = photo.size
+        # Over config.AIHAIR_MAX_PIXELS (4 MP unless set), shrunk to it: the
+        # results are that size.
+        photo = core.capped_photo(photo, config.AIHAIR_MAX_PIXELS)
+    timing["input_size"], timing["photo_size"] = list(input_size), list(photo.size)
+    shrunk = (f" (shrunk from {input_size[0]}x{input_size[1]}, max_pixels="
+              f"{config.AIHAIR_MAX_PIXELS})" if photo.size != input_size else "")
     log(logger, task_id, f"feature={feature_name} level={params.get('level')} "
-                         f"photo={photo.size[0]}x{photo.size[1]} n_images={n_images} "
+                         f"photo={photo.size[0]}x{photo.size[1]}{shrunk} n_images={n_images} "
                          f"model={ctx.render.model} quality={ctx.render.quality}")
 
     # Feature.run, with its two halves timed apart; a failure ends the task
     # (Feature.run would keep it in the result instead).
-    result = core.EffectResult(effect=feature_name, photo=photo.ref)
+    # debug=False: no intermediates made only to be looked at (nothing here
+    # saves them).
+    result = core.EffectResult(effect=feature_name, photo=photo.ref, debug=False)
     try:
         with timing.section("generate"):
             try:
@@ -138,12 +154,20 @@ def run_ai_hair_pipeline(*, params: dict, src_paths: list[str], n_images: int, t
                 result.skipped = str(e)
             except Exception as e:  # noqa: BLE001 — reported with its code
                 raise _failed(result, e) from e
+            finally:
+                timing["process_steps"] = core.process_steps(result, time.perf_counter())
         with timing.section("postprocess"):
             feature.finish(ctx, photo, opts, result)
     finally:
         timing["api_sec"] = round(timer.busy_seconds(), 3)
         timing["api_calls"] = timer.summary()
         timing["cost_usd"] = round(result.cost, 6)
+        # Each post-processing step (the face, the colour match, the lining
+        # up, the blend, the hair model inside them), its algorithm and time,
+        # and each kind's own seconds (core.stage, core.breakdown).
+        steps = result.info.pop("postprocess_steps", [])
+        timing["postprocess_steps"] = steps
+        timing["postprocess_breakdown"] = core.breakdown(steps)
 
     if logger is not None:
         for warning in result.warnings:
@@ -159,6 +183,8 @@ def run_ai_hair_pipeline(*, params: dict, src_paths: list[str], n_images: int, t
         "metadata": {
             "feature": feature_name,
             "level": params.get("level"),
+            "input_size": list(input_size),
+            "photo_size": list(photo.size),
             "warnings": list(result.warnings),
             "aligned_by": info.get("aligned_by"),
             "blend": (info.get("blend") or {}).get("mask"),

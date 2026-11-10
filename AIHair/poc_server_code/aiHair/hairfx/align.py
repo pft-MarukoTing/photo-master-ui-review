@@ -323,9 +323,43 @@ def register(photo, resized, rendered, regions):
     the hair (_patch_matches); the render is warped by it and fitted again,
     up to _REGISTER_PASSES times. It is left as drawn with too few patches,
     past _MAX_WARP, within _MIN_WARP_PX, or where the warp leaves no fewer
-    pixels outside the hair off than before."""
-    _, aligned, lines = _register(photo, resized, rendered, regions)
+    pixels outside the hair off than before. Over
+    imaging.ESTIMATE_MAX_PIXELS, all of that on the photo shrunk
+    (_register_scaled)."""
+    _, aligned, lines = _register_scaled(photo, resized, rendered, regions)
     return aligned, lines
+
+
+def _register_scaled(photo, resized, rendered, regions):
+    """_register, its fit and its checks made on the photo, `resized` and
+    `regions` shrunk to imaging.ESTIMATE_MAX_PIXELS where the photo has
+    more (aiHair): the transform taken back to the full frame (it maps
+    continuous coordinates, a pixel's corner at 0, so shrinking by s is
+    S M S^-1) and `rendered` warped by it once, at the photo's size. As
+    _register where the photo has no more, or ESTIMATE_MAX_PIXELS is 0."""
+    import numpy as np
+
+    from . import imaging
+
+    width, height = photo.size
+    scale = imaging.estimate_scale(width, height)
+    if scale >= 1:
+        return _register(photo, resized, rendered, regions)
+    size = imaging.scaled_size(width, height, scale)
+    small_regions = tuple(imaging.shrunk(np.asarray(r, bool), size) for r in regions)
+    small_resized = imaging.shrunk(resized.convert("RGB"), size)
+    # Matched and warped the same (small) render: its transform is the
+    # small photo's frame to the small render's.
+    small, _, lines = _register(imaging.shrunk(photo.convert("RGB"), size), small_resized,
+                                small_resized, small_regions)
+    lines = [f"{lines[0]} (fitted at {size[0]}x{size[1]})", *lines[1:]]
+    if small is None:
+        return None, None, lines
+    s = np.diag([size[0] / width, size[1] / height, 1.0])
+    to_rendered = np.diag([rendered.width / width, rendered.height / height, 1.0])
+    matrix = to_rendered @ np.linalg.inv(s) @ small @ s
+    aligned, _ = _warp(rendered, matrix, (width, height))
+    return matrix, aligned, lines
 
 
 def _register(photo, resized, rendered, regions):
@@ -789,7 +823,8 @@ def _line_up_local(photo, resized, hair, near, face, flow_python=None, stages=No
             outside = ~near
             lines.append(f"fitted with the face: {clear} patches outside it, under "
                          f"{_MIN_PATCHES_OUTSIDE_FACE}")
-        matrix, aligned, global_lines = _register(photo, resized, resized, (hair, outside))
+        matrix, aligned, global_lines = _register_scaled(photo, resized, resized,
+                                                         (hair, outside))
         lines += global_lines
         m = matrix if matrix is not None else np.eye(3)
 

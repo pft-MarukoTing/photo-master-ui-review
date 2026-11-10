@@ -6,10 +6,68 @@ height x width, True = in it; an image is PIL."""
 
 import io
 import math
+import os
 import threading
 
 # --size match: the photo's aspect at about this many pixels.
 _TARGET_PIXELS = 1536 * 1024
+# aiHair: the lining up's fits — align.register's patches and transform,
+# region_align's ECC and optical flow (regions, face_flow, shifted) — made on
+# the photo and the render shrunk to at most this many pixels, what they
+# find taken back to the full frame and applied there once (estimate_scale);
+# 0 fits them at the photo's own size, as before. HAIRFX_ESTIMATE_MAX_PIXELS
+# sets it. At 9.8 MP, hairline's flow alone took 1.9 GB in each of its two
+# child processes (DIS down to the full resolution).
+ESTIMATE_MAX_PIXELS = int(os.environ.get("HAIRFX_ESTIMATE_MAX_PIXELS", "0") or 0)
+
+
+def estimate_scale(width: int, height: int) -> float:
+    """The scale (at most 1) the lining up's fits run at for a photo of
+    `width` x `height`: down to ESTIMATE_MAX_PIXELS pixels, 1 where it has
+    no more or that is 0."""
+    if not ESTIMATE_MAX_PIXELS or width * height <= ESTIMATE_MAX_PIXELS:
+        return 1.0
+    return math.sqrt(ESTIMATE_MAX_PIXELS / (width * height))
+
+
+def scaled_size(width: int, height: int, scale: float) -> tuple[int, int]:
+    """(width, height) times `scale`, rounded, at least 1 px each."""
+    return max(1, round(width * scale)), max(1, round(height * scale))
+
+
+def shrunk(a, size: tuple[int, int]):
+    """`a` — an image (PIL) or an array (height x width [x channels], any
+    dtype OpenCV resizes) — area-averaged to `size` (width, height): a PIL
+    image back for an image. A bool mask comes back a mask: True where more
+    than half of what it averages was."""
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    if isinstance(a, Image.Image):
+        mode = a.mode if a.mode in ("L", "RGB", "RGBA") else "RGB"
+        return Image.fromarray(cv2.resize(np.asarray(a.convert(mode)), size,
+                                          interpolation=cv2.INTER_AREA), mode)
+    a = np.asarray(a)
+    if a.dtype == bool:
+        return cv2.resize(a.astype(np.uint8) * 255, size, interpolation=cv2.INTER_AREA) > 127
+    return cv2.resize(a, size, interpolation=cv2.INTER_AREA)
+
+
+def field_grown(field, size: tuple[int, int]):
+    """An offset field (height x width x 2: dx, dy in its own pixels), found
+    on a frame shrunk from one of `size` (width, height), as the full
+    frame's: resized bilinearly, pixel centres kept (OpenCV's), and each
+    offset scaled to the full frame's pixels."""
+    import cv2
+    import numpy as np
+
+    height, width = field.shape[:2]
+    out = cv2.resize(np.ascontiguousarray(field, np.float32), size,
+                     interpolation=cv2.INTER_LINEAR)
+    out[..., 0] *= size[0] / width
+    out[..., 1] *= size[1] / height
+    return out
 # fit_render: a render shrunk to the photo's size is blurred first by a
 # Gaussian of _SHRINK_BLUR * sqrt(f² - 1) of its px, f its size over the
 # photo's — the detail between the photo's pixel and the render's, which
@@ -126,12 +184,24 @@ def fit_render(image_bytes: bytes, size: tuple[int, int], keep_rendered_size: bo
     finest strands don't fold back as stair-steps, and shrunk by area
     averaging (area_resize, as OpenCV's INTER_AREA); any other resize uses
     LANCZOS."""
+    from PIL import Image
+
+    with Image.open(io.BytesIO(image_bytes)) as rendered:
+        rgb = rendered.convert("RGB")
+    if keep_rendered_size:
+        return rgb, None
+    return fit_image(rgb, size)
+
+
+def fit_image(rgb, size: tuple[int, int]):
+    """fit_render's resize, of an RGB image already decoded (aiHair:
+    frizzCare's smooth_at=render grows its smoothed render to the photo's
+    size so, as the render would have been): `rgb` at `size`, and the
+    warning where its aspect is off, or None."""
     from PIL import Image, ImageFilter
 
     width, height = size
-    with Image.open(io.BytesIO(image_bytes)) as rendered:
-        rgb = rendered.convert("RGB")
-    if keep_rendered_size or rgb.size == (width, height):
+    if rgb.size == (width, height):
         return rgb, None
     warning = None
     if abs(rgb.width / rgb.height - width / height) > 0.02 * width / height:
