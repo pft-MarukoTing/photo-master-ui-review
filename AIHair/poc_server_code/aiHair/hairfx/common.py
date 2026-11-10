@@ -254,9 +254,10 @@ class Composited(Feature):
         notes = result.info["blend"] = {"mask": self.blend_mask}
         for name, (image, weight, note) in pasted.items():
             result.intermediates[f"{name}_unblended"] = result.outputs[name]
-            result.intermediates[f"blend_mask_{name}"] = imaging.as_image(weight * 255).convert("L")
-            result.intermediates[f"blend_{name}.jpg"] = imaging.as_image(
-                imaging.tinted(photo.image, weight > 0.5))
+            result.keep(f"blend_mask_{name}",
+                        lambda: imaging.as_image(weight * 255).convert("L"))
+            result.keep(f"blend_{name}.jpg", lambda: imaging.as_image(
+                imaging.tinted(photo.image, weight > 0.5)))
             result.outputs[name] = image
             notes[name] = note
             result.sheet.append(["input", f"{name}_unblended", f"blend_{name}.jpg", name])
@@ -289,7 +290,7 @@ def lined_up(ctx, photo, renders: dict, grow: float, result, first=None):
                                     f"the photo and {len(names)} render(s)")
     if not photo_hair.any():
         raise RuntimeError("the hair model found no hair in the photo")
-    result.intermediates["hair_input"] = imaging.mask_image(photo_hair)
+    result.keep("hair_input", lambda: imaging.mask_image(photo_hair))
     hair = dict(zip(names, masks))
     radius = round(grow * max(photo.size))
     notes = result.info.setdefault("alignment", {})
@@ -308,7 +309,8 @@ def lined_up(ctx, photo, renders: dict, grow: float, result, first=None):
                 aligned, notes[name] = align.line_up(
                     photo.image, render, imaging.dilated(photo_hair | render_hair, radius))
             if aligned is not None:
-                result.intermediates[f"{name}_lined_up"] = render = aligned
+                render = aligned
+                result.keep(f"{name}_lined_up", lambda: render)
                 moved.append(name)
             lined[name] = [render, render_hair]
     if moved:
@@ -316,7 +318,7 @@ def lined_up(ctx, photo, renders: dict, grow: float, result, first=None):
                                                        f"{len(moved)} render(s) as lined up")):
             lined[name][1] = render_hair
     for name, (_, render_hair) in lined.items():
-        result.intermediates[f"hair_{name}"] = imaging.mask_image(render_hair)
+        result.keep(f"hair_{name}", lambda: imaging.mask_image(render_hair))
     return photo_hair, {name: tuple(pair) for name, pair in lined.items()}
 
 
@@ -536,7 +538,10 @@ def _hair_pulled(photo, render, photo_hair, render_hair, long_side: int, near=No
 
 def _five_tap(a):
     """`a` blurred by OpenCV's pyramid kernel, (1 4 6 4 1) / 16 each way,
-    its edges reflected as OpenCV's are (BORDER_REFLECT_101)."""
+    its edges reflected as OpenCV's are (BORDER_REFLECT_101). The taps
+    are views of the padded array and summed in place, in the order the
+    sum of copies they were took them (aiHair): the same values, two
+    arrays of `a`'s size where it was ten."""
     import numpy as np
 
     kernel = np.array([1, 4, 6, 4, 1], np.float32) / 16
@@ -545,7 +550,13 @@ def _five_tap(a):
         pad[axis] = (2, 2)
         padded = np.pad(a, pad, mode="reflect")
         n = a.shape[axis]
-        a = sum(w * padded.take(range(i, i + n), axis=axis) for i, w in enumerate(kernel))
+        taps = [padded[(slice(None),) * axis + (slice(i, i + n),)] for i in range(len(kernel))]
+        out = kernel[0] * taps[0]
+        part = np.empty_like(out)
+        for w, tap in zip(kernel[1:], taps[1:]):
+            np.multiply(w, tap, out=part)
+            out += part
+        a = out
     return a
 
 
@@ -553,16 +564,21 @@ def _pyramid_blend(a, b, weight, levels: int):
     """`b` over `a` (float RGB) by `weight` (0–1), one Laplacian-pyramid
     band at a time with the weight taken down the pyramid too: colour and
     light blend over a wide band, fine strands over a narrow one, so
-    neither steps where they meet."""
+    neither steps where they meet. (aiHair: each level down a copy, not a
+    view keeping the blur a level up alive, and each level up summed in
+    place in the order the expression took it: the same values, a third of
+    the memory.)"""
     import numpy as np
 
     def down(x):  # cv2.pyrDown
-        return _five_tap(x)[::2, ::2]
+        return np.ascontiguousarray(_five_tap(x)[::2, ::2])
 
     def up(x, shape):  # cv2.pyrUp to `shape`
         out = np.zeros(shape[:2] + x.shape[2:], np.float32)
         out[::2, ::2] = x
-        return _five_tap(out) * 4
+        out = _five_tap(out)
+        out *= 4
+        return out
 
     ga, gb, gw = [a], [b], [weight.astype(np.float32)]
     for _ in range(levels):
@@ -573,9 +589,18 @@ def _pyramid_blend(a, b, weight, levels: int):
     for i in range(levels - 1, -1, -1):
         shape = ga[i].shape
         w = gw[i][..., None]
-        out = (up(out, shape) + (ga[i] - up(ga[i + 1], shape)) * (1 - w)
-               + (gb[i] - up(gb[i + 1], shape)) * w)
-    return np.clip(out, 0, 255)
+        # up(out) + (ga[i] - up(ga[i + 1])) * (1 - w) + (gb[i] - up(gb[i + 1])) * w
+        total = up(out, shape)
+        band = up(ga[i + 1], shape)
+        np.subtract(ga[i], band, out=band)
+        band *= 1 - w
+        total += band
+        band = up(gb[i + 1], shape)
+        np.subtract(gb[i], band, out=band)
+        band *= w
+        total += band
+        out = total
+    return np.clip(out, 0, 255, out=out)
 
 
 # HairShifted's lock eased off the hair over a Gaussian of this share of the
@@ -647,12 +672,13 @@ def shifted_composite(ctx, photo, result, face, keep_out, zone_of, match=None,
     renders = [result.outputs[name] for name in names]
     photo_hair, *hairs = hair_model(ctx, result, [photo.image, *renders],
                                     f"the photo and {len(renders)} render(s)")
-    result.intermediates["hair_input"] = imaging.mask_image(photo_hair)
+    result.keep("hair_input", lambda: imaging.mask_image(photo_hair))
     with stage(result, "align", "region_align.shifted: the face, the hair and the rest each "
                                 "lined up by one translation (OpenCV, in the face python)"):
         lined, weights = region_align.shifted(photo.image, renders, photo_hair, hairs, face,
-                                              keep_out, ctx.face_python)
-    result.intermediates["regions.jpg"] = _regions(photo.image, weights)
+                                              keep_out, ctx.face_python,
+                                              weights=result.debug)
+    result.keep("regions.jpg", lambda: _regions(photo.image, weights))
     moved = [i for i, (image, _) in enumerate(lined) if image is not None]
     if moved:
         for i, hair in zip(moved, hair_model(ctx, result, [lined[i][0] for i in moved],
@@ -666,14 +692,14 @@ def shifted_composite(ctx, photo, result, face, keep_out, zone_of, match=None,
         if render is None:
             render = renders[i]
         else:
-            result.intermediates[f"{name}_lined_up"] = render
-        result.intermediates[f"hair_{name}"] = imaging.mask_image(hairs[i])
+            result.keep(f"{name}_lined_up", lambda: render)
+        result.keep(f"hair_{name}", lambda: imaging.mask_image(hairs[i]))
         weight = _zone_weight(zone_of(photo_hair, hairs[i]), long_side)
         lock = lock_of(photo_hair, hairs[i]) if lock_of is not None else None
         if lock is not None:
             weight = weight * (1 - lock)
-            result.intermediates[f"face_lock_{name}.jpg"] = imaging.as_image(
-                imaging.tinted(photo.image, lock > 0.5))
+            result.keep(f"face_lock_{name}.jpg", lambda: imaging.as_image(
+                imaging.tinted(photo.image, lock > 0.5)))
         with stage(result, "blend", "common._paste: the render pasted through the zone (grown, "
                                     "feathered, less the face lock) by Laplacian pyramid"
                                     + (", its hair's colour matched first" if match else ""),

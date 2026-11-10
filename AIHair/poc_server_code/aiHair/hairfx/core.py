@@ -225,6 +225,13 @@ class EffectResult:
     skipped        why the effect left the photo as it is (Skip), or None.
     error          why it failed, or None; what it made before stays.
     warnings       what is worth a look but didn't stop it.
+    debug          whether the intermediates made only to be looked at (the
+                   overlays, the masks, the renders as they were) are made
+                   (keep): main.py's, which saves them with --debug and puts
+                   them in its sheets, are; aiHair's server sets it False,
+                   so a task doesn't make or hold them (a 9.8 MP photo's
+                   overlays took 0.3-0.9 GB). Those later steps read
+                   (face_mask, <name>_unblended) are kept either way.
     """
 
     effect: str
@@ -238,6 +245,13 @@ class EffectResult:
     skipped: str | None = None
     error: str | None = None
     warnings: list[str] = field(default_factory=list)
+    debug: bool = True
+
+    def keep(self, name: str, make) -> None:
+        """intermediates[name] = make(), where the result keeps what is made
+        only to be looked at (debug); make() isn't called where it doesn't."""
+        if self.debug:
+            self.intermediates[name] = make()
 
     @property
     def cost(self) -> float:
@@ -583,15 +597,19 @@ def _find_face(ctx: Context, photo: Photo, result: EffectResult):
         return None
     result.info["face"] = {"score": round(face["score"], 4),
                            "bbox": [round(v, 1) for v in face["bbox"]]}
-    weight, _ = align.face_weight(face, photo.size)
-    rgb = imaging.tinted(photo.image, weight > 0.5)
-    radius = max(2, round(0.003 * max(photo.size)))
-    height, width = weight.shape
-    for x, y in face["points"]:
-        x, y = int(round(x)), int(round(y))
-        rgb[max(0, y - radius):min(height, y + radius + 1),
-            max(0, x - radius):min(width, x + radius + 1)] = (40, 200, 255)
-    result.intermediates["face.jpg"] = imaging.as_image(rgb)
+
+    def overlay():
+        weight, _ = align.face_weight(face, photo.size)
+        rgb = imaging.tinted(photo.image, weight > 0.5)
+        radius = max(2, round(0.003 * max(photo.size)))
+        height, width = weight.shape
+        for x, y in face["points"]:
+            x, y = int(round(x)), int(round(y))
+            rgb[max(0, y - radius):min(height, y + radius + 1),
+                max(0, x - radius):min(width, x + radius + 1)] = (40, 200, 255)
+        return imaging.as_image(rgb)
+
+    result.keep("face.jpg", overlay)
     return face
 
 
@@ -675,7 +693,7 @@ def _colour_match_outputs(ctx: Context, photo: Photo, result: EffectResult,
         change = np.abs(np.asarray(image, np.float32)
                         - np.asarray(drawn.convert("RGB"), np.float32)).mean(axis=2)
         notes[name] = round(float(change[weight > 0].mean()), 2)
-        result.intermediates[f"{name}_uncorrected"] = drawn
+        result.keep(f"{name}_uncorrected", lambda: drawn)
         result.outputs[name] = image
     return (photo_hair, hair) if hair is not None else None
 
@@ -707,12 +725,12 @@ def _align_outputs(ctx: Context, photo: Photo, result: EffectResult, face=None,
 
     try:
         photo_hair, hair = hair or _hair_masks(ctx, photo, result)
-        result.intermediates["align_hair_input"] = imaging.mask_image(photo_hair)
+        result.keep("align_hair_input", lambda: imaging.mask_image(photo_hair))
         notes = result.info["alignment"] = {}
         by = result.info["aligned_by"] = {}
         flow_python = ctx.face_python if flow and face is not None else None
         for name, output_hair in hair.items():
-            result.intermediates[f"align_hair_{name}"] = imaging.mask_image(output_hair)
+            result.keep(f"align_hair_{name}", lambda: imaging.mask_image(output_hair))
             stages = {}
             drawn = result.outputs[name]
             aligned, notes[name] = align.line_up(
@@ -721,9 +739,9 @@ def _align_outputs(ctx: Context, photo: Photo, result: EffectResult, face=None,
             by[name] = (" + ".join(stages["steps"]) if stages.get("steps") else
                         "global" if aligned is not None else "as drawn")
             if aligned is not None:
-                result.intermediates[f"{name}_raw"] = drawn
+                result.keep(f"{name}_raw", lambda: drawn)
                 result.outputs[name] = aligned
-            if flow_python and "global" in stages:
+            if flow_python and "global" in stages and result.debug:
                 kept = result.intermediates
                 first = f"{name}_{'regions' if stages['steps'][0] == 'regions' else 'global'}"
                 kept[f"{name}_render_only"] = kept.get(f"{name}_uncorrected", drawn)
@@ -783,9 +801,9 @@ def _blend_outputs(ctx: Context, kind: str, photo: Photo, result: EffectResult,
     result.info["blend"] = notes
     for name, (image, weight) in blended.items():
         result.intermediates[f"{name}_unblended"] = result.outputs[name]
-        result.intermediates[f"blend_mask_{name}"] = imaging.as_image(weight * 255).convert("L")
-        result.intermediates[f"blend_{name}.jpg"] = imaging.as_image(
-            imaging.tinted(photo.image, weight > 0.5))
+        result.keep(f"blend_mask_{name}", lambda: imaging.as_image(weight * 255).convert("L"))
+        result.keep(f"blend_{name}.jpg", lambda: imaging.as_image(
+            imaging.tinted(photo.image, weight > 0.5)))
         result.outputs[name] = image
         result.sheet.append(["input", f"{name}_unblended", f"blend_{name}.jpg", name])
 
@@ -958,10 +976,11 @@ def edit(ctx: Context, result: EffectResult, step: str, images: list, prompt: st
         image, warning = imaging.fit_render(image_bytes, size, keep_size)
         if warning:
             result.warnings.append(f"{step}: {warning}")
-        with Image.open(io.BytesIO(image_bytes)) as drawn:
-            if drawn.size != image.size:
-                result.intermediates[f"{step}_rendered_{first + len(out)}"] = (
-                    drawn.convert("RGB"))
+        if result.debug:  # the render decoded again, only to be looked at
+            with Image.open(io.BytesIO(image_bytes)) as drawn:
+                if drawn.size != image.size:
+                    result.intermediates[f"{step}_rendered_{first + len(out)}"] = (
+                        drawn.convert("RGB"))
         out.append(image)
     if not out:
         raise no_image_returned(response_text="OpenAI response carried no image data")

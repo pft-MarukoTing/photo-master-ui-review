@@ -480,18 +480,21 @@ class FrizzCareFeature(SinglePromptFeature):
 
         result.step = "smooth"
         for i, (render, render_hair) in enumerate(zip(renders, hair)):
-            result.intermediates[f"render_{i}"] = render
+            result.keep(f"render_{i}", lambda: render)
             rgb, base, added, body, taken, notes = smoothed(
                 render, render_hair, opts.blur, opts.fine, self.step2_gain(opts))
-            result.intermediates[f"base_{i}"] = imaging.as_image(base)
-            result.intermediates[f"added_{i}"] = imaging.as_image(128 + _SHOWN * added)
-            result.intermediates[f"gain_{i}"] = imaging.as_image(
-                taken * 255 / _GAIN_WHITE).convert("L")
-            for name, m in notes.pop("maps", {}).items():
-                result.intermediates[f"{name}_{i}"] = imaging.as_image(
-                    m * 255 / _GAIN_WHITE).convert("L")
-            result.intermediates[f"body_{i}.jpg"] = imaging.as_image(
-                imaging.tinted(render, body > 0.5))
+            # The steps and maps, only to be looked at (result.debug).
+            result.keep(f"base_{i}", lambda: imaging.as_image(base))
+            result.keep(f"added_{i}", lambda: imaging.as_image(128 + _SHOWN * added))
+            result.keep(f"gain_{i}", lambda: imaging.as_image(
+                taken * 255 / _GAIN_WHITE).convert("L"))
+            maps = notes.pop("maps", {})
+            for name in maps:
+                result.keep(f"{name}_{i}", lambda: imaging.as_image(
+                    maps[name] * 255 / _GAIN_WHITE).convert("L"))
+            result.keep(f"body_{i}.jpg", lambda: imaging.as_image(
+                imaging.tinted(render, body > 0.5)))
+            del base, added, body, taken, maps
             result.info[f"result_{i}"] = notes
             result.outputs[f"result_{i}"] = imaging.as_image(rgb)
             result.sheet.append(["input", f"render_{i}", f"base_{i}", f"added_{i}",

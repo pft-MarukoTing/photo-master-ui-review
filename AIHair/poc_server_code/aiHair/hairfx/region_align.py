@@ -321,7 +321,7 @@ for i in range(k["n"]):
 
 
 def shifted(photo, renders: list, photo_hair, render_hairs: list, face, keep_out,
-            face_python: str):
+            face_python: str, weights: bool = True):
     """Each of `renders` (PIL, at the photo's size) lined up with `photo`
     region by region, each by one translation (ECC's MOTION_TRANSLATION):
     the face (`face`, a mask) fitted on its skin, the hair (`photo_hair` and
@@ -333,7 +333,8 @@ def shifted(photo, renders: list, photo_hair, render_hairs: list, face, keep_out
     render, (the render lined up, or None where no region moved half a
     pixel; a report of each region's shift and its mean difference from the
     photo before and after), and the regions' weights (height x width x 3:
-    face, hair, rest). Raises RuntimeError if the face python fails."""
+    face, hair, rest), or None without `weights` (aiHair: they are only drawn,
+    for regions.jpg). Raises RuntimeError if the face python fails."""
     import numpy as np
     from PIL import Image
 
@@ -360,7 +361,7 @@ def shifted(photo, renders: list, photo_hair, render_hairs: list, face, keep_out
         for i, report in enumerate(reports):
             path = tmp / f"aligned_{i}.npy"
             out.append((Image.fromarray(np.load(path)) if path.is_file() else None, report))
-        return out, np.load(tmp / "weights.npy")
+        return out, np.load(tmp / "weights.npy") if weights else None
 
 
 # Run in the face python: regions' work, for the render in the folder.

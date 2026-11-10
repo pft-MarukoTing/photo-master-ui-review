@@ -583,12 +583,17 @@ def components(region, connectivity: int = 8):
 
 def tinted(image, region):
     """`image` with `region` tinted red, for an overlay: an RGB float array,
-    for the effect to draw on before it is an image (as_image)."""
+    for the effect to draw on before it is an image (as_image). float32,
+    made in place (aiHair: `region` times a Python float made it float64,
+    with its temporaries 0.9 GB on a 9.8 MP photo)."""
     import numpy as np
 
-    rgb = np.asarray(image.convert("RGB"), np.float32)
-    a = region[..., None] * 0.45
-    return rgb * (1 - a) + np.array([255, 40, 40], np.float32) * a
+    rgb = np.array(image.convert("RGB"), np.float32)
+    a = region.astype(np.float32)[..., None]
+    a *= np.float32(0.45)
+    rgb *= 1 - a
+    rgb += np.array([255, 40, 40], np.float32) * a
+    return rgb
 
 
 def as_image(rgb):

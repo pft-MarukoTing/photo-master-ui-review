@@ -223,6 +223,31 @@ def _bands(rgb, k: float):
     return [levels[i] - levels[i + 1] for i in range(len(levels) - 1)], levels[-1]
 
 
+def _bands_each(rgb, k: float):
+    """_bands' bands of `rgb`, finest first, then its base, one array at a
+    time: each band levels[i] - levels[i + 1] as _bands has it, two levels
+    held at once, not all of them (aiHair: _softened's held 22 of the
+    photo's size, 2.2 GB on a 9.8 MP photo)."""
+    previous = rgb
+    for s in _BANDS[1:]:
+        level = _gaussian(rgb, s * k)
+        yield previous - level
+        previous = level
+    yield previous
+
+
+def _sum_into(x, y):
+    """x + y, in x's memory where x is an array whose dtype and shape hold
+    the sum (the same values: the same addition, just not a new array)."""
+    import numpy as np
+
+    if (isinstance(x, np.ndarray) and np.result_type(x, y) == x.dtype
+            and np.broadcast_shapes(x.shape, np.shape(y)) == x.shape):
+        x += y
+        return x
+    return x + y
+
+
 def _band_mix(target: float, own: float, photo: float, shared: float):
     """The gain for a band of RMS `own`, and how much of the photo's band
     (RMS `photo`, mean product with it `shared`) to add, for an RMS of
@@ -247,34 +272,60 @@ def _softened(photo, image, body, soften: float, k: float):
     strands a render smoothed away — is filled from the photo's own band.
     The bands overlap, so a band rescaled spills into its neighbours when
     the result is split again: the targets are refitted _GAIN_PASSES times
-    to the bands of the result."""
+    to the bands of the result.
+
+    aiHair: the bands are made one at a time (_bands_each) — once for their
+    grey, which the gains are fitted on, and again for the result — and
+    summed in place (_sum_into), in the order and with the dtypes the sums
+    of whole lists took: the same values, a fraction of the memory."""
+    import itertools
+
     import numpy as np
 
     inside = body > 0.5
     if not inside.any():
         return image, []
+    n = len(_BANDS) - 1
 
     def rms(grey_bands):
         return np.array([np.sqrt((b[inside] ** 2).mean()) for b in grey_bands])
 
-    photo_bands, _ = _bands(photo, k)
-    bands, base = _bands(image, k)
-    grey_photo = [b.mean(axis=2) for b in photo_bands]
-    grey = [b.mean(axis=2) for b in bands]
-    grey_base = base.mean(axis=2)
+    grey_photo = [b.mean(axis=2) for b in itertools.islice(_bands_each(photo, k), n)]
+    grey, grey_base = [], None
+    for i, b in enumerate(_bands_each(image, k)):
+        if i < n:
+            grey.append(b.mean(axis=2))
+        else:
+            grey_base = b.mean(axis=2)
     own, from_photo = rms(grey), rms(grey_photo)
     shared = np.array([(b[inside] * p[inside]).mean() for b, p in zip(grey, grey_photo)])
     targets = from_photo * (1 - soften * (1 - np.array(_REF_RATIOS)))
     aims = targets.copy()
     for _ in range(_GAIN_PASSES):
         mix = [_band_mix(*args) for args in zip(aims, own, from_photo, shared)]
-        now = rms(_bands(grey_base + sum(g * b + h * p for (g, h), b, p
-                                         in zip(mix, grey, grey_photo)), k)[0])
+        now = rms(itertools.islice(_bands_each(
+            grey_base + sum(g * b + h * p for (g, h), b, p in zip(mix, grey, grey_photo)), k),
+            n))
         aims *= targets / np.maximum(now, 1e-3)
     mix = [_band_mix(*args) for args in zip(aims, own, from_photo, shared)]
-    out = base + sum(g * b + h * p for (g, h), b, p in zip(mix, bands, photo_bands))
+    del grey, grey_photo, grey_base
+    # out = base + sum(g * b + h * p over the bands), a band at a time.
+    total = None
+    image_bands, photo_bands = _bands_each(image, k), _bands_each(photo, k)
+    for (g, h), b, p in zip(mix, image_bands, photo_bands):
+        term = _sum_into(g * b, h * p)
+        del b, p
+        total = term if total is None else _sum_into(total, term)
+        del term
+    base = next(image_bands)
+    del image_bands, photo_bands
+    out = _sum_into(total, base)
+    del total, base
+    # image * (1 - a) + out * a
     a = body[..., None]
-    return image * (1 - a) + out * a, [[round(float(g), 3), round(float(h), 3)] for g, h in mix]
+    out = out * a if np.result_type(out, a) != out.dtype else np.multiply(out, a, out=out)
+    out = _sum_into(out, image * (1 - a))
+    return out, [[round(float(g), 3), round(float(h), 3)] for g, h in mix]
 
 
 def post_process(photo, render, hair, opts):
@@ -337,9 +388,10 @@ class SoftFeature(Feature):
         if not hair.any():
             raise RuntimeError("the hair model found no hair")
         result.info["hair_share"] = float(hair.mean())
-        result.intermediates["hair_mask"] = imaging.mask_image(hair)
-        body = _hair_body(hair, min(photo.size)) > 0.5
-        result.intermediates["body.jpg"] = imaging.as_image(imaging.tinted(photo.image, body))
+        result.keep("hair_mask", lambda: imaging.mask_image(hair))
+        # The hair's body, only for the overlays (result.debug).
+        body = _hair_body(hair, min(photo.size)) > 0.5 if result.debug else None
+        result.keep("body.jpg", lambda: imaging.as_image(imaging.tinted(photo.image, body)))
 
         result.step = "paste and soften"
         if not renders:
@@ -349,7 +401,7 @@ class SoftFeature(Feature):
             return
         near = imaging.grown(hair, _ALIGN_GROW * max(photo.size))
         for i, raw in enumerate(renders):
-            result.intermediates[f"render_{i}"] = raw
+            result.keep(f"render_{i}", lambda: raw)
             aligned, lines = align.line_up(photo.image, raw, near)
             image, keep_photo, notes = post_process(
                 photo.image, aligned if aligned is not None else raw, hair, opts)
@@ -357,7 +409,7 @@ class SoftFeature(Feature):
             result.info[f"result_{i}"] = {**notes, "alignment": lines}
             row = ["input", f"render_{i}", f"result_{i}"]
             if keep_photo is not None:
-                result.intermediates[f"guard_{i}.jpg"] = imaging.as_image(
-                    imaging.tinted(photo.image, (keep_photo > 0.5) & body))
+                result.keep(f"guard_{i}.jpg", lambda: imaging.as_image(
+                    imaging.tinted(photo.image, (keep_photo > 0.5) & body)))
                 row.insert(2, f"guard_{i}.jpg")
             result.sheet.append(row)

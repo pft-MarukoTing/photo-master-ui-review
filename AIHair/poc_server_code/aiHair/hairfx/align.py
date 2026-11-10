@@ -138,18 +138,28 @@ _BROW_CLEAR = 0.3
 _BROW_CLEAR_BELOW = 0.2
 _BROW_CLEAR_EASE = 0.1
 _BROWS = {"left": range(17, 22), "right": range(22, 27)}  # by the side of the image
+# aiHair: _warp's, _sample's and _resampled's per-pixel work is done this
+# many points at a time, a band of rows, not over the whole photo at once:
+# the same values, its temporaries a fraction of the size (_sample's
+# bicubic took 1.8 GB on a 9.8 MP photo).
+_CHUNK = 1 << 18
 
 
 def _difference(a, b):
     """Per-pixel difference of two same-size RGB images after a 1px Gaussian
     blur, which keeps resampling and compression noise from counting: the
-    largest of the three channels' absolute differences."""
+    largest of the three channels' absolute differences. int16, in place
+    (aiHair): the blurred images are 8-bit, so it is exactly the float64 it
+    was, with a quarter of the memory (0.9 GB of float64 on a 9.8 MP
+    photo)."""
     import numpy as np
     from PIL import ImageFilter
 
-    a, b = (np.asarray(im.filter(ImageFilter.GaussianBlur(1)), dtype=np.float64)
+    a, b = (np.asarray(im.filter(ImageFilter.GaussianBlur(1)), dtype=np.int16)
             for im in (a, b))
-    return np.abs(a - b).max(axis=2)
+    a -= b
+    np.abs(a, out=a)
+    return a.max(axis=2)
 
 
 def _alignment(photo, regions, image) -> dict:
@@ -281,19 +291,26 @@ def _warp(image, matrix, size: tuple[int, int]):
     from PIL import Image
 
     width, height = size
-    xs, ys = np.meshgrid(np.arange(width) + 0.5, np.arange(height) + 0.5)
-    src_x = matrix[0, 0] * xs + matrix[0, 1] * ys + matrix[0, 2]
-    src_y = matrix[1, 0] * xs + matrix[1, 1] * ys + matrix[1, 2]
-    fell_off = (src_x < 0) | (src_x > image.width) | (src_y < 0) | (src_y > image.height)
-    pad = 2 + math.ceil(max(0.0, -src_x.min(), -src_y.min(),
-                            src_x.max() - image.width, src_y.max() - image.height))
+    xs, ys = np.arange(width) + 0.5, np.arange(height) + 0.5
+    # Where each output pixel comes from, a band of rows at a time (_CHUNK).
+    off, lo_x, lo_y, hi_x, hi_y = 0, math.inf, math.inf, -math.inf, -math.inf
+    step = max(1, _CHUNK // max(1, width))
+    for top in range(0, height, step):
+        y = ys[top:top + step, None]
+        src_x = matrix[0, 0] * xs + matrix[0, 1] * y + matrix[0, 2]
+        src_y = matrix[1, 0] * xs + matrix[1, 1] * y + matrix[1, 2]
+        off += int(((src_x < 0) | (src_x > image.width) | (src_y < 0)
+                    | (src_y > image.height)).sum())
+        lo_x, hi_x = min(lo_x, src_x.min()), max(hi_x, src_x.max())
+        lo_y, hi_y = min(lo_y, src_y.min()), max(hi_y, src_y.max())
+    pad = 2 + math.ceil(max(0.0, -lo_x, -lo_y, hi_x - image.width, hi_y - image.height))
     padded = Image.fromarray(np.pad(np.asarray(image), ((pad, pad), (pad, pad), (0, 0)),
                                     mode="edge"))
     coeffs = (matrix[0, 0], matrix[0, 1], matrix[0, 2] + pad,
               matrix[1, 0], matrix[1, 1], matrix[1, 2] + pad)
     warped = padded.transform(size, Image.Transform.AFFINE, coeffs,
                               resample=Image.Resampling.BICUBIC)
-    return warped, float(fell_off.mean())
+    return warped, off / (width * height)
 
 
 def register(photo, resized, rendered, regions):
@@ -391,7 +408,7 @@ def line_up(photo, render, hair, face=None, flow_python=None, stages=None, hairs
     if resized.size != photo.size:
         resized = resized.resize(photo.size, Image.Resampling.LANCZOS)
     near = np.asarray(Image.fromarray(hair.astype(np.uint8) * 255)
-                      .filter(ImageFilter.GaussianBlur(MASK_MARGIN)), dtype=np.float64) >= 1
+                      .filter(ImageFilter.GaussianBlur(MASK_MARGIN))) >= 1
     if near.all():
         return None, ["left as drawn: nothing outside the hair to line it up on"]
     if face is None:
@@ -422,7 +439,27 @@ def face_weight(face, size: tuple[int, int]):
 def _sample(a, xs, ys):
     """`a` (height x width x channels, float) at the points `xs`, `ys` (pixel
     coordinates, a pixel's centre at +0.5), interpolated as PIL's BICUBIC
-    transform does, its edges repeated as _warp's padding does."""
+    transform does, its edges repeated as _warp's padding does. Taken a band
+    of `xs`' rows at a time (_CHUNK points; aiHair): each point's value is
+    its own, so they are the same, and the 16 neighbours' float64 copies
+    a band's size, not the photo's."""
+    import numpy as np
+
+    xs, ys = np.broadcast_arrays(xs, ys)
+    if xs.ndim < 2 or xs.size <= _CHUNK:
+        return _sample_block(a, xs, ys)
+    step = max(1, _CHUNK // (xs.size // xs.shape[0]))
+    out = None
+    for top in range(0, xs.shape[0], step):
+        block = _sample_block(a, xs[top:top + step], ys[top:top + step])
+        if out is None:
+            out = np.empty(xs.shape + block.shape[xs.ndim:], block.dtype)
+        out[top:top + step] = block
+    return out
+
+
+def _sample_block(a, xs, ys):
+    """_sample's work on one band of points."""
     import numpy as np
 
     h, w = a.shape[:2]
@@ -659,15 +696,23 @@ def _resampled(resized, base, to_render, box, inside, qx, qy):
     """`base` with the pixels `inside` (a mask over `box`: left, top, right,
     bottom) taken from `resized` at to_render(qx, qy), (qx, qy) being where
     each one's content sits in the photo's frame as the transform or the
-    regions line it up: the render resampled from as drawn, once."""
+    regions line it up: the render resampled from as drawn, once. A band
+    of the box's rows at a time (_CHUNK; aiHair): to_render and _sample
+    take each point on its own, so the pixels are the same."""
     import numpy as np
     from PIL import Image
 
     left, top, right, bottom = box
-    src_x, src_y = to_render(qx, qy)
-    moved = _sample(np.asarray(resized, np.float32), src_x, src_y)
+    image = np.asarray(resized, np.float32)
     out = np.array(base)
-    out[top:bottom, left:right][inside] = np.clip(np.rint(moved[inside]), 0, 255)
+    region = out[top:bottom, left:right]
+    step = max(1, _CHUNK // max(1, right - left))
+    for row in range(0, bottom - top, step):
+        rows = slice(row, row + step)
+        src_x, src_y = to_render(qx[rows], qy[rows])
+        moved = _sample(image, src_x, src_y)
+        here = inside[rows]
+        region[rows][here] = np.clip(np.rint(moved[here]), 0, 255)
     return Image.fromarray(out)
 
 
