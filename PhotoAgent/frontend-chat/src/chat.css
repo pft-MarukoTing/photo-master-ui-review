@@ -1231,6 +1231,15 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
 .chat-face-panel-x:hover{background:var(--n04);color:var(--n84)}
 .chat-face-grid{display:flex;flex-wrap:wrap;gap:var(--sp-2);padding:2px}
 @media (prefers-reduced-motion:reduce){.chat-face-panel{animation:none}}
+.chat-face-preview{position:fixed;z-index:2100;display:flex;flex-direction:column;align-items:center;gap:var(--sp-2);
+  padding:6px;border-radius:16px;border:1px solid var(--border);background:var(--card);
+  box-shadow:0 14px 32px rgba(0,0,0,.16),0 2px 6px rgba(0,0,0,.06);pointer-events:none;
+  animation:chat-attach-menu-in .14s ease-out}
+.chat-face-preview img{display:block;width:160px;height:160px;border-radius:12px;object-fit:cover;background:var(--n14)}
+.chat-face-preview-name{max-width:160px;padding:0 var(--sp-1) 2px;font-size:var(--chat-fs-sm);color:var(--n84);text-align:center;overflow-wrap:anywhere}
+.chat-face-preview.has-go{pointer-events:auto}
+.chat-face-preview .chat-chip{width:100%;justify-content:center}
+@media (prefers-reduced-motion:reduce){.chat-face-preview{animation:none}}
 
 /* The live composer */
 .chat-composer-field.is-live{gap:var(--sp-1);padding-block:var(--sp-1);padding-inline:var(--sp-3) var(--sp-1);cursor:text;min-width:0}

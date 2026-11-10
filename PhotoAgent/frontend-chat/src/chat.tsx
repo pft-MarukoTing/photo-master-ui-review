@@ -618,6 +618,7 @@ export function FacePicker(props: {
       <FaceChip
         face={p}
         avatarOnly
+        preview
         picked={picked}
         title={picked ? t("取消指定{v1}", { v1: faceLabel(p) }) : t("指定{v1}", { v1: faceLabel(p) })}
         onClick={() =>
@@ -956,6 +957,107 @@ export function faceText(text: string, refs: { ref: string; face: FaceRef }[], p
   return out;
 }
 
+// The enlarged face over a small avatar: on mouse hover, or after a tap on touch
+// screens. One at a time, attached to <body> so a scrolling row or panel cannot clip it.
+const PREVIEW_HOVER_MS = 250;
+const PREVIEW_LEAVE_MS = 80;
+const PREVIEW_MARGIN = 8;
+const mouseQuery = typeof matchMedia === "function" ? matchMedia("(hover:hover) and (pointer:fine)") : null;
+const usesMouse = () => !!mouseQuery?.matches;
+
+let previewEl: HTMLDivElement | null = null;
+let previewAnchor: HTMLElement | null = null;
+let previewTimer = 0;
+let previewHiddenAt = 0;
+
+function placeFacePreview() {
+  const el = previewEl;
+  const anchor = previewAnchor;
+  if (!el || !anchor) return;
+  if (!anchor.isConnected) return hideFacePreview();
+  const r = anchor.getBoundingClientRect();
+  const left = Math.min(Math.max(PREVIEW_MARGIN, r.left + r.width / 2 - el.offsetWidth / 2), innerWidth - el.offsetWidth - PREVIEW_MARGIN);
+  const above = r.top - el.offsetHeight - PREVIEW_MARGIN;
+  el.style.left = `${left}px`;
+  el.style.top = `${above >= PREVIEW_MARGIN ? above : r.bottom + PREVIEW_MARGIN}px`;
+}
+
+function hideFacePreview() {
+  clearTimeout(previewTimer);
+  if (!previewEl) return;
+  previewEl.remove();
+  previewEl = null;
+  previewAnchor = null;
+  previewHiddenAt = Date.now();
+}
+
+// `go` turns the preview into a confirmation: its button runs the tap's action.
+function showFacePreview(anchor: HTMLElement, face: FaceRef, go?: { label: string; run: () => void }) {
+  hideFacePreview();
+  if (!face.thumb) return;
+  const el = document.createElement("div");
+  el.className = `chat-face-preview${go ? " has-go" : ""}`;
+  if (!go) el.setAttribute("aria-hidden", "true");
+  const img = document.createElement("img");
+  img.src = face.thumb;
+  img.alt = "";
+  el.appendChild(img);
+  const label = face.name || face.where;
+  if (label) {
+    const name = document.createElement("div");
+    name.className = "chat-face-preview-name";
+    name.textContent = label;
+    el.appendChild(name);
+  }
+  if (go) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chat-chip is-primary";
+    button.textContent = go.label;
+    button.onclick = () => {
+      hideFacePreview();
+      go.run();
+    };
+    el.appendChild(button);
+  }
+  document.body.appendChild(el);
+  previewEl = el;
+  previewAnchor = anchor;
+  placeFacePreview();
+}
+
+function hoverFacePreview(anchor: HTMLElement, face: FaceRef) {
+  clearTimeout(previewTimer);
+  if (previewAnchor === anchor) return;
+  // Moving straight on to the next face swaps the preview without the wait.
+  if (previewEl || Date.now() - previewHiddenAt < 300) return showFacePreview(anchor, face);
+  previewTimer = window.setTimeout(() => showFacePreview(anchor, face), PREVIEW_HOVER_MS);
+}
+
+function leaveFacePreview() {
+  clearTimeout(previewTimer);
+  if (previewEl) previewTimer = window.setTimeout(hideFacePreview, PREVIEW_LEAVE_MS);
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      const target = e.target as Node;
+      if (!previewEl || previewEl.contains(target)) return;
+      if (e.pointerType === "mouse" && previewAnchor?.contains(target)) return;
+      hideFacePreview();
+    },
+    true,
+  );
+  document.addEventListener("keydown", (e) => e.key === "Escape" && hideFacePreview(), true);
+  document.addEventListener("input", hideFacePreview, true);
+  document.addEventListener("scroll", placeFacePreview, true);
+  addEventListener("resize", placeFacePreview);
+  visualViewport?.addEventListener("resize", placeFacePreview);
+  visualViewport?.addEventListener("scroll", placeFacePreview);
+}
+
 export function FaceChip(props: {
   face: FaceRef;
   picked?: boolean;
@@ -964,29 +1066,75 @@ export function FaceChip(props: {
   avatarOnly?: boolean;
   title?: string;
   onClick?: () => void;
+  // Enlarges the face on hover; on touch, after a tap that picks it.
+  preview?: boolean;
+  // Touch only: a tap opens the preview, and its button (labelled `title`) runs onClick.
+  confirmOnTouch?: boolean;
 }) {
   const { face } = props;
+  const ref = useRef<HTMLElement>(null);
+  const previews = !!props.preview && !!face.thumb;
+  useEffect(
+    () => () => {
+      if (ref.current && previewAnchor === ref.current) hideFacePreview();
+    },
+    [],
+  );
   const img = face.thumb ? <img src={face.thumb} alt="" /> : <span class="chat-face-blank" />;
   const cls =
     `chat-face-chip${props.picked ? " is-picked" : ""}` +
     `${props.small ? " is-small" : ""}${props.avatarOnly ? " is-avatar" : ""}`;
   const name = !props.small && !props.avatarOnly && face.name;
+  const hover = previews
+    ? {
+        onPointerEnter: (e: PointerEvent) => {
+          if (e.pointerType === "mouse" && usesMouse()) hoverFacePreview(e.currentTarget as HTMLElement, face);
+        },
+        onPointerLeave: (e: PointerEvent) => {
+          if (e.pointerType === "mouse") leaveFacePreview();
+        },
+        onFocus: (e: FocusEvent) => {
+          const el = e.currentTarget as HTMLElement;
+          if (el.matches(":focus-visible")) showFacePreview(el, face);
+        },
+        onBlur: (e: FocusEvent) => {
+          if (usesMouse() && !(e.currentTarget as HTMLElement).matches(":hover")) leaveFacePreview();
+        },
+      }
+    : {};
   if (!props.onClick) {
     return (
-      <span class={cls} title={faceLabel(face)}>
+      <span
+        ref={ref}
+        class={cls}
+        title={previews ? undefined : faceLabel(face)}
+        onClick={previews ? () => !usesMouse() && ref.current && showFacePreview(ref.current, face) : undefined}
+        {...hover}
+      >
         {img}
         {name}
       </span>
     );
   }
+  const run = props.onClick;
+  const click = () => {
+    const el = ref.current;
+    if (el && props.confirmOnTouch && face.thumb && !usesMouse()) {
+      return showFacePreview(el, face, { label: props.title || faceLabel(face), run });
+    }
+    run();
+    if (el && previews && !props.picked && !usesMouse()) showFacePreview(el, face);
+  };
   return (
     <button
+      ref={ref as preact.RefObject<HTMLButtonElement>}
       type="button"
       class={cls}
-      title={props.title || faceLabel(face)}
+      title={previews ? undefined : props.title || faceLabel(face)}
       aria-label={props.title || faceLabel(face)}
       aria-pressed={props.picked}
-      onClick={props.onClick}
+      onClick={click}
+      {...hover}
     >
       {img}
       {name}
@@ -1445,7 +1593,7 @@ export function Composer(props: {
                   {/* Three is enough to read as "these people"; the count
                       beside them says how many. */}
                   {who.slice(0, 3).map((p) => (
-                    <FaceChip key={p.subjectIndex} face={p} small />
+                    <FaceChip key={p.subjectIndex} face={p} small preview />
                   ))}
                 </span>
                 {who.length > 1 && t("{length} 位", { length: who.length })}

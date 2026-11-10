@@ -6458,6 +6458,8 @@ export function SessionView(props: {
                       <FaceChip
                         face={face}
                         avatarOnly
+                        preview
+                        confirmOnTouch
                         picked={picked}
                         title={face.name ? t("就是{name}", { name: face.name }) : t("就是這位")}
                         onClick={open && !busy ? () => props.onAsk(t("這位"), [face.subjectIndex], screen, askFaces([face.subjectIndex]), c.question_kind ? messages[idx].id : undefined) : undefined}
@@ -6486,6 +6488,8 @@ export function SessionView(props: {
                   <FaceChip
                     face={face}
                     avatarOnly
+                    preview
+                    confirmOnTouch
                     picked={!open && nextSi.length === 1 && nextSi[0] === face.subjectIndex}
                     title={face.name ? t("就是{name}", { name: face.name }) : t("就是這位")}
                     onClick={open && !busy ? () => props.onAsk(t("這位"), [face.subjectIndex], screen, askFaces([face.subjectIndex]), c.question_kind ? messages[idx].id : undefined) : undefined}
