@@ -1127,6 +1127,9 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
    area out 4px above and below; 4+4 is exactly the --sp-2 row gap, so
    wrapped rows meet without overlapping. Rows and the input field stay a
    real 44px, they are full-width and there the height is the layout. */
+@media (pointer:coarse){
+  .chat-composer-field{font-size:16px}
+}
 @media (hover:none){
   .chat-opt-person-head,.chat-composer-field{min-height:44px}
   .chat-chip,.chat-opt-chip,.chat-face-chip{min-height:36px}
