@@ -120,6 +120,13 @@ _DEFAULT_LONG_SIDE = 720
 _DEFAULT_REASONING = "high"
 _DEFAULT_DETAIL = "original"
 
+# Step 1 asked up to 5 times (ask_majority), not once, as of 2026-11-10: Luna
+# at 720 read 66DD7EE7029A51725791975's head grey all over in 4 of 5 asks
+# and 2175377645's in 2 of 5 (output/grayHairPromptTune_261109), one ask
+# deciding its route. Asked one after another, 3 to 5 asks where one took
+# 7.9 s on average (output/grayHairCauseCheck_261110).
+_DEFAULT_ASKS = 5
+
 # Step 1, sent with the photo; GrayReading's fields take its answers.
 # Question 1 is judged by the criteria after them, which list what grayHair
 # alone took for grey hair: light that falls on the hair, hair that is light
@@ -213,7 +220,7 @@ class GrayHairOptions:
                                      "finds grey hair (明確 or 可能) or the head grey all over "
                                      "and grown in")
     analyze_only: bool = option(False, "step 1 only: read the photo, render nothing")
-    asks: int = option(1, "times step 1 is asked at most: the photo goes on where more than "
+    asks: int = option(_DEFAULT_ASKS, "times step 1 is asked at most: the photo goes on where more than "
                           "half of the answers say so, a tie not; asked one after another, "
                           "stopping once that is settled")
     analyst_model: str = option(_DEFAULT_ANALYST_MODEL, "step 1's model")
@@ -264,8 +271,9 @@ class GrayHairFeature(HairShifted, SinglePromptFeature):
         self.description = (
             "grayHair with GPT checking the hair first: a photo with grey hair 明確 or 可能 "
             "gets grayHair's render, one grey all over and grown in its own (one light all "
-            "over by dye or nature as not grey all over); per photo 1 analyst call (up to "
-            "-o asks), and 1 render call where it goes on")
+            "over by dye or nature as not grey all over); per photo up to -o asks analyst "
+            "calls (5 by default, from 3 once the majority is settled), and 1 render call "
+            "where it goes on")
 
     def prompts(self, opts) -> dict[str, str]:
         out = {"detect": _ANALYSIS_PROMPT}
