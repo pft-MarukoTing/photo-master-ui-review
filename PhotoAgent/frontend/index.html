@@ -2032,6 +2032,11 @@
     @container (max-width: 340px) {
       .aspect-ratio-picker .ar-smart-row { grid-auto-flow: row; }
     }
+    .aspect-ratio-picker:not(:lang(zh)) .ar-scale { display: none; }
+    .aspect-ratio-picker:not(:lang(zh)) .ar-shape-row {
+      grid-auto-flow: row;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
     /* Applied by wireOptionPicker (app.js) when there isn't enough room
        below the trigger -- flips the panel to open upward instead of
        spilling past the viewport bottom. */

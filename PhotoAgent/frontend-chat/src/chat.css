@@ -588,6 +588,8 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
   .chat-ar-shape-row{grid-auto-flow:row;grid-template-columns:repeat(5,minmax(0,1fr))}
 }
 @container (max-width:340px){.chat-ar-smart-row{grid-auto-flow:row}}
+.chat-ar-panel:not(:lang(zh)) .chat-ar-scale{display:none}
+.chat-ar-panel:not(:lang(zh)) .chat-ar-shape-row{grid-auto-flow:row;grid-template-columns:repeat(5,minmax(0,1fr))}
 .chat-settings-portrait{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2) var(--sp-4)}
 .chat-settings-portrait>.chat-meta{width:100%}
 /* Its own row, pulled up under the label it belongs to so the pair reads as
@@ -1609,13 +1611,13 @@ div.chat-proposal-row{cursor:default}
 
   /* 分頁＋全部：緊貼在它切換的那排磚上面。分頁做成 segmented control，「全部」靠右。 */
   #upload-section .upload-gallery-heading{order:4;display:flex;align-items:center;justify-content:space-between;margin-top:20px;padding:0;border:0}
-  #upload-section .upload-gallery-tabs{flex:0 0 auto;gap:2px;padding:3px;border-radius:20px;background:var(--n14)}
+  #upload-section .upload-gallery-tabs{flex:0 1 auto;min-width:0;gap:2px;padding:3px;border-radius:20px;background:var(--n14)}
   #upload-section .upload-gallery-tab-recent-group,
   #upload-section .upload-gallery-col .upload-gallery-tab-recent-group{background:transparent}
-  #upload-section .upload-gallery-tab{flex:0 0 auto;height:34px;padding:0 14px;border-radius:17px;font-size:13px;font-weight:500;color:var(--text-2);background:transparent}
+  #upload-section .upload-gallery-tab{flex:0 1 auto;height:auto;min-height:34px;padding:4px 14px;border-radius:17px;font-size:13px;line-height:1.2;font-weight:500;color:var(--text-2);background:transparent}
   #upload-section .upload-gallery-tab.is-active{background:var(--card);color:var(--accent);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.1)}
   #upload-section .upload-gallery-tab-icon{display:none}
-  .upload-gallery-all{display:inline-flex;align-items:center;gap:2px;min-height:44px;padding-block:0;padding-inline:8px 0;border:0;background:transparent;
+  .upload-gallery-all{display:inline-flex;flex-shrink:0;align-items:center;gap:2px;min-height:44px;padding-block:0;padding-inline:8px 0;border:0;background:transparent;
     color:var(--accent);font-size:13px;font-weight:500;cursor:pointer}
 
   /* 前後對照：滿版、比桌機矮。左右滑留給滑桿，上下滑照樣捲頁面。 */

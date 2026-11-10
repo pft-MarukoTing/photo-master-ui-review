@@ -6823,6 +6823,9 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
     inset-inline-end: auto;
     inset-inline-start: 5px;
   }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube-count {
+    top: 30px;
+  }
   /* Letterbox backdrop: same note as the desktop block -- defined once in
      .demo-image-tile-bg / .history-cube-bg's own base rules, not here. */
 }
