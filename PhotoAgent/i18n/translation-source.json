@@ -1221,7 +1221,8 @@
       "where": [
         "panel"
       ],
-      "note": "Row label in the portrait check list, next to an on/off switch and followed by the result (e.g. 'No fix needed'); also read inside 'Adjusting {fix}: …'. A short noun phrase naming the problem checked: stray or flyaway hairs. Name the problem itself, not the fix: never a verb such as fix, correct, adjust or tidy. The setting 'Tidy Stray Hairs' fixes this problem, so share its noun but leave out its verb."
+      "note": "Row label in the portrait check list, next to an on/off switch and followed by the result (e.g. 'No fix needed'); also read inside 'Adjusting {fix}: …'. A short noun phrase naming the problem checked: stray or flyaway hairs. Name the problem itself, not the fix: never a verb such as fix, correct, adjust or tidy. The setting 'Tidy Stray Hairs' fixes this problem, so share its noun but leave out its verb.",
+      "max": "about 14 Latin letters or 7 CJK characters"
     },
     "亂髮偵測：保留髮絲動態": {
       "en": "Hair: Natural",
@@ -7052,7 +7053,8 @@
       "where": [
         "panel"
       ],
-      "note": "Row label in the portrait check list, next to an on/off switch and followed by the result (e.g. 'No fix needed'); also read inside 'Adjusting {fix}: …'. A short noun phrase naming what is checked: where the person's eyes look, and whether they look at the camera. Name the problem itself, not the fix: never a verb such as fix, correct, adjust or tidy. The setting 'Fix Gaze' fixes this problem, so share its noun but leave out its verb."
+      "note": "Row label in the portrait check list, next to an on/off switch and followed by the result (e.g. 'No fix needed'); also read inside 'Adjusting {fix}: …'. A short noun phrase naming what is checked: where the person's eyes look, and whether they look at the camera. Name the problem itself, not the fix: never a verb such as fix, correct, adjust or tidy. The setting 'Fix Gaze' fixes this problem, so share its noun but leave out its verb.",
+      "max": "about 14 Latin letters or 7 CJK characters"
     },
     "眼神對焦修正": {
       "en": "Fix Gaze",
@@ -7217,7 +7219,7 @@
       ],
       "en_full": "Smile adjustment",
       "note": "Row label in the panel's portrait check list: a noun naming what is checked (the person's smile), never a command to smile.",
-      "max": "about 4 Chinese characters"
+      "max": "about 14 Latin letters or 7 CJK characters"
     },
     "笑容：不笑": {
       "en": "Smile: No Smile",
@@ -9475,7 +9477,8 @@
       "where": [
         "panel"
       ],
-      "note": "Row label in the portrait check list, next to an on/off switch and followed by the result (e.g. 'No fix needed'); also read inside 'Adjusting {fix}: …'. A short noun phrase naming the problem checked: eyes caught closed (a blink). Name the problem itself, not the fix: never a verb such as fix, correct, adjust or tidy. The setting 'Fix Closed Eyes' fixes this problem, so share its noun but leave out its verb."
+      "note": "Row label in the portrait check list, next to an on/off switch and followed by the result (e.g. 'No fix needed'); also read inside 'Adjusting {fix}: …'. A short noun phrase naming the problem checked: eyes caught closed (a blink). Name the problem itself, not the fix: never a verb such as fix, correct, adjust or tidy. The setting 'Fix Closed Eyes' fixes this problem, so share its noun but leave out its verb.",
+      "max": "about 14 Latin letters or 7 CJK characters"
     },
     "開": {
       "en": "On",
