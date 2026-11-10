@@ -14,11 +14,14 @@ _TARGET_PIXELS = 1536 * 1024
 # aiHair: the lining up's fits — align.register's patches and transform,
 # region_align's ECC and optical flow (regions, face_flow, shifted) — made on
 # the photo and the render shrunk to at most this many pixels, what they
-# find taken back to the full frame and applied there once (estimate_scale);
-# 0 fits them at the photo's own size, as before. HAIRFX_ESTIMATE_MAX_PIXELS
-# sets it. At 9.8 MP, hairline's flow alone took 1.9 GB in each of its two
-# child processes (DIS down to the full resolution).
-ESTIMATE_MAX_PIXELS = int(os.environ.get("HAIRFX_ESTIMATE_MAX_PIXELS", "0") or 0)
+# find taken back to the full frame and applied there once (estimate_scale).
+# 2 MP by default (2026-11-10); HAIRFX_ESTIMATE_MAX_PIXELS sets it, 0 fits
+# them at the photo's own size, as before. At 9.8 MP, hairline's flow alone
+# took 1.9 GB in each of its two child processes (DIS down to the full
+# resolution); at 2 MP its two children took ~0.7 and ~0.55 GB whatever the
+# photo, the results within 3 levels on 99% of the pixels up to 4 MP
+# (output/mem_profile_20261110/cat2, fake renders).
+ESTIMATE_MAX_PIXELS = int(os.environ.get("HAIRFX_ESTIMATE_MAX_PIXELS", "2000000") or 0)
 
 
 def estimate_scale(width: int, height: int) -> float:

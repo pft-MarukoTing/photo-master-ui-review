@@ -356,10 +356,11 @@ def smoothed(image, hair, blur: float, fine: float, gain=1.0):
 @dataclass
 class FrizzCareOptions:
     smooth_at: str = option(
-        os.environ.get("HAIRFX_FRIZZ_SMOOTH_AT", "photo"),
-        "aiHair: the size the render is smoothed at: the photo's (it grown to it first), or "
-        "the render's own where that is smaller (~1.6 MP; the hair model and the smoothing "
-        "run there, and the result is grown to the photo's as a render is); "
+        os.environ.get("HAIRFX_FRIZZ_SMOOTH_AT", "render"),
+        "aiHair: the size the render is smoothed at: the render's own where that is "
+        "smaller than the photo's (~1.6 MP; the hair model and the smoothing run there, and "
+        "the result is grown to the photo's as a render is; the default since 2026-11-10, "
+        "~1.5x faster at 4 MP, 3x at 9.8 MP), or the photo's (it grown to it first); "
         "HAIRFX_FRIZZ_SMOOTH_AT sets the default",
         choices=("photo", "render"))
     blur: float = option(4.0, "frizzCare_3's -o blur: step 1's Gaussian along the hair's "
