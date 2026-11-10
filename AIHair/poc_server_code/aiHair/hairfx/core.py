@@ -372,8 +372,6 @@ BLEND_ALGORITHMS = {
     "crown": "fluffy's composite: lined up (common.lined_up), its hair's colour matched place "
              "by place, pasted on top of the head where it reshaped the hair, the face kept "
              "the photo's (by its -o options)",
-    "parting": "hairpart's composite: lined up (common.lined_up), pasted only where it filled "
-               "the parting, its colour fixed to the hair round it",
 }
 
 

@@ -132,9 +132,11 @@ for itself whether it is one images.edit call or a pipeline of calls;
       --align regions_flow and pasted into the photo through the head mask.
   hairPart
       one call: single-prompt_HairPart.py's prompt, as
-      run_HairPart_samples.py renders it. With --blend,
-      hairpart_composite.py's paste: the render taken only where it filled
-      the parting, its colour fixed to the hair round it.
+      run_HairPart_samples.py renders it, colour-matched over the whole
+      picture as it does; by default (--no-blend keeps it as drawn) lined up
+      --align regions_flow and pasted into the photo through the hair_brow
+      mask: the hair and the forehead above the brows, the face below them
+      kept the photo's.
   fluffy
       one call: single-prompt_Fluffy.py's prompt (-o language en or zh), as
       run_Fluffy_samples.py renders it. By default (--no-blend keeps it as
@@ -181,7 +183,9 @@ every run.
 
 The results of frizzCare(_1/_2/_3/_4), plump, rootRetouch(_1),
 hairline_simple_lv0/1/1.5/2, strayHairWithFace(_1/_2), hairPart and
-fluffy (not plumpFixHair(_1/_2/_3/_3.7)) first have their hair's colours
+fluffy (not plumpFixHair(_1/_2/_3/_3.7)) first have their colours
+pulled back to the photo's — hairPart's over the whole picture, as below
+(--colour-match-area whole, its default), the rest's their hair's
 pulled back to the photo's (imaging.colour_matched:
 run_HairPart_samples.py's and run_Fluffy_samples.py's after_correction,
 kept to the hair), as the model
@@ -213,12 +217,12 @@ the hair, as looping-prompt.py lines its renders up before review: the
 photo's and the result's hair from the in-house hair model (--seg-model,
 run in this process), the render as drawn kept as debug/<photo>/<name>_raw.png
 where it moved. hairline's and soft_1's results, pasted into the photo
-already, aren't, nor hairPart's, fluffy's, strayHairWithFace's,
+already, aren't, nor fluffy's, strayHairWithFace's,
 rootRetouch_1's and grayHairTwoStep(_1)'s when blended (--blend; fluffy's and
 those last two by default), which line them up themselves; nor are any with
 --no-align or --keep-rendered-size.
 That is one affine transform of the whole render (--align global, every
-effect's default but hairline_simple_lv1/1.5's); with --align local it is
+effect's default but hairline_simple_lv1/1.5's and hairPart's); with --align local it is
 fitted outside the face, and inside it each of the brows, eyes, nose,
 mouth and chin is matched on its own and moved into place, the face found
 by FAN's 68 landmarks (face_alignment, run locally in --face-python;
@@ -230,7 +234,7 @@ lines it up; align's _BROW_TAIL note), the render resampled once, and with
 --debug each stage kept in debug/<photo>/: <name>_render_only,
 _global, _local, _local_flow and _flow.jpg (how far the flow moved each
 pixel, white at 6 px); with --align regions_flow (hairline_simple_lv1/1.5's
-default) the one transform is replaced by lining the render up region by
+and hairPart's default) the one transform is replaced by lining the render up region by
 region — the rest (outside the hair and the face) and the face with the
 bare forehead each by an affine transform (ECC), the hair by optical flow
 faded in from the forehead's edge (region_align's REGIONS_HAIR_FADE note) —
@@ -243,16 +247,16 @@ With --blend, each result is then pasted into the photo through its
 effect's blend mask, so it is the photo, pixel for pixel, outside it
 (hairfx/blend.py; --list shows each effect's): frizzCare(_2/_3/_4),
 plumpFixHair(_1/_2/_3/_3.7) and rootRetouch the photo's and the result's
-hair; hairline_simple_lv0/2 that and the forehead above the lower brow;
-hairline_simple_lv1/1.5 that and the face with its forehead (head, pasted by
-Laplacian pyramid);
-hairPart, fluffy, strayHairWithFace, rootRetouch_1 and grayHairTwoStep(_1) by
-composites of their own (parting: the filled parting; crown: the raised
-crown, the face kept; face: the face it drew; hair_shifted: the hair, the
-face kept but for it, the renders lined up region by region). Each result as
+hair; hairline_simple_lv0/2 and hairPart that and the forehead above the
+lower brow (hair_brow); hairline_simple_lv1/1.5 that and the face with its
+forehead (head, pasted by Laplacian pyramid);
+fluffy, strayHairWithFace, rootRetouch_1 and grayHairTwoStep(_1) by
+composites of their own (crown: the raised crown, the face kept; face: the
+face it drew; hair_shifted: the hair, the face kept but for it, the renders
+lined up region by region). Each result as
 it was is kept as debug/<photo>/<name>_unblended.png, the mask as
 blend_mask_<name>.png and blend_<name>.jpg. The other effects' results are
-left as they are. fluffy's, rootRetouch_1's, grayHairTwoStep(_1)'s and
+left as they are. hairPart's, fluffy's, rootRetouch_1's, grayHairTwoStep(_1)'s and
 hairline_simple_lv1/1.5's are pasted so without --blend too, by default;
 --no-blend keeps them as drawn.
 

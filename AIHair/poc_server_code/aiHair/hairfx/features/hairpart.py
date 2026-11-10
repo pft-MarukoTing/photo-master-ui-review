@@ -1,89 +1,64 @@
-"""hairpart: HairFeatures' hairPart. Its switches, as HairFeatures set them:
-colour match on, in the hair; lined up --align global; --blend by its own
-parting composite, off by default.
-
---- HairFeatures' features/hair_part.py ---
+"""hairpart: HairFeatures' hairPart's render, finished as hairline's are.
+Its switches: colour match on, over the whole picture; lined up --align
+regions_flow; pasted into the photo through the hair_brow mask by default
+(--no-blend keeps the renders whole, lined up).
 
 hairPart (補髮縫): the scalp that shows along the parting filled with the
-hair beside it, as 6_Hair part's Meitu results do. run_HairPart_samples.py's
-render and colour match; with --blend, hairpart_composite.py's paste back
-into the photo, which keeps the render only where it filled the parting.
+hair beside it, as 6_Hair part's Meitu results do.
 
 Per photo:
 
   1. render: the photo and _PROMPT — single-prompt_HairPart.py's own
      skeleton with its CHANGE ONLY (_hair_part_prompt, _HAIR_PART_DIRECTION),
-     as of 2026-10-30 — for --n-images images (result_<i>). Feature.run
-     then pulls their hair's colours back to the photo's by one 3x3 colour
-     matrix and offset (core._colour_match_outputs:
-     run_HairPart_samples.py's _colour_match, its after_correction/, kept
-     to the hair; --no-colour-match skips it) and, without --blend, lines
-     them up with it as every render is.
+     as of 2026-10-30 — for --n-images images (result_<i>).
+  2. colour (core._colour_match_outputs, area "whole"): one 3x3 colour
+     matrix and offset fitted over the whole picture, on the 70% that
+     differs least (imaging.whole_colour_matched): run_HairPart_samples.py's
+     _colour_match, its after_correction/, which hairpart_composite.py
+     composited from. Fitted on the hair alone (area "hair"), where the
+     photo's thin hair shows much bright scalp and the render filled it in,
+     the matrix's gain stretched the render's hair's contrast and turned
+     the faint gaps it left into bright patches: the hair's lightness
+     spread (p90-p10) x1.52 on female_batch02_351_FT, x1.29-1.32 on
+     female_batchExpand04_066_FT_1/068_FT_1/068_FT_2; whole, x0.90-1.05 on
+     all 44 photos of sample_for_HairPart and rst_pub_by_feature
+     (output/hairpart_mask_compare, 2026-11-10).
+  3. lining up (--align regions_flow, hairline's): region by region, then
+     the face part by part and by optical flow (core._align_outputs).
+  4. paste (blend hair_brow): the photo's and the render's hair, grown and
+     feathered, and the forehead above the brows (FAN's), from the render;
+     the face from the brows down, the body and the background the photo's.
+     The forehead comes with the hair, so a filled parting runs on into it
+     with no seam at the hairline; with no face found, the hair alone.
+  5. mask check (HairPartFeature.finish): a render more than _MASK_FAIL of
+     whose hair lies outside the photo's hair closed over _CLOSE is kept
+     whole instead (hairpart_composite.py's --mask-fail): the photo's hair
+     mask missed part of the head, and the paste would stop mid-parting.
 
-With --blend, CompositeFeature.finish pastes them into the photo instead
-(HairPartFeature.composite), as hairpart_composite.py does:
-
-  2. hair masks and lining up (lined_up): the photo's hair and each
-     render's, from the in-house hair model; each render lined up with the
-     photo outside both, grown by _REGION_GROW (align.line_up), and its hair
-     found again where it moved. hairpart_composite.py shifts the render by
-     one translation found by phase correlation outside the hair
-     (composite_common._shift_onto); line_up fits an affine transform to
-     the shifts of patches there, the same way, so it stands in for it.
-  3. the parting (_edit_area): where the render really changed the photo —
-     blurred over _DETECT_BLUR, off by more than -o level in a channel — in
-     the render's hair inside the photo's hair closed over _CLOSE
-     (envelope.jpg), which bridges the parting and a bare crown but not the
-     forehead or the background, so the outline and the hairline stay the
-     photo's; closed and grown by _GROW, specks under _MIN_AREA of the photo
-     dropped. gpt-image re-tones all the hair it returns, so only this is
-     taken from the render.
-  4. colour, locally (_colour_fixed): the render's low-frequency offset from
-     the photo, measured on the photo's hair outside the parting
-     (normalised convolution over _COLOUR), is taken out, so the fill
-     matches the hair round it.
-  5. paste: the render into the photo through the parting feathered over
-     _FEATHER, and over _EDGE at the hair's edge (blend_<name>.jpg); the
-     photo, pixel for pixel, everywhere else.
-
-single-prompt_HairPart.py's own --composite hair pastes the render's whole
-hair (the photo's hair mask closed over 3% and grown) instead of step 3's
-parting; the demo (demo_hairpart.zip) is step 3's.
+Until 2026-11-10 its --blend (off by default) was hairpart_composite.py's
+parting composite instead: the render taken only where it changed the photo
+inside the photo's hair closed over 8% of the long side. It cut the render's
+strands off at the hairline (subject25), and where the hair model missed
+most of the head — a small top-down shot, female_batch08_261_FT_4: 6.8% of
+the photo — kept almost nothing of the fill; hairpart_composite.py wrote the
+render as is there (--mask-fail), as step 5 does. The old module is in
+output/hairpart_mask_compare/backup_before_hairpart/.
 
 Billed calls per photo: 1 render.
 """
 
-from dataclasses import dataclass
+from .. import imaging
+from ..common import SinglePromptFeature
+from ..core import hair_model, stage
 
-from .. import align, imaging
-from ..common import CompositeFeature, _gaussian, _reach, lined_up
-from ..core import option, stage
-
-
-# hairpart_composite.py's defaults, as shares of the photo's long side but
-# the level: the render counts as changed where off by more than _LEVEL
-# (0–255, the largest of R, G and B) after a blur of _DETECT_BLUR; closed
-# and grown by _GROW, specks under _MIN_AREA of the photo dropped; inside
-# the photo's hair closed over _CLOSE; feathered by _FEATHER, and by _EDGE
-# where it meets the hair's edge; its colour fixed over _COLOUR. Lining up
-# leaves out the photo's and the render's hair grown by _REGION_GROW.
-_LEVEL = 30.0
-
-# hairpart_composite.py's defaults, as shares of the photo's long side but
-# the level: the render counts as changed where off by more than _LEVEL
-# (0–255, the largest of R, G and B) after a blur of _DETECT_BLUR; closed
-# and grown by _GROW, specks under _MIN_AREA of the photo dropped; inside
-# the photo's hair closed over _CLOSE; feathered by _FEATHER, and by _EDGE
-# where it meets the hair's edge; its colour fixed over _COLOUR. Lining up
-# leaves out the photo's and the render's hair grown by _REGION_GROW.
-_DETECT_BLUR = 0.003
-_MIN_AREA = 0.0005
-_GROW = 0.01
+# Step 5, hairpart_composite.py's --mask-fail and --close: a render more than
+# _MASK_FAIL of whose hair (as lined up) lies outside the photo's hair closed
+# over _CLOSE of the long side is kept whole instead of pasted, as there.
+# On sample_for_HairPart's 21 photos, 3 renders each (2026-11-10), that was
+# female_batch08_261_FT_4's three (42–62%: on its small top-down head the
+# hair model found 6.8% of the photo); the other 20 photos' were 0–5%.
+_MASK_FAIL = 0.15
 _CLOSE = 0.08
-_FEATHER = 0.012
-_EDGE = 0.002
-_COLOUR = 0.02
-_REGION_GROW = 0.012
 
 # single-prompt_HairPart.py's _HAIR_PART_DIRECTION, its default CHANGE ONLY.
 _HAIR_PART_DIRECTION = (
@@ -120,118 +95,60 @@ def _hair_part_prompt(direction: str) -> str:
 _PROMPT = _hair_part_prompt(_HAIR_PART_DIRECTION)
 
 
-@dataclass
-class HairPartOptions:
-    level: float = option(_LEVEL, "with --blend, how far off the photo (0–255, in a channel, "
-                          "after a light blur) the render has to be for a pixel to count as "
-                          "filled; lower takes in more of the hair the render only re-toned")
+class HairPartFeature(SinglePromptFeature):
+    """hairpart: one render; colour-matched over the whole picture, lined up
+    region by region and pasted into the photo through the hair_brow mask,
+    by default (steps 2–4)."""
 
-    def __post_init__(self):
-        if not 0 < self.level < 255:
-            raise ValueError(f"option level: {self.level} isn't between 0 and 255")
-
-
-def _edit_area(photo, render, inner, long_side: int, level: float):
-    """Step 3: where `render` changed `photo` (float RGB) in `inner`: off by
-    more than `level` in a channel after a blur of _DETECT_BLUR, closed over
-    _GROW, specks under _MIN_AREA of the photo dropped, grown by _GROW."""
-    import numpy as np
-
-    sigma = max(1.0, _DETECT_BLUR * long_side)
-    changed = np.zeros(inner.shape, bool)
-    near = imaging.box(inner, _reach(sigma))
-    if near is None:
-        return changed
-    changed[near] = np.abs(_gaussian(photo[near], sigma)
-                           - _gaussian(render[near], sigma)).max(axis=2) > level
-    grow = max(1, round(_GROW * long_side))
-    area = imaging.closed(changed & inner, grow)
-    labels, sizes = imaging.components(area)
-    keep = sizes >= _MIN_AREA * area.size
-    keep[0] = False
-    return imaging.dilated(keep[labels], grow) & inner
-
-
-def _colour_fixed(photo, render, ref, sigma: float, mean):
-    """Step 4: `render` (float RGB) plus its offset from `photo`, blurred
-    over the `ref` pixels only (normalised convolution, a Gaussian of
-    `sigma`); `mean`, the offset over the whole photo's ref (these may be a
-    crop of it), where no ref pixel is near."""
-    import numpy as np
-
-    m = ref.astype(np.float32)[..., None]
-    eps = 1e-3
-    num = _gaussian((photo - render) * m, sigma) + eps * mean
-    den = _gaussian(m, sigma) + eps
-    return render + num / den
-
-
-def _paste(photo, render, photo_hair, render_hair, envelope, level: float):
-    """Steps 3–5 for one render, lined up with `photo` (PIL): the result and
-    the weight the render was pasted by (0–1)."""
-    import numpy as np
-
-    p = np.asarray(photo.convert("RGB"), np.float32)
-    r = np.asarray(render.convert("RGB"), np.float32)
-    long_side = max(photo.size)
-    inner = render_hair & envelope
-    area = _edit_area(p, r, inner, long_side, level)
-    weight = np.zeros(area.shape, np.float32)
-    out = p.copy()
-    if area.any():
-        feather = max(1.0, _FEATHER * long_side / 2)
-        colour = max(1.0, _COLOUR * long_side)
-        edge = max(1.0, _EDGE * long_side)
-        ref = photo_hair & ~area
-        mean = (p[ref] - r[ref]).mean(axis=0) if ref.any() else np.zeros(3, np.float32)
-        # The weight is 0 past the feather's reach of the area, so the blurs
-        # run over that box and their own reach round it only.
-        box = imaging.box(area, _reach(feather))
-        src = imaging.box(area, _reach(feather) + _reach(max(feather, colour, edge)))
-        inside = tuple(slice(b.start - a.start, b.stop - a.start) for a, b in zip(src, box))
-        wt = (_gaussian(area[src].astype(np.float32), feather)
-              * _gaussian(inner[src].astype(np.float32), edge))
-        weight[box] = wt[inside]
-        fixed = _colour_fixed(p[src], r[src], ref[src], colour, mean)[inside]
-        w = weight[box][..., None]
-        out[box] = fixed * w + p[box] * (1 - w)
-    return imaging.as_image(out), weight
-
-
-class HairPartFeature(CompositeFeature):
-    description = ("the scalp along the parting filled with the hair beside it (補髮縫): 1 "
-                   "render call per photo, colour-matched to the photo; with --blend, pasted "
-                   "into it only where it filled the parting")
-    Options = HairPartOptions
+    default_n_images = 3  # the demos' r1–r3
     colour_match = True
-    blend_mask = "parting"
+    colour_match_area = "whole"
+    blend_mask = "hair_brow"
+    blend_default = True
+    align_default = "regions_flow"
 
     def __init__(self):
-        super().__init__("hairpart")
+        super().__init__("hairpart", _PROMPT)
+        self.description = (
+            "the scalp along the parting filled with the hair beside it (補髮縫): 1 render "
+            "call per photo, colour-matched to the photo over the whole picture, lined up "
+            "region by region and pasted into it through the hair and the forehead above the "
+            "brows, the face below them kept the photo's (kept whole where the hair model "
+            "missed part of the head)")
 
-    def prompts(self, opts) -> dict[str, str]:
-        return {"edit": _PROMPT}
+    def finish(self, ctx, photo, opts, result) -> None:
+        """Feature.finish (steps 2–4), then step 5: each pasted output whose
+        hair, as lined up, lies more than _MASK_FAIL outside the photo's
+        hair closed over _CLOSE — the photo's hair mask missed part of the
+        head, so the paste would stop mid-parting — is kept whole (lined up
+        and colour-matched), with a warning; info["blend"][name] notes its
+        share outside either way."""
+        import numpy as np
 
-    def composite(self, ctx, photo, opts, result) -> dict:
-        """Steps 2–5."""
-        photo_hair, lined = lined_up(ctx, photo, result.outputs, _REGION_GROW, result)
-        envelope = imaging.closed(photo_hair, round(_CLOSE * max(photo.size)))
-        result.intermediates["envelope.jpg"] = imaging.as_image(
-            imaging.tinted(photo.image, envelope))
-        pasted = {}
-        for name, (render, render_hair) in lined.items():
-            with stage(result, "blend", "hairpart._paste: the render taken only where it "
-                                        "filled the parting, its colour fixed to the hair "
-                                        "round it", name=f"paste {name}"):
-                image, weight = _paste(photo.image, render, photo_hair, render_hair, envelope,
-                                       opts.level)
-            # What the paste dropped: the photo's hair kept where the render
-            # had re-toned or moved it (hairpart_composite.py's
-            # hair_off_pct_before).
-            kept = photo_hair & (weight < 0.01)
-            off = align._difference(photo.image.convert("RGB"), render)[kept] > align._DRIFT_LEVEL
-            pasted[name] = (image, weight, {
-                "filled": round(float((weight >= 0.5).mean()), 4),
-                "hair_redrawn_dropped": round(float(off.mean()), 4) if kept.any() else 0.0,
-            })
-        return pasted
+        super().finish(ctx, photo, opts, result)
+        notes = result.info.get("blend")
+        names = [name for name in result.outputs if f"{name}_unblended" in result.intermediates]
+        if not notes or not names:  # --no-blend, or the blend failed (a warning already)
+            return
+        with stage(result, "blend", f"hairpart mask check: an output with more than "
+                                    f"{_MASK_FAIL:.0%} of its hair outside the photo's hair "
+                                    f"closed over {_CLOSE:g} of the long side kept whole"):
+            unblended = [result.intermediates[f"{name}_unblended"] for name in names]
+            photo_hair, *hairs = hair_model(ctx, result, [photo.image, *unblended],
+                                            f"the photo and {len(names)} output(s), as lined up")
+            envelope = imaging.closed(photo_hair, max(1, round(_CLOSE * max(photo.size))))
+            for name, image, hair in zip(names, unblended, hairs):
+                outside = 1 - float((hair & envelope).sum()) / max(int(hair.sum()), 1)
+                note = notes.setdefault(name, {})
+                note["hair_outside_photo"] = round(outside, 3)
+                if outside <= _MASK_FAIL:
+                    continue
+                note["kept_whole"] = True
+                result.outputs[name] = image
+                whole = np.ones(photo_hair.shape, bool)
+                result.intermediates[f"blend_mask_{name}"] = imaging.mask_image(whole)
+                result.intermediates[f"blend_{name}.jpg"] = imaging.as_image(
+                    imaging.tinted(photo.image, whole))
+                result.warnings.append(
+                    f"{name}: {outside:.0%} of its hair is outside the photo's (the hair model "
+                    f"missed part of the head): kept whole, not pasted")
