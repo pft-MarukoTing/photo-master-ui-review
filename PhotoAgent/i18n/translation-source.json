@@ -2317,7 +2317,9 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Status badge on a photo: analysis in progress.",
+      "max": "about 10 Latin letters or 5 CJK characters"
     },
     "分析中…": {
       "en": "Analyzing…",
@@ -3285,7 +3287,9 @@
       "where": [
         "panel",
         "chat"
-      ]
+      ],
+      "note": "Status badge on a photo: processing failed.",
+      "max": "about 10 Latin letters or 5 CJK characters"
     },
     "套用": {
       "en": "Apply",
@@ -4152,7 +4156,8 @@
         "panel",
         "chat"
       ],
-      "note": "Status: retouched."
+      "note": "Status: retouched.",
+      "max": "about 10 Latin letters or 5 CJK characters"
     },
     "已美化 ({runsDone}/{length})": {
       "en": "Retouched ({runsDone}/{length})",
@@ -7545,7 +7550,8 @@
         "panel",
         "chat"
       ],
-      "note": "Status: retouching in progress."
+      "note": "Status: retouching in progress.",
+      "max": "about 10 Latin letters or 5 CJK characters"
     },
     "美化中 ({runsDone}/{length})": {
       "en": "Retouching ({runsDone}/{length})",
