@@ -329,6 +329,18 @@ def _first_result_data(body):
     return None
 
 
+def _result_url(data):
+    """The result image's URL in one results[].data[] entry: `url` where
+    AIPoC fills it, else the first of `dstUrls` (aiHair's results come back
+    with `url` null and the image under dstKeys -> dstUrls)."""
+    if not data:
+        return None
+    if data.get("url"):
+        return data["url"]
+    urls = data.get("dstUrls") or []
+    return urls[0] if urls else None
+
+
 @api_bp.route('/hair/status/<path:task_id>', methods=['GET'])
 def hair_status(task_id):
     """Poll an aiHair task's status on the remote AIPoC API."""
@@ -377,8 +389,8 @@ def hair_result(task_id):
         out['error'] = 'The task finished without a result image'
         return jsonify(out)
     if data:
-        entry['result_url'] = data.get("url")
-        out['remote_url'] = data.get("url")
+        entry['result_url'] = _result_url(data)
+        out['remote_url'] = entry['result_url']
         out['skipped'] = data.get("skipped") or ""
     return jsonify(out)
 
@@ -394,8 +406,7 @@ def hair_image(task_id):
     url = entry.get('result_url')
     if not url:
         body, _ = _fetch_remote_status(task_id)
-        data = _first_result_data(body)
-        url = data.get("url") if data else None
+        url = _result_url(_first_result_data(body))
         if not url:
             return jsonify({'error': 'No result image for this task yet'}), 404
         entry['result_url'] = url
@@ -516,8 +527,7 @@ def submit_feedback():
     if not result_url and entry:
         try:
             body, _ = _fetch_remote_status(task_id)
-            first = _first_result_data(body)
-            result_url = first.get('url') if first else None
+            result_url = _result_url(_first_result_data(body))
         except Exception as e:  # noqa: BLE001 — feedback saves what it can
             errors['remote_status'] = str(e)
     if result_url:
