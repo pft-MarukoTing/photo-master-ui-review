@@ -319,7 +319,7 @@
   "chat_evaluating_the_composition_and_framing": "正在评估构图与取景…",
   "chat_evaluating_the_crop_and_aspect": "正在评估裁剪范围与长宽比…",
   "chat_every_photo_is_already_being": "每张都已经在美化或美化好了，这句不会应用；要改哪一张，到那张的结果页说就好。",
-  "chat_everything_here_is_based_on": "里面的项目都是看原图分析出来的，有小圆点的是建议调整的地方；哪些开着、哪些关着，则沿用上次美化的设置。",
+  "chat_everything_here_is_based_on": "里面的项目都是看原图分析出来的；哪些开着、哪些关着，则沿用上次美化的设置。",
   "chat_everything_you_just_sent_is": "刚刚提交的都处理完成了。",
   "chat_everything_you_just_sent_is_2": "刚刚提交的都处理完成了，目前 {list}。",
   "chat_eyes": "闭眼",

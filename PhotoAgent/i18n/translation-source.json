@@ -7921,8 +7921,8 @@
         "panel"
       ]
     },
-    "裡面的項目都是看原圖分析出來的，有小圓點的是建議調整的地方；哪些開著、哪些關著，則沿用上次美化的設定。": {
-      "en": "Everything here is based on an analysis of the original; a dot marks a suggested change. What's on or off carries over from the last retouch.",
+    "裡面的項目都是看原圖分析出來的；哪些開著、哪些關著，則沿用上次美化的設定。": {
+      "en": "Everything here is based on an analysis of the original. What's on or off carries over from the last retouch.",
       "where": [
         "chat"
       ]

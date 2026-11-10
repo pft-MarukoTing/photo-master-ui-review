@@ -253,8 +253,8 @@ export const EN: Record<string, string> = {
   "想調整美化項目，按「看美化項目」；想直接開始美化，按「{goLabel}」。": "To adjust the edits, tap “Review Edits”. To retouch right away, tap “{goLabel}”.",
   "這版只照你的需求改，所以這輪只要改個人化需求就好。想整張一起美化的話，按「幫我分析」。":
     "This version follows only your requests, so only My Requests can be changed this round. To retouch the whole photo, tap “Analyze for Me”.",
-  "裡面的項目都是看原圖分析出來的，有小圓點的是建議調整的地方；哪些開著、哪些關著，則沿用上次美化的設定。":
-    "Everything here is based on an analysis of the original; a dot marks a suggested change. What's on or off carries over from the last retouch.",
+  "裡面的項目都是看原圖分析出來的；哪些開著、哪些關著，則沿用上次美化的設定。":
+    "Everything here is based on an analysis of the original. What's on or off carries over from the last retouch.",
   "可以調整{v1}，想先看哪一項？": "You can adjust {v1}. Which would you like to look at first?",
   "點下面的「{v1}」就可以改。": "Tap “{v1}” below to change it.",
   "返回": "Back",
