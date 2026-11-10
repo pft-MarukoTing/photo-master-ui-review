@@ -92,13 +92,14 @@ def plurals(text):
     return found
 
 
-def mismatch(reference, text, backend):
-    """Why `text` cannot stand in for `reference` in the code, or ""."""
+def mismatch(reference, text, backend, in_buttons=()):
+    """Why `text` cannot stand in for `reference` in the code, or "".
+    `in_buttons`: placeholders of the button names `reference` sends as {button_…}."""
     if not balanced(text):
         return "unbalanced braces"
     want, got = set(l10n_arb.placeholders(reference)), set(l10n_arb.placeholders(text))
     # A translation made before a button name became {button_…} still names the button itself.
-    if got - want or any(not name.startswith(l10n_arb.BUTTON) for name in want - got):
+    if got - want - set(in_buttons) or any(not name.startswith(l10n_arb.BUTTON) for name in want - got):
         return f"placeholders {sorted(got)}, the English has {sorted(want)}"
     for name, forms in plurals(text):
         if "other" not in forms:
@@ -148,12 +149,13 @@ def translate(code, meta, arb, keys_doc, source, problems):
         if not text.strip():
             continue
         reference = item["zh"].split("@@")[0] if from_chinese else source[key_id]
-        why = mismatch(reference, text, any(w.startswith("backend") for w in item["where"]))
+        buttons = item.get("buttons") or {}
+        in_buttons = () if from_chinese else {n for i in buttons.values() for n in l10n_arb.placeholders(source[i])}
+        why = mismatch(reference, text, any(w.startswith("backend") for w in item["where"]), in_buttons)
         if why:
             problems.append(f"{code}: {key_id} has {why}: {text!r}")
             continue
         translated += 1
-        buttons = item.get("buttons") or {}
         own_words += not from_chinese and any("{%s}" % name not in text for name in buttons)
         text = fill_buttons(text, buttons, arb, source, meta["format"]["quote"])
         for where in item["where"]:

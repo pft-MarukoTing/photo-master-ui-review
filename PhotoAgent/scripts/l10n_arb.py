@@ -33,7 +33,7 @@ KEYS_ABOUT = [
 ]
 
 BUTTON = "button_"
-_QUOTED = re.compile(r"「([^「」{}]+)」")
+_QUOTED = re.compile(r"「([^「」]+)」")
 
 _PLURAL_HEAD = re.compile(r"\{(\w+),\s*plural\s*,")
 _PLURAL_FORM = re.compile(r"\s*(=\d+|zero|one|two|few|many|other)\s*\{")
@@ -154,7 +154,8 @@ def _buttons(keys):
     """{sentence id: {placeholder: label id}}: a label the Chinese quotes in 「」 whose English the sentence quotes in “”."""
     labels = {}
     for key_id, item in keys.items():
-        if "{" not in item["en"]:
+        # A label may hold a placeholder (「接續第 {n} 版美化」): the sentence quoting it fills the same one.
+        if "plural," not in item["en"] and re.sub(r"\{\w+\}", "", item["en"]).strip():
             labels.setdefault(item["zh"].split("@@")[0], []).append(key_id)
     def where(key_id):
         return {SURFACE[w] for w in keys[key_id]["where"]}

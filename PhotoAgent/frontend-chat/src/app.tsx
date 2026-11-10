@@ -2030,7 +2030,7 @@ export function App() {
         .sort((a, b) => a - b).map((i) => i + 1);
       if (nums.length) {
         setLeaveAsk({
-          message: t("第 {v1} 張有需求，還沒選要整體美化還是僅依需求修改，會用「整體美化」送出。要繼續嗎？", { v1: nums.join(t("、")) }),
+          message: t("第 {v1} 張有需求，還沒選要「整體美化」還是「僅依需求修改」，會用「整體美化」送出。要繼續嗎？", { v1: nums.join(t("、")) }),
           confirmLabel: t("繼續"),
           cancelLabel: t("先去選"),
           // 先去選：回到總覽，在那裡問一次怎麼套用，選了就接著美化。

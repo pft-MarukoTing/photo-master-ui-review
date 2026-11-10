@@ -111,8 +111,8 @@ export const EN: Record<string, string> = {
   "照片傳好了，準備開始分析…": "Photo uploaded. Preparing the analysis…",
   "照片傳好了，準備開始調整…": "Photo uploaded. Preparing your edits…",
   "照片傳好了，準備開始美化…": "Photo uploaded. Preparing the retouch…",
-  "第 {v1} 張有需求，還沒選要整體美化還是僅依需求修改，會用「整體美化」送出。要繼續嗎？":
-    "Photo {v1} has requests, but you haven't chosen between Full Retouch and Only My Requests. It will be sent as “Full Retouch”. Continue?",
+  "第 {v1} 張有需求，還沒選要「整體美化」還是「僅依需求修改」，會用「整體美化」送出。要繼續嗎？":
+    "Photo {v1} has requests, but you haven't chosen between “Full Retouch” and “Only My Requests”. It will be sent as “Full Retouch”. Continue?",
   "繼續": "Continue",
   "先去選": "Let Me Choose",
   "請選擇圖片檔。": "Please choose an image file.",

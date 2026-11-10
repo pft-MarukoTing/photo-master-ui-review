@@ -560,15 +560,18 @@
         "backend text"
       ],
       "buttons": {
+        "button_common_retouch_from_version": "common_retouch_from_version",
         "button_common_style_2": "common_style_2"
       }
     },
     "backend_ok_ive_switched_to_version_2": {
-      "zh": "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的個人化需求了，沒問題就按「接續第 {n} 版美化」；想換光線、角度這類效果，可以先按「風格」。",
+      "zh": "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的「個人化需求」了，沒問題就按「接續第 {n} 版美化」；想換光線、角度這類效果，可以先按「風格」。",
       "where": [
         "backend text"
       ],
       "buttons": {
+        "button_common_my_requests_2": "common_my_requests_2",
+        "button_common_retouch_from_version": "common_retouch_from_version",
         "button_common_style_2": "common_style_2"
       }
     },
@@ -2083,7 +2086,10 @@
       "zh": "好，這句記下來了，按「接續第 {n} 版美化」時一起套用。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch_from_version": "common_retouch_from_version"
+      }
     },
     "chat_got_your_photos": {
       "zh": "收到你上傳的 {n} 張照片了。",
@@ -2566,7 +2572,10 @@
       "zh": "好，這句先記下來，按「接續第 {n} 版美化」時一起套用。",
       "where": [
         "chat"
-      ]
+      ],
+      "buttons": {
+        "button_common_retouch_from_version": "common_retouch_from_version"
+      }
     },
     "chat_nothing_has_changed_yet_so": {
       "zh": "還沒改過需求或設定，會照原本的再美化一次，結果可能跟上次不太一樣",
@@ -3027,11 +3036,12 @@
       ]
     },
     "chat_photo_has_requests_but_you": {
-      "zh": "第 {v1} 張有需求，還沒選要整體美化還是僅依需求修改，會用「整體美化」送出。要繼續嗎？",
+      "zh": "第 {v1} 張有需求，還沒選要「整體美化」還是「僅依需求修改」，會用「整體美化」送出。要繼續嗎？",
       "where": [
         "chat"
       ],
       "buttons": {
+        "button_common_only_my_requests": "common_only_my_requests",
         "button_common_full_retouch": "common_full_retouch"
       }
     },
@@ -4372,6 +4382,7 @@
         "chat"
       ],
       "buttons": {
+        "button_common_retouch_from_version": "common_retouch_from_version",
         "button_common_style_2": "common_style_2"
       }
     },

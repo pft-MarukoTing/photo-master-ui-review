@@ -152,7 +152,7 @@ TEXT = {
         "I couldn't match that to any available setting, but you can change it directly in the panels.",
     "這些已經在目前的設定裡了。": "That's already in the current settings.",
     "想照這樣重新產生一版，可以按「再美化」。": "To make a new version with these settings, tap “Retouch Again”.",
-    "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的個人化需求了，沒問題就按「接續第 {n} 版美化」；想換光線、角度這類效果，可以先按「風格」。": "OK, I've switched to version {n} so we can build on it. The change is in “My Requests” below; tap “Retouch from Version {n}” when it looks right. For effects like lighting or angle, tap “Style” first.",
+    "好，已經切到第 {n} 版，接著在這版上改。要改的地方幫你放進下面的「個人化需求」了，沒問題就按「接續第 {n} 版美化」；想換光線、角度這類效果，可以先按「風格」。": "OK, I've switched to version {n} so we can build on it. The change is in “My Requests” below; tap “Retouch from Version {n}” when it looks right. For effects like lighting or angle, tap “Style” first.",
     "好，已經切到第 {n} 版，接著在這版上改。想改哪裡直接打在下面，我會先幫你看過、記下來；想換光線、角度這類效果，可以按「風格」。都好了再按「接續第 {n} 版美化」。": "OK, I've switched to version {n} so we can build on it. Type what to change below and I'll check and note it; for effects like lighting or angle, tap “Style”. Tap “Retouch from Version {n}” when you're done.",
     "長寬比也幫你換成「{ratio}」了，在「設定」裡隨時可以改。":
         "I've also set the aspect ratio to “{ratio}”. You can change it anytime in “Settings”.",
@@ -257,7 +257,7 @@ TEXT = {
     "要照這樣把這幾張再美化一次嗎？": "Want me to retouch these again with this?",
     "要不要照這樣再美化一次？": "Want me to retouch them again with this?",
     "長寬比換成「{ratio}」": "aspect ratio “{ratio}”",
-    "輸出尺寸換成「{scale}」": "set the output size to “{scale}”",
+    "輸出尺寸換成「{scale}」": "output size “{scale}”",
     "打開「{name}」": "“{name}” on",
     "關掉「{name}」": "“{name}” off",
     "好，{said}了，在「設定」裡隨時可以改。": "OK, settings updated: {said}. You can change them anytime in “Settings”.",
