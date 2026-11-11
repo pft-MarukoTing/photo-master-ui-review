@@ -705,14 +705,15 @@ def shifted_composite(ctx, photo, result, face, keep_out, zone_of, match=None,
                                     + (", its hair's colour matched first" if match else ""),
                    name=f"paste {name}"):
             image = _paste(photo.image, render, photo_hair, hairs[i], weight, match, lock)
-        # What the paste dropped: the render's pixels off the photo's where
-        # the photo is kept.
-        kept = weight < 0.01
-        off = align._difference(photo.image.convert("RGB"), render)[kept] > align._DRIFT_LEVEL
-        pasted[name] = (image, weight, {
-            "pasted": round(float((weight >= 0.5).mean()), 4),
-            "render_off_dropped": round(float(off.mean()), 4) if kept.any() else 0.0,
-        })
+        note = {"pasted": round(float((weight >= 0.5).mean()), 4)}
+        if result.debug:  # aiHair: a note only, which the server doesn't read
+            # What the paste dropped: the render's pixels off the photo's
+            # where the photo is kept.
+            kept = weight < 0.01
+            off = (align._difference(photo.image.convert("RGB"), render)[kept]
+                   > align._DRIFT_LEVEL)
+            note["render_off_dropped"] = round(float(off.mean()), 4) if kept.any() else 0.0
+        pasted[name] = (image, weight, note)
     return pasted
 
 

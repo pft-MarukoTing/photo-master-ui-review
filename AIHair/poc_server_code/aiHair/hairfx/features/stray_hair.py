@@ -280,20 +280,23 @@ def _skin_face(ctx, result, photo):
     result.info["face"] = {"score": round(found["score"], 4),
                            "bbox": [round(v, 1) for v in found["bbox"]]}
     skin, prob, crop, crop_prob = skinmap.skin_map(photo.image, found["points"])
-    result.intermediates["skinmap_prob"] = imaging.as_image(
-        np.dstack([np.round(prob * 255).astype(np.uint8)] * 3))
-    result.intermediates["skinmap_crop.jpg"] = imaging.as_image(
-        imaging.tinted(imaging.as_image(crop), crop_prob >= skinmap.THRESHOLD))
+    result.keep("skinmap_prob", lambda: imaging.as_image(
+        np.dstack([np.round(prob * 255).astype(np.uint8)] * 3)))
+    result.keep("skinmap_crop.jpg", lambda: imaging.as_image(
+        imaging.tinted(imaging.as_image(crop), crop_prob >= skinmap.THRESHOLD)))
     skin = imaging.tidied(skin, _FACE_TIDY * max(photo.size))
     if not skin.any():
         raise RuntimeError("the skin-map model found no skin")
     face, outline, kept = skinmap.face(skin, found["points"])
     result.info["skin_share_of_face"] = float((kept & face).sum() / max(1, face.sum()))
-    drawn = imaging.tinted(photo.image, kept)
-    width = max(2, round(0.003 * max(photo.size)))
-    for region, colour in ((outline, (255, 220, 0)), (face, (40, 200, 255))):
-        drawn[_edge(region, width)] = colour
-    result.intermediates["skinmap_face.jpg"] = imaging.as_image(drawn)
+    def drawn():
+        image = imaging.tinted(photo.image, kept)
+        width = max(2, round(0.003 * max(photo.size)))
+        for region, colour in ((outline, (255, 220, 0)), (face, (40, 200, 255))):
+            image[_edge(region, width)] = colour
+        return imaging.as_image(image)
+
+    result.keep("skinmap_face.jpg", drawn)
     return face
 
 
@@ -442,8 +445,8 @@ class StrayHairFeature(Composited):
         # grow 0, the face as drawn.
         region = imaging.grown(face, opts.grow * width / 2) if opts.grow > 0 else face
         result.info["mask_share"] = float(region.mean())
-        result.intermediates["mask"] = imaging.mask_image(region)
-        result.intermediates["overlay.jpg"] = _overlay(photo.image, region, face)
+        result.keep("mask", lambda: imaging.mask_image(region))
+        result.keep("overlay.jpg", lambda: _overlay(photo.image, region, face))
         if not region.any():
             raise RuntimeError("the features cover the whole face: no skin left in the mask")
         if opts.analyze_only:

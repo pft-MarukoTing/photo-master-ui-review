@@ -259,7 +259,7 @@ def _root_zone(shape, points, start: float = _ROOT_START, ramp: float = _ROOT_RA
     return np.clip((height - brow_top - start * d) / (ramp * d), 0, 1)
 
 
-def _by_region(ctx, photo, renders: dict, points):
+def _by_region(ctx, photo, renders: dict, points, reports: bool = True):
     """-o align_regions, as hair_part.lined_up's `first`: each render (name
     -> image) whose face FAN finds lined up region by region
     (region_align.lined_up), the hair's flow kept out of the lift: faded
@@ -282,7 +282,7 @@ def _by_region(ctx, photo, renders: dict, points):
         lined = region_align.lined_up(
             photo.image, [renders[n] for n in todo], photo_hair, [hair[n] for n in todo], points,
             [found[n]["points"] for n in todo], _filled_hull(photo_hair.shape, points[_JAW + _BROWS]),
-            keep, ctx.face_python)
+            keep, ctx.face_python, reports)
         return {name: (image, ["lined up by region (face: landmarks, hair: optical flow, rest: "
                                f"ECC); mean |diff| before -> after: {report}"])
                 for name, (image, report) in zip(todo, lined)}
@@ -416,21 +416,21 @@ class FluffyFeature(CompositeFeature):
         if self.blend_face(opts):
             with stage(result, "face", face_algorithm(ctx)):
                 face = _find_face(ctx, photo, result)
-        first = (_by_region(ctx, photo, result.outputs, face["points"])
+        first = (_by_region(ctx, photo, result.outputs, face["points"], result.debug)
                  if opts.align_regions and face is not None else None)
         photo_hair, lined = lined_up(ctx, photo, result.outputs, _GROW, result, first)
         long_side = max(photo.size)
         roots = cap = lock = None
         if face is not None and opts.roots_only:
             roots = _root_zone(photo_hair.shape, face["points"])
-            result.intermediates["roots.jpg"] = imaging.as_image(
-                imaging.tinted(photo.image, roots > 0.5))
+            result.keep("roots.jpg", lambda: imaging.as_image(
+                imaging.tinted(photo.image, roots > 0.5)))
         if face is not None and opts.only_changed and opts.whole_cap:
             cap = _root_zone(photo_hair.shape, face["points"], _CAP_START, _CAP_RAMP)
         if face is not None and opts.lock_face:
             lock = _face_lock(photo_hair, face["points"], long_side)
-            result.intermediates["face_lock.jpg"] = imaging.as_image(
-                imaging.tinted(photo.image, lock > 0.5))
+            result.keep("face_lock.jpg", lambda: imaging.as_image(
+                imaging.tinted(photo.image, lock > 0.5)))
         pasted = {}
         for name, (render, render_hair) in lined.items():
             with stage(result, "blend", "fluffy._paste: the render's hair on top of the head "
@@ -439,12 +439,13 @@ class FluffyFeature(CompositeFeature):
                        name=f"paste {name}"):
                 image, weight = _paste(photo.image, render, photo_hair, render_hair, roots, cap,
                                        lock, opts)
-            # What the paste dropped: the render's pixels off the photo's
-            # where the photo is kept (fluffy_composite.py's outside_off_pct).
-            kept = weight < 0.01
-            off = align._difference(photo.image.convert("RGB"), render)[kept] > align._DRIFT_LEVEL
-            pasted[name] = (image, weight, {
-                "pasted": round(float((weight >= 0.5).mean()), 4),
-                "render_off_dropped": round(float(off.mean()), 4) if kept.any() else 0.0,
-            })
+            note = {"pasted": round(float((weight >= 0.5).mean()), 4)}
+            if result.debug:  # aiHair: a note only, which the server doesn't read
+                # What the paste dropped: the render's pixels off the photo's
+                # where the photo is kept (fluffy_composite.py's outside_off_pct).
+                kept = weight < 0.01
+                off = (align._difference(photo.image.convert("RGB"), render)[kept]
+                       > align._DRIFT_LEVEL)
+                note["render_off_dropped"] = round(float(off.mean()), 4) if kept.any() else 0.0
+            pasted[name] = (image, weight, note)
         return pasted

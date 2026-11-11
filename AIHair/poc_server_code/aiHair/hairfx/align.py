@@ -415,7 +415,8 @@ def _register(photo, resized, rendered, regions):
                              _alignment_line(before, after)]
 
 
-def line_up(photo, render, hair, face=None, flow_python=None, stages=None, hairs=None):
+def line_up(photo, render, hair, face=None, flow_python=None, stages=None, hairs=None,
+            reports=True):
     """`render` lined up with `photo` outside `hair` (a boolean array, the
     area the edit may change) and a band MASK_MARGIN wide round it, or None
     where it is better left as drawn; and register's lines.
@@ -434,7 +435,9 @@ def line_up(photo, render, hair, face=None, flow_python=None, stages=None, hairs
     ("steps": "regions", "global" or "as drawn", then "parts" and "flow"
     where kept), the render lined up by the transform or the regions
     ("global"), then by the parts ("local"), and how far the flow moved each
-    pixel ("flow", px; local_flow and regions_flow only)."""
+    pixel ("flow", px; local_flow and regions_flow only). Without `reports`
+    (aiHair's server, which reads no notes), regions_flow's regions don't
+    work out each region's mean |diff| for the lines."""
     import numpy as np
     from PIL import Image, ImageFilter
 
@@ -448,7 +451,8 @@ def line_up(photo, render, hair, face=None, flow_python=None, stages=None, hairs
         return None, ["left as drawn: nothing outside the hair to line it up on"]
     if face is None:
         return register(photo, resized, resized, (hair, ~near))
-    return _line_up_local(photo, resized, hair, near, face, flow_python, stages, hairs)
+    return _line_up_local(photo, resized, hair, near, face, flow_python, stages, hairs,
+                          reports)
 
 
 def face_weight(face, size: tuple[int, int]):
@@ -888,7 +892,7 @@ def _resampled(resized, base, to_render, box, inside, qx, qy):
     return Image.fromarray(out)
 
 
-def _by_regions(photo, resized, hairs, face, flow_python):
+def _by_regions(photo, resized, hairs, face, flow_python, reports=True):
     """regions_flow's first step: `resized` lined up region by region
     (region_align.regions), the face the one align.face_weight outlines with
     the bare forehead above it (blend.above_brows less the photo's hair),
@@ -907,7 +911,7 @@ def _by_regions(photo, resized, hairs, face, flow_python):
     forehead = area & (rows < face["points"][17:27, 1].min())
     try:
         field, report = region_align.regions(photo, resized, photo_hair, render_hair, area,
-                                             forehead, flow_python)
+                                             forehead, flow_python, reports)
     except RuntimeError as e:
         return None, None, [f"by region failed, one transform instead — {e}"]
     field = field.astype(np.float64)
@@ -924,12 +928,12 @@ def _by_regions(photo, resized, hairs, face, flow_python):
                       if k.endswith("|diff|"))
     return to_render, aligned, [
         f"lined up by region: the rest by an affine ({report['rest']}), the face by another "
-        f"({report['face']}), the hair by {report['hair']}; mean |diff| from the photo: "
-        f"{diffs}"]
+        f"({report['face']}), the hair by {report['hair']}"
+        + (f"; mean |diff| from the photo: {diffs}" if diffs else "")]
 
 
 def _line_up_local(photo, resized, hair, near, face, flow_python=None, stages=None,
-                   hairs=None):
+                   hairs=None, reports=True):
     """line_up with the face lined up on its own: the transform fitted
     outside the hair and the face (register), unless too few patches lie
     there (_MIN_PATCHES_OUTSIDE_FACE) — or with `hairs` and `flow_python`,
@@ -950,7 +954,8 @@ def _line_up_local(photo, resized, hair, near, face, flow_python=None, stages=No
     photo_grey = np.asarray(photo.convert("L"), dtype=np.float64)
     to_render, aligned, lines = None, None, []
     if hairs is not None and flow_python is not None:
-        to_render, aligned, lines = _by_regions(photo, resized, hairs, face, flow_python)
+        to_render, aligned, lines = _by_regions(photo, resized, hairs, face, flow_python,
+                                                reports)
     steps = ["regions"] if to_render is not None else []
     if to_render is None:
         outside = ~near & ~reach

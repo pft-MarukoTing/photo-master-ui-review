@@ -186,12 +186,15 @@ for i in range(k["n"]):
     d = wf[..., None] * field(m_face) + wh[..., None] * hair_d + wr[..., None] * field(m_rest)
     aligned = cv2.remap(render, xs + d[..., 0], ys + d[..., 1], cv2.INTER_LINEAR,
                         borderMode=cv2.BORDER_REPLICATE)
-    before, after = changed(photo, render), changed(photo, aligned)
     report = {"rest": rest_note}
-    for name, mask in (("face", face), ("hair", photo_hair & (keep < 0.5)), ("rest", rest)):
-        if mask.any():
-            report[f"{name} mean |diff|"] = [round(float(before[mask].mean()), 2),
-                                            round(float(after[mask].mean()), 2)]
+    # aiHair: each region's mean |diff| only for the report (k["report"]: not
+    # on the server, which reads none).
+    if k.get("report", True):
+        before, after = changed(photo, render), changed(photo, aligned)
+        for name, mask in (("face", face), ("hair", photo_hair & (keep < 0.5)), ("rest", rest)):
+            if mask.any():
+                report[f"{name} mean |diff|"] = [round(float(before[mask].mean()), 2),
+                                                round(float(after[mask].mean()), 2)]
     np.save(tmp / f"aligned_{i}.npy", aligned[..., ::-1])
     reports.append(report)
     print(f"  regions render {i}: {report}", flush=True)
@@ -200,7 +203,7 @@ for i in range(k["n"]):
 
 
 def lined_up(photo, renders: list, photo_hair, render_hairs: list, points, render_points: list,
-             face, keep, face_python: str) -> list:
+             face, keep, face_python: str, report: bool = True) -> list:
     """Each of `renders` (PIL, at the photo's size) lined up with `photo`
     region by region: the face (`face`, a mask of its hull) by a similarity
     transform from the photo's landmarks `points` to the render's
@@ -209,7 +212,8 @@ def lined_up(photo, renders: list, photo_hair, render_hairs: list, points, rende
     (0–1), and the rest, outside `photo_hair` and the render's own hair
     (`render_hairs`), by ECC. Returns (render lined up, report) per render,
     the report each region's mean difference from the photo before and
-    after. Raises RuntimeError if the face python fails."""
+    after (aiHair: only with `report`; without it, how the rest was fitted
+    alone). Raises RuntimeError if the face python fails."""
     import numpy as np
     from PIL import Image
 
@@ -224,7 +228,8 @@ def lined_up(photo, renders: list, photo_hair, render_hairs: list, points, rende
         for i, (render, hair, found) in enumerate(zip(renders, render_hairs, render_points)):
             np.savez(tmp / f"render_{i}.npz", render=np.asarray(render.convert("RGB")),
                      hair=hair, points=np.asarray(found, np.float32))
-        settings = json.dumps({"n": len(renders), "flow": FLOW, "feather": FEATHER})
+        settings = json.dumps({"n": len(renders), "flow": FLOW, "feather": FEATHER,
+                               "report": report})
         with _LOCK:
             done = subprocess.run([face_python, "-c", _JOB, str(tmp), settings],
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -272,7 +277,8 @@ disc = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * grow + 1,) * 2)
 wf = blur_within(face.astype(np.float32), face, f)
 wh = blur_within(photo_hair.astype(np.float32), photo_hair, f) * (1 - wf)
 wr = np.clip(1 - wf - wh, 0, 1)
-np.save(tmp / "weights.npy", np.dstack([wf, wh, wr]))
+if k.get("weights", True):  # aiHair: read only for regions.jpg (debug)
+    np.save(tmp / "weights.npy", np.dstack([wf, wh, wr]))
 near_face = cv2.dilate(face.astype(np.uint8), disc).astype(bool)
 # aiHair: the shifts fitted and checked on the photo and the render shrunk
 # by k["scale"] (1: as they are), each taken back to the full frame's px.
@@ -374,7 +380,8 @@ def shifted(photo, renders: list, photo_hair, render_hairs: list, face, keep_out
             np.savez(tmp / f"render_{i}.npz", render=np.asarray(render.convert("RGB")), hair=hair)
         settings = json.dumps({"n": len(renders), "feather": FEATHER, "max_shift": MAX_SHIFT,
                                "min_pixels": MIN_PIXELS,
-                               "scale": imaging.estimate_scale(*photo.size)})
+                               "scale": imaging.estimate_scale(*photo.size),
+                               "weights": weights})
         with _LOCK:
             done = subprocess.run([face_python, "-c", _SHIFT_JOB, str(tmp), settings],
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -502,21 +509,25 @@ beyond = beyond * np.minimum(1, cap / np.maximum(size, 1e-6))
 capped = float((size[..., 0] > cap)[photo_hair].mean()) if photo_hair.any() else 0.0
 hair_how = f"flow {hair_how}, capped at {cap:.0f} px (on {capped:.1%} of the hair)"
 d = wf[..., None] * d_face + wh[..., None] * (under + g * beyond) + wr[..., None] * d_rest
-aligned = cv2.remap(render, xs + d[..., 0], ys + d[..., 1], cv2.INTER_LINEAR,
-                    borderMode=cv2.BORDER_REPLICATE)
-before, after = changed(photo, render), changed(photo, aligned)
 report = {"rest": rest_how, "face": face_how, "hair": hair_how,
           "m_rest": m_rest.tolist(), "m_face": m_face.tolist()}
-for name, mask in (("rest", rest), ("face", skin), ("hair", photo_hair & render_hair)):
-    if mask.any():
-        report[f"{name} mean |diff|"] = [round(float(before[mask].mean()), 2),
-                                        round(float(after[mask].mean()), 2)]
+# aiHair: the render warped by the field and each region's mean |diff| only
+# for the report (k["report"]: not on the server, which reads none).
+if k.get("report", True):
+    aligned = cv2.remap(render, xs + d[..., 0], ys + d[..., 1], cv2.INTER_LINEAR,
+                        borderMode=cv2.BORDER_REPLICATE)
+    before, after = changed(photo, render), changed(photo, aligned)
+    for name, mask in (("rest", rest), ("face", skin), ("hair", photo_hair & render_hair)):
+        if mask.any():
+            report[f"{name} mean |diff|"] = [round(float(before[mask].mean()), 2),
+                                            round(float(after[mask].mean()), 2)]
 np.save(tmp / "field.npy", d.astype(np.float32))
 (tmp / "report.json").write_text(json.dumps(report), encoding="utf-8")
 '''
 
 
-def regions(photo, render, photo_hair, render_hair, face, forehead, face_python: str):
+def regions(photo, render, photo_hair, render_hair, face, forehead, face_python: str,
+            report: bool = True):
     """`render` (PIL, at the photo's size) lined up with `photo` region by
     region, as an offset field: where in the render each pixel's content of
     the photo sits (height x width x 2, dx and dy). The rest, outside both
@@ -532,7 +543,8 @@ def regions(photo, render, photo_hair, render_hair, face, forehead, face_python:
     feathered over FEATHER, the
     face first, then the hair. Also a report: how each affine was found, how
     the hair's flow was capped and faded in, and each region's mean
-    difference from the photo before and after; aiHair: each affine
+    difference from the photo before and after (aiHair: only with
+    `report`, which warps the render once more to find it); aiHair: each affine
     (m_rest, m_face). The two ECC fits run on the photo shrunk to
     REGIONS_ECC_SHORT where set. aiHair: over imaging.ESTIMATE_MAX_PIXELS,
     all of it is found on the photo, the render and the masks shrunk to
@@ -562,7 +574,8 @@ def regions(photo, render, photo_hair, render_hair, face, forehead, face_python:
                  forehead=np.asarray(forehead, bool))
         settings = json.dumps({"feather": FEATHER, "hair_flow": REGIONS_HAIR_FLOW,
                                "hair_fade": REGIONS_HAIR_FADE, "hair_cap": REGIONS_HAIR_CAP,
-                               "min_pixels": MIN_PIXELS, "ecc_short": REGIONS_ECC_SHORT})
+                               "min_pixels": MIN_PIXELS, "ecc_short": REGIONS_ECC_SHORT,
+                               "report": report})
         with _LOCK:
             done = subprocess.run([face_python, "-c", _REGIONS_JOB, str(tmp), settings],
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,

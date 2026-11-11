@@ -768,7 +768,8 @@ def _align_outputs(ctx: Context, photo: Photo, result: EffectResult, face=None,
             drawn = result.outputs[name]
             aligned, notes[name] = align.line_up(
                 photo.image, drawn, photo_hair | output_hair, face, flow_python, stages,
-                (photo_hair, output_hair) if regions and flow_python else None)
+                (photo_hair, output_hair) if regions and flow_python else None,
+                reports=result.debug)
             by[name] = (" + ".join(stages["steps"]) if stages.get("steps") else
                         "global" if aligned is not None else "as drawn")
             if aligned is not None:

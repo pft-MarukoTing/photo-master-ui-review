@@ -145,10 +145,10 @@ class HairPartFeature(SinglePromptFeature):
                     continue
                 note["kept_whole"] = True
                 result.outputs[name] = image
-                whole = np.ones(photo_hair.shape, bool)
-                result.intermediates[f"blend_mask_{name}"] = imaging.mask_image(whole)
-                result.intermediates[f"blend_{name}.jpg"] = imaging.as_image(
-                    imaging.tinted(photo.image, whole))
+                result.keep(f"blend_mask_{name}", lambda: imaging.mask_image(
+                    np.ones(photo_hair.shape, bool)))
+                result.keep(f"blend_{name}.jpg", lambda: imaging.as_image(
+                    imaging.tinted(photo.image, np.ones(photo_hair.shape, bool))))
                 result.warnings.append(
                     f"{name}: {outside:.0%} of its hair is outside the photo's (the hair model "
                     f"missed part of the head): kept whole, not pasted")
