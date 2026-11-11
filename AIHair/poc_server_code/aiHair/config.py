@@ -24,6 +24,13 @@ AIHAIR_CALLS_PER_TASK = max(int(os.getenv("AIHAIR_CALLS_PER_TASK", "4")), 1)
 # while it waits on OpenAI (ai_hair/cpu_slots.py). 1 suits a 2 vCPU server;
 # 0: no limit.
 AIHAIR_CPU_SLOTS = max(int(os.getenv("AIHAIR_CPU_SLOTS", "1")), 0)
+# How fluffy pastes its render back (its -o paste): "shifted", rootRetouch's
+# composite (the default since 2026-11-11: 9.1 s against 15.8 on 5 renders),
+# or "crown", the route before (only the raised crown pasted, its colour
+# matched place by place); unset, hairfx's default.
+AIHAIR_FLUFFY_PASTE = os.getenv("AIHAIR_FLUFFY_PASTE") or None
+if AIHAIR_FLUFFY_PASTE not in (None, "shifted", "crown"):
+    raise ValueError(f"AIHAIR_FLUFFY_PASTE must be shifted or crown, not {AIHAIR_FLUFFY_PASTE!r}")
 # The OpenAI client's timeout and retries; HairFeatures' policy is no SDK
 # retries, so a slow call fails at the timeout instead of re-billing.
 AIHAIR_OPENAI_TIMEOUT_S = os.getenv("AIHAIR_OPENAI_TIMEOUT_S") or None

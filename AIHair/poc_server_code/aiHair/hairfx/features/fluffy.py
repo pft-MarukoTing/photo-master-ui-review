@@ -1,10 +1,24 @@
 """fluffy: HairFeatures' fluffy. Its switches: colour match on, in the hair;
---blend by its own crown composite, on by default since 2026-11-10 (aiHair;
-HairFeatures had it off), so only the raised crown is the render's and the
-rest the photo's; --no-blend keeps the renders whole, lined up --align
-global. What it shares with grayHair, rootRetouch
-and strayHair (the face lock, the pyramid blend, the Lab colour helpers) is
-in hairfx/common.py.
+--blend on by default since 2026-11-10 (aiHair; HairFeatures had it off);
+--no-blend keeps the renders whole, lined up --align global. What it shares
+with grayHair, rootRetouch and strayHair (the face lock, the pyramid blend,
+the Lab colour helpers) is in hairfx/common.py.
+
+aiHair: --blend pastes by -o paste:
+  shifted (the default since 2026-11-11): rootRetouch's composite
+      (common.hair_shifted_composite): the face (FAN), the hair and the
+      rest each lined up by one translation (region_align.shifted), the
+      render's hair pasted whole through the photo's and the render's hair
+      grown and feathered, by Laplacian pyramid, the face kept the photo's
+      but for the hair. Steps 2-4 below and their -o options are left out.
+      On 5 renders (subject0/3/21/22/25's, output/mem_profile_20261110/exp3)
+      it took 9.1 s against crown's 15.8 (no landmarks of the render, no
+      region_align.lined_up, no _match_hair), and changed 7-14% of the
+      picture against 1-8%: the render's whole hair, its colour by the
+      colour match's one matrix, and the background within the paste's
+      band round the hair, as rootRetouch's;
+  crown: steps 2-4 below, the route before, so only the raised crown is
+      the render's and the rest the photo's.
 
 --- HairFeatures' features/fluffy.py ---
 
@@ -92,7 +106,7 @@ from .. import align, imaging, landmarks, region_align
 from ..common import (_BROWS, _JAW, _LOCAL_SIZE, _MATCH_EDGE, _PYRAMID_LEVELS, _PYRAMID_SCALE,
                       _ZONE_FEATHER, _ZONE_GROW, CompositeFeature, _face_frame, _face_lock,
                       _filled_hull, _gaussian, _hair_pulled, _lab, _local_stats,
-                      _pyramid_blend, _reach, _rgb, lined_up)
+                      _pyramid_blend, _reach, _rgb, hair_shifted_composite, lined_up)
 from ..core import _find_face, face_algorithm, option, stage
 
 
@@ -226,24 +240,31 @@ def _fluffy_prompt(direction: str) -> str:
 class FluffyOptions:
     language: str = option("en", "the language of the prompt's CHANGE ONLY",
                            choices=("en", "zh"))
-    align_regions: bool = option(True, "with --blend, line each render up region by region — "
-                                 "the face by its landmarks, the hair by optical flow (the "
-                                 "lift on top kept), the rest by ECC — instead of one "
+    paste: str = option("shifted", "with --blend, how the renders go back into the photo: "
+                        "shifted, rootRetouch's composite (each region lined up by one "
+                        "translation, the render's hair pasted whole, the face kept the "
+                        "photo's but for the hair); crown, the route before (the options "
+                        "below: only the raised crown pasted, its colour matched place by "
+                        "place)", choices=("shifted", "crown"))
+    align_regions: bool = option(True, "with -o paste=crown, line each render up region by "
+                                 "region — the face by its landmarks, the hair by optical flow "
+                                 "(the lift on top kept), the rest by ECC — instead of one "
                                  "transform (needs the face; OpenCV, run in --face-python)")
-    roots_only: bool = option(True, "with --blend, take the render only on top of the head, "
-                              "from about the eyes up, the lengths beside the face kept the "
-                              "photo's (needs the face)")
-    lock_face: bool = option(True, "with --blend, keep the face, and the forehead where it "
-                             "shows no hair, exactly the photo's (needs the face)")
-    only_changed: bool = option(True, "with --blend, inside the hair too, take the render only "
-                                "where it reshaped the hair (the raised crown), the photo's "
-                                "hair elsewhere, by a Laplacian pyramid blend")
-    whole_cap: bool = option(True, "with --blend and -o only_changed, take all the render's "
-                             "hair above the brows (the cap from the hairline up) too, not only "
-                             "where it reshaped it, so the lift runs on from the roots in front "
-                             "(needs the face)")
-    match_hair: bool = option(True, "with --blend, pull the render's hair colour, place by "
-                              "place, and its strand detail back to the photo's before pasting")
+    roots_only: bool = option(True, "with -o paste=crown, take the render only on top of the "
+                              "head, from about the eyes up, the lengths beside the face kept "
+                              "the photo's (needs the face)")
+    lock_face: bool = option(True, "with -o paste=crown, keep the face, and the forehead where "
+                             "it shows no hair, exactly the photo's (needs the face)")
+    only_changed: bool = option(True, "with -o paste=crown, inside the hair too, take the render "
+                                "only where it reshaped the hair (the raised crown), the "
+                                "photo's hair elsewhere, by a Laplacian pyramid blend")
+    whole_cap: bool = option(True, "with -o paste=crown and -o only_changed, take all the "
+                             "render's hair above the brows (the cap from the hairline up) too, "
+                             "not only where it reshaped it, so the lift runs on from the roots "
+                             "in front (needs the face)")
+    match_hair: bool = option(True, "with -o paste=crown, pull the render's hair colour, place "
+                              "by place, and its strand detail back to the photo's before "
+                              "pasting")
 
 
 def _root_zone(shape, points, start: float = _ROOT_START, ramp: float = _ROOT_RAMP):
@@ -391,13 +412,15 @@ def _paste(photo, render, photo_hair, render_hair, roots, cap, lock, opts):
 class FluffyFeature(CompositeFeature):
     description = ("the roots on top of the head lifted (蓬鬆): 1 render call per photo, "
                    "colour-matched to the photo; by default (--no-blend keeps it whole), pasted "
-                   "into it on top of the head where it reshaped the hair, lined up region by "
-                   "region, the face kept the photo's")
+                   "into it as rootRetouch's are (-o paste=crown: only on top of the head where "
+                   "it reshaped the hair, lined up region by region), the face kept the "
+                   "photo's")
     Options = FluffyOptions
     colour_match = True
-    blend_mask = "crown"
-    # aiHair: pasted by the crown composite by default (--no-blend keeps the
-    # renders whole), so only the raised crown is the render's.
+    # aiHair: -o paste's default, rootRetouch's composite; -o paste=crown,
+    # the crown composite (composite_kind).
+    blend_mask = "hair_shifted"
+    # aiHair: pasted by default (--no-blend keeps the renders whole).
     blend_default = True
 
     def __init__(self):
@@ -406,12 +429,20 @@ class FluffyFeature(CompositeFeature):
     def prompts(self, opts) -> dict[str, str]:
         return {"edit": _fluffy_prompt(_FLUFFY_DIRECTIONS[opts.language])}
 
+    def composite_kind(self, opts) -> str:
+        return "crown" if opts.paste == "crown" else "hair_shifted"
+
     def blend_face(self, opts) -> bool:
+        if opts.paste != "crown":
+            return True
         return (opts.align_regions or opts.roots_only or opts.lock_face
                 or (opts.only_changed and opts.whole_cap))
 
     def composite(self, ctx, photo, opts, result) -> dict:
-        """Steps 2–4."""
+        """-o paste=shifted: rootRetouch's composite; -o paste=crown: steps
+        2–4."""
+        if opts.paste != "crown":
+            return hair_shifted_composite(ctx, photo, result)
         face = None
         if self.blend_face(opts):
             with stage(result, "face", face_algorithm(ctx)):

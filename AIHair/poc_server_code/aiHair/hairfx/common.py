@@ -226,6 +226,12 @@ class Composited(Feature):
         makes on the way goes into `result` as it goes."""
         raise NotImplementedError
 
+    def composite_kind(self, opts) -> str:
+        """The composite `opts` run, by its BLEND_ALGORITHMS name, as
+        info["blend"]["mask"] says: blend_mask, unless the effect picks one
+        by its options (fluffy's -o paste)."""
+        return self.blend_mask
+
     def finish(self, ctx, photo, opts, result) -> None:
         """Feature.finish without --blend. With it, the outputs colour-matched
         (where colour_matches) and composited, each as it was kept as
@@ -242,16 +248,17 @@ class Composited(Feature):
             area = self.colour_area(ctx)
             with stage(result, "colour_match", colour_algorithm(area, self.colour_shift)):
                 _colour_match_outputs(ctx, photo, result, self.colour_shift, area)
+        kind = self.composite_kind(opts)
         try:
             # aiHair: the composite lines the renders up itself, so its
             # align steps are inside this blend step.
-            with stage(result, "blend", BLEND_ALGORITHMS.get(self.blend_mask, self.blend_mask)):
+            with stage(result, "blend", BLEND_ALGORITHMS.get(kind, kind)):
                 pasted = self.composite(ctx, photo, opts, result)
         except Exception as e:  # noqa: BLE001 — the renders are paid for; keep them
-            result.warnings.append(f"{self.blend_mask} composite failed, outputs left unblended "
+            result.warnings.append(f"{kind} composite failed, outputs left unblended "
                                    f"— {type(e).__name__}: {e}")
             return
-        notes = result.info["blend"] = {"mask": self.blend_mask}
+        notes = result.info["blend"] = {"mask": kind}
         for name, (image, weight, note) in pasted.items():
             result.intermediates[f"{name}_unblended"] = result.outputs[name]
             result.keep(f"blend_mask_{name}",
@@ -729,22 +736,31 @@ class HairShifted(Composited):
         return True
 
     def composite(self, ctx, photo, opts, result) -> dict:
-        import numpy as np
+        return hair_shifted_composite(ctx, photo, result)
 
-        shape = (photo.size[1], photo.size[0])
-        with stage(result, "face", face_algorithm(ctx)):
-            found = _find_face(ctx, photo, result)
-        face, lock_of = np.zeros(shape, bool), None
-        if found is not None:
-            points, long_side = found["points"], max(photo.size)
-            face = _filled_hull(shape, points[_JAW + _BROWS])
 
-            def lock_of(photo_hair, render_hair):
-                return _lock(photo_hair, render_hair, points, long_side)
+def hair_shifted_composite(ctx, photo, result) -> dict:
+    """HairShifted's composite, as Composited.composite returns it; fluffy's
+    -o paste=shifted too: the face found (FAN; the hull of its jaw and
+    brows), the renders lined up and pasted through the hair, the photo's
+    and the render's (shifted_composite), the face kept the photo's but for
+    the hair (_lock); with no face found, no face region and no lock."""
+    import numpy as np
 
-        return shifted_composite(ctx, photo, result, face, np.zeros(shape, bool),
-                                 lambda photo_hair, render_hair: photo_hair | render_hair,
-                                 lock_of=lock_of)
+    shape = (photo.size[1], photo.size[0])
+    with stage(result, "face", face_algorithm(ctx)):
+        found = _find_face(ctx, photo, result)
+    face, lock_of = np.zeros(shape, bool), None
+    if found is not None:
+        points, long_side = found["points"], max(photo.size)
+        face = _filled_hull(shape, points[_JAW + _BROWS])
+
+        def lock_of(photo_hair, render_hair):
+            return _lock(photo_hair, render_hair, points, long_side)
+
+    return shifted_composite(ctx, photo, result, face, np.zeros(shape, bool),
+                             lambda photo_hair, render_hair: photo_hair | render_hair,
+                             lock_of=lock_of)
 
 
 def _lock(photo_hair, render_hair, points, long_side: int):
