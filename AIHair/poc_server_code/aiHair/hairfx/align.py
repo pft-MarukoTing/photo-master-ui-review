@@ -26,6 +26,7 @@ the flow taken as local_flow's on
 top, the render still resampled once."""
 
 import math
+import threading
 
 # A caller leaves out the area the edit changed and a band this many pixels
 # wide around it (a Gaussian of this radius, thresholded at 1).
@@ -480,6 +481,13 @@ def _sample(a, xs, ys):
     import numpy as np
 
     xs, ys = np.broadcast_arrays(xs, ys)
+    kernel = _sample_kernel()
+    if (kernel and a.ndim == 3 and a.dtype in (np.float32, np.float64)
+            and xs.dtype == np.float64 and ys.dtype == np.float64):
+        a = np.ascontiguousarray(a)
+        out = np.empty((xs.size, a.shape[2]), np.float64)
+        kernel(a, np.ascontiguousarray(xs).ravel(), np.ascontiguousarray(ys).ravel(), out)
+        return out.reshape(xs.shape + (a.shape[2],))
     if xs.ndim < 2 or xs.size <= _CHUNK:
         return _sample_block(a, xs, ys)
     step = max(1, _CHUNK // (xs.size // xs.shape[0]))
@@ -509,6 +517,97 @@ def _sample_block(a, xs, ys):
         y = np.clip(iv + j, 0, h - 1)
         rows.append(cubic(*(a[y, np.clip(iu + i, 0, w - 1)] for i in range(-1, 3)), du))
     return cubic(*rows, dv)
+
+
+# aiHair: _sample's bicubic compiled (numba) where numba is there, one point
+# at a time: _sample_block's NumPy took 5.4 s of hairline's 13.9 s lining up
+# on a 2.45 MP photo (1 core), most of it the 16 neighbours' float64 copies.
+# The kernel does _sample_block's arithmetic in its order and types (no
+# fastmath), so the values are the same: the neighbours' differences in
+# `a`'s type (float32 for an image, as NumPy keeps a float32 array's
+# difference float32, its 2 x one as well), each product with the offset
+# and what it is added to in float64. Compiled once per process (preload, or
+# the first _sample), cached on disk where numba can; None until then,
+# False where numba isn't there or it can't compile, _sample_block then.
+_SAMPLE_KERNEL = None
+_KERNEL_LOCK = threading.Lock()
+
+
+def _bicubic_points(a, xs, ys, out):
+    """_sample_block's work, compiled by _sample_kernel: `a` (height x width
+    x channels, float32 or float64, C order) at the points `xs`, `ys` (1-D
+    float64), into `out` (points x channels, float64). math.floor, an int
+    as Python's is: u less it is u less NumPy's floor, cast as _sample_block
+    casts it."""
+    h, w, c = a.shape
+    for n in range(xs.shape[0]):
+        u = xs[n] - 0.5
+        v = ys[n] - 0.5
+        iu = math.floor(u)
+        iv = math.floor(v)
+        du = u - iu
+        dv = v - iv
+        x1 = min(max(iu - 1, 0), w - 1)
+        x2 = min(max(iu, 0), w - 1)
+        x3 = min(max(iu + 1, 0), w - 1)
+        x4 = min(max(iu + 2, 0), w - 1)
+        for ch in range(c):
+            r1 = r2 = r3 = r4 = 0.0
+            for j in range(4):
+                y = min(max(iv - 1 + j, 0), h - 1)
+                v1, v2, v3, v4 = a[y, x1, ch], a[y, x2, ch], a[y, x3, ch], a[y, x4, ch]
+                # cubic(v1, v2, v3, v4, du) as _sample_block has it.
+                t = v1 - v2
+                p = t + t + v3 - v4
+                q = v2 - v1 - v3 + v4
+                r = v2 + du * ((v3 - v1) + du * (p + du * q))
+                if j == 0:
+                    r1 = r
+                elif j == 1:
+                    r2 = r
+                elif j == 2:
+                    r3 = r
+                else:
+                    r4 = r
+            t = r1 - r2
+            p = t + t + r3 - r4
+            q = r2 - r1 - r3 + r4
+            out[n, ch] = r2 + dv * ((r3 - r1) + dv * (p + dv * q))
+
+
+def _sample_kernel():
+    """_sample's compiled kernel (_bicubic_points), compiled on first use,
+    or False (NumPy's _sample_block instead)."""
+    global _SAMPLE_KERNEL
+    if _SAMPLE_KERNEL is None:
+        with _KERNEL_LOCK:
+            if _SAMPLE_KERNEL is None:
+                _SAMPLE_KERNEL = _compiled_kernel()
+    return _SAMPLE_KERNEL
+
+
+def _compiled_kernel():
+    import numpy as np
+
+    try:
+        import numba
+    except ImportError:
+        return False
+    for cache in (True, False):  # cached on disk, or where it can't be, not
+        try:
+            kernel = numba.njit(cache=cache, nogil=True)(_bicubic_points)
+            for dtype in (np.float32, np.float64):  # an image's and a field's
+                kernel(np.zeros((1, 1, 1), dtype), np.zeros(1), np.zeros(1), np.empty((1, 1)))
+            return kernel
+        except Exception:  # noqa: BLE001 — no cache dir, or no compiling: _sample_block
+            continue
+    return False
+
+
+def preload() -> bool:
+    """Compile _sample's kernel now (server start), not in the first task's
+    lining up; returns whether it is used (numba there)."""
+    return bool(_sample_kernel())
 
 
 def _part_shifts(photo_grey, image_grey, face, width: float):
@@ -572,6 +671,45 @@ def _face_field(shifts, weight, box, width: float):
 def _off_share(photo, image, region) -> float:
     """The share of `region`'s pixels off by more than _DRIFT_LEVEL."""
     return float((_difference(photo, image)[region] > _DRIFT_LEVEL).mean())
+
+
+# aiHair: _off_share_of's box round the region: _difference's 1 px Gaussian
+# is PIL's three box passes of radius 0.25, each reaching 1 px, 3 in all, so
+# a pixel this far inside the box (or at the photo's own edge, which the
+# box then shares) is blurred to what it is on the whole image.
+_OFF_MARGIN = 8
+
+
+def _off_share_of(photo, region):
+    """_off_share(photo, ·, region) as a function of the image, the same
+    values (aiHair): both blurred over `region`'s box and _OFF_MARGIN round
+    it only, not the whole photo, and the photo's blur taken once for every
+    image checked (_line_up_local checks the face up to four times: 1.0 s of
+    whole-photo blurs on a 2.45 MP photo, 1 core)."""
+    import numpy as np
+    from PIL import ImageFilter
+
+    rows, cols = np.flatnonzero(region.any(axis=1)), np.flatnonzero(region.any(axis=0))
+    if not len(rows):
+        return lambda image: _off_share(photo, image, region)
+    height, width = region.shape
+    top, bottom = max(0, rows[0] - _OFF_MARGIN), min(height, rows[-1] + 1 + _OFF_MARGIN)
+    left, right = max(0, cols[0] - _OFF_MARGIN), min(width, cols[-1] + 1 + _OFF_MARGIN)
+    inside = region[top:bottom, left:right]
+
+    def blurred(image):
+        return np.asarray(image.crop((left, top, right, bottom)).filter(
+            ImageFilter.GaussianBlur(1)), dtype=np.int16)
+
+    photo_blur = blurred(photo)
+
+    def share(image) -> float:
+        d = blurred(image)
+        d -= photo_blur  # |image - photo|, as _difference's |photo - image|
+        np.abs(d, out=d)
+        return float((d.max(axis=2)[inside] > _DRIFT_LEVEL).mean())
+
+    return share
 
 
 def _brow_curve(points):
@@ -842,6 +980,13 @@ def _line_up_local(photo, resized, hair, near, face, flow_python=None, stages=No
     lines.append("face: " + (found + " px" if found else "no part matched")
                  + (f"; left out: {', '.join(dropped)}" if dropped else ""))
     check = (weight > 0.5) & ~near
+    checker = []  # aiHair: _off_share_of(photo, check), made at the first check
+
+    def off_share(image) -> float:
+        if not checker:
+            checker.append(_off_share_of(photo, check))
+        return checker[0](image)
+
     # The parts' field over the whole photo where it is kept (0 elsewhere),
     # the render as it and the transform line it up, and what line_up returns.
     field = np.zeros(weight.shape + (2,))
@@ -858,7 +1003,7 @@ def _line_up_local(photo, resized, hair, near, face, flow_python=None, stages=No
         if not check.any():
             lines.append("face kept as fitted: none of it outside the hair to check against")
         else:
-            before, after = _off_share(photo, base, check), _off_share(photo, local, check)
+            before, after = off_share(base), off_share(local)
             if after >= before:
                 lines.append(f"face kept as fitted: moved (up to {largest:.1f} px), it was no "
                              f"closer to the photo ({before:.2%} -> {after:.2%} of its pixels "
@@ -903,7 +1048,7 @@ def _line_up_local(photo, resized, hair, near, face, flow_python=None, stages=No
     at = _sample(field, qx, qy)
     flowed = _resampled(resized, out, to_render, box, (area > 0.004)[top:bottom, left:right],
                         qx + at[..., 0], qy + at[..., 1])
-    before, after = _off_share(photo, out, check), _off_share(photo, flowed, check)
+    before, after = off_share(out), off_share(flowed)
     if after >= before:
         lines.append(f"flow left out: it moved the face up to {size.max():.1f} px and it was "
                      f"no closer to the photo ({before:.2%} -> {after:.2%} of its pixels "

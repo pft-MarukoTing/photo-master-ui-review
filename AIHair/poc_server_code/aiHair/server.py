@@ -16,7 +16,7 @@ import aiserver_utils.health_checker as health_checker
 from aiserver_utils.health_checker import HeartBeatV2
 
 from config import *
-from hairfx import hairseg, landmarks, skinmap
+from hairfx import align, hairseg, landmarks, skinmap
 from ai_hair import EFFECT_NAME
 from artifact_store import S3ArtifactStore
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
@@ -104,6 +104,12 @@ def init():
         logger.info('', "Face model runs in %s" % landmarks.FACE_PYTHON)
     else:
         logger.warning('', "Face model unavailable: %s" % face_why)
+    # Lining up's bicubic resampling (hairfx/align.py), compiled now (numba)
+    # rather than in the first task that lines up region by region.
+    if align.preload():
+        logger.info('', "Resampling kernel compiled (numba)")
+    else:
+        logger.warning('', "numba unavailable: lining up resamples with NumPy (slower)")
 
     heart_beat = HeartBeatV2(timeout_after_ms=HEART_BEAT_IDLE_TIMEOUT_MS)
 
