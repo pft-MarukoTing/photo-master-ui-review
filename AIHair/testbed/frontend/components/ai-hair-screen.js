@@ -5,10 +5,11 @@
  *   │ [Frizz Care][Plump] … [Stray Hair]           │ Edit History   │
  *   │  毛躁修護    髮量豐盈     碎髮修整             │  0 Original    │
  *   │ Level [Lv1][Lv2]              (hairline only) │  1 Frizz Care  │
- *   │ [Undo][Redo] [Original]  [Discard][⬇][Change] │  2 Soft ◀      │
+ *   │             [Discard Edits][Download][Change] │  2 Soft ◀      │
  *   │ ┌──────────────────────────────────────────┐ ├────────────────┤
  *   │ │                  image                   │ │ Current Step   │
- *   │ └──────────────────────────────────────────┘ │  Task ID …     │
+ *   │ │ [↶][↷]                       [Original] │ │  Task ID …     │
+ *   │ └──────────────────────────────────────────┘ │                │
  *   │                  [ Apply ]                    │  [Report Issue]│
  *   │                 status line                   │                │
  *   └──────────────────────────────────────────────┴────────────────┘
@@ -17,8 +18,8 @@
  * step the history is at and pushes the result as a new step (the steps after
  * it — the redo branch — are dropped), so edits chain. Undo / Redo (also
  * Ctrl/⌘+Z, Ctrl/⌘+Shift+Z, Ctrl+Y) move along it; clicking a step in Edit
- * History jumps to it; Original shows the uploaded photo (hold to peek, click
- * to toggle); Discard Edits drops every step back to the original photo.
+ * History jumps to it; Original shows the uploaded photo only while it is held
+ * down; Discard Edits drops every step back to the original photo.
  */
 
 import {
@@ -33,8 +34,6 @@ import { showConfirmDialog } from './dialogs/confirmation-dialogs.js';
 import { IconUndo, IconRedo, IconDownload, IconX, IconReplace, IconUpload } from '../utils/icons.js';
 
 const PAGE = 'ai-hair';
-// A press on Original shorter than this is a click (toggle); longer is a peek.
-const PEEK_HOLD_MS = 300;
 
 const STAGE_LABELS = {
   preparing:   'Preparing…',
@@ -68,7 +67,7 @@ const state = {
   levels:    Object.fromEntries(FEATURES.filter((f) => f.levels).map((f) => [f.name, f.levels[0]])),
   // The in-flight run: { abort, feature, level, startedAt, taskId, timer }
   run:       null,
-  compare:   false,  // showing the original photo instead of the current step
+  compare:   false,  // Original held down: showing the uploaded photo
   loadingInput: false,
   // The status line under Apply: { text, kind: 'hint'|'ok'|'notice'|'error' }
   status:    null,
@@ -220,9 +219,7 @@ const SCREEN_STYLE = `
   .ah-seg button:hover:not([aria-checked="true"]) { background: var(--color-muted); }
   .ah-seg button[aria-checked="true"] { background: var(--color-primary); color: var(--color-primary-foreground); }
 
-  .ah-toolbar { display: flex; align-items: center; gap: 0.375rem; flex-wrap: wrap; }
-  .ah-toolbar-sep { width: 1px; height: 1.5rem; background: var(--color-border); margin: 0 0.25rem; }
-  .ah-toolbar-spacer { flex: 1; }
+  .ah-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 0.375rem; flex-wrap: wrap; }
   .ah-tool {
     display: inline-flex; align-items: center; gap: 0.375rem;
     height: 2.25rem; padding: 0 0.75rem;
@@ -235,8 +232,6 @@ const SCREEN_STYLE = `
   .ah-tool:hover:not(:disabled) { background: var(--color-accent); color: var(--color-accent-foreground); }
   .ah-tool:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 1px; }
   .ah-tool:disabled { opacity: 0.45; cursor: not-allowed; }
-  .ah-tool[aria-pressed="true"] { background: #f59e0b; border-color: #f59e0b; color: #111; }
-  #ah-compare-btn { touch-action: none; }
 
   .ah-stage {
     position: relative;
@@ -255,6 +250,29 @@ const SCREEN_STYLE = `
     font-size: 0.75rem; font-weight: 500; pointer-events: none;
   }
   .ah-stage.comparing .ah-badge { background: #f59e0b; color: #111; }
+
+  /* Controls floating on the image: Undo / Redo bottom-left, Original
+     bottom-right. */
+  .ah-stage-tools { position: absolute; bottom: 0.75rem; display: flex; gap: 0.5rem; }
+  .ah-stage-tools.left  { left: 0.75rem; }
+  .ah-stage-tools.right { right: 0.75rem; }
+  .ah-stage-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem;
+    height: 2.5rem; min-width: 2.5rem; padding: 0 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55); color: #fff;
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    font-size: 0.8125rem; font-weight: 500; cursor: pointer;
+    transition: background .12s, opacity .12s;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  }
+  .ah-stage-btn.icon { padding: 0; width: 2.5rem; }
+  .ah-stage-btn:hover:not(:disabled) { background: rgba(0, 0, 0, 0.75); }
+  .ah-stage-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .ah-stage-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .ah-stage-btn[aria-pressed="true"],
+  .ah-stage-btn[aria-pressed="true"]:hover:not(:disabled) { background: #f59e0b; border-color: #f59e0b; color: #111; }
+  #ah-compare-btn { touch-action: none; }
 
   .ah-busy {
     position: absolute; inset: 0;
@@ -346,12 +364,6 @@ const SCREEN_HTML = `
       </div>
 
       <div class="ah-toolbar" role="toolbar" aria-label="Edit tools">
-        <button class="ah-tool" id="ah-undo-btn" type="button" title="Undo (Ctrl/⌘+Z)">${IconUndo('icon-sm')}<span>Undo</span></button>
-        <button class="ah-tool" id="ah-redo-btn" type="button" title="Redo (Ctrl/⌘+Shift+Z)">${IconRedo('icon-sm')}<span>Redo</span></button>
-        <span class="ah-toolbar-sep" aria-hidden="true"></span>
-        <button class="ah-tool" id="ah-compare-btn" type="button" aria-pressed="false"
-                title="Hold to view the original; click to toggle original / current">${IconCompare('icon-sm')}<span>Original</span></button>
-        <span class="ah-toolbar-spacer"></span>
         <button class="ah-tool" id="ah-discard-btn" type="button" title="Discard all edits and return to the original">${IconX('icon-sm')}<span>Discard Edits</span></button>
         <button class="ah-tool" id="ah-download-btn" type="button" title="Download the current image">${IconDownload('icon-sm')}<span>Download</span></button>
         <button class="ah-tool" id="ah-change-btn" type="button" title="Use a different photo">${IconReplace('icon-sm')}<span>Change Photo</span></button>
@@ -360,6 +372,16 @@ const SCREEN_HTML = `
       <div class="ah-stage" id="ah-stage">
         <img id="ah-image" alt="" draggable="false" />
         <span class="ah-badge" id="ah-badge"></span>
+        <div class="ah-stage-tools left">
+          <button class="ah-stage-btn icon" id="ah-undo-btn" type="button"
+                  title="Undo (Ctrl/⌘+Z)" aria-label="Undo">${IconUndo('icon-sm')}</button>
+          <button class="ah-stage-btn icon" id="ah-redo-btn" type="button"
+                  title="Redo (Ctrl/⌘+Shift+Z)" aria-label="Redo">${IconRedo('icon-sm')}</button>
+        </div>
+        <div class="ah-stage-tools right">
+          <button class="ah-stage-btn" id="ah-compare-btn" type="button" aria-pressed="false"
+                  title="Hold to view the original">${IconCompare('icon-sm')}<span>Original</span></button>
+        </div>
         <div class="ah-busy" id="ah-busy" hidden role="status" aria-live="polite">
           <div class="ah-spinner" aria-hidden="true"></div>
           <div class="ah-busy-title" id="ah-busy-title"></div>
@@ -552,29 +574,32 @@ function wireToolbar() {
   $('#ah-change-btn').addEventListener('click', changePhoto);
 }
 
-/** Original: hold to peek at the original, a quick click toggles it. */
+/** Original: the uploaded photo shows only while the button is held down
+ *  (mouse / touch, or Space / Enter from the keyboard). */
 function wireCompare() {
   const btn = $('#ah-compare-btn');
-  let press = null;   // { at, before } while the pointer is down
+  const release = () => setCompare(false);
 
   btn.addEventListener('pointerdown', (e) => {
     if (btn.disabled || e.button !== 0) return;
+    // Capture so the release is seen even if the pointer leaves the button.
     btn.setPointerCapture?.(e.pointerId);
-    press = { at: performance.now(), before: state.compare };
     setCompare(true);
   });
-  const release = () => {
-    if (!press) return;
-    const quick = performance.now() - press.at < PEEK_HOLD_MS;
-    setCompare(quick ? !press.before : press.before);
-    press = null;
-  };
   btn.addEventListener('pointerup', release);
   btn.addEventListener('pointercancel', release);
   btn.addEventListener('lostpointercapture', release);
-  // Keyboard (Enter / Space) fires a click with detail 0; pointer clicks are
-  // already handled above.
-  btn.addEventListener('click', (e) => { if (e.detail === 0) setCompare(!state.compare); });
+
+  btn.addEventListener('keydown', (e) => {
+    if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
+      e.preventDefault();
+      setCompare(true);
+    }
+  });
+  btn.addEventListener('keyup', (e) => {
+    if (e.key === ' ' || e.key === 'Enter') release();
+  });
+  btn.addEventListener('blur', release);
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
