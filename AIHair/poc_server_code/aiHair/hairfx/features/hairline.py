@@ -150,7 +150,8 @@ _DEFAULT_LONG_SIDE = 720
 
 # Step 1 asked up to 5 times (ask_majority), not once, as of 2026-11-10, as
 # grayHair's: a photo near _MAX_COVERED_PERCENT read one way one time and the
-# other the next. Asked one after another, 3 to 5 asks per photo.
+# other the next. 3 to 5 asks per photo: the first alone, the rest at once
+# (core.ask_majority).
 _DEFAULT_ASKS = 5
 
 # Step 2's prompt. Neither the mask nor the drop a prompt asked for set how
@@ -304,8 +305,8 @@ class HairlineOptions:
     render_all: bool = option(False, "go on past step 1 even where the forehead is covered "
                                      "or the brows hidden")
     asks: int = option(_DEFAULT_ASKS, "times step 1 is asked at most: the photo goes on where more than "
-                          "half of the answers say so, a tie not; asked one after another, "
-                          "stopping once that is settled")
+                          "half of the answers say so, a tie not; the first alone, the rest "
+                          "at once from the prompt cache, stopping once that is settled")
     analyst_model: str = option(_DEFAULT_ANALYST_MODEL, "step 1's model")
     reasoning: str = option(_DEFAULT_REASONING, "step 1's reasoning effort",
                             choices=("none", "low", "medium", "high", "xhigh", "max"))

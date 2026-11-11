@@ -1050,6 +1050,22 @@ def ask(ctx: Context, result: EffectResult, step: str, image: bytes, prompt: str
     return response.output_parsed
 
 
+def _ask_at_once(ctx: Context, result: EffectResult, step: str, image: bytes, prompt: str,
+                 schema, model: str, reasoning: str, detail: str, k: int) -> list:
+    """`ask` `k` times at once (each its own thread; ctx.slots still bounds
+    the calls in flight), the answers in the order asked; the first to
+    fail raises, once the rest are back (they are billed, and in
+    result.calls)."""
+    if k == 1:
+        return [ask(ctx, result, step, image, prompt, schema, model, reasoning, detail)]
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=k) as pool:
+        futures = [pool.submit(ask, ctx, result, step, image, prompt, schema, model, reasoning,
+                               detail) for _ in range(k)]
+        return [f.result() for f in futures]
+
+
 def majority(flags) -> bool:
     """More than half of `flags` true; a tie isn't."""
     flags = list(flags)
@@ -1061,21 +1077,32 @@ def ask_majority(ctx: Context, result: EffectResult, step: str, image: bytes, pr
     """`ask` up to `n` times, until more than half of `n` answers go on
     (`skip_reason` None for them) or that can no longer happen: a vote, as
     the analyst reads a photo near a threshold one way one time and the other
-    way the next (probe-detect-consistency.py). The asks go one after
-    another, so each after the first reads the image and prompt the first
-    wrote to the prompt cache (0.1x the input rate, the first paying 1.25x).
+    way the next (probe-detect-consistency.py). The first ask goes alone, and
+    writes the image and prompt to the prompt cache (paying 1.25x the input
+    rate); the rest read it (0.1x), and go at once, in batches of as many as
+    either side still needs at least (_ask_at_once): a batch can settle the
+    vote only at its last answer, all of it one way, so the asks made and
+    the verdict are the ones asking one after another would give (5 asks:
+    the 1st, then the 2nd and 3rd at once, then the 4th and the 5th alone
+    where the vote is still open).
     The answers go into result.info[step]: the answer, or with n > 1 a list
     of them, and how many went on into result.info[f"{step}_votes"].
     Returns (answers, None) where they go on, else (answers, why not): the
     answer's reason, or with n > 1 how many didn't and their reasons."""
-    answers, reasons = [], []
+    # Settled: more than half go on, or half or more don't.
+    go_need, skip_need = n // 2 + 1, (n + 1) // 2
+    answers, reasons, batch = [], [], 1
     while len(answers) < n:
-        answers.append(ask(ctx, result, step, image, prompt, schema, model, reasoning, detail))
-        reason = skip_reason(answers[-1])
-        if reason:
-            reasons.append(reason)
-        if len(answers) - len(reasons) > n / 2 or len(reasons) >= n / 2:
+        for answer in _ask_at_once(ctx, result, step, image, prompt, schema, model,
+                                   reasoning, detail, batch):
+            answers.append(answer)
+            reason = skip_reason(answer)
+            if reason:
+                reasons.append(reason)
+        go_on = len(answers) - len(reasons)
+        if go_on >= go_need or len(reasons) >= skip_need:
             break
+        batch = min(go_need - go_on, skip_need - len(reasons), n - len(answers))
     go_on = len(answers) - len(reasons)
     if n == 1:
         result.info[step] = answers[0].model_dump()
