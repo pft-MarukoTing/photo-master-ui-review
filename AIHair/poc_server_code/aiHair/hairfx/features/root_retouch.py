@@ -3,10 +3,15 @@ _PROMPT (its EFFECT_PROMPTS["rootRetouch_1"]): the roots recoloured over the
 photo's strands, which stay where they are.
 
 Its switches, as HairFeatures set them:
-  colour match on, in the hair, with colour_shift: the hair the colour
+  colour match on, with colour_shift: the hair the colour
       match's fit leaves out (the recoloured roots, mostly) is shifted as
       the hair round it instead of taken through the matrix, whose gain made
-      the roots darker where dark and lighter where light;
+      the roots darker where dark and lighter where light; aiHair: taken in
+      hair_inset (frizzCare's: the render's hair drawn in from its outline
+      and kept off the forehead's skin), as in the hair (the photo's and the
+      render's, faded in over 0.3% of the long side) the matrix's change
+      ended a few px inside the hair mask's edge round the forehead, an arc
+      there after the blend (816a32e9, 2026-11-11);
   pasted back by HairShifted's composite by default (hairfx/common.py's
       shifted_composite: the renders lined up region by region, the face,
       the hair and the rest each by one translation, OpenCV in
@@ -52,6 +57,7 @@ class RootRetouchFeature(HairShifted, SinglePromptFeature):
     """rootRetouch: a SinglePromptFeature whose --blend is HairShifted's."""
 
     colour_match = True
+    colour_match_area = "hair_inset"
     colour_shift = True
     blend_mask = "hair_shifted"
     blend_default = True

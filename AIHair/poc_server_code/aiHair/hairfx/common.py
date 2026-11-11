@@ -246,8 +246,16 @@ class Composited(Feature):
             return
         if self.colour_matches(ctx, opts):
             area = self.colour_area(ctx)
+            face = None
+            if area == "hair_inset":
+                # aiHair: as Feature.finish, the face found first, so the
+                # hair_inset match keeps off the forehead's skin (without
+                # it, rootRetouch's 816a32e9 kept an arc round the forehead,
+                # 2026-11-11). The composite finds it again from the cache.
+                with stage(result, "face", face_algorithm(ctx)):
+                    face = _find_face(ctx, photo, result)
             with stage(result, "colour_match", colour_algorithm(area, self.colour_shift)):
-                _colour_match_outputs(ctx, photo, result, self.colour_shift, area)
+                _colour_match_outputs(ctx, photo, result, self.colour_shift, area, face)
         kind = self.composite_kind(opts)
         try:
             # aiHair: the composite lines the renders up itself, so its
