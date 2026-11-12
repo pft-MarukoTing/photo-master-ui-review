@@ -1858,6 +1858,12 @@
       ],
       "note": "Value of a portrait-fix setting: the issue will be corrected at the given strength level."
     },
+    "修過的照片會出現在這裡。": {
+      "en": "Photos you edit will appear here.",
+      "where": [
+        "chat"
+      ]
+    },
     "修飾{who}外緣，讓畫面份量更均衡": {
       "en": "Refine {who}'s outline to balance the visual weight in the frame",
       "where": [
@@ -5408,6 +5414,13 @@
         "chat"
       ]
     },
+    "最近": {
+      "en": "Recent",
+      "where": [
+        "chat"
+      ],
+      "note": "Tab label on the home page photo sidebar: the user's recent photos (short for 最近照片)."
+    },
     "最近照片": {
       "en": "Recent Photos",
       "where": [
@@ -7428,6 +7441,13 @@
         "panel"
       ]
     },
+    "範例": {
+      "en": "Samples",
+      "where": [
+        "chat"
+      ],
+      "note": "Tab label on the home page photo sidebar: sample photos to try (short for 範例照片)."
+    },
     "範例照片": {
       "en": "Sample Photos",
       "where": [
@@ -8134,6 +8154,13 @@
       "where": [
         "panel"
       ]
+    },
+    "試試範例照片": {
+      "en": "Try a sample",
+      "where": [
+        "chat"
+      ],
+      "note": "Button in the empty Recent tab; switches to the Samples tab."
     },
     "詳細解說": {
       "en": "Detailed Explanations",
@@ -9247,6 +9274,12 @@
     },
     "還沒改過需求或設定，會照原本的再美化一次，結果可能跟上次不太一樣": {
       "en": "Nothing has changed yet, so they'll be retouched again with the same settings; results may differ a little",
+      "where": [
+        "chat"
+      ]
+    },
+    "還沒有最近照片": {
+      "en": "No recent photos yet",
       "where": [
         "chat"
       ]

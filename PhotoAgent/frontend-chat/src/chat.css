@@ -2125,3 +2125,120 @@ button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
 .chat-footbar{position:relative}
 .chat-footbar .chat-face-picker{position:static}
 .chat-footbar .chat-face-panel{inset-inline-start:var(--sp-4);max-width:calc(100% - 2 * var(--sp-4))}
+
+/* ═══ YCO header ═══
+   照 yco-collab-space 的 NavigationHeader（Figma 12338:242779）：64px 高、左右 32px、
+   logo 圖示 40px＋字標 256×25，右邊語言＋40px 頭像。顏色、間距、圓角、字級全部用 YCO token
+   （../assets/yco/yco-tokens-1.35.1.agent.css），不寫死色碼。YCO token 只有淺色，所以 header 不跟著 PhotoMaster 的主題換色。
+   原本的按鈕收進頭像選單；選擇器前綴 .site-header.yco-header #chat-header-actions 是為了蓋過
+   上面各斷點對 .site-header(:has(#chat-home-btn)) .header-actions 的規則。 */
+html:root{--header-h:64px}
+.site-header.yco-header{background:var(--background-base);backdrop-filter:none;-webkit-backdrop-filter:none;border-bottom:1px solid var(--stroke-weak);box-shadow:none}
+body[data-theme-mode] .site-header.yco-header{box-shadow:none}
+.site-header.yco-header .header-inner{position:relative;max-width:none;padding:0 var(--spacing-32);gap:var(--spacing-12)}
+.site-header.yco-header .yco-brand{display:flex;align-items:center;gap:10px;margin-inline-end:auto;font-size:0;line-height:0}
+/* 推右邊交給 logo 的 margin-inline-end:auto；各斷點給圖示的 auto 會把空間對分，讓圖示跑到中間。 */
+.site-header.yco-header :is(.chat-header-icon,.lang-switch,.yco-avatar){margin-inline-start:0 !important}
+.site-header.yco-header .chat-header-icon{color:var(--icon-neutral)}
+.site-header.yco-header .chat-header-icon:hover{background:var(--fill-hover)}
+.yco-logo-symbol{width:40px;height:40px;flex:0 0 auto}
+.yco-wordmark{display:block;width:256px;height:25px}
+.site-header.yco-header .yco-brand:focus-visible,
+.yco-avatar:focus-visible,
+.site-header.yco-header .lang-switch-btn:focus-visible{outline:2px solid var(--stroke-brand-strong);outline-offset:2px}
+
+/* 語言：文字鈕（EN），照 YCO nav item（font-size-small、font-weight-strong）。 */
+.site-header.yco-header .lang-switch{margin:0}
+.site-header.yco-header .lang-switch-btn{width:auto;min-width:40px;height:40px;padding:0 var(--spacing-12);border-radius:var(--corner-radius-32);background:transparent;color:var(--text-strong)}
+.site-header.yco-header .lang-switch-btn:hover,
+.site-header.yco-header .lang-switch-btn[aria-expanded="true"]{background:var(--fill-hover);color:var(--text-strong)}
+.lang-switch-code{font-family:var(--font-family-body);font-size:var(--font-size-small);font-weight:var(--font-weight-strong);line-height:1}
+.site-header.yco-header .lang-switch-menu{border-radius:var(--corner-radius-16);background:var(--background-overlay);border:1px solid var(--stroke-weak)}
+.site-header.yco-header .lang-switch-item{color:var(--text-strong);border-radius:var(--corner-radius-8)}
+.site-header.yco-header .lang-switch-item:hover{background:var(--fill-hover)}
+.site-header.yco-header .lang-switch-item.is-on{color:var(--text-brand)}
+
+/* 頭像：YCO avatar-photo-circle 的 #09161A 95% 就是 --fill-strong；人像用 --icon-inverse-strong（白）。 */
+.yco-avatar{display:flex;align-items:center;justify-content:center;flex:0 0 auto;width:40px;height:40px;padding:0;border:0;border-radius:50%;
+  background:var(--fill-strong);color:var(--icon-inverse-strong);cursor:pointer;transition:box-shadow .15s ease}
+.yco-avatar:hover,.yco-avatar[aria-expanded="true"]{box-shadow:0 0 0 3px var(--stroke-focus)}
+
+/* 頭像選單：每個寬度都是下拉，不再攤在 header 上。 */
+.site-header.yco-header .chat-header-more{display:none}
+.site-header.yco-header #chat-header-actions{display:none}
+.site-header.yco-header #chat-header-actions.is-open{display:flex;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:calc(100% + 6px);inset-inline-end:var(--spacing-24);z-index:1500;
+  min-width:200px;padding:6px;border-radius:var(--corner-radius-16);background:var(--background-overlay);border:1px solid var(--stroke-weak);
+  box-shadow:0 12px 32px var(--stroke-weak)}
+.site-header.yco-header #chat-header-actions.is-open .btn{display:flex;width:100%;height:44px;justify-content:flex-start;gap:10px;padding:0 var(--spacing-12);border:0;border-radius:var(--corner-radius-8);
+  background:transparent;color:var(--text-strong);font-size:var(--font-size-tiny);box-shadow:none}
+.site-header.yco-header #chat-header-actions.is-open .btn svg{color:var(--icon-neutral)}
+.site-header.yco-header #chat-header-actions.is-open .btn:hover{background:var(--fill-hover)}
+.site-header.yco-header #chat-header-actions.is-open .btn[disabled]{color:var(--text-disabled);opacity:1}
+.site-header.yco-header #chat-header-actions.is-open .btn-label{display:inline}
+
+/* ≤768px（YCO 的 Mobile）：只留 logo 圖示，字標拿掉。 */
+@media (max-width:768px){
+  .yco-wordmark{display:none}
+}
+@media (max-width:600px){
+  html:root{--header-h:56px}
+  .site-header.yco-header .header-inner{padding:0 var(--spacing-12) 0 var(--spacing-16);gap:var(--spacing-4)}
+  .yco-logo-symbol{width:32px;height:32px}
+  .site-header.yco-header #chat-header-actions.is-open{inset-inline-end:var(--spacing-8)}
+}
+
+/* ═══ 首頁 H01：桌機改橫式對照圖 ═══
+   原本 4:5 直圖最寬 400px，左右留下大片空白。≥1201px 改成 4:3 橫圖、吃滿右欄，
+   文案欄收窄、間距縮小，讓主圖貼近文案與右側照片欄。原圖是 4:5，橫裁時往上對齊（臉在上 1/3）。
+   平板、手機各自有版面，不動。 */
+@media (min-width:1201px){
+  .home-hero{grid-template-columns:minmax(300px,.85fr) minmax(0,1.15fr);gap:var(--sp-6)}
+  .home-compare{max-width:none;aspect-ratio:4/3;justify-self:stretch;border-radius:16px}
+  .home-compare-img{object-position:50% 22%}
+  /* 文案欄變窄，標題字級跟著收，「開啟專屬美化體驗」才排得進一行。 */
+  .home-headline{font-size:clamp(34px,3vw,46px)}
+}
+
+/* ═══ 首頁照片側欄（簡報 p2）═══ 全部用 YCO token。 */
+/* G01：YCO 分頁。灰色底線拉滿整列，選中那顆蓋上品牌色底線；短標籤、內容寬、靠左。
+   前綴 #upload-section .upload-gallery-col 蓋過平板／手機原本的膠囊分頁。 */
+#upload-section .upload-gallery-col .upload-gallery-heading{padding:0;border-bottom:0;min-height:0}
+#upload-section .upload-gallery-col .upload-gallery-tabs{flex:1 1 auto;gap:0;padding:0;border-radius:0;background:transparent;box-shadow:inset 0 -2px 0 var(--stroke-weak)}
+#upload-section .upload-gallery-col .upload-gallery-tab-recent-group{flex:0 0 auto;background:transparent}
+#upload-section .upload-gallery-col .upload-gallery-tab{flex:0 0 auto;height:auto;min-height:0;padding:var(--spacing-12) var(--spacing-16);border-radius:0;background:transparent;box-shadow:none;
+  font-family:var(--font-family-body);font-size:var(--font-size-small);line-height:var(--line-height-small);font-weight:var(--font-weight-strong);color:var(--text-strong)}
+#upload-section .upload-gallery-col .upload-gallery-tab:hover{background:var(--fill-hover)}
+#upload-section .upload-gallery-col .upload-gallery-tab.is-active{background:transparent;color:var(--text-brand);box-shadow:inset 0 -2px 0 var(--stroke-selected)}
+#upload-section .upload-gallery-col .upload-gallery-tab:focus-visible{outline:2px solid var(--stroke-brand-strong);outline-offset:-2px}
+#upload-section .upload-gallery-col .upload-gallery-tab-icon{display:none}
+#upload-section .upload-gallery-col .upload-gallery-all{color:var(--text-brand)}
+
+/* 選取狀態：品牌色外框＋品牌色圓形序號／勾勾。 */
+#upload-section .upload-gallery-col .demo-image-tile.is-selected::after{box-shadow:inset 0 0 0 2px var(--stroke-selected);border:0}
+#upload-section .upload-gallery-col .demo-image-tile.is-selected .demo-image-tile-check{background:var(--fill-selected);border-color:var(--fill-white);color:var(--icon-inverse-strong)}
+
+/* G02：範例照片改成等高三欄，間距一致，裁切往上留人物（最近照片的拼貼不動）。
+   只在側欄是直欄的時候：桌機 ≥1201、橫拿平板 901–1200。手機／直拿平板是橫向一排，本來就等高。 */
+@media (min-width:1201px),(min-width:901px) and (max-width:1200px) and (orientation:landscape){
+  #upload-section .upload-gallery-col .demo-images-grid:not(:has(.history-day-group)){display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:auto;gap:var(--spacing-8);align-content:start}
+  #upload-section .upload-gallery-col .demo-images-grid:not(:has(.history-day-group))>.demo-image-tile{grid-column:auto !important;grid-row:auto !important;
+    width:100%;height:auto;min-height:0;aspect-ratio:1/1;padding-top:0;margin:0;border-radius:var(--corner-radius-4);box-shadow:none}
+  #upload-section .upload-gallery-col .demo-images-grid:not(:has(.history-day-group))>.demo-image-tile img:not(.demo-image-tile-bg){position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%;border-radius:inherit}
+  #upload-section .upload-gallery-col .demo-images-grid:not(:has(.history-day-group))>.demo-image-tile .demo-image-tile-bg{display:none}
+}
+
+/* G03：最近照片空狀態。佔滿清單那塊、置中；按鈕是 YCO 的品牌色主按鈕。 */
+.upload-gallery-col:has(.gallery-empty) .upload-gallery-scroll-frame{display:none}
+.gallery-empty{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--spacing-8);padding:var(--spacing-32) var(--spacing-16);text-align:center}
+.gallery-empty-icon{display:flex;align-items:center;justify-content:center;width:56px;height:56px;margin-bottom:var(--spacing-8);border-radius:var(--corner-radius-12);background:var(--fill-brand-weak);color:var(--icon-brand)}
+.gallery-empty-title{margin:0;font-family:var(--font-family-body);font-size:var(--font-size-heading-5);line-height:var(--line-height-heading-5);font-weight:var(--font-weight-strong);color:var(--text-strong)}
+.gallery-empty-sub{margin:0;font-family:var(--font-family-body);font-size:var(--font-size-tiny);line-height:var(--line-height-tiny);color:var(--text-weak)}
+.gallery-empty-btn{margin-top:var(--spacing-8);height:40px;padding:0 var(--spacing-24);border:0;border-radius:var(--corner-radius-32);background:var(--fill-brand-strong);color:var(--text-inverse-strong);
+  font-family:var(--font-family-body);font-size:var(--font-size-tiny);font-weight:var(--font-weight-strong);cursor:pointer}
+.gallery-empty-btn:hover{box-shadow:0 0 0 3px var(--stroke-focus)}
+.gallery-empty-btn:focus-visible{outline:2px solid var(--stroke-brand-strong);outline-offset:2px}
+/* 手機／直拿平板：側欄是橫向一排，空狀態壓矮，按鈕才不會被底下固定的「開始對話」蓋住。 */
+@media (max-width:900px),(max-width:1200px) and (orientation:portrait){
+  .gallery-empty{flex:0 0 auto;gap:var(--spacing-4);padding:var(--spacing-16) 0 var(--spacing-8)}
+  .gallery-empty-icon{width:40px;height:40px;margin-bottom:var(--spacing-4)}
+}

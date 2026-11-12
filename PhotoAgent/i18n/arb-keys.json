@@ -2508,6 +2508,12 @@
         "chat"
       ]
     },
+    "chat_no_recent_photos_yet": {
+      "zh": "還沒有最近照片",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_no_requests_yet": {
       "zh": "目前沒有個人化需求。",
       "where": [
@@ -3157,6 +3163,12 @@
         "chat"
       ]
     },
+    "chat_photos_you_edit_will_appear": {
+      "zh": "修過的照片會出現在這裡。",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_pick_a_photo_then_just": {
       "zh": "選一張照片，剩下的用聊的",
       "where": [
@@ -3249,6 +3261,12 @@
     },
     "chat_reading_your_requests": {
       "zh": "正在讀你寫的需求…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_recent": {
+      "zh": "最近",
       "where": [
         "chat"
       ]
@@ -3463,6 +3481,12 @@
     },
     "chat_s": {
       "zh": "{sec} 秒",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_samples": {
+      "zh": "範例",
       "where": [
         "chat"
       ]
@@ -4324,6 +4348,12 @@
     },
     "chat_today": {
       "zh": "今天 {hm}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_try_a_sample": {
+      "zh": "試試範例照片",
       "where": [
         "chat"
       ]

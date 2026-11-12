@@ -7,6 +7,9 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { api, getUser, urls, type ReportChat } from "./api";
 import heroAfter from "./assets/hero_after.jpg";
 import heroBefore from "./assets/hero_before.jpg";
+// YouCam Online Editor 的 logo，從 yco-collab-space 的 design-library 複製（NavigationHeader 用的同一份）。
+import ycoLogoSymbol from "./assets/yco/logo-symbol.svg";
+import ycoWordmark from "./assets/yco/logo-en-desktop.svg";
 import { Icon } from "./icons";
 import { ReportsButton } from "./reports";
 import {
@@ -269,6 +272,13 @@ export function ConfirmModal(props: {
 // showHistory is off on 首頁, whose gallery has its own 最近照片 tab.
 // 右上角的語言切換：一顆地球，點開列出每個語言（用它自己的寫法），選了就換並重新載入。
 // 偏好設定裡的「介面語言」照樣在，這顆是給還沒進對話、找不到設定的人。
+// 語言鈕上的短標：English → EN、繁體中文 → 繁中，其他語言用代碼的主標籤（ja → JA）。
+function langCode(code: string) {
+  if (code === "en") return "EN";
+  if (/^zh/i.test(code)) return /hant|tw|hk|mo/i.test(code) ? "繁中" : "简中";
+  return code.split("-")[0].toUpperCase();
+}
+
 function LangSwitch(props: { debugUi: boolean }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -296,7 +306,8 @@ function LangSwitch(props: { debugUi: boolean }) {
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <Icon name="globe" size={20} />
+        {/* YCO header 的語言鈕是文字（EN），不是地球圖示。 */}
+        <span class="lang-switch-code">{langCode(lang)}</span>
       </button>
       {open && (
         <div class="lang-switch-menu" role="menu">
@@ -349,7 +360,7 @@ export function Header(props: {
   useEffect(() => {
     if (!menu) return;
     const close = (e: Event) => {
-      if (!(e.target as Element).closest?.(".header-actions, .chat-header-more")) setMenu(false);
+      if (!(e.target as Element).closest?.(".header-actions, .yco-avatar")) setMenu(false);
     };
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setMenu(false);
     document.addEventListener("pointerdown", close);
@@ -360,10 +371,13 @@ export function Header(props: {
     };
   }, [menu]);
   return (
-    <header class="site-header">
+    // YCO header（yco-collab-space NavigationHeader 的登入狀態）：左邊 logo，右邊語言＋頭像。
+    // 原本攤在 header 上的按鈕（回到首頁、設定、回報…）收進頭像點開的選單，功能都還在。
+    <header class="site-header yco-header">
       <div class="header-inner">
-        <button type="button" class="logo" id="logo-home-btn" onClick={props.onHome}>
-          Photo<em>Master</em>
+        <button type="button" class="logo yco-brand" id="logo-home-btn" aria-label="YouCam Online Editor" onClick={props.onHome}>
+          <img class="yco-logo-symbol" src={ycoLogoSymbol} alt="" aria-hidden="true" />
+          <img class="yco-wordmark" src={ycoWordmark} alt="YouCam Online Editor" />
         </button>
         {/* 收成 ⋯ 的寬度，新對話跟最近照片不進選單，留在 header 上一鍵就到（寬螢幕不顯示，用攤開的那顆）。 */}
         {props.onNewChat && (
@@ -377,15 +391,21 @@ export function Header(props: {
           </button>
         )}
         {props.showLang && <LangSwitch debugUi={!!props.debugUi} />}
+        {/* YCO 的頭像：深色圓底＋白色人像。每個寬度都用它開選單（取代原本只在手機出現的 ⋯）。 */}
         <button
           type="button"
-          class="chat-header-more"
+          class="yco-avatar"
           aria-label={t("更多選項")}
+          title={t("更多選項")}
+          aria-haspopup="menu"
           aria-expanded={menu}
           aria-controls="chat-header-actions"
           onClick={() => setMenu(!menu)}
         >
-          <Icon name="more" size={22} />
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" />
+          </svg>
         </button>
         {/* 選了哪一項選單就收起來；點擊從按鈕冒泡上來，按鈕自己的動作已經先跑完了。 */}
         <div class={`header-actions${menu ? " is-open" : ""}`} id="chat-header-actions" onClick={() => setMenu(false)}>
@@ -441,8 +461,9 @@ export function Header(props: {
 
 // Generated sample portrait (slightly messy hair, not smiling) and its 一鍵美化
 // result, aligned and cropped to the same 4:5 frame so the slider lines up.
+// H02：分隔線預設停在臉中間（鼻樑約在 48%），兩邊各露出半張臉，不用拖就看得出差別。
 function HeroCompare() {
-  const [pos, setPos] = useState(25);
+  const [pos, setPos] = useState(48);
   return (
     <div class="home-compare" style={{ "--pos": `${pos}%` }}>
       <img class="home-compare-img" src={heroBefore} alt={t("修圖前")} />
@@ -745,10 +766,8 @@ export function Gallery(props: {
               aria-selected={recent}
               onClick={() => props.onTab("recent")}
             >
-              <span class="upload-gallery-tab-icon" aria-hidden="true">
-                <Icon name="clock" size={14} />
-              </span>
-              {t("最近照片")}
+              {/* G01：YCO 分頁用短標籤、不放圖示（Recent／Samples）。 */}
+              {t("最近")}
             </button>
           </div>
           <button
@@ -759,19 +778,7 @@ export function Gallery(props: {
             aria-selected={!recent}
             onClick={() => props.onTab("sample")}
           >
-            <span class="upload-gallery-tab-icon" aria-hidden="true">
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                <rect x="4" y="4" width="16" height="16" rx="4" stroke="currentColor" stroke-width="1.8" />
-                <path
-                  d="M8 15l2.5-3 2 2 1.5-2 2 3M8 9.5h.01"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </span>
-            {t("範例照片")}
+            {t("範例")}
           </button>
         </div>
         {props.onAll && (
@@ -807,9 +814,23 @@ export function Gallery(props: {
               ))}
         </div>
       </div>
-      <p id="demo-images-empty" class="history-empty" hidden={!list || list.length > 0}>
-        {recent ? t("還沒有照片，按「開始對話」挑一張吧。") : t("目前沒有可顯示的照片。")}
-      </p>
+      {/* G03：最近照片是空的時候給下一步，按了切到範例照片。 */}
+      {recent && list && list.length === 0 ? (
+        <div id="demo-images-empty" class="gallery-empty">
+          <span class="gallery-empty-icon" aria-hidden="true">
+            <Icon name="plus" size={20} />
+          </span>
+          <p class="gallery-empty-title">{t("還沒有最近照片")}</p>
+          <p class="gallery-empty-sub">{t("修過的照片會出現在這裡。")}</p>
+          <button type="button" class="gallery-empty-btn" onClick={() => props.onTab("sample")}>
+            {t("試試範例照片")}
+          </button>
+        </div>
+      ) : (
+        <p id="demo-images-empty" class="history-empty" hidden={!list || list.length > 0}>
+          {t("目前沒有可顯示的照片。")}
+        </p>
+      )}
       {!recent && (
         <button
           id="demo-images-confirm-btn"
