@@ -32,6 +32,7 @@ import {
   ResultCard,
   PhotoViewer,
   SamplePicker,
+  ActionChoice,
   UploadBubble,
   BatchUploadBubble,
   UserMsg,
@@ -48,6 +49,7 @@ import { useSubjectPreview } from "./subject-preview";
 import { appendNotesHistory, sectionsIdentity, type HistoricalSection } from "./personalized-history";
 import type { PreviewReplyEvent } from "./pre-chat-events";
 import { Icon } from "./icons";
+import { isLeavingForPanel, takeBackHandoff, writePreHandoff, type PreHandoffPhoto } from "./pre-handoff";
 import { CASE_PREFIX, rowId, ConfirmModal, Gallery, Header, HistoryDrawer, HomeIntro, type GallerySelection, type GalleryTab } from "./home";
 import { handoffPatch, takeHandoff, writeHandoff, type Handoff, type HandoffContinuation } from "./handoff";
 import { resolveUser } from "./identity";
@@ -693,6 +695,12 @@ function fullSrc(s: Source) {
   return s.kind === "file" ? s.url : s.kind === "remote" ? urls.sourceImage(s.job) : urls.demoImage(s.name);
 }
 
+// 上傳頁按「面板」要帶過去的照片：自己的檔案帶檔案本身，其他的帶網址（pre-handoff.ts）。
+function preHandoffPhoto(s: Source): PreHandoffPhoto {
+  if (s.kind === "file") return { name: s.file.name, blob: s.file };
+  return { name: s.kind === "demo" ? s.name : `${s.job}.jpg`, url: fullSrc(s) };
+}
+
 // 要上傳的檔案：自己選的直接用，範例和已經在伺服器上的去抓。
 async function sourceBlob(s: Source, signal?: AbortSignal): Promise<{ blob: Blob; name: string }> {
   if (s.kind === "file") return { blob: s.file, name: s.file.name };
@@ -1246,6 +1254,8 @@ export function App() {
   useEffect(() => {
     if (!unsentHome) return;
     const warn = (e: BeforeUnloadEvent) => {
+      // 按「面板」切過去：照片和需求都帶到面板模式了，不算遺失。
+      if (isLeavingForPanel()) return;
       e.preventDefault();
       e.returnValue = "";
     };
@@ -1426,8 +1436,16 @@ export function App() {
   // so opening it to swap an already-chosen photo leaves the stage -- and the
   // two-column layout -- exactly where they were until a new photo lands.
   function showSamples() {
+    growSamples.current = false;
     setSamplesOpen(true);
     setError("");
+  }
+
+  // 單張時側欄的「從範例照片挑選」：挑的接在原本那張後面，不取代它。
+  const growSamples = useRef(false);
+  function showSamplesToAdd() {
+    showSamples();
+    growSamples.current = true;
   }
 
   function choose(s: Source) {
@@ -1505,6 +1523,12 @@ export function App() {
 
   // 一次選了好幾張。只有一張就照單張走（有人物、有需求）；兩張以上開一頁
   // 多張的上傳頁，只問要分析還是一鍵美化。
+  // 從面板模式按「對話」回來、但還沒有 case：接回面板手上的照片，停在上傳頁選好照片那一步。
+  useEffect(() => {
+    if (/(^|[#&])case=/.test(location.hash.slice(1))) return;
+    void takeBackHandoff().then((files) => { if (files.length) void pickFiles(files); });
+  }, []);
+
   async function pickFiles(files: File[]) {
     const images = files.filter((f) => f.type.startsWith("image/") || isHeic(f));
     if (images.length <= 1) return pickFile(images[0] || files[0]);
@@ -1572,6 +1596,15 @@ export function App() {
   // 範例照片彈窗送出來的：一張照單張走（換掉上傳頁上的照片），兩張以上跟上傳多張一樣開多張頁。
   function pickSamples(names: string[]) {
     if (batch) return appendSamples(names);
+    if (growSamples.current && source) {
+      growSamples.current = false;
+      setSamplesOpen(false);
+      const kept = source;
+      const added: Source[] = names.map((name): Source => ({ kind: "demo", name }))
+        .filter((x) => sourceSrc(x) !== sourceSrc(kept)).slice(0, MAX_BATCH - 1);
+      if (added.length) void startBatch([kept, ...added], "");
+      return;
+    }
     if (names.length <= 1) return names[0] ? swapSource({ kind: "demo", name: names[0] }) : setSamplesOpen(false);
     setSamplesOpen(false);
     ++lastPick.current; // 蓋過還在解碼的上傳
@@ -1683,6 +1716,29 @@ export function App() {
         setError("");
       },
     });
+  }
+
+  // 單張時側欄的「新增照片」：原本那張留著，加進來的接在後面，變成多張頁。
+  async function growSingle(files: File[]) {
+    if (!source) return pickFiles(files);
+    const images = files.filter((f) => f.type.startsWith("image/") || isHeic(f));
+    if (!images.length) return;
+    const kept = source;
+    const taken = images.slice(0, MAX_BATCH - 1);
+    const pick = ++lastPick.current;
+    const first = await readFirst(taken, pick);
+    if (pick !== lastPick.current) return dropSource(first);
+    const entry = await startBatch([kept, first], "", 1 + taken.length);
+    if (entry !== null) await addAsLoaded(taken.slice(1), entry);
+  }
+
+  // 單張時側欄那張的 ×：拿掉就回到還沒選照片的空狀態。
+  async function removeSingle() {
+    if (!source || busy || submitting) return;
+    if (!(await confirmSwap())) return;
+    dropSource(source);
+    resetPre();
+    setError("");
   }
 
   // 多張時對話框的上傳鈕和拖進來的照片：接在原本那幾張後面，不取代。
@@ -3261,6 +3317,17 @@ export function App() {
       class={`home-chat${source ? "" : " is-solo"}`}
       sub={batchIndex >= 0 ? t("第 {v1} 張", { v1: batchIndex + 1 }) : t("新對話")}
       photo={source ? { src: thumbSrc(source), onOpen: () => setViewing(true) } : undefined}
+      // 選好照片就能切到面板模式：照片帶過去，在那邊接著做；還沒選照片時「面板」灰掉。
+      panelMode={source || batch?.length
+        ? {
+            href: urls.oldUi(null),
+            busy: !!busy,
+            onLeave: () => writePreHandoff(
+              (batch?.length ? batch : [source!]).map(preHandoffPhoto),
+              notes.filter((n) => n.kept !== false && !n.dropped).map((n) => n.text).join("\n"),
+            ),
+          }
+        : undefined}
       onDropFiles={busy || loadingPhotos ? undefined : batch ? appendFiles : pickFiles}
       footer={
         <>
@@ -3514,27 +3581,32 @@ export function App() {
       const lb = has.labels || { analyze: "全部分析", render: "全部一鍵美化" };
       if (live && (askOpen || drawerLayout || !(has.pending || has.renderable || has.finished))) return null;
       return (
-        <div class="chat-choices chat-actions">
-          <div class="chat-actions-aux">
-            <Chip label={t("設定")} icon="tune" kind="ghost" settled={!live} disabled={overviewHeld} onClick={overviewEditSettings} />
-          </div>
+        // 跟單張上傳頁那排同一款（ActionChoice）：黑底白字＋圖示的 YCO 按鈕，設定是緊跟在後的圖示鈕。
+        <div class="chat-choices chat-actions is-yco">
           <div class="chat-actions-main">
             {has.pending ? (
-              <Chip label={lb.analyze} icon="search" kind={live ? "primary" : undefined} settled={!live} disabled={overviewHeld}
+              <ActionChoice label={lb.analyze} icon="search" settled={!live} disabled={overviewHeld}
                 title={t("還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送")}
                 onClick={() => overviewStart("analyze")} />
             ) : null}
             {has.renderable ? (
-              <Chip label={lb.render} icon="spark" kind={live ? "primary" : undefined} settled={!live} disabled={overviewHeld}
+              <ActionChoice label={lb.render} icon="sparkles" settled={!live} disabled={overviewHeld}
                 title={t("還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送")}
                 onClick={() => overviewStart("render")} />
             ) : null}
             {has.redo ? (
-              <Chip label={lb.redo || "全部再美化"} icon="redo" kind={live ? "primary" : undefined} settled={!live} disabled={overviewHeld}
+              <ActionChoice label={lb.redo || "全部再美化"} icon="redo" settled={!live} disabled={overviewHeld}
                 title={redoTitle}
                 onClick={() => void overviewRedo()} />
             ) : null}
           </div>
+          {live && (
+            <div class="chat-actions-aux">
+              <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" aria-label={t("設定")} title={t("設定")} disabled={overviewHeld} onClick={overviewEditSettings}>
+                <span class="buttonIcon"><Icon name="tune" size={18} /></span>
+              </button>
+            </div>
+          )}
         </div>
       );
     };
@@ -3557,7 +3629,16 @@ export function App() {
     const overviewPanel = !source && (
       <ChatPanel
         class="home-chat is-overview"
-        sub={t("總覽")}
+        sub=""
+        // 總覽也能隨時切到面板模式：這批照片和已經打的需求一起帶過去（pre-handoff.ts），那邊接著分析。
+        panelMode={{
+          href: urls.oldUi(null),
+          busy: !!overviewHeld,
+          onLeave: () => writePreHandoff(
+            batch.map(preHandoffPhoto),
+            notes.filter((n) => n.kept !== false && !n.dropped).map((n) => n.text).join("\n"),
+          ),
+        }}
         top={drawerLayout &&
           <BatchOverviewGrid
             key={sourceSrc(batch[0])}
@@ -3837,10 +3918,7 @@ export function App() {
                     reveal={revealDrawer}
                   />
                   {source ? (
-                    <>
-                      <PreStage source={source} />
-                      {preChatPanel}
-                    </>
+                    preChatPanel
                   ) : (
                     overviewPanel
                   )}
@@ -3872,10 +3950,11 @@ export function App() {
                 <PreStage source={submitting.sources[0]} />
                 <ChatPanel class="home-chat has-photo" sub={submitting.mode === "analyze" ? t("分析") : t("一鍵美化")} footer={null}>
                   <AssistantMsg>
-                    <p class="chat-text">{submitting.mode === "analyze" ? t("正在準備分析照片") : t("正在準備一鍵美化")}</p>
+                    {/* 簡報 p6 A03：進度集中在這張卡：標題＋進度條，底下一句句細節。 */}
                     <WorkingCard done={starting?.lines.slice(0, -1) || []}
                       now={starting?.lines[starting.lines.length - 1] || t("正在上傳照片…")}
-                      since={submitting.since} />
+                      since={submitting.since}
+                      title={submitting.mode === "analyze" ? t("正在準備分析照片") : t("正在準備一鍵美化")} />
                   </AssistantMsg>
                 </ChatPanel>
               </div>
@@ -3980,6 +4059,8 @@ export function App() {
       onSelect={onGallerySelect}
       onConfirm={onGalleryConfirm}
       onRemove={(id) => removeRows([id])}
+      onUpload={() => fileInput.current?.click()}
+      onDropFiles={(fs) => pickFiles(fs)}
       onAll={(t) => {
         if (t === "sample") return showSamples();
         refreshSessions();
@@ -4008,7 +4089,22 @@ export function App() {
                   {/* Nothing to stage until a photo is picked: before that the
                       conversation is the whole page, centred, and ChatPanel
                       itself is the drop target. */}
-                  {source && <PreStage source={source} />}
+                  {/* 單張和還沒選照片時也放「我的照片」側欄，跟多張頁同一個樣子。 */}
+                  <BatchPreSidebar
+                    sources={source ? [source] : []}
+                    runs={{}}
+                    wished={() => false}
+                    current={source ? sourceSrc(source) : null}
+                    pending={0}
+                    renderable={0}
+                    disabled={busy}
+                    onPick={() => {}}
+                    onStartAll={() => {}}
+                    onRemove={source && !busy ? () => void removeSingle() : undefined}
+                    onAdd={busy ? undefined : (fs) => void growSingle(fs)}
+                    onSamples={busy ? undefined : source ? showSamplesToAdd : showSamples}
+                    onUpload={busy ? undefined : () => fileInput.current?.click()}
+                  />
                   {preChatPanel}
                   </>
                 )}
@@ -4142,8 +4238,10 @@ export function BatchPreSidebar(props: {
   // 每加一就從外面把抽屜打開一次（總覽照片格的「顯示全部」）：那顆先亮一下再從它展開，
   // 收起來時那顆再跳幾下，讓人知道照片收在這裡、之後從這顆開闔。
   reveal?: number;
+  // 還沒有照片時，列表那塊顯示空狀態，這顆打開選照片。
+  onUpload?: () => void;
 }) {
-  const { sources, runs, current, pending, live } = props;
+  const { sources, runs, current, live } = props;
   const [download, downloading, downloadUi] = useBatchDownload();
   const isFresh = useFreshTiles();
   const [open, setOpen] = useState(false);
@@ -4191,7 +4289,6 @@ export function BatchPreSidebar(props: {
     close();
     props.onPick(s);
   };
-  const renderable = props.renderable ?? pending;
   // 各張到哪了：列表上面的篩選用這份，跟總覽照片格的篩選同樣的字，照要處理的先後排。最前面固定
   // 一顆「全部」；點一顆只列那種狀態的照片，再點一次或點「全部」回來，
   // 那種一張都不剩時自己回到全部。
@@ -4199,15 +4296,6 @@ export function BatchPreSidebar(props: {
   const progress = GRID_GROUPS.map((g) => ({ g, n: sources.filter((x) => stage(x) === g.key).length })).filter((x) => x.n);
   const [picked, setFilter] = useState<BatchProgress | "all">("all");
   const filter = progress.some((x) => x.g.key === picked) ? picked : "all";
-  const goOverview = () => {
-    setOpen(false);
-    props.onOverview!();
-  };
-  const held = props.disabled || !!props.actionsHeld;
-  const startAll = (mode: "analyze" | "render") => {
-    close();
-    props.onStartAll(mode);
-  };
   return (
     <>
       {downloadUi}
@@ -4227,71 +4315,6 @@ export function BatchPreSidebar(props: {
             </button>
           )}
           </div>
-        </div>
-        {/* 「總覽」不是一張照片，所以不做成方塊混在照片裡：一格橫的，放在照片列表上面。
-            整批的東西都收在這格裡：上面整列回總覽，下面是「全部…」那幾顆，一看就知道是對整批的。
-            張數只寫在這裡，標題列不再寫一次。 */}
-        <div class={`batch-overview-card${props.overview ? " is-on" : ""}`}>
-          {props.onOverview && (
-            <button
-              type="button"
-              aria-current={props.overview ? "page" : undefined}
-              title={t("回到總覽，全部一起分析、美化或調整設定")}
-              class={`batch-overview-entry${props.overview ? " is-on" : ""}`}
-              disabled={props.disabled && !props.overview}
-              onClick={goOverview}
-            >
-              <span class={`batch-overview-mosaic is-${Math.min(sources.length, 4)}`} aria-hidden="true">
-                {sources.slice(0, 4).map((s) => <img key={sourceSrc(s)} src={thumbSrc(s)} alt="" />)}
-              </span>
-              <span class="batch-overview-text">
-                <b>{t("總覽 · {n} 張", { n: sources.length })}</b>
-              </span>
-              <Icon name="next" size={14} />
-            </button>
-          )}
-          {pending || renderable || (props.finished && props.onSettings) ? (
-            // 每次進到總覽重新掛一次，那兩顆就再跳一下，提示這裡可以一次處理全部。
-            <div key={props.overview ? "overview" : "single"} class={`batch-sidebar-all${props.overview && !held ? " is-nudge" : ""}`}>
-              {props.onSettings ? <Chip
-                label={t("設定")}
-                icon="tune"
-                kind="ghost"
-                disabled={held}
-                onClick={() => {
-                  close();
-                  props.onSettings!();
-                }}
-              /> : null}
-              {pending ? <Chip
-                label={allLabel("analyze", pending, props.sources.length)}
-                icon="search"
-                kind="primary"
-                disabled={held}
-                title={t("還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送")}
-                onClick={() => startAll("analyze")}
-              /> : null}
-              {renderable ? <Chip
-                label={allLabel("render", renderable, props.sources.length)}
-                icon="spark"
-                kind="primary"
-                disabled={held}
-                title={t("還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送")}
-                onClick={() => startAll("render")}
-              /> : null}
-              {props.redo && props.onRedo ? <Chip
-                label={props.redoLabel || "全部再美化"}
-                icon="redo"
-                kind="primary"
-                disabled={held}
-                title={props.redoTitle}
-                onClick={() => {
-                  close();
-                  props.onRedo!();
-                }}
-              /> : null}
-            </div>
-          ) : null}
         </div>
         {/* 篩的是底下的列表，就貼在列表上面、不跟著捲；只有一種狀態時沒得篩，不出現。 */}
         {progress.length > 1 && (
@@ -4351,6 +4374,21 @@ export function BatchPreSidebar(props: {
               <span class="rc-media" style={ghostDelay(i)} />
             </span>
           ))}
+          {/* 還沒選照片：側欄照樣在，列表那塊說明這裡會放什麼，給一顆上傳。 */}
+          {!sources.length && !props.loading && (
+            <div class="gallery-empty batch-sidebar-empty">
+              <span class="gallery-empty-icon" aria-hidden="true">
+                <Icon name="photos" size={20} />
+              </span>
+              <p class="gallery-empty-title">{t("還沒有照片")}</p>
+              <p class="gallery-empty-sub">{t("上傳照片或挑一張範例，選好的照片會放在這裡。")}</p>
+              {props.onUpload && (
+                <button type="button" class="gallery-empty-btn" onClick={() => { close(); props.onUpload!(); }}>
+                  {t("上傳照片")}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </aside>
       <button
@@ -4580,23 +4618,29 @@ function BatchOverviewGrid(props: {
       )}
       {props.pending || props.renderable || props.finished ? (
         // 總覽上一次處理全部的按鈕只放這裡：固定在對話上面，不會被新訊息捲走。
-        <div class="batch-grid-actions">
-          <Chip label={t("設定")} icon="tune" kind="ghost" disabled={props.actionsHeld} onClick={props.onSettings} />
+        <div class="batch-grid-actions chat-actions is-yco">
+          <div class="chat-actions-main">
           {props.pending ? (
-            <Chip label={allLabel("analyze", props.pending, props.sources.length)} icon="search" kind="primary" disabled={props.actionsHeld}
+            <ActionChoice label={allLabel("analyze", props.pending, props.sources.length)} icon="search" disabled={props.actionsHeld}
               title={t("還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送")}
               onClick={() => props.onStartAll("analyze")} />
           ) : null}
           {props.renderable ? (
-            <Chip label={allLabel("render", props.renderable, props.sources.length)} icon="spark" kind="primary" disabled={props.actionsHeld}
+            <ActionChoice label={allLabel("render", props.renderable, props.sources.length)} icon="sparkles" disabled={props.actionsHeld}
               title={t("還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送")}
               onClick={() => props.onStartAll("render")} />
           ) : null}
           {props.redo && props.onRedo ? (
-            <Chip label={props.redoLabel || "全部再美化"} icon="redo" kind="primary" disabled={props.actionsHeld}
+            <ActionChoice label={props.redoLabel || "全部再美化"} icon="redo" disabled={props.actionsHeld}
               title={props.redoTitle}
               onClick={props.onRedo} />
           ) : null}
+          </div>
+          <div class="chat-actions-aux">
+            <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" aria-label={t("設定")} title={t("設定")} disabled={props.actionsHeld} onClick={props.onSettings}>
+              <span class="buttonIcon"><Icon name="tune" size={18} /></span>
+            </button>
+          </div>
         </div>
       ) : null}
     </section>
@@ -4918,15 +4962,16 @@ export function BatchSidebar(props: {
           <BatchDownloadButton plan={downloadOf(photos.filter((p) => photoState(p).key === "done"), photos.length)} busy={downloading} onDownload={download} />
         </div>
         {todo.length ? (
-          <div class="batch-sidebar-all">
-            <Chip
+          <div class="batch-sidebar-all chat-actions is-yco">
+            <div class="chat-actions-main">
+            <ActionChoice
               label={allLabel("render", todo.length, photos.length)}
-              icon="spark"
-              kind="primary"
+              icon="sparkles"
               disabled={props.busy}
               title={t("還沒美化的每張照目前的設定美化，美化過的不重送")}
               onClick={props.onRenderAll}
             />
+            </div>
           </div>
         ) : null}
         <div class="batch-sidebar-list" ref={list} role="tablist" aria-label={t("這段對話的照片")}>
@@ -5163,47 +5208,46 @@ function PreChat(props: {
       <NotesEditor sections={props.sections} upTo={notes.length} held={held} onSave={props.onPrompt} />
     </div>
   );
+  // 簡報 p5 A01：「分析」「一鍵美化」是同等份量的兩顆 YCO Button（黑底白字＋圖示）；
+  // 「設定」是緊跟在後面的圖示鈕，「清除所有需求」是文字連結。
   const startChips = (
-    <div class="chat-choices chat-actions">
-      {/* Reading order follows the order of operations: adjust the settings
-          first, then run. 分析 and 一鍵美化 are peers -- both are "go", they
-          differ only in how far they go -- so they carry the same weight. */}
-      {!asking && !went && (step === "picked" || step === "settings" || hasWishes) && (
-        <div class="chat-actions-aux">
-          {(step === "picked" || step === "settings") && <Chip label={t("設定")} icon="tune" kind="ghost" disabled={held} onClick={props.onEdit} />}
-          {/* 清掉的是需求，不是對話：上面那幾句連同 AI 的回覆都還在，只是不再算
-              數。所以沒有需求可清時這顆就不該在——按下去畫面不會有任何變化。 */}
-          {hasWishes && (
-            <Chip
-              label={t("清除所有需求")}
-              icon="x"
-              kind="ghost"
-              disabled={held}
-              onClick={props.onClear}
-            />
-          )}
-        </div>
-      )}
+    <div class="chat-choices chat-actions is-yco">
       <div class="chat-actions-main">
         {/* 按了一鍵美化、正在問怎麼套用時，這排就是已經做過的選擇：定格，
             一鍵美化維持選取的樣子，跟回答過的其他提問一樣。 */}
-        <Chip
+        <ActionChoice
           label={t("分析")}
           icon="search"
-          kind={went === "analyze" ? "picked" : asking || went ? undefined : "primary"}
+          picked={went === "analyze"}
           settled={!!asking || !!went}
           disabled={held}
           onClick={() => props.onStart("analyze")}
         />
-        <Chip
+        <ActionChoice
           label={t("一鍵美化")}
-          icon="spark"
-          kind={asking || went === "render" ? "picked" : went ? undefined : "primary"}
+          icon="sparkles"
+          picked={!!asking || went === "render"}
           settled={!!asking || !!went}
           disabled={held}
           onClick={() => props.onStart("render")}
         />
       </div>
+      {!asking && !went && (step === "picked" || step === "settings" || hasWishes) && (
+        <div class="chat-actions-aux">
+          {(step === "picked" || step === "settings") && (
+            <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" aria-label={t("設定")} title={t("設定")} disabled={held} onClick={props.onEdit}>
+              <span class="buttonIcon"><Icon name="tune" size={18} /></span>
+            </button>
+          )}
+          {/* 清掉的是需求，不是對話：上面那幾句連同 AI 的回覆都還在，只是不再算
+              數。所以沒有需求可清時這顆就不該在——按下去畫面不會有任何變化。 */}
+          {hasWishes && (
+            <button type="button" class="ycoButton variant_tertiary tone_neutral size_tiny" disabled={held} onClick={props.onClear}>
+              <span class="label">{t("清除所有需求")}</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
   // 歷史需求留在當輪；只有尚未建立快照時，編輯器才暫放在操作鍵前。
@@ -5223,24 +5267,14 @@ function PreChat(props: {
             through the composer's attach button instead of back up here.
             Dropping a file works too -- ChatPanel takes a drop anywhere on
             itself -- but that is a shortcut, not the advertised path. */}
-        <div class="chat-choices">
-          <Chip
-            label={t("自行上傳照片")}
-            icon="up"
-            kind={via === "upload" ? "picked" : undefined}
-            settled={!!via}
-            disabled={busy}
-            onClick={props.onUpload}
-          />
-          <Chip
-            label={t("從範例照片挑選")}
-            icon="image"
-            kind={via === "sample" ? "picked" : undefined}
-            settled={!!via}
-            disabled={busy}
-            onClick={props.onSamples}
-          />
-        </div>
+        {/* 簡報 p5 C03：還沒選圖才給這兩顆；選好之後這輪就結束了，選了什麼由下面那則
+            「上傳了這張／選了這張」的紀錄講，不再留著兩顆看起來還能按的鍵。換照片走輸入框的附圖鍵。 */}
+        {!via && !source && (
+          <div class="chat-choices">
+            <Chip label={t("自行上傳照片")} icon="up" disabled={busy} onClick={props.onUpload} />
+            <Chip label={t("從範例照片挑選")} icon="image" disabled={busy} onClick={props.onSamples} />
+          </div>
+        )}
       </AssistantMsg>}
 
       {source && (
@@ -5416,6 +5450,7 @@ function PreChat(props: {
                 done={starting.lines.slice(0, -1)}
                 now={starting.lines[starting.lines.length - 1]}
                 since={starting.since}
+                title={starting.mode === "analyze" ? t("正在分析照片") : t("正在美化照片")}
               />
             </AssistantMsg>
           )}
@@ -7371,7 +7406,7 @@ export function SessionView(props: {
 
   let working = busyCopy ? (
     <AssistantMsg>
-      <WorkingCard done={workLog.done} now={workLog.now} since={workLog.since} />
+      <WorkingCard done={workLog.done} now={workLog.now} since={workLog.since} title={busyCopy.title} />
     </AssistantMsg>
   ) : null;
 

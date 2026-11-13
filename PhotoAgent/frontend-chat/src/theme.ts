@@ -61,7 +61,7 @@ export const THEME_MODE: Record<ThemeKey, "dark" | "light"> = {
 };
 
 export const THEME_SCROLLBAR_RGB: Record<ThemeKey, string> = {
-  sky: "6,166,217",
+  sky: "3,173,226",
   default: "147,51,234",
   "purple-light": "124,58,237",
   "lilac-dark": "201,103,162",

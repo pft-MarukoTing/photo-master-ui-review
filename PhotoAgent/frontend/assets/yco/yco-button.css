@@ -1,0 +1,560 @@
+/* =====================================================================
+   YCO Button — variant API · SINGLE SOURCE OF TRUTH
+   ---------------------------------------------------------------------
+   Plain CSS, CSS-Modules class names (.ycoButton / .variant_* / .tone_* /
+   .size_*). Edit THIS file to change the button everywhere.
+
+   Consumed by:
+   - yco-component-library doc site  →  <link> (plain stylesheet, preview)
+   - yce-frontend button-wrapper     →  import styles from './button.module.css'
+                                        (Next.js CSS Modules: scoped, no leak)
+
+   The two repos hold a VERBATIM copy of this file. Keep them identical.
+   ===================================================================== */
+
+.ycoButton {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--corner-radius-32);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-family-heading);
+  font-weight: var(--font-weight-strong);
+  letter-spacing: 0;
+  line-height: 1;
+  text-decoration: none;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.ycoButton::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: transparent;
+  pointer-events: none;
+  transition: background 140ms ease;
+}
+
+.ycoButton > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ycoButton:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px var(--stroke-focus);
+}
+
+.ycoButton:disabled {
+  cursor: not-allowed;
+}
+
+/* ----- Sizes ----- */
+.size_tiny {
+  min-height: var(--spacing-32);
+  gap: var(--spacing-4);
+  padding: 0 var(--spacing-12);
+  font-family: var(--font-family-body);
+  font-size: var(--font-size-tiny);
+  line-height: var(--line-height-tiny);
+}
+
+.size_small {
+  /* Figma wants 36px; the RD spacing scale only has --spacing-40 (40px), not a
+     --spacing-36 token, so this is the literal Designer-specified value, not
+     rounded to the nearest existing token. See component.yaml decisionBasis. */
+  min-height: 36px;
+  gap: var(--spacing-4);
+  padding: 0 var(--spacing-16);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.size_medium {
+  /* Figma wants 42px; the RD spacing scale only has --spacing-48 (48px), not a
+     --spacing-42 token, so this is the literal Designer-specified value, not
+     rounded to the nearest existing token. See component.yaml decisionBasis. */
+  min-height: 42px;
+  gap: var(--spacing-4);
+  padding: 0 var(--spacing-16);
+  font-size: var(--font-size-heading-5, 1.125rem);
+  line-height: var(--line-height-small);
+}
+
+.size_large {
+  min-height: var(--spacing-56);
+  gap: var(--spacing-4);
+  padding: 0 var(--spacing-24);
+  font-size: var(--font-size-heading-4);
+  line-height: var(--line-height-heading-4);
+}
+
+/* ----- Brand × variants ----- */
+.tone_brand.variant_primary {
+  background: var(--fill-brand-strong);
+  color: var(--text-inverse-strong);
+}
+
+.tone_brand.variant_primary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_brand.variant_primary:active::before {
+  background: var(--fill-press);
+}
+
+.tone_brand.variant_secondary {
+  border-color: var(--stroke-brand-strong);
+  background: transparent;
+  color: var(--text-brand);
+}
+
+.tone_brand.variant_secondary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_brand.variant_secondary:active::before {
+  background: var(--fill-press);
+}
+
+.tone_brand.variant_tertiary {
+  background: transparent;
+  color: var(--text-brand);
+}
+
+.tone_brand.variant_tertiary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_brand.variant_tertiary:active::before {
+  background: var(--fill-press);
+}
+
+/* ----- Neutral × variants ----- */
+.tone_neutral.variant_primary {
+  background: var(--fill-strong);
+  color: var(--text-inverse-strong);
+}
+
+.tone_neutral.variant_primary:hover::before {
+  background: var(--fill-inverse-hover);
+}
+
+.tone_neutral.variant_primary:active::before {
+  background: var(--fill-inverse-press);
+}
+
+/* No ground at rest: Figma's Neutral/Secondary/Default is a 1%-white fill under
+   --stroke/strong (node 6860:302630), and the grey only appears on hover (PM,
+   2026-10-15). It had been a 2% dark tint. */
+.tone_neutral.variant_secondary {
+  border-color: var(--stroke-strong);
+  background: transparent;
+  color: var(--text-strong);
+}
+
+.tone_neutral.variant_secondary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_neutral.variant_secondary:active {
+  background: var(--fill-press);
+}
+
+.tone_neutral.variant_tertiary {
+  background: transparent;
+  color: var(--text-strong);
+}
+
+.tone_neutral.variant_tertiary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_neutral.variant_tertiary:active {
+  background: var(--fill-press);
+}
+
+/* ----- Destructive × variants ----- */
+.tone_destructive.variant_primary {
+  background: var(--fill-error-strong);
+  color: var(--text-inverse-strong);
+}
+
+.tone_destructive.variant_primary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_destructive.variant_primary:active::before {
+  background: var(--fill-press);
+}
+
+.tone_destructive.variant_secondary {
+  border-color: var(--stroke-error-strong);
+  background: transparent;
+  color: var(--text-error);
+}
+
+.tone_destructive.variant_secondary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_destructive.variant_secondary:active::before {
+  background: var(--fill-press);
+}
+
+.tone_destructive.variant_tertiary {
+  background: transparent;
+  color: var(--text-error);
+}
+
+.tone_destructive.variant_tertiary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_destructive.variant_tertiary:active::before {
+  background: var(--fill-press);
+}
+
+/* ----- Inverse × variants ----- */
+.tone_inverse.variant_primary {
+  background: var(--fill-inverse-strong);
+  color: var(--text-strong);
+}
+
+.tone_inverse.variant_primary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_inverse.variant_primary:active::before {
+  background: var(--fill-press);
+}
+
+.tone_inverse.variant_secondary {
+  border-color: var(--stroke-inverse-strong);
+  background: transparent;
+  color: var(--text-inverse-strong);
+}
+
+.tone_inverse.variant_secondary:hover {
+  background: var(--fill-inverse-hover);
+}
+
+.tone_inverse.variant_secondary:active {
+  background: var(--fill-inverse-press);
+}
+
+.tone_inverse.variant_tertiary {
+  background: transparent;
+  color: var(--text-inverse-strong);
+}
+
+.tone_inverse.variant_tertiary:hover {
+  background: var(--fill-inverse-hover);
+}
+
+.tone_inverse.variant_tertiary:active {
+  background: var(--fill-inverse-press);
+}
+
+/* ----- Custom: warning (not in designer spec, used for legacy ffc700) ----- */
+.tone_warning.variant_primary {
+  background: var(--fill-warning-strong);
+  color: var(--text-inverse-strong);
+}
+
+.tone_warning.variant_primary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_warning.variant_primary:active::before {
+  background: var(--fill-press);
+}
+
+.tone_warning.variant_secondary {
+  border-color: var(--stroke-warning-strong);
+  background: transparent;
+  color: var(--text-warning);
+}
+
+.tone_warning.variant_secondary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_warning.variant_secondary:active::before {
+  background: var(--fill-press);
+}
+
+.tone_warning.variant_tertiary {
+  background: transparent;
+  color: var(--text-warning);
+}
+
+.tone_warning.variant_tertiary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_warning.variant_tertiary:active::before {
+  background: var(--fill-press);
+}
+
+/* ----- Custom: success (not in designer spec, used for legacy 0ea639) ----- */
+.tone_success.variant_primary {
+  background: var(--fill-success-strong);
+  color: var(--text-inverse-strong);
+}
+
+.tone_success.variant_primary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_success.variant_primary:active::before {
+  background: var(--fill-press);
+}
+
+.tone_success.variant_secondary {
+  border-color: var(--stroke-success-strong);
+  background: transparent;
+  color: var(--text-success);
+}
+
+.tone_success.variant_secondary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_success.variant_secondary:active::before {
+  background: var(--fill-press);
+}
+
+.tone_success.variant_tertiary {
+  background: transparent;
+  color: var(--text-success);
+}
+
+.tone_success.variant_tertiary:hover::before {
+  background: var(--fill-hover);
+}
+
+.tone_success.variant_tertiary:active::before {
+  background: var(--fill-press);
+}
+
+/* Figma wraps the label text in its own "Label container" with 4px padding each
+   side, nested inside the button's own padding — this box already plays that role,
+   it just needed the padding. */
+.label {
+  padding: 0 var(--spacing-4);
+}
+
+/* ----- Tertiary label gets underline ----- */
+.variant_tertiary .label {
+  text-decoration: underline;
+  text-decoration-skip-ink: none;
+  text-underline-position: from-font;
+}
+
+/* ----- Loading state ----- */
+.isLoading {
+  pointer-events: none;
+}
+
+.isLoading .label {
+  opacity: 0.72;
+}
+
+/* Spinning loading indicator — CSS-only (a conic-gradient ring faded around its
+   circumference, masked hollow), so it inherits `currentColor` and needs no
+   separate icon asset per tone/variant. Matches credit-controls/assets/icon/
+   yco-credit-controls/loading.png's actual look (sampled via canvas pixel read:
+   a ring whose stroke opacity fades smoothly from ~87% to ~34% around the circle,
+   not a hard-edged gap) rather than the harder-edged `border-right-color:
+   transparent` ring this started as. Sized larger than the surrounding
+   .buttonIcon box (that reference icon is a fixed 24px regardless of button
+   size) via the negative-margin overscan below, rather than shrinking with it. */
+@keyframes ycoButtonSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0%, currentcolor 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), currentColor calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), currentColor calc(100% - 2.5px));
+  opacity: 0.85;
+  animation: ycoButtonSpin 0.75s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.5s;
+  }
+}
+
+/* ----- Icon slots ----- */
+.buttonIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  line-height: 1;
+}
+
+.buttonIcon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+/* Raster icons (e.g. an <img src="...png">, matching how
+   credit-controls/CreditControls.module.scss's own .loadingIcon sizes its PNG) —
+   no fill/stroke concept for these, just fit the slot. Colour comes from the asset
+   itself, not currentColor, since raster pixels can't recolour via CSS. */
+.buttonIcon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.size_medium .buttonIcon,
+.size_small .buttonIcon {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+}
+
+.size_tiny .buttonIcon {
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+}
+
+/* ----- Icon colors per tone × variant -----
+   (lower-specificity default first, then secondary/tertiary overrides) */
+.tone_brand .buttonIcon,
+.tone_neutral .buttonIcon,
+.tone_destructive .buttonIcon,
+.tone_warning .buttonIcon,
+.tone_success .buttonIcon {
+  color: var(--icon-inverse-strong);
+}
+
+.tone_inverse .buttonIcon {
+  color: var(--icon-neutral);
+}
+
+.tone_brand.variant_secondary .buttonIcon,
+.tone_brand.variant_tertiary .buttonIcon {
+  color: var(--icon-brand);
+}
+
+.tone_neutral.variant_secondary .buttonIcon,
+.tone_neutral.variant_tertiary .buttonIcon {
+  color: var(--icon-neutral);
+}
+
+.tone_destructive.variant_secondary .buttonIcon,
+.tone_destructive.variant_tertiary .buttonIcon {
+  color: var(--icon-error);
+}
+
+.tone_inverse.variant_secondary .buttonIcon,
+.tone_inverse.variant_tertiary .buttonIcon {
+  color: var(--icon-inverse-strong);
+}
+
+.tone_warning.variant_secondary .buttonIcon,
+.tone_warning.variant_tertiary .buttonIcon {
+  color: var(--icon-warning);
+}
+
+.tone_success.variant_secondary .buttonIcon,
+.tone_success.variant_tertiary .buttonIcon {
+  color: var(--icon-success);
+}
+
+/* ----- Disabled: single shared state, independent of tone (Figma: Fill/Disabled) -----
+   Figma's disabled treatment is one flat grey shared by every tone/variant, not a
+   faded version of the button's own colour, so this overrides the tone rules above
+   instead of fading them like the old `opacity: 0.5` did. Declared last on purpose:
+   .variant_*:disabled and .ycoButton:disabled tie in specificity with the
+   .tone_*.variant_* rules above (same selector count), so source order is what makes
+   these win. */
+.ycoButton:disabled {
+  background: var(--fill-disabled);
+  border-color: transparent;
+  /* Primary keeps light text against its filled grey background — matches the
+     platform/ui/credit-controls override (.generateButton:disabled) that already
+     had to patch around this exact gap for its own Button usage. */
+  color: var(--text-inverse-strong);
+}
+
+.variant_secondary:disabled,
+.variant_tertiary:disabled {
+  background: transparent;
+  /* Secondary/Tertiary have no fill behind them, so inverse-strong text would be
+     invisible — they need the muted grey text instead. */
+  color: var(--text-disabled);
+}
+
+.variant_secondary:disabled {
+  border-color: var(--stroke-disabled);
+}
+
+.ycoButton:disabled .buttonIcon {
+  color: var(--icon-inverse-strong);
+}
+
+.variant_secondary:disabled .buttonIcon,
+.variant_tertiary:disabled .buttonIcon {
+  color: var(--icon-disabled);
+}
+
+/* ----- Disabled: no hover/press feedback (2026-09-15, corrected live —
+   "已經是disable的東西就不要再加上hover效果了，以免被誤會可以點擊") -----
+   Every tone/variant rule above defines its own :hover/:active feedback —
+   almost all of them swap the ::before overlay's background, but
+   tone_inverse's secondary/tertiary variants (and tone_neutral's
+   secondary/tertiary :active) paint straight onto the button itself instead
+   — and none of those rules excludes :disabled. A native `disabled` button
+   blocks click/focus but browsers still match :hover purely on cursor
+   position, so a disabled button visibly reacted to being hovered before
+   this fix — reading as clickable when it isn't. Same specificity-ties-
+   broken-by-source-order technique the .ycoButton:disabled block above
+   already relies on (see its own comment) — this must stay declared after
+   every tone/variant rule above to win the tie. */
+.ycoButton:disabled:hover::before,
+.ycoButton:disabled:active::before {
+  background: transparent;
+}
+
+.tone_neutral.variant_secondary:disabled:active,
+.tone_neutral.variant_tertiary:disabled:active,
+.tone_inverse.variant_secondary:disabled:hover,
+.tone_inverse.variant_secondary:disabled:active,
+.tone_inverse.variant_tertiary:disabled:hover,
+.tone_inverse.variant_tertiary:disabled:active {
+  background: transparent;
+}

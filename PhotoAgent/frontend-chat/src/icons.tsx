@@ -3,7 +3,26 @@ import type { JSX } from "preact";
 // mirror: points along the reading direction, so it flips in a right-to-left page.
 const ICONS: Record<string, { sw: number; body: JSX.Element; mirror?: boolean }> = {
   chat: { sw: 2, body: <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" /> },
+  "messages-circle": {
+    sw: 2,
+    body: (
+      <>
+        <path d="M19.95 10.05a7 7 0 0 1 1.412 7.872 1 1 0 0 0-.058.787l.675 2.089a1 1 0 0 1-1.236 1.168l-2.155-.631a1 1 0 0 0-.745.06 7 7 0 0 1-7.793-1.445" />
+        <path d="M2.696 12.708a1 1 0 0 0-.058-.785 7 7 0 1 1 3.518 3.473 1 1 0 0 0-.744-.061l-2.155.63a1 1 0 0 1-1.236-1.167z" />
+      </>
+    ),
+  },
   spark: { sw: 2, body: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /> },
+  // Lucide「sparkles」（ISC，lucide.dev/icons/sparkles）。
+  sparkles: {
+    sw: 2,
+    body: (
+      <>
+        <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" />
+        <path d="M5 3v4M3 5h4M19 17v4M17 19h4" />
+      </>
+    ),
+  },
   redo: {
     sw: 2.2,
     mirror: true,

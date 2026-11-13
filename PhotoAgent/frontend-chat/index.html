@@ -7,14 +7,24 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- Inter carries the Latin; Noto Sans TC carries the CJK (Inter has no CJK
-       glyphs, so it used to fall through to whatever the OS had). Noto Serif TC
-       is the display face -- headline and panel titles only. -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet">
+       glyphs, so it used to fall through to whatever the OS had). Roboto
+       is the display face -- headline and panel titles only (was Noto Serif TC). -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&family=Roboto:wght@400;500;600;700&family=Wix+Madefor+Display:wght@600;700;800&display=swap" rel="stylesheet">
   <!-- YCO design tokens（yco-collab-space platform/tokens/rd/yce-frontend-1.35.1.agent/variables.css，原檔照抄、不改）。 -->
   <link rel="stylesheet" href="../assets/yco/yco-tokens-1.35.1.agent.css">
+  <!-- YCO 深色 token（只在 <html data-theme="dark"> 時生效），header 的太陽／月亮切換。 -->
+  <link rel="stylesheet" href="../assets/yco/yco-tokens-dark.css">
+  <!-- YCO Button（yco-collab-space platform/ui/button/Button.module.css，原檔照抄；class 直接用 .ycoButton/.variant_*/.tone_*/.size_*）。 -->
+  <link rel="stylesheet" href="../assets/yco/yco-button.css">
   <link rel="stylesheet" href="../styles.css">
   <!-- 面板模式那支一張張存圖（window.PhotoAgentSave），「全部下載」直接共用，不另寫一份。 -->
   <script src="../save-images.js"></script>
+  <!-- 首頁 A/B/C 比較，右下角切換。決定版本後再移除。 -->
+  <script src="../ab-home.js" defer></script>
+  <!-- 手機版首頁：只留一顆「開始對話（N 張）」。 -->
+  <script src="../home-mobile.js" defer></script>
+  <!-- 對話頁 handoff 預覽補丁；正式原始碼也已同步補入。 -->
+  <script src="../chat-tweaks.js" defer></script>
   <!-- old-inline-styles -->
 </head>
 <body data-theme="sky" data-theme-mode="light" class="side-panel-layout">
@@ -35,7 +45,7 @@
           "caramel-dark": "dark", "caramel": "light"
         };
         var SCROLLBAR = {
-          "sky": "6,166,217",
+          "sky": "3,173,226",
           "default": "147,51,234", "purple-light": "124,58,237",
           "lilac-dark": "201,103,162", "lilac": "136,71,136",
           "caramel-dark": "241,170,66", "caramel": "185,81,27"
@@ -50,6 +60,17 @@
         else document.body.dataset.theme = theme;
         document.body.dataset.themeMode = MODE[theme];
       } catch (_) { /* never block first paint on a theming failure */ }
+    })();
+  </script>
+  <script>
+    // YCO 淺色／深色（header 的太陽／月亮，home.tsx ColorModeToggle）：第一次繪製前套上，不閃一下淺色。
+    (function () {
+      try {
+        if (localStorage.getItem("yco-color-mode") === "dark") {
+          document.documentElement.dataset.theme = "dark";
+          document.body.dataset.themeMode = "dark";
+        }
+      } catch (_) { /* storage may be blocked */ }
     })();
   </script>
   <div id="app"></div>

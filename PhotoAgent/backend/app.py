@@ -4,6 +4,7 @@ from flask import Flask, request
 from flask_cors import CORS
 
 from backend.compression import init_compression
+from backend.dev_ui_mock import init_ui_mock
 from backend.services.redaction import init_redaction
 from backend.routes.api import api_bp
 from backend.routes.chat import chat_bp, start_watcher
@@ -32,6 +33,8 @@ def create_app(config=None):
     init_compression(app)
     # Registered after compression so it runs first (after_request runs in reverse order).
     init_redaction(app)
+    # Local UI preview only (PHOTOAGENT_UI_MOCK=1); a no-op everywhere else.
+    init_ui_mock(app)
     app.register_blueprint(static_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(chat_bp)

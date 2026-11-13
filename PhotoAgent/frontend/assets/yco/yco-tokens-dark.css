@@ -1,0 +1,85 @@
+/* YCO dark semantic colors — copied verbatim (lines 227–308) from pft-MarukoTing/workflow src/app/yco-tokens.css
+   (version 261001, 2026-10-01). Only this block is taken: that file's body/typography rules would change the site's fonts.
+   Primitives it references come from yco-tokens-1.35.1.agent.css. Turned on with data-theme="dark" on <html>. */
+/* Dark semantic colors */
+[data-theme="dark"] {
+  color-scheme: dark;
+  /* color */
+  --background-alternate: var(--grey-solid-850);
+  --background-base: var(--grey-solid-900);
+  --background-brand: var(--brand-dark-1000);
+  --background-inverse: var(--grey-solid-0);
+  --background-overlay: var(--grey-solid-800);
+  --background-raised: var(--grey-solid-850);
+  --background-sunken: var(--grey-solid-1000);
+  --fill-badge: var(--perfect-1000);
+  --fill-brand-hover: var(--grey-dark-50);
+  --fill-brand-press: var(--grey-dark-100);
+  --fill-brand-strong: var(--brand-dark-1000);
+  --fill-brand-weak: var(--brand-dark-50);
+  --fill-disabled: var(--grey-dark-200);
+  --fill-error-strong: var(--red-dark-1000);
+  --fill-error-weak: var(--red-dark-50);
+  --fill-hover: var(--grey-dark-100);
+  --fill-information-strong: var(--teal-dark-1000);
+  --fill-information-weak: var(--teal-dark-50);
+  --fill-inverse-disabled: var(--grey-light-100);
+  --fill-inverse-hover: var(--grey-light-100);
+  --fill-inverse-press: var(--grey-light-50);
+  --fill-inverse-strong: var(--grey-solid-900);
+  --fill-inverse-weak: var(--grey-light-50);
+  --fill-overlay: var(--grey-light-900);
+  --fill-overlay-strong: var(--grey-light-1000);
+  --fill-overlay-weak: var(--grey-light-700);
+  --fill-press: var(--grey-dark-50);
+  --fill-selected: var(--brand-dark-1000);
+  --fill-strong: var(--grey-dark-1000);
+  --fill-success-strong: var(--green-dark-1000);
+  --fill-success-weak: var(--green-dark-50);
+  --fill-warning-strong: var(--amber-dark-1000);
+  --fill-warning-weak: var(--amber-dark-50);
+  --fill-weak: var(--grey-dark-50);
+  --fill-weaker: var(--grey-dark-25);
+  --fill-white: var(--grey-solid-0);
+  --fill-yellow: var(--yellow-solid-1000);
+  --icon-brand: var(--brand-dark-1000);
+  --icon-disabled: var(--grey-dark-200);
+  --icon-error: var(--red-dark-800);
+  --icon-information: var(--teal-dark-800);
+  --icon-inverse: var(--grey-light-500);
+  --icon-inverse-disabled: var(--grey-light-100);
+  --icon-inverse-strong: var(--grey-light-1000);
+  --icon-neutral: var(--grey-dark-1000);
+  --icon-success: var(--green-dark-800);
+  --icon-warning: var(--amber-dark-800);
+  --stroke-brand-strong: var(--brand-dark-800);
+  --stroke-brand-weak: var(--brand-dark-200);
+  --stroke-disabled: var(--grey-dark-200);
+  --stroke-error-strong: var(--red-dark-800);
+  --stroke-error-weak: var(--red-dark-200);
+  --stroke-focus: var(--brand-dark-200);
+  --stroke-information-strong: var(--teal-dark-800);
+  --stroke-information-weak: var(--teal-dark-200);
+  --stroke-inverse-disabled: var(--grey-light-100);
+  --stroke-inverse-strong: var(--grey-light-500);
+  --stroke-inverse-weak: var(--grey-light-100);
+  --stroke-selected: var(--brand-dark-1000);
+  --stroke-strong: var(--grey-dark-200);
+  --stroke-success-strong: var(--green-dark-800);
+  --stroke-success-weak: var(--green-dark-200);
+  --stroke-warning-strong: var(--amber-dark-800);
+  --stroke-warning-weak: var(--amber-dark-200);
+  --stroke-weak: var(--grey-dark-100);
+  --text-brand: var(--brand-dark-1000);
+  --text-disabled: var(--grey-dark-200);
+  --text-error: var(--red-dark-1000);
+  --text-information: var(--teal-dark-1000);
+  --text-inverse-disabled: var(--grey-light-100);
+  --text-inverse-strong: var(--grey-light-1000);
+  --text-inverse-weak: var(--grey-light-700);
+  --text-strong: var(--grey-dark-1000);
+  --text-success: var(--green-dark-1000);
+  --text-warning: var(--amber-dark-1000);
+  --text-weak: var(--grey-dark-700);
+  --text-weaker: var(--grey-dark-500);
+}

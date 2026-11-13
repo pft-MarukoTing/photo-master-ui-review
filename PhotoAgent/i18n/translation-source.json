@@ -805,6 +805,12 @@
       ],
       "note": "Name of the first step in a progress indicator (Upload, Analyze, Retouch, Done); a noun-like step name."
     },
+    "上傳一張照片開始": {
+      "en": "Upload a photo to get started",
+      "where": [
+        "panel"
+      ]
+    },
     "上傳中": {
       "en": "Uploading",
       "where": [
@@ -859,6 +865,24 @@
       "where": [
         "panel",
         "chat"
+      ]
+    },
+    "上傳照片後，AI 會在這裡說明照片的內容。": {
+      "en": "Once you upload a photo, the AI describes it here.",
+      "where": [
+        "panel"
+      ]
+    },
+    "上傳照片後，AI 的修圖建議會在這裡，也能在這裡微調。": {
+      "en": "Once you upload a photo, the AI's suggestions show up here and you can fine-tune them.",
+      "where": [
+        "panel"
+      ]
+    },
+    "上傳的照片會放在這裡。": {
+      "en": "Photos you upload appear here.",
+      "where": [
+        "panel"
       ]
     },
     "上傳進度": {
@@ -1209,6 +1233,12 @@
         "panel"
       ]
     },
+    "也可以把照片拖到這裡": {
+      "en": "Or drag photos here",
+      "where": [
+        "panel"
+      ]
+    },
     "也可以點「風格」，幫這版調整光線、角度之類的風格。": {
       "en": "You can also tap “Style” to adjust things like lighting and camera angle for this version.",
       "where": [
@@ -1519,6 +1549,12 @@
       "where": [
         "panel",
         "chat"
+      ]
+    },
+    "你的需求": {
+      "en": "Your requests",
+      "where": [
+        "panel"
       ]
     },
     "你的需求會留著，這次會連同分析的建議一起美化。": {
@@ -2097,6 +2133,12 @@
         "chat"
       ]
     },
+    "先看建議": {
+      "en": "Review suggestions first",
+      "where": [
+        "chat"
+      ]
+    },
     "先看美化項目": {
       "en": "Review Edits First",
       "where": [
@@ -2153,6 +2195,12 @@
         "chat"
       ],
       "note": "Field-name word the AI may prefix to a photo description; used to detect and strip that prefix."
+    },
+    "全螢幕": {
+      "en": "Full Screen",
+      "where": [
+        "chat"
+      ]
     },
     "全螢幕檢視比較": {
       "en": "Compare in full screen",
@@ -2587,6 +2635,18 @@
       "en": "The page will reload after you switch. Earlier chats and analyses stay in their original language.",
       "where": [
         "panel",
+        "chat"
+      ]
+    },
+    "切換成深色模式": {
+      "en": "Switch to dark mode",
+      "where": [
+        "chat"
+      ]
+    },
+    "切換成淺色模式": {
+      "en": "Switch to light mode",
+      "where": [
         "chat"
       ]
     },
@@ -3884,6 +3944,12 @@
       ],
       "note": "Chat mode: the conversation page, as opposed to panel mode."
     },
+    "尚未上傳照片": {
+      "en": "No photo uploaded yet",
+      "where": [
+        "panel"
+      ]
+    },
     "尚未取得 QA 檢查結果。": {
       "en": "No QA result yet.",
       "where": [
@@ -4491,6 +4557,7 @@
     "從範例照片挑選": {
       "en": "Choose a Sample Photo",
       "where": [
+        "panel",
         "chat",
         "backend labels"
       ]
@@ -4858,6 +4925,12 @@
         "chat"
       ]
     },
+    "拖曳照片到這裡，或點一下上傳": {
+      "en": "Drop photos here, or click to upload",
+      "where": [
+        "chat"
+      ]
+    },
     "指定{v1}": {
       "en": "Select {v1}",
       "where": [
@@ -5078,12 +5151,6 @@
       "where": [
         "panel",
         "chat"
-      ]
-    },
-    "換一種拍法，重新詮釋照片氛圍": {
-      "en": "Try a different shot to reimagine the photo's mood",
-      "where": [
-        "panel"
       ]
     },
     "換分析引擎必須重新分析這張照片，目前的分析結果和建議都會被取代。要繼續嗎？": {
@@ -5551,6 +5618,12 @@
     },
     "未過度美化": {
       "en": "Not over-retouched",
+      "where": [
+        "panel"
+      ]
+    },
+    "未選擇的分類會輪播兩張預覽照片。": {
+      "en": "Unselected categories cycle through two preview photos.",
       "where": [
         "panel"
       ]
@@ -6223,6 +6296,12 @@
         "chat"
       ]
     },
+    "每次美化都會產生一個新版本。": {
+      "en": "Each run creates a new version.",
+      "where": [
+        "panel"
+      ]
+    },
     "比例": {
       "en": {
         "panel": "Ratio",
@@ -6263,6 +6342,12 @@
       "en": "Why this ratio",
       "where": [
         "panel"
+      ]
+    },
+    "比較": {
+      "en": "Compare",
+      "where": [
+        "chat"
       ]
     },
     "氛圍": {
@@ -6487,6 +6572,12 @@
         "chat"
       ]
     },
+    "無法載入範例照片。": {
+      "en": "Couldn't load the sample photo.",
+      "where": [
+        "panel"
+      ]
+    },
     "無法載入：{error}": {
       "en": "Couldn't load: {error}",
       "where": [
@@ -6695,6 +6786,12 @@
       "en": "This photo is still processing. Please try again in a moment.",
       "where": [
         "chat"
+      ]
+    },
+    "照片預覽": {
+      "en": "Photo preview",
+      "where": [
+        "panel"
       ]
     },
     "燼火": {
@@ -7023,6 +7120,12 @@
       "note": "Photo orientation, next to 橫 and 方. Not a person: that is 人像.",
       "max": "one short word"
     },
+    "直接套用": {
+      "en": "Apply edits right away",
+      "where": [
+        "chat"
+      ]
+    },
     "直接打字告訴我想怎麼改就可以。": {
       "en": "Just type what you'd like changed.",
       "where": [
@@ -7203,6 +7306,7 @@
     "移除": {
       "en": "Remove",
       "where": [
+        "panel",
         "chat"
       ],
       "note": "Tooltip on a photo thumbnail: remove this photo from the batch (not object removal)."
@@ -7229,6 +7333,12 @@
       "en": "Remove photo {v1}",
       "where": [
         "chat"
+      ]
+    },
+    "移除這張照片": {
+      "en": "Remove this photo",
+      "where": [
+        "panel"
       ]
     },
     "窗影光線": {
@@ -8155,13 +8265,6 @@
         "panel"
       ]
     },
-    "試試範例照片": {
-      "en": "Try a sample",
-      "where": [
-        "chat"
-      ],
-      "note": "Button in the empty Recent tab; switches to the Samples tab."
-    },
     "詳細解說": {
       "en": "Detailed Explanations",
       "where": [
@@ -8269,6 +8372,12 @@
       "en": "Please check the requested text before using this result.",
       "where": [
         "backend text"
+      ]
+    },
+    "請確認": {
+      "en": "Confirm",
+      "where": [
+        "chat"
       ]
     },
     "請輸入你的名稱。": {
@@ -9164,6 +9273,12 @@
         "chat"
       ]
     },
+    "選好照片後就能切換": {
+      "en": "Available once you pick a photo",
+      "where": [
+        "chat"
+      ]
+    },
     "選好的照片": {
       "en": "Selected photos",
       "where": [
@@ -9284,6 +9399,12 @@
         "chat"
       ]
     },
+    "還沒有照片": {
+      "en": "No photos yet",
+      "where": [
+        "panel"
+      ]
+    },
     "還沒有照片，按「開始對話」挑一張吧。": {
       "en": "No photos yet. Tap “Start a Chat” to choose one.",
       "where": [
@@ -9307,6 +9428,12 @@
       "en": "The {n} photos not yet retouched will follow this; the {done} already being retouched or done stay as they are.",
       "where": [
         "backend text"
+      ]
+    },
+    "還沒美化的原始照片。": {
+      "en": "The original photo, before any retouching.",
+      "where": [
+        "panel"
       ]
     },
     "還沒美化的每張照目前的設定美化，美化過的不重送": {
@@ -9830,10 +9957,22 @@
         "chat"
       ]
     },
+    "顯示全部 {n} 張": {
+      "en": "Show all {n} photos",
+      "where": [
+        "chat"
+      ]
+    },
     "顯示第一階段圖": {
       "en": "Show stage 1 image",
       "where": [
         "panel"
+      ]
+    },
+    "顯示較少": {
+      "en": "Show fewer",
+      "where": [
+        "chat"
       ]
     },
     "風景": {

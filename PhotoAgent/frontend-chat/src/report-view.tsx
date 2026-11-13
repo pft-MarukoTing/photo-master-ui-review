@@ -10,6 +10,8 @@
 // 在首頁、上傳頁回報的還沒有對話，改看回報當下記下的頁面（report-page.ts）。
 import { useLayoutEffect, useEffect, useState } from "preact/hooks";
 import { api, setUser, urls, type ReportRef } from "./api";
+import ycoLogoSymbol from "./assets/yco/logo-symbol.svg";
+import { YcoWordmark } from "./home";
 import {
   activePhoto,
   AskBubble,
@@ -159,10 +161,12 @@ export function ReportView({ reportId }: { reportId: string }) {
 
   return (
     <>
-      <header class="site-header">
+      {/* 跟其他頁同一款 YCO header（home.tsx 的 Header）：左邊 YouCam Online Editor logo，右邊是回報檢視自己的工具。 */}
+      <header class="site-header yco-header">
         <div class="header-inner">
-          <button type="button" class="logo" onClick={leaveReport}>
-            Photo<em>Master</em>
+          <button type="button" class="logo yco-brand" aria-label="YouCam Online Editor" onClick={leaveReport}>
+            <img class="yco-logo-symbol" src={ycoLogoSymbol} alt="" aria-hidden="true" />
+            <YcoWordmark />
           </button>
           {data && report && (
             <div class="report-view-meta">
@@ -196,19 +200,19 @@ export function ReportView({ reportId }: { reportId: string }) {
           <div class="report-view-actions">
             <ReportsButton currentId={reportId} />
             {panelHref ? (
-              <a class="btn btn-secondary btn-sm" href={panelHref} title="用面板模式看左邊這張">
-                <Icon name="layout" size={14} />
-                <span class="btn-label">面板模式</span>
+              <a class="ycoButton variant_secondary tone_neutral size_tiny" href={panelHref} title="用面板模式看左邊這張">
+                <span class="buttonIcon"><Icon name="layout" size={14} /></span>
+                <span class="label">面板模式</span>
               </a>
             ) : (
-              <a class="btn btn-secondary btn-sm" aria-disabled="true" title={report ? (data?.page ? "在首頁或上傳頁回報的，還沒有面板可看" : view === OVERVIEW ? "先在左邊選一張，才有面板可看" : "這張還沒有分析結果，沒有面板可看") : undefined}>
-                <Icon name="layout" size={14} />
-                <span class="btn-label">面板模式</span>
+              <a class="ycoButton variant_secondary tone_neutral size_tiny is-disabled" aria-disabled="true" title={report ? (data?.page ? "在首頁或上傳頁回報的，還沒有面板可看" : view === OVERVIEW ? "先在左邊選一張，才有面板可看" : "這張還沒有分析結果，沒有面板可看") : undefined}>
+                <span class="buttonIcon"><Icon name="layout" size={14} /></span>
+                <span class="label">面板模式</span>
               </a>
             )}
-            <button class="btn btn-secondary btn-sm" type="button" title="回到聊天" onClick={leaveReport}>
-              <Icon name="chat" size={14} />
-              <span class="btn-label">回到聊天</span>
+            <button class="ycoButton variant_secondary tone_neutral size_tiny" type="button" title="回到聊天" onClick={leaveReport}>
+              <span class="buttonIcon"><Icon name="chat" size={14} /></span>
+              <span class="label">回到聊天</span>
             </button>
           </div>
         </div>

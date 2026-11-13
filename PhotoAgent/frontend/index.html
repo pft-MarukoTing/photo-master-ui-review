@@ -10,6 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <!-- YCO design tokens（yco-collab-space platform/tokens/rd/yce-frontend-1.35.1.agent/variables.css，原檔照抄、不改）。 -->
   <link rel="stylesheet" href="assets/yco/yco-tokens-1.35.1.agent.css">
+  <!-- YCO Button（yco-collab-space platform/ui/button/Button.module.css，原檔照抄）。 -->
+  <link rel="stylesheet" href="assets/yco/yco-button.css">
   <link rel="stylesheet" href="styles.css">
   <style>
     [hidden] { display: none !important; }
@@ -469,21 +471,9 @@
       gap: 24px;
     }
     .step-indicator-slot > .ap-step-indicator { flex: 1; min-width: 0; }
-    .step-indicator-slot > .mode-switch { margin: -3px 0 1px; }
-    /* 面板模式的按鈕大多是 .btn-secondary（卡片底＋細框＋小圓角），共用的
-       灰軌道膠囊放在這裡像外來的。只在這裡改成同一套外框，目前那段用淡主色
-       填色，跟對話頁把手旁那顆一致。總高維持 36px（1px 框＋2px 內距＋30px）。 */
-    .step-indicator-slot > .mode-switch {
-      padding: 2px;
-      border: 1px solid var(--border-2);
-      border-radius: 10px;
-      background: var(--card-2);
-    }
-    .step-indicator-slot > .mode-switch .mode-switch-opt { border-radius: 8px; }
-    .step-indicator-slot > .mode-switch .mode-switch-opt.is-active {
-      background: rgba(var(--accent-rgb), .14);
-      box-shadow: none;
-    }
+    /* 「對話｜面板」跟對話模式右上角那組一模一樣（styles.css 的 .mode-switch 膠囊：灰軌道、選中那段白底＋陰影），
+       位置也對齊：對話模式那組在對話卡片標頭裡，離畫面右緣多 16px、往下 5px，這裡補同樣的距離，切換模式時不會跳。 */
+    .step-indicator-slot > .mode-switch { margin: 2px 16px 0 0; }
     /* 這列在的時候開關就是回對話的入口，header 不用再放一顆一樣的。 */
     body:has(#step-indicator-slot:not([hidden])) #chat-ui-btn { display: none; }
     .ap-step {
@@ -4905,7 +4895,7 @@
        （assets/yco/yco-tokens-1.35.1.agent.css），不寫死色碼；YCO token 只有淺色，header 不跟主題換色。
        ≤1279px 沿用上面「logo · 新對話 · 最近照片 · 選單」的窄版；≥1280px 原本按鈕是攤開的，
        這裡改成也收進頭像選單（新對話、最近照片也在裡面），固定定位的回報改由選單那顆代按。 */
-    .site-header.yco-header { background: var(--background-base); backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: 1px solid var(--stroke-weak); box-shadow: none; }
+    .site-header.yco-header { background: var(--background-base); backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: 0; box-shadow: none; }
     body[data-theme-mode] .site-header.yco-header { box-shadow: none; }
     .site-header.yco-header .header-inner { position: relative; max-width: none; padding: 0 var(--spacing-32); gap: var(--spacing-12); }
     .site-header.yco-header .header-icon-btn { color: var(--icon-neutral); }
@@ -4996,9 +4986,352 @@
     /* 一版生了好幾張時，檢視下排每格右上角標第幾張（沿用美化紀錄條的小標）。 */
     #photo-viewer .version-viewer-tile { position: relative; }
     #photo-viewer .version-tile-run { top: 2px; bottom: auto; inset-inline-end: 2px; }
+  
+    /* ══════════════════════════════════════════════════════════════════
+       UI/UX audit — panel mode (deck p7–p14). YCO tokens only. Every rule
+       sits under .pm-panel (panel's <body>), because this <style> block is
+       also pulled into the chat-mode build, which reuses several of these
+       ids/classes (#version-strip, .canvas-btn, .ios-switch…).
+       ══════════════════════════════════════════════════════════════════ */
+
+    /* P01 (p7): Analysis & Adjustments tabs → YCO Tabs (Figma 4157:47006):
+       42px, 9px/16px, no gap, one 4px --stroke-weak line under the row and a
+       4px --stroke-selected line under the current tab. Text only. */
+    .pm-panel .ap-review-tabs { margin: 0; gap: 0; align-items: stretch; box-shadow: inset 0 -4px 0 0 var(--stroke-weak); }
+    .pm-panel .ap-review-tab,
+    .pm-panel .ap-review-tab.is-active {
+      flex: 1 1 0; justify-content: center; gap: 0; min-width: 0; padding: 9px var(--spacing-16);
+      border: 0; border-radius: 0; background: transparent; box-shadow: none;
+      font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small);
+      font-weight: var(--font-weight-strong); color: var(--text-strong);
+    }
+    .pm-panel .ap-review-tab .ic { display: none; }
+    .pm-panel .ap-review-tab:hover { background: linear-gradient(var(--fill-hover), var(--fill-hover)) top / 100% calc(100% - 4px) no-repeat; }
+    .pm-panel .ap-review-tab.is-active { color: var(--text-brand); box-shadow: inset 0 -4px 0 0 var(--stroke-selected); }
+    /* hover 只有被指到的那個 tab 填 fill-hover，不出現外框（焦點框只給鍵盤）。 */
+    .pm-panel .ap-review-tab:hover { box-shadow: none; }
+    .pm-panel .ap-review-tab.is-active:hover { box-shadow: inset 0 -4px 0 0 var(--stroke-selected); }
+    .pm-panel .ap-review-tab:focus-visible:not(:hover) { outline: none; box-shadow: inset 0 0 0 2px var(--stroke-focus); }
+    .pm-panel .ap-review-tab.is-active:focus-visible:not(:hover) { box-shadow: inset 0 -4px 0 0 var(--stroke-selected), inset 0 0 0 2px var(--stroke-focus); }
+    .pm-panel #ap-review-panel { --active-hue: var(--stroke-weak); background: transparent; border: 0; box-shadow: none; outline: 0; }
+    .pm-panel #ap-review-panel > .ap-review-summary { padding: 0; }
+    .pm-panel #ap-review-panel > .ap-toggle-card-body { padding: var(--spacing-16) 0 0; border: 0; box-shadow: none; background: transparent; }
+
+    /* P02 (p7): Style overview stays inline instead of looking like four
+       bordered cards. Category name, preview, carousel dots and selected
+       value form one vertical column; only the image carries selection. */
+    .pm-panel #ap-review-style { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+    .pm-panel #ap-review-style .ap-style-cards {
+      order: 1; flex: 0 1 auto; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      align-items: start; gap: var(--spacing-24); min-height: 0;
+    }
+    .pm-panel #ap-review-style .ap-style-intro {
+      order: 2; margin: var(--spacing-24) 0 0; font-family: var(--font-family-body);
+      font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); color: var(--text-weak);
+    }
+    .pm-panel .ap-style-card-wrap { min-width: 0; }
+    .pm-panel .ap-style-card {
+      display: flex; flex-direction: column; align-items: stretch; gap: var(--spacing-8);
+      width: 100%; padding: 0; border: 0; border-radius: 0; background: transparent;
+      color: var(--text-strong); text-align: start; box-shadow: none; transform: none;
+      transition: none;
+    }
+    .pm-panel .ap-style-card:hover { border: 0; background: transparent; transform: none; }
+    .pm-panel .ap-style-card-name {
+      min-width: 0; padding-inline-end: var(--spacing-24); font-family: var(--font-family-body);
+      font-size: var(--font-size-small); line-height: var(--line-height-small);
+      font-weight: var(--font-weight-strong); color: var(--text-strong); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .pm-panel .ap-style-card-thumbs { display: block; width: 100%; padding: 0 0 var(--spacing-24); }
+    .pm-panel .ap-style-card-stack { width: 100%; max-width: none; aspect-ratio: 2 / 3; perspective: none; }
+    .pm-panel .ap-style-card-deep,
+    .pm-panel .ap-style-card-back,
+    .pm-panel .ap-style-card-front {
+      border: 0; border-radius: var(--corner-radius-4); background: var(--background-alternate);
+      outline: 1px solid oklch(0 0 0 / .1); outline-offset: -1px;
+      transform: none; opacity: 0; transition: opacity .2s ease-out;
+    }
+    html[data-theme="dark"] .pm-panel :is(.ap-style-card-deep,.ap-style-card-back,.ap-style-card-front) {
+      outline-color: oklch(1 0 0 / .1);
+    }
+    .pm-panel .ap-style-card-front { opacity: 1; }
+    .pm-panel .ap-style-card-stack.is-advancing .ap-style-card-front { transform: none; opacity: 0; }
+    .pm-panel .ap-style-card-stack.is-advancing .ap-style-card-back { transform: none; opacity: 1; }
+    .pm-panel .ap-style-card-stack.is-advancing .ap-style-card-deep { transform: none; opacity: 0; }
+    .pm-panel .ap-style-card.is-picked .ap-style-card-front {
+      border: 2px solid var(--stroke-selected); outline: 0;
+    }
+    .pm-panel .ap-style-card:focus-visible { outline: none; }
+    .pm-panel .ap-style-card:focus-visible .ap-style-card-front {
+      box-shadow: 0 0 0 4px var(--stroke-focus);
+    }
+    /* Two-dot carousel indicator. It stays as a spacer after selection so
+       every value label keeps the same baseline. */
+    .pm-panel .ap-style-card-stack::after {
+      content: ""; position: absolute; top: calc(100% + 10px); left: 50%;
+      width: 8px; height: 8px; border-radius: 50%; background: var(--fill-brand-strong);
+      box-shadow: 16px 0 0 var(--fill-disabled); transform: translateX(-12px);
+    }
+    .pm-panel .ap-style-card.is-picked .ap-style-card-stack::after { visibility: hidden; }
+    .pm-panel .ap-style-card-value {
+      min-height: var(--line-height-small); font-family: var(--font-family-body);
+      font-size: var(--font-size-small); line-height: var(--line-height-small);
+      font-weight: var(--font-weight-weak); color: var(--text-weak); text-align: start;
+    }
+    .pm-panel .ap-style-card.is-picked .ap-style-card-value { color: var(--text-brand); font-weight: var(--font-weight-strong); }
+    .pm-panel .ap-style-card-clear {
+      top: 2px; inset-inline-end: 0; width: 20px; height: 20px; border-radius: var(--corner-radius-4);
+      background: transparent; color: var(--icon-neutral); font-size: 18px;
+    }
+    .pm-panel .ap-style-card-clear:hover { background: var(--fill-hover); color: var(--icon-neutral); }
+    @media (max-width: 720px) {
+      .pm-panel #ap-review-style { overflow-y: auto; }
+      .pm-panel #ap-review-style .ap-style-cards { grid-template-columns: repeat(2, minmax(0,1fr)); gap: var(--spacing-24) var(--spacing-16); }
+    }
+
+    /* P04 (p8): My Requests — a labelled, bordered box; 美化 right under it. */
+    .pm-panel .pm-prompt-label {
+      display: block; margin: 0 0 var(--spacing-4);
+      font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small);
+      font-weight: var(--font-weight-strong); color: var(--text-strong);
+    }
+    .pm-panel #ap-review-prompt .ap-prompt-label-row { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+    .pm-panel #ap-review-prompt .ap-prompt-intro { margin: 0 0 var(--spacing-12); font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); color: var(--text-weak); }
+    .pm-panel #ap-review-prompt .field-ta {
+      border: 1px solid var(--stroke-strong); border-radius: var(--corner-radius-8);
+      background: var(--background-base); color: var(--text-strong);
+      font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); padding: var(--spacing-12);
+    }
+    .pm-panel #ap-review-prompt .field-ta::placeholder { color: var(--text-weaker); }
+    .pm-panel #ap-review-prompt .ap-prompt-box { border-radius: var(--corner-radius-8); }
+    .pm-panel #ap-review-prompt .ap-prompt-box:focus-within { box-shadow: 0 0 0 4px var(--stroke-focus); }
+    .pm-panel #ap-review-prompt .ap-prompt-box:focus-within .field-ta { border-color: var(--stroke-selected); }
+    .pm-panel #ap-review-panel:has(#ap-review-tab-prompt.is-active) + .ap-actions-row,
+    .pm-panel #ap-review-panel:has(#ap-review-tab-prompt.is-active) ~ .ap-actions-row { margin-top: var(--spacing-12); }
+
+    /* P05 (p9, P2): Photo Overview — People · Commercial as small badges; Expand/Collapse is a borderless text + chevron button. */
+    .pm-panel .ap-photo-summary-tags { gap: var(--spacing-4); }
+    /* People / Outdoor: small badges (not plain text). */
+    .pm-panel .ap-photo-summary-tags span {
+      padding: 1px var(--spacing-8); border: 0; border-radius: var(--corner-radius-32);
+      background: color-mix(in srgb, var(--text-strong) 8%, transparent); box-shadow: none;
+      font-size: 11px; line-height: 16px; font-weight: var(--font-weight-strong); color: var(--text-weak);
+    }
+    .pm-panel .ap-photo-summary-tags span + span::before { content: none; }
+    .pm-panel .ap-photo-summary-badge {
+      padding: 1px var(--spacing-8); border: 0; border-radius: var(--corner-radius-32);
+      background: color-mix(in srgb, var(--text-strong) 8%, transparent); box-shadow: none;
+      font-size: 11px; line-height: 16px; font-weight: var(--font-weight-strong); color: var(--text-weak);
+    }
+    /* Expand / Collapse: no border; label + Lucide chevron-down (flips when open). */
+    .pm-panel .ap-photo-summary-toggle {
+      min-height: var(--spacing-32); padding: 0 var(--spacing-12); gap: var(--spacing-4);
+      border: 0; border-radius: var(--corner-radius-32);
+      background: transparent; color: var(--text-strong); box-shadow: none; opacity: 1;
+      font-family: var(--font-family-body); font-size: var(--font-size-tiny); font-weight: var(--font-weight-strong);
+    }
+    .pm-panel .ap-photo-summary-toggle::before { display: none; }
+    .pm-panel .ap-photo-summary-toggle::after {
+      content: ""; width: 16px; height: 16px; flex-shrink: 0; background: currentColor; transition: transform .15s;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    .pm-panel .ap-photo-summary-toggle[aria-expanded="true"]::after { transform: rotate(180deg); }
+    .pm-panel .ap-photo-summary-toggle:hover { background: var(--fill-hover); color: var(--text-strong); }
+    .pm-panel .ap-photo-summary-toggle:focus-visible { outline: 0; box-shadow: 0 0 0 4px var(--stroke-focus); }
+
+    /* R01 (p10): canvas icon buttons — a tooltip from aria-label on hover and
+       keyboard focus (app.js drops their native title so it doesn't double). */
+    .pm-panel #compare-card .canvas-actions .canvas-btn { position: relative; }
+    .pm-panel #compare-card .canvas-actions .canvas-btn::after {
+      content: attr(aria-label);
+      position: absolute; top: calc(100% + 8px); right: 0; z-index: 30;
+      padding: var(--spacing-4) var(--spacing-8); border-radius: var(--corner-radius-4);
+      background: var(--background-inverse); color: var(--text-inverse-strong);
+      font-family: var(--font-family-body); font-size: var(--font-size-caption); line-height: var(--line-height-micro); font-weight: var(--font-weight-strong);
+      white-space: nowrap; pointer-events: none;
+      opacity: 0; transform: translateY(-2px); transition: opacity .12s ease, transform .12s ease;
+    }
+    .pm-panel #compare-card .canvas-actions .canvas-btn:is(:hover, :focus-visible)::after { opacity: 1; transform: none; }
+    .pm-panel #compare-card .canvas-actions .canvas-btn[aria-expanded="true"]::after { opacity: 0; }
+
+    /* R03 (p10): the selected version's one-line summary under the strip. */
+    .pm-panel .pm-version-summary {
+      display: flex; align-items: baseline; gap: var(--spacing-8); flex-wrap: wrap;
+      margin: var(--spacing-12) 0 0;
+      font-family: var(--font-family-body); font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); color: var(--text-weak);
+    }
+    .pm-panel .pm-version-summary[hidden] { display: none; }
+    .pm-panel .pm-version-summary-title { color: var(--text-strong); font-weight: var(--font-weight-strong); }
+
+    /* R04 (p10): 再美化 + "Each run creates a new version." beside it, and the
+       run button itself as a YCO Primary · Brand button. */
+    .pm-panel .pm-run-hint { font-family: var(--font-family-body); font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); color: var(--text-weak); }
+    .pm-panel .pm-run-hint[hidden],
+    .pm-panel .ap-settings-run-row:has(#inline-analysis-continue-btn[hidden]) .pm-run-hint { display: none; }
+    .pm-panel #inline-analysis-continue-btn {
+      min-height: 42px; padding: 0 var(--spacing-24); gap: var(--spacing-4);
+      border: 1px solid transparent; border-radius: var(--corner-radius-32);
+      background: var(--fill-brand-strong); color: var(--text-inverse-strong); box-shadow: none;
+      font-family: var(--font-family-body); font-size: var(--font-size-small); font-weight: var(--font-weight-strong);
+    }
+    .pm-panel #inline-analysis-continue-btn:hover:not(:disabled) { background: linear-gradient(var(--fill-hover), var(--fill-hover)), var(--fill-brand-strong); }
+    .pm-panel #inline-analysis-continue-btn:focus-visible { outline: 0; box-shadow: 0 0 0 4px var(--stroke-focus); }
+    .pm-panel #inline-analysis-continue-btn:disabled { background: var(--fill-disabled); color: var(--text-disabled); }
+
+    /* R02 (p11): full screen gets its own × at the top right ("Exit full
+       screen" tooltip); the toolbar's full-screen button steps aside. */
+    .pm-panel .pm-fullscreen-exit { display: none; }
+    .pm-panel #compare-card.is-fullscreen .pm-fullscreen-exit {
+      display: flex; align-items: center; justify-content: center;
+      position: absolute; top: var(--spacing-16); right: var(--spacing-16); z-index: 40;
+      width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%;
+      background: var(--background-raised); color: var(--icon-neutral); cursor: pointer;
+      box-shadow: 0 2px 8px var(--stroke-strong);
+    }
+    .pm-panel #compare-card.is-fullscreen .pm-fullscreen-exit:hover { background: linear-gradient(var(--fill-hover), var(--fill-hover)), var(--background-raised); }
+    .pm-panel #compare-card.is-fullscreen .pm-fullscreen-exit:focus-visible { outline: 0; box-shadow: 0 0 0 4px var(--stroke-focus); }
+    .pm-panel #compare-card.is-fullscreen .pm-fullscreen-exit::after {
+      content: attr(aria-label);
+      position: absolute; top: calc(100% + 8px); right: 0;
+      padding: var(--spacing-4) var(--spacing-8); border-radius: var(--corner-radius-4);
+      background: var(--background-inverse); color: var(--text-inverse-strong);
+      font-family: var(--font-family-body); font-size: var(--font-size-caption); line-height: var(--line-height-micro); font-weight: var(--font-weight-strong);
+      white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .12s ease;
+    }
+    .pm-panel #compare-card.is-fullscreen .pm-fullscreen-exit:is(:hover, :focus-visible)::after { opacity: 1; }
+    .pm-panel #compare-card.is-fullscreen #compare-fullscreen-btn { display: none; }
+    /* The canvas header row sits under the ×: leave it room on the right. */
+    .pm-panel #compare-card.is-fullscreen .canvas-header-row { padding-right: 72px; }
+
+    /* T05 (p12): Portrait Settings toggles — on = brand blue, off = neutral
+       grey, disabled = light grey; the white knob's position says the state.
+       Colors only: each switch keeps its own size. */
+    .pm-panel .ios-track { background: var(--stroke-strong); box-shadow: none; }
+    .pm-panel .ios-switch input:checked + .ios-track { background: var(--fill-brand-strong); box-shadow: none; }
+    .pm-panel .ios-switch input:focus-visible + .ios-track { box-shadow: 0 0 0 3px var(--stroke-focus); }
+    .pm-panel .ios-thumb { background: var(--fill-white); box-shadow: 0 1px 3px var(--stroke-strong); }
+    .pm-panel .ios-switch input:disabled + .ios-track { background: var(--fill-disabled); opacity: .5; }
+    .pm-panel .ios-switch input:disabled + .ios-track .ios-thumb { box-shadow: none; }
+    .pm-panel .ap-face-issue-toggle:has(input:disabled) { opacity: 1; }
+
+    
+    /* 面板模式沒有舊的上傳頁（#upload-section 一律藏起來）：還沒有照片時看到的是工作區的空狀態。 */
+    .pm-panel #upload-section { display: none !important; }
+    .pm-panel #pm-empty { display: none; }
+    .pm-panel:has(#upload-section.visible) #pm-empty { display: block; }
+    .pm-panel #pm-empty .pm-empty-wrap { display: flex; justify-content: center; padding: var(--spacing-20, 20px) var(--spacing-28, 28px); height: calc(100vh - 150px); min-height: 480px; box-sizing: border-box; }
+    .pm-panel #pm-empty .pm-empty-drop {
+      width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--spacing-8);
+      text-align: center; color: var(--text-weak); border: 1px solid var(--stroke-weak); border-radius: var(--corner-radius-24, 24px); background: var(--background-raised, #fff); padding: var(--spacing-28, 28px); box-sizing: border-box;
+    }
+    .pm-panel #pm-empty .pm-empty-inner { flex: 1; align-self: stretch; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--spacing-8);
+      border: 2px dashed var(--stroke-selected); border-radius: var(--corner-radius-16); }
+    .pm-panel #pm-empty .pm-empty-drop.is-over .pm-empty-inner { background: var(--fill-brand-weak); }
+    .pm-panel #pm-empty .pm-empty-drop-icon { display: inline-flex; padding: var(--spacing-16); border-radius: var(--corner-radius-16); background: var(--fill-brand-weak); color: var(--text-brand); }
+    .pm-panel #pm-empty .pm-empty-drop-title { font-size: var(--font-size-large, 18px); font-weight: var(--font-weight-strong); color: var(--text-strong); }
+    .pm-panel #pm-empty .pm-empty-drop-sub { font-size: var(--font-size-tiny); }
+    .pm-panel #pm-empty .pm-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--spacing-12); margin-top: var(--spacing-16); }
+    .pm-sample-modal { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; background: rgba(17,24,26,.45); padding: var(--spacing-16); }
+    .pm-sample-modal[hidden] { display: none; }
+    .pm-sample-card { width: min(720px, 100%); max-height: 80vh; display: flex; flex-direction: column; background: var(--background-overlay, #fff); border-radius: var(--corner-radius-16); box-shadow: 0 16px 48px rgba(0,0,0,.25); overflow: hidden; }
+    .pm-sample-head { display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-16) var(--spacing-20, 20px); border-bottom: 1px solid var(--stroke-weak); }
+    .pm-sample-title { font-weight: var(--font-weight-strong); color: var(--text-strong); }
+    .pm-sample-close { border: 0; background: none; font-size: 22px; line-height: 1; cursor: pointer; color: var(--text-weak); }
+    .pm-sample-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: var(--spacing-8); padding: var(--spacing-16); overflow-y: auto; }
+    .pm-sample-grid button { aspect-ratio: 1; padding: 0; border: 0; border-radius: var(--corner-radius-8); overflow: hidden; cursor: pointer; background: var(--fill-hover); }
+    .pm-sample-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .pm-sample-grid button:hover { outline: 2px solid var(--stroke-selected); }
+    /* 面板的「我的照片」跟對話模式同一個樣子：新增、下載、每張的 ×；沒有「全部美化 / Retouch All」。 */
+    .pm-panel #batch-sidebar .batch-sidebar-all { display: none !important; }
+    .pm-panel #batch-sidebar .batch-sidebar-actions { display: flex; gap: 4px; margin-inline-start: auto; flex: none; }
+    .pm-panel #batch-sidebar .batch-sidebar-actions .batch-download-all-btn { position: static; width: 26px; height: 26px; }
+    .pm-panel #batch-sidebar .batch-sidebar-item { position: relative; }
+    .pm-panel #batch-sidebar .history-cube-remove {
+      position: absolute; top: 6px; inset-inline-end: 6px; z-index: 3; display: flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(17,24,26,.62); color: #fff; font-size: 14px; line-height: 1; cursor: pointer;
+    }
+    .pm-panel #batch-sidebar .history-cube-remove:hover { background: rgba(220,60,60,.9); }
+    /* 步驟列：文字和圖示都縮小（文字 13px、圓圈 22px、勾勾／轉圈 11px）。 */
+    .pm-panel .ap-step { gap: var(--spacing-8); font-size: 13px; line-height: 18px; }
+    .pm-panel .ap-step-num { width: 22px; height: 22px; }
+    .pm-panel .ap-step-num-check { width: 11px; height: 11px; }
+    .pm-panel .ap-step-num-spinner { width: 11px; height: 11px; border-width: 1.5px; }
+    .pm-panel .ap-step-name { font-size: inherit; }
+    .pm-panel .ap-step-line { margin: 0 var(--spacing-8); }
+    /* 手機／窄螢幕步驟直排（圓圈在上、字在下）：連接線對著圓圈中心（圓圈 22px，線 2px → 上緣 10px）。 */
+    @media (max-width: 560px) { .pm-panel .ap-step-line { margin: 10px var(--spacing-8) 0; } }
+    @media (min-width: 561px) and (max-width: 720px) { :root:lang(en) .pm-panel .ap-step-line { margin: 10px var(--spacing-8) 0; } }
+    /* 步驟列跟右邊的 對話｜面板 切換鈕拉開距離。 */
+    @media (min-width: 561px) { .pm-panel .step-indicator-slot > .ap-step-indicator { margin-inline-end: var(--spacing-48, 48px); } }
+    /* 目前這一步：不是轉圈圈，是 2px 藍色邊框的空心圓（勾勾出現時顏色同藍）。 */
+    .pm-panel .ap-step--active .ap-step-num { background: transparent; box-shadow: inset 0 0 0 2px var(--stroke-selected); color: var(--text-brand); }
+    .pm-panel .ap-step--active:not(.ap-step--checked) .ap-step-num-spinner { display: none; }
+    /* 步驟列跟「對話｜面板」切換鈕垂直置中對齊（桌機同一行時）。 */
+    @media (min-width: 561px) {
+      .pm-panel .step-indicator-slot:not([hidden]) { align-items: center; }
+      .pm-panel .step-indicator-slot > .mode-switch { margin-top: 0; margin-bottom: 0; }
+      .pm-panel .step-indicator-slot > .ap-step-indicator { margin-top: 0; margin-bottom: 0; }
+    }
+    /* 「對話｜面板」維持 styles.css 的 .mode-switch 膠囊樣式（跟對話模式標頭那組一樣）。 */
+    /* 從對話模式帶照片過來（takePreHandoff, app.js）：上傳頁已經不用了，接手到開始分析之間先藏起來。 */
+    body.pm-from-chat #upload-section { visibility: hidden; }
+
+    /* W02 (p14): while retouching, the workspace keeps the photo — preview on
+       the left, a YouCam AI Agent status card (title, current step, a
+       progress bar) on the right — instead of rings in an empty column. */
+    .pm-panel .canvas-loading:not([hidden]) {
+      display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); align-items: stretch;
+      gap: var(--spacing-16); height: auto; min-height: max(420px, calc(100vh - var(--header-h) - var(--step-indicator-h, 52px) - 64px)); padding: var(--spacing-16);
+      border: 1px solid var(--stroke-weak); border-radius: var(--corner-radius-16); background: var(--background-base);
+    }
+    .pm-panel .canvas-loading .proc-visual {
+      position: relative; width: auto; height: auto; min-height: 380px; grid-row: auto; align-self: stretch;
+      border-radius: var(--corner-radius-12); overflow: hidden; background: var(--background-alternate);
+    }
+    .pm-panel .canvas-loading .think-ring { display: none; }
+    .pm-panel .canvas-loading .think-center { inset: 0; border-radius: 0; background: none; }
+    .pm-panel .canvas-loading .proc-thumb { border-radius: 0; object-fit: contain; animation: none; filter: none; }
+    .pm-panel .canvas-loading .pm-wait-tag {
+      position: absolute; top: var(--spacing-12); left: var(--spacing-12);
+      padding: var(--spacing-4) var(--spacing-12); border-radius: var(--corner-radius-32);
+      background: var(--background-raised); color: var(--text-strong);
+      font-family: var(--font-family-body); font-size: var(--font-size-caption); line-height: var(--line-height-micro); font-weight: var(--font-weight-strong);
+    }
+    .pm-panel .canvas-loading .pm-wait-card {
+      display: flex; flex-direction: column; justify-content: center; gap: var(--spacing-12);
+      padding: var(--spacing-24); border: 1px solid var(--stroke-weak); border-radius: var(--corner-radius-12); background: var(--background-raised);
+    }
+    .pm-panel .canvas-loading .canvas-loading-eyebrow {
+      display: flex; align-items: center; gap: var(--spacing-8); margin: 0;
+      text-transform: none; letter-spacing: 0; text-align: start;
+      font-family: var(--font-family-body); font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); font-weight: var(--font-weight-strong); color: var(--text-brand);
+    }
+    .pm-panel .pm-agent-avatar {
+      display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%;
+      background: var(--yco-gradient, var(--fill-brand-strong)); color: var(--fill-white);
+    }
+    .pm-panel .canvas-loading .canvas-loading-title {
+      margin: 0; text-align: start; letter-spacing: 0;
+      font-family: var(--font-family-body); font-size: var(--font-size-heading-4); line-height: var(--line-height-heading-4); font-weight: var(--font-weight-strong); color: var(--text-strong);
+    }
+    .pm-panel .canvas-loading .canvas-loading-status {
+      max-width: none; margin: 0; padding: 0; text-align: start;
+      font-family: var(--font-family-body); font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); font-weight: var(--font-weight-weak); color: var(--text-weak);
+    }
+    .pm-panel .pm-wait-progress { position: relative; height: 4px; margin-top: var(--spacing-8); border-radius: 2px; background: var(--fill-press); overflow: hidden; }
+    .pm-panel .pm-wait-progress > span { position: absolute; top: 0; bottom: 0; left: -35%; width: 35%; border-radius: 2px; background: var(--fill-brand-strong); animation: pm-wait-bar 1.6s ease-in-out infinite; }
+    @keyframes pm-wait-bar { to { left: 100%; } }
+    @media (prefers-reduced-motion: reduce) { .pm-panel .pm-wait-progress > span { animation: none; left: 0; width: 35%; } }
+    @media (max-width: 900px) {
+      .pm-panel .canvas-loading:not([hidden]) { grid-template-columns: minmax(0, 1fr); }
+      .pm-panel .canvas-loading .proc-visual { min-height: 280px; }
+    }
   </style>
 </head>
-<body>
+<!-- pm-panel：面板模式專用的樣式掛勾。index.html 的 <style> 也會被帶進對話模式的 build，新加的面板樣式都掛在 .pm-panel 底下，才不會影響對話模式。 -->
+<body class="pm-panel">
 <script>
   // Runs before the rest of <body> is parsed/painted so the saved theme
   // applies on the very first frame -- without this, the body renders
@@ -5027,7 +5360,7 @@
         "caramel": "light"
       };
       var THEME_SCROLLBAR_RGB = {
-        "sky": "6,166,217",
+        "sky": "3,173,226",
         "default": "147,51,234",
         "purple-light": "124,58,237",
         "lilac-dark": "201,103,162",
@@ -5349,14 +5682,14 @@
     <!-- 「對話｜面板」：對話頁對話框標頭那顆的鏡像（樣式在 styles.css 的
          .mode-switch），讓兩邊用同一個地方、同一個樣子互相切換。這裡是面板
          模式，所以「面板」是目前那段，「對話」是連回去的連結；點擊、交接
-         照片、分析或美化中暫停都跟 #chat-ui-btn 走同一套（app.js）。
+         照片交接跟 #chat-ui-btn 走同一套（app.js）；分析或美化中也能切換。
          只在這列出現時才有它，上傳畫面沒有這列，就交給 header 的
          #chat-ui-btn。 -->
     <nav class="mode-switch" aria-label="檢視方式">
       <a id="chat-mode-switch-link" class="mode-switch-opt" href="chat/" title="切換到對話模式">
-        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-          <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" stroke="currentColor"
-            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19.95 10.05a7 7 0 0 1 1.412 7.872 1 1 0 0 0-.058.787l.675 2.089a1 1 0 0 1-1.236 1.168l-2.155-.631a1 1 0 0 0-.745.06 7 7 0 0 1-7.793-1.445"/>
+          <path d="M2.696 12.708a1 1 0 0 0-.058-.785 7 7 0 1 1 3.518 3.473 1 1 0 0 0-.744-.061l-2.155.63a1 1 0 0 1-1.236-1.167z"/>
         </svg>
         對話
       </a>
@@ -5760,6 +6093,36 @@
     </div>
   </section>
 
+  <!-- 面板模式沒有舊的上傳頁：還沒有照片時直接是工作區的空狀態（我的照片／預覽／分析與調整都是空的）。
+       選了照片就走跟對話模式帶過來一樣的流程（startFromEmpty, app.js），落在工作區。 -->
+  <section id="pm-empty" class="section" aria-label="尚未上傳照片">
+    <div class="container pm-empty-wrap">
+      <div class="pm-empty-drop" id="pm-empty-drop">
+       <div class="pm-empty-inner">
+        <span class="pm-empty-drop-icon" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></span>
+        <span class="pm-empty-drop-title">上傳一張照片開始</span>
+        <span class="pm-empty-drop-sub">也可以把照片拖到這裡</span>
+        <div class="pm-empty-actions">
+          <button type="button" class="ycoButton variant_primary tone_brand size_medium" id="pm-empty-upload-btn">
+            <span class="buttonIcon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></span>
+            <span class="label">上傳照片</span>
+          </button>
+          <button type="button" class="ycoButton variant_secondary tone_neutral size_medium" id="pm-empty-sample-btn">
+            <span class="label">從範例照片挑選</span>
+          </button>
+        </div>
+       </div>
+      </div>
+    </div>
+    <div class="pm-sample-modal" id="pm-sample-modal" hidden role="dialog" aria-modal="true" aria-label="從範例照片挑選">
+      <div class="pm-sample-card">
+        <div class="pm-sample-head"><span class="pm-sample-title">從範例照片挑選</span>
+          <button type="button" class="pm-sample-close" id="pm-sample-close" aria-label="關閉">×</button></div>
+        <div class="pm-sample-grid" id="pm-sample-grid"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ══════════════════════════════════
        SCREEN 2 — PROCESSING
   ══════════════════════════════════ -->
@@ -6043,7 +6406,7 @@
                       <div class="ap-body-reshape-control" id="ap-body-reshape-control" hidden aria-live="polite"></div>
                     </div>
                     <div class="ap-review-style" id="ap-review-style" hidden>
-                      <p class="ap-style-intro">換一種拍法，重新詮釋照片氛圍</p>
+                      <p class="ap-style-intro">未選擇的分類會輪播兩張預覽照片。</p>
                       <!-- Stacked preview images filled by fillStyleCardStack
                            (results.js); clicking a card opens that category's
                            full example-image grid in #ap-style-modal. -->
@@ -6112,6 +6475,8 @@
                     </div>
                     <div class="form-field ap-options-prompt" id="ap-review-prompt" hidden>
                       <div class="ap-prompt-label-row">
+                        <!-- P04：輸入框有自己的標籤，下面一行說明。 -->
+                        <label class="pm-prompt-label" for="prompt">你的需求</label>
                         <p class="ap-prompt-intro">說出你的想法，打造專屬美化效果</p>
                       </div>
                       <!-- The request and its 僅依需求修改 tray read as one box.
@@ -6190,6 +6555,8 @@
                          updateApCaseSettingsTrigger owns its `hidden`, so it
                          shows only beside a visible 美化. -->
                     <button id="ap-skip-analyze-btn" class="analysis-preview-action ap-skip-analyze-btn" type="button" hidden>幫我分析</button>
+                    <!-- R04：已經有版本時，按鈕是「再美化」，旁邊提示每次都會產生新版本（syncRedoLabel, app.js）。 -->
+                    <span id="ap-run-new-version-hint" class="pm-run-hint" hidden>每次美化都會產生一個新版本。</span>
                     <button id="inline-analysis-continue-btn" class="analysis-preview-action analysis-preview-action-right" type="button" hidden>
                       <span>美化</span>
                       <svg class="icon-mirror" width="14" height="14" fill="none" viewBox="0 0 24 24">
@@ -6263,13 +6630,18 @@
       </button>
       <div class="batch-sidebar-header">
         <h2 id="batch-sidebar-title" class="batch-sidebar-title">我的照片</h2>
-        <button id="batch-download-all-btn" class="batch-download-all-btn" type="button" hidden
+        <div class="batch-sidebar-actions">
+          <button id="batch-add-btn" class="batch-download-all-btn" type="button" title="新增照片" aria-label="新增照片">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button id="batch-download-all-btn" class="batch-download-all-btn" type="button" hidden
           title="全部下載" aria-label="全部下載">
-          <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
             <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
+        </div>
       </div>
       <div class="batch-sidebar-all">
         <button id="batch-continue-all-btn" class="batch-sidebar-chip batch-continue-all-btn" type="button" hidden>
@@ -6343,6 +6715,11 @@
             <!-- Before / After: one full-bleed canvas, toggled between the two
                  images with floating icon buttons instead of a boxed header. -->
             <div class="compare-card" id="compare-card">
+            <!-- R02：全螢幕時右上角獨立的 ×（只在 .is-fullscreen 顯示），提示「返回原視窗」；
+                 工具列上的全螢幕鈕這時收起來，比較和下載留在工具列。 -->
+            <button id="compare-fullscreen-exit-btn" class="pm-fullscreen-exit" type="button" aria-label="返回原視窗">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
             <div class="photo-frame-wrap" id="photo-frame-wrap">
               <!-- Header row floating over the top of the photo: persistent
                    Original/Result hint (left), "N / total" RUN counter
@@ -6507,6 +6884,7 @@
                  (backToProcessFromResults, app.js), rather than dimming/
                  blurring the previous result underneath it, since none of
                  those controls act on anything meaningful mid-regenerate. -->
+            <!-- W02：等待時保留照片預覽（左），狀態放在旁邊的卡片（右），不再是一整頁的等待畫面。 -->
             <div id="canvas-loading" class="canvas-loading" hidden>
               <div class="proc-visual" id="canvas-loading-visual">
                 <div class="think-ring"></div>
@@ -6515,10 +6893,19 @@
                 <div class="think-center">
                   <img id="canvas-loading-thumb" class="proc-thumb" alt="">
                 </div>
+                <span class="pm-wait-tag">照片預覽</span>
               </div>
-              <p id="canvas-loading-eyebrow" class="canvas-loading-eyebrow">Photo Master is working</p>
-              <h2 id="canvas-loading-title" class="canvas-loading-title"></h2>
-              <p id="canvas-loading-status" class="canvas-loading-status"></p>
+              <div class="pm-wait-card">
+                <p id="canvas-loading-eyebrow" class="canvas-loading-eyebrow">
+                  <span class="pm-agent-avatar" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+                  </span>
+                  YouCam AI Agent
+                </p>
+                <h2 id="canvas-loading-title" class="canvas-loading-title"></h2>
+                <p id="canvas-loading-status" class="canvas-loading-status"></p>
+                <div class="pm-wait-progress" aria-hidden="true"><span></span></div>
+              </div>
             </div>
             <!-- Shown for as long as any RUN of a multi-RUN job is still
                  generating in the background while an earlier (already
@@ -6574,6 +6961,11 @@
                 </button>
               </div>
               <div id="version-strip-track" class="version-strip-track" role="tablist" aria-label="這張照片的美化紀錄"></div>
+              <!-- R03：選中那一版改了什麼，一行摘要（syncVersionStripSummary, app.js）。 -->
+              <p id="version-strip-summary" class="pm-version-summary" aria-live="polite" hidden>
+                <strong id="version-strip-summary-title" class="pm-version-summary-title"></strong>
+                <span id="version-strip-summary-text" class="pm-version-summary-text"></span>
+              </p>
             </div>
             </div>
           </div>

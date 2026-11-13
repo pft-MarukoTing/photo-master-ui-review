@@ -3560,6 +3560,7 @@
         }));
       }
       if (panelRun()?.versionId === versionId) paintSkipHint();
+      syncVersionStripSummary();
     };
     (async () => {
       for (let attempt = 0; attempt < VERSION_NOTE_MAX_POLLS; attempt += 1) {
@@ -4531,17 +4532,14 @@
     if (!FLOW_STAGE_STEPS[stage]) return;
     flowStage = stage;
     renderStepIndicator();
-    // The ways to 對話模式 (#chat-ui-btn in the header, and the 對話 half of
-    // the step row's 對話｜面板 switch) are held while 分析/修圖 is running:
-    // the chat page would open the case on a half-done job. They're links, so
-    // aria-disabled (styled in index.html / styles.css) plus the click
-    // handler's guard.
-    const busy = stage === "analyzing" || stage === "editing";
+    // Chat／Panel are view choices, so switching stays available while analysis
+    // or retouching is running. The existing handoff carries the current photo
+    // and any transferable state to the other view.
     for (const id of ["chat-ui-btn", "chat-mode-switch-link"]) {
       const link = document.getElementById(id);
       if (!link) continue;
-      link.toggleAttribute("aria-disabled", busy);
-      link.title = busy ? tr("分析或美化完成後才能切換") : tr("切換到對話模式");
+      link.removeAttribute("aria-disabled");
+      link.title = tr("切換到對話模式");
     }
     // #page-scroll-hint gates on this stage (PAGE_SCROLL_HINT_STAGES), and
     // entering/leaving 修圖中 happens in place on the results page -- no
@@ -5094,8 +5092,16 @@
     if (!label) return;
     const cont = activeContinuation();
     const redo = cont && continuationRedoSource(cont);
-    const from = redo && singleRuns.find((run) => run.versionId === redo.version_id)?.versionNumber;
-    label.textContent = redo ? tr("再美化") : tr("美化");
+    // singleRuns is null until a photo has run once (a fresh upload starting its first analysis).
+    const runs = Array.isArray(singleRuns) ? singleRuns : [];
+    const from = redo && runs.find((run) => run.versionId === redo.version_id)?.versionNumber;
+    // R04 (UI/UX audit p10): once this photo already has a version, the
+    // button says 再美化 and the hint beside it says the run adds a version.
+    const hasVersion = runs.some((run) => run.versionNumber != null);
+    label.textContent = redo || hasVersion ? tr("再美化") : tr("美化");
+    const hint = document.getElementById("ap-run-new-version-hint");
+    // Shown only beside a visible button: CSS hides it while #inline-analysis-continue-btn is hidden.
+    if (hint) hint.hidden = !hasVersion;
     if (redo && from != null) btn.title = tr("需求沒改，會從第 {n} 版照一樣的需求再做一版", { n: from });
     else btn.removeAttribute("title");
   }
@@ -6717,7 +6723,8 @@
     // function's OWN direct showPendingResults/renderAnalysisPreview calls,
     // which aren't behind finishSingleFlow's guard at all.
     const myHistoryToken = historyViewToken;
-    if (batchRecords.length > 1) {
+    // 從對話模式帶過來的單張也走批次那條（handoffBatchFlow, takePreHandoff）：一開始就在工作區，不經過舊的處理中整頁。
+    if (batchRecords.length > 1 || (handoffBatchFlow && batchRecords.length === 1)) {
       await startSubmitBatch(skipReview);
       return;
     }
@@ -8560,11 +8567,78 @@
     item.appendChild(media);
     item.appendChild(badge);
     if (record.status === "error") item.title = record.error || tr("處理失敗");
+    // × 移除這張（跟對話模式「我的照片」一樣）；分析或美化進行中的先不給移除。
+    if (record.status !== "analyzing" && record.status !== "processing" && !runsRunning) {
+      const rm = document.createElement("span");
+      rm.className = "history-cube-remove";
+      rm.setAttribute("role", "button");
+      rm.tabIndex = 0;
+      rm.title = tr("移除");
+      rm.setAttribute("aria-label", tr("移除這張照片"));
+      rm.textContent = "×";
+      const doRemove = (event) => { event.preventDefault(); event.stopPropagation(); removeWorkspacePhoto(record); };
+      rm.addEventListener("click", doRemove);
+      rm.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") doRemove(event); });
+      item.appendChild(rm);
+    }
     item.addEventListener("click", async () => {
       if (record !== currentBatchRecord && !(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
       selectBatchRecord(record);
     });
     return item;
+  }
+
+  // 工作區「我的照片」的 ×：移掉這張。最後一張移掉就回到空狀態；移掉的是正在看的那張，改看第一張。
+  async function removeWorkspacePhoto(record) {
+    const index = batchRecords.indexOf(record);
+    if (index === -1) return;
+    if (record === currentBatchRecord && !(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
+    batchRecords.splice(index, 1);
+    if (record.previewUrl) URL.revokeObjectURL(record.previewUrl);
+    if (record.thumbUrl) URL.revokeObjectURL(record.thumbUrl);
+    if (!batchRecords.length) { resetApp(); return; }
+    renderBatchSidebarList();
+    updateBatchDownloadAllVisibility();
+    if (record === currentBatchRecord) selectBatchRecord(batchRecords[0]);
+  }
+
+  // 工作區「我的照片」的 +：加幾張進來，只分析新加的（本機分析走工作區自己的流程）。
+  async function addWorkspacePhotos(fileList) {
+    const images = filterBatchImageFiles([...fileList]);
+    if (!images || !images.length || !batchSettings) return;
+    fileSelectionToken++;
+    const fresh = images.map((file) => makeBatchRecord(file));
+    batchRecords = batchRecords.concat(fresh);
+    fresh.forEach((record) => convertBatchRecord(record));
+    for (let waited = 0; waited < 8000 && fresh.some((r) => r.previewPending); waited += 100) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const uploadedAt = Date.now() / 1000;
+    fresh.forEach((r) => {
+      r.uploadedAt = uploadedAt;
+      r.status = "analyzing";
+      r.analysisModel = batchSettings.analysisModel;
+    });
+    renderBatchSidebarList();
+    updateBatchDownloadAllVisibility();
+    try {
+      const entries = await analyzeJobBatch({
+        files: fresh.map((r) => r.file), preset: batchSettings.presetKey, imageQuality: batchSettings.imageQuality,
+        imageModel: batchSettings.imageModel, analysisModel: batchSettings.analysisModel, aspectRatio: batchSettings.aspectRatio,
+        outputScale: batchSettings.outputScale, aiPhotoEditing: batchSettings.aiPhotoEditing,
+        advancedOptions: batchSettings.advancedOptions, user: getCurrentUser()
+      });
+      fresh.forEach((r, i) => {
+        const entry = entries[i];
+        if (entry && entry.job_id) { r.analyzeJobId = entry.job_id; r.analyzeSubmittedAt = Date.now(); }
+        else { r.status = "error"; r.error = (entry && entry.error) || tr("送出分析失敗"); }
+        updateBatchSidebarItem(r);
+      });
+      await runBatchPool(fresh.filter((r) => r.status === "analyzing" && r.analyzeJobId), analyzeBatchItem, POLL_CONCURRENCY);
+    } catch (error) {
+      fresh.forEach((r) => { r.status = "error"; r.error = friendlyError(error); updateBatchSidebarItem(r); });
+      showError(friendlyError(error));
+    }
   }
 
   function updateBatchSidebarItem(record) {
@@ -12364,7 +12438,7 @@
     caramel: "light",
   };
   const THEME_SCROLLBAR_RGB = {
-    sky: "6,166,217",
+    sky: "3,173,226",
     default: "147,51,234",
     "purple-light": "124,58,237",
     ocean: "14,165,194",
@@ -13306,6 +13380,7 @@
     if (els.versionStripTrack) els.versionStripTrack.textContent = "";
     versionStripRuns = null;
     versionStripCurrentIdx = null;
+    syncVersionStripSummary();
     hideVersionTilePreview();
     closeVersionStripPreviewModal();
     syncPhotoViewer();
@@ -13499,6 +13574,41 @@
     });
     syncAdjustingTile();
     syncPhotoViewer();
+    syncVersionStripSummary();
+  }
+
+  // R03 (UI/UX audit p10): one line under 美化紀錄 saying what the selected
+  // version changed -- its note (the same one #ap-skip-hint shows, written by
+  // the backend per version) or, until that lands, the short fallback line
+  // paintSkipHint uses. The 原圖 tile gets its own line; nothing selected or
+  // no strip, no line.
+  function syncVersionStripSummary() {
+    const box = document.getElementById("version-strip-summary");
+    if (!box) return;
+    const title = document.getElementById("version-strip-summary-title");
+    const text = document.getElementById("version-strip-summary-text");
+    const runs = versionStripRuns;
+    const run = runs && versionStripCurrentIdx != null ? runs[versionStripCurrentIdx] : null;
+    if (!runs || (!run && !versionStripOriginPicked)) {
+      box.hidden = true;
+      return;
+    }
+    if (versionStripOriginPicked) {
+      title.textContent = tr("原圖");
+      text.textContent = tr("還沒美化的原始照片。");
+      box.hidden = false;
+      return;
+    }
+    if (run.versionNumber == null) {
+      box.hidden = true;
+      return;
+    }
+    if (!run.versionNote && versionNotes.has(run.versionId)) run.versionNote = versionNotes.get(run.versionId);
+    const request = (run.versionParams?.user_prompt || "").trim();
+    title.textContent = tr("第 {n} 版", { n: run.versionNumber });
+    text.textContent = run.versionNote || (request ? tr("依你的需求調整：「{request}」", { request })
+      : isContinuationRun(run) ? tr("依你挑的風格調整。") : tr("依 AI 分析的建議美化。"));
+    box.hidden = false;
   }
 
   // Touch has no hover, so .version-tile-preview turns itself off below the
@@ -15664,7 +15774,6 @@
     if (!chatUiLink) continue;
     chatUiLink.setAttribute("href", `chat/${location.search}`);
     chatUiLink.addEventListener("click", async (event) => {
-      if (chatUiLink.hasAttribute("aria-disabled")) { event.preventDefault(); return; }
       // A new tab leaves this page as it is.
       if (event.metaKey || event.ctrlKey || event.shiftKey) return;
       event.preventDefault();
@@ -15680,6 +15789,8 @@
           caseKey = null; // not in history yet -- just open the chat page
         }
       }
+      // 還沒有 case：把照片放進 IndexedDB，對話頁接回上傳頁選好照片那一步（frontend-chat/src/pre-handoff.ts takeBackHandoff）。
+      if (!caseKey) await writeBackPhotos();
       if (!writeModeHandoff(caseKey) && isReviewDirty()) {
         const leave = await showConfirmModal(
           tr("這張照片還沒美化的調整沒辦法帶到對話模式，切過去就會清掉。確定要切換嗎？"),
@@ -15692,6 +15803,167 @@
     });
   }
   setupHeaderMenu();
+  async function writeBackPhotos() {
+    try {
+      const files = batchRecords.length ? batchRecords.map((r) => r.file) : (selectedFile ? [selectedFile] : []);
+      const photos = files.filter(Boolean).map((f) => ({ name: f.name, blob: f }));
+      if (!photos.length || !window.indexedDB) return;
+      const db = await new Promise((resolve, reject) => {
+        const req = indexedDB.open("photoagent-pre-handoff", 1);
+        req.onupgradeneeded = () => req.result.createObjectStore("pending");
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction("pending", "readwrite");
+        tx.objectStore("pending").put({ at: Date.now(), photos }, "back");
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+    } catch (_) { /* 存不了就照舊切過去 */ }
+  }
+  // 對話模式上傳頁（還沒分析、沒有 case）按「面板」帶過來的照片：存在 IndexedDB
+  // （frontend-chat/src/pre-handoff.ts 寫的，格式改那邊要一起改）。讀了就刪，只接兩分鐘內的。
+  // 自己的檔案直接是 Blob；範例照片和已上傳的照片給網址，這裡抓下來變成檔案，走面板模式自己的選照片流程。
+  const PRE_HANDOFF_DB = "photoagent-pre-handoff";
+  // 對話模式帶過來的照片一律走批次流程（連只有一張也是）：工作區（我的照片＋預覽＋分析）一開始就出現，
+  // 失敗也是在工作區裡顯示，不會退回已經不用的上傳頁。只對這次接手有效，面板模式自己上傳的單張照舊。
+  let handoffBatchFlow = false;
+  async function takePreHandoff() {
+    if (/(^|[#&])case=/.test(location.hash.slice(1)) || !window.indexedDB) return;
+    const data = await new Promise((resolve) => {
+      let req;
+      try { req = indexedDB.open(PRE_HANDOFF_DB, 1); } catch (_) { resolve(null); return; }
+      req.onupgradeneeded = () => req.result.createObjectStore("pending");
+      req.onerror = () => resolve(null);
+      req.onsuccess = () => {
+        const db = req.result;
+        let value = null;
+        try {
+          const tx = db.transaction("pending", "readwrite");
+          const store = tx.objectStore("pending");
+          const get = store.get("photos");
+          get.onsuccess = () => { value = get.result || null; store.delete("photos"); };
+          tx.oncomplete = () => { db.close(); resolve(value); };
+          tx.onerror = () => { db.close(); resolve(null); };
+        } catch (_) { db.close(); resolve(null); }
+      };
+    });
+    if (!data || !Array.isArray(data.photos) || !data.photos.length || Date.now() - (data.at || 0) > 2 * 60 * 1000) return;
+    // 面板模式已經沒有上傳頁了：接手時先把它藏起來，照片放好就直接按「分析」，落在工作區（分析與調整）。
+    document.body.classList.add("pm-from-chat");
+    const files = [];
+    for (const p of data.photos) {
+      try {
+        let blob = p.blob || null;
+        if (!blob && p.url) {
+          const res = await fetch(p.url);
+          if (!res.ok) continue;
+          blob = await res.blob();
+        }
+        if (blob) files.push(new File([blob], p.name || "photo.jpg", { type: blob.type || "image/jpeg" }));
+      } catch (_) { /* 這張抓不到就跳過 */ }
+    }
+    if (!files.length) { document.body.classList.remove("pm-from-chat"); return; }
+    handoffBatchFlow = true;
+    await setSelectedFileBatch(files);
+    // 每張的預覽圖是背景轉的（convertBatchRecord）：等轉好再開始，不然工作區會先拿到空的圖畫出來。
+    for (let waited = 0; waited < 8000 && batchRecords.some((r) => r.previewPending); waited += 100) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    // 上傳頁已經打好的需求，放進面板模式的「你的需求」。開始分析時會先清空這欄，所以開始之後再放一次。
+    const putPrompt = () => {
+      if (typeof data.prompt !== "string" || !data.prompt || !els.promptInput) return;
+      els.promptInput.value = data.prompt;
+      els.promptInput.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    putPrompt();
+    // 跟使用者自己按「分析」走同一條路（有開預估花費就照樣先問）。
+    if (els.startButton) {
+      els.startButton.disabled = false;
+      els.startButton.click();
+    }
+    setTimeout(putPrompt, 600);
+    // 分析開始後畫面已經換到處理中；取消或失敗時才看得到上傳頁，那時再把它放出來。
+    setTimeout(() => document.body.classList.remove("pm-from-chat"), 1500);
+  }
+  takePreHandoff();
+  // 面板模式的空狀態工作區（index.html #pm-empty）：選照片／拖進來，跟對話模式帶過來同一條路（批次流程、直接分析、落在工作區）。
+  async function startFromEmpty(fileList) {
+    const files = [...fileList].filter((f) => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
+    if (!files.length) return;
+    handoffBatchFlow = true;
+    document.body.classList.add("pm-from-chat");
+    await setSelectedFileBatch(files);
+    for (let waited = 0; waited < 8000 && batchRecords.some((r) => r.previewPending); waited += 100) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (els.startButton) { els.startButton.disabled = false; els.startButton.click(); }
+    setTimeout(() => document.body.classList.remove("pm-from-chat"), 1500);
+  }
+  (function setupEmptyWorkspace() {
+    const drop = document.getElementById("pm-empty-drop");
+    const btn = document.getElementById("pm-empty-upload-btn");
+    if (!drop) return;
+    // 空狀態的步驟列停在第一步「上傳」（一載入還沒切過畫面，這裡先設好）。
+    const stepSlot = document.getElementById("step-indicator-slot");
+    if (stepSlot && document.body.classList.contains("pm-panel")) stepSlot.hidden = false;
+    document.querySelectorAll("#ap-step-indicator .ap-step").forEach((el, i) => {
+      el.classList.toggle("ap-step--done", false);
+      el.classList.toggle("ap-step--active", i === 0);
+    });
+    document.querySelectorAll("#ap-step-indicator .ap-step-line").forEach((el) => el.classList.remove("ap-step-line--active"));
+    const pick = () => {
+      // 用自己的暫時 input，不動上傳頁原本那顆的 change 流程。
+      const tmp = document.createElement("input");
+      tmp.type = "file"; tmp.accept = "image/*,.heic,.heif"; tmp.multiple = true; tmp.hidden = true;
+      tmp.addEventListener("change", () => { if (tmp.files && tmp.files.length) startFromEmpty(tmp.files); tmp.remove(); });
+      document.body.appendChild(tmp);
+      tmp.click();
+    };
+    if (btn) btn.addEventListener("click", pick);
+    ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("is-over"); }));
+    ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("is-over"); }));
+    drop.addEventListener("drop", (e) => { if (e.dataTransfer && e.dataTransfer.files.length) startFromEmpty(e.dataTransfer.files); });
+
+    // 從範例照片挑選：一個小視窗列出範例，點哪張就用哪張開始。
+    const modal = document.getElementById("pm-sample-modal");
+    const grid = document.getElementById("pm-sample-grid");
+    const sampleBtn = document.getElementById("pm-empty-sample-btn");
+    const closeModal = () => { if (modal) modal.hidden = true; };
+    if (sampleBtn && modal && grid) {
+      sampleBtn.addEventListener("click", async () => {
+        modal.hidden = false;
+        if (!grid.children.length) {
+          const names = demoImagesCache || (await getDemoImages().catch(() => [])) || [];
+          names.forEach((name) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.title = name;
+            const im = document.createElement("img");
+            im.src = demoImageThumbnailUrl(name);
+            im.alt = name;
+            im.loading = "lazy";
+            b.appendChild(im);
+            b.addEventListener("click", async () => {
+              try {
+                const response = await fetch(demoImageUrl(name));
+                if (!response.ok) throw new Error("fetch failed");
+                const blob = await response.blob();
+                closeModal();
+                startFromEmpty([new File([blob], name, { type: blob.type || "image/jpeg" })]);
+              } catch (_) { showError(tr("無法載入範例照片。")); }
+            });
+            grid.appendChild(b);
+          });
+        }
+      });
+      document.getElementById("pm-sample-close").addEventListener("click", closeModal);
+      modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+    }
+  })();
   // Reload, close, or any other way off the page: the browser's own leave
   // prompt (its wording cannot be changed) when review edits are unsent.
   window.addEventListener("beforeunload", (event) => {
@@ -15710,7 +15982,7 @@
     // Nothing uploaded yet -- startSubmit's own "請先上傳一張照片" error is
     // the right response, not a cost estimate for a request that's about to
     // be rejected anyway (same condition startSubmit itself checks).
-    if (!selectedFile && batchRecords.length <= 1) { startSubmit({ skipReview: false }); return; }
+    if (!selectedFile && batchRecords.length <= 1 && !(handoffBatchFlow && batchRecords.length === 1)) { startSubmit({ skipReview: false }); return; }
     const confirmed = await showPreflightCostModal([analysisPreflightStep()]);
     if (!confirmed) return;
     startSubmit({ skipReview: false });
@@ -15826,6 +16098,25 @@
   }
   if (els.compareFullscreenBtn) els.compareFullscreenBtn.addEventListener("click", toggleCompareFullscreen);
   if (els.compareFullscreenBackdrop) els.compareFullscreenBackdrop.addEventListener("click", closeCompareFullscreen);
+  // R02 (UI/UX audit p11): the standalone × shown only in full screen.
+  document.getElementById("compare-fullscreen-exit-btn")?.addEventListener("click", closeCompareFullscreen);
+  // R01 (UI/UX audit p10): the canvas icon buttons show a tooltip built from
+  // their aria-label (CSS, .pm-panel .canvas-actions .canvas-btn::after) on
+  // hover and keyboard focus. Their title is set in several places alongside
+  // aria-label; it is dropped here as it lands so the browser's own tooltip
+  // doesn't show on top of it.
+  (() => {
+    const bar = document.querySelector("#compare-card .canvas-actions");
+    if (!bar || typeof MutationObserver !== "function") return;
+    const strip = (el) => {
+      if (!el.matches?.(".canvas-btn") || !el.hasAttribute("title")) return;
+      if (!el.getAttribute("aria-label")) el.setAttribute("aria-label", el.getAttribute("title"));
+      el.removeAttribute("title");
+    };
+    bar.querySelectorAll(".canvas-btn").forEach(strip);
+    new MutationObserver((changes) => changes.forEach((c) => strip(c.target)))
+      .observe(bar, { subtree: true, attributes: true, attributeFilter: ["title"] });
+  })();
   if (els.reportBtn) els.reportBtn.addEventListener("click", openReportModal);
   syncReportBtnPosition();
   if (els.reportModalClose) els.reportModalClose.addEventListener("click", closeReportModal);
@@ -16120,6 +16411,17 @@
   });
   if (els.batchContinueAllBtn) els.batchContinueAllBtn.addEventListener("click", batchContinueAll);
   if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.addEventListener("click", handleDownloadAllBatchClick);
+  (function setupWorkspaceAdd() {
+    const add = document.getElementById("batch-add-btn");
+    if (!add) return;
+    add.addEventListener("click", () => {
+      const tmp = document.createElement("input");
+      tmp.type = "file"; tmp.accept = "image/*,.heic,.heif"; tmp.multiple = true; tmp.hidden = true;
+      tmp.addEventListener("change", () => { if (tmp.files && tmp.files.length) addWorkspacePhotos(tmp.files); tmp.remove(); });
+      document.body.appendChild(tmp);
+      tmp.click();
+    });
+  })();
   if (els.batchDrawerTrigger) els.batchDrawerTrigger.addEventListener("click", openBatchDrawer);
   if (els.batchSidebarCloseBtn) els.batchSidebarCloseBtn.addEventListener("click", closeBatchDrawer);
   if (els.batchSidebarBackdrop) els.batchSidebarBackdrop.addEventListener("click", closeBatchDrawer);

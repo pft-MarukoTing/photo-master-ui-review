@@ -99,6 +99,7 @@ export const EN: Record<string, string> = {
     "Switching to this photo clears the requests you typed and the settings you chose. Switch anyway?",
   "更換": "Switch",
   "取消": "Cancel",
+  "請確認": "Confirm",
   "一次最多只能選 {MAX_BATCH} 張，先放前 {v2} 張。": "You can choose up to {MAX_BATCH} at a time, so only the first {v2} were added.",
   "有 {v1} 個檔案不是圖片，先略過。": "{v1} {v1, plural, one{file isn't an image and was} other{files aren't images and were}} skipped.",
   "已經選滿 {MAX_BATCH} 張了。想新增照片的話，建議先移除幾張，或按「全部清除」重新選，再新增其他照片。":
@@ -440,7 +441,6 @@ export const EN: Record<string, string> = {
   "範例": "Samples",
   "還沒有最近照片": "No recent photos yet",
   "修過的照片會出現在這裡。": "Photos you edit will appear here.",
-  "試試範例照片": "Try a sample",
   "使用所選照片（{length} 張）": "Use Selected Photos ({length})",
   "使用所選照片": "Use Selected Photo",
   "全部刪除": "Delete All",
@@ -512,6 +512,16 @@ export const EN: Record<string, string> = {
 
   // results.tsx
   "上傳": "Upload",
+  "選好照片後就能切換": "Available once you pick a photo",
+  "顯示較少": "Show fewer",
+  "顯示全部 {n} 張": "Show all {n} photos",
+  "先看建議": "Review suggestions first",
+  "直接套用": "Apply edits right away",
+  "比較": "Compare",
+  "全螢幕": "Full Screen",
+  "拖曳照片到這裡，或點一下上傳": "Drop photos here, or click to upload",
+  "切換成深色模式": "Switch to dark mode",
+  "切換成淺色模式": "Switch to light mode",
   "完成": "Done",
   "美化流程": "Retouching steps",
   "人像調整": "Portrait",

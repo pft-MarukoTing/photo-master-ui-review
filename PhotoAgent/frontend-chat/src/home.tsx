@@ -9,7 +9,8 @@ import heroAfter from "./assets/hero_after.jpg";
 import heroBefore from "./assets/hero_before.jpg";
 // YouCam Online Editor 的 logo，從 yco-collab-space 的 design-library 複製（NavigationHeader 用的同一份）。
 import ycoLogoSymbol from "./assets/yco/logo-symbol.svg";
-import ycoWordmark from "./assets/yco/logo-en-desktop.svg";
+import ycoWordmarkSvg from "./assets/yco/logo-en-desktop.svg?raw";
+import { readTheme, THEME_MODE } from "./theme";
 import { Icon } from "./icons";
 import { ReportsButton } from "./reports";
 import {
@@ -217,6 +218,7 @@ function ChangelogModal(props: { onClose: () => void }) {
 // 面板模式 #confirm-modal 的版型：一句話、兩個選項。Esc 跟點背景都算留下；
 // 兩個選項都會往下走的，給 onDismiss，關掉就是兩個都不選。
 export function ConfirmModal(props: {
+  title?: string;
   message: string;
   confirmLabel: string;
   // 沒給就只有一顆確認鍵（像刪不掉時的那句提醒）。
@@ -237,23 +239,26 @@ export function ConfirmModal(props: {
   return createPortal(
     <div class="error-modal" id="chat-confirm-modal">
       <div class="error-modal-backdrop" onClick={dismiss} />
-      <div class="error-modal-box" role="alertdialog" aria-modal="true" aria-labelledby="chat-confirm-title" aria-describedby="chat-confirm-msg">
-        <div class="error-modal-hdr">
-          <span id="chat-confirm-title" class="notice-modal-title">
-            Photo<em>Master</em>
-          </span>
+      <div class="error-modal-box yco-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="chat-confirm-title" aria-describedby="chat-confirm-msg">
+        <button type="button" class="yco-confirm-close" aria-label={t("關閉")} onClick={dismiss}>
+          <Icon name="x" size={24} />
+        </button>
+        <div class="yco-confirm-content">
+          <h2 id="chat-confirm-title" class="yco-confirm-title">
+            {props.title || t("請確認")}
+          </h2>
+          <p id="chat-confirm-msg" class="yco-confirm-message">
+            {props.message}
+          </p>
         </div>
-        <p id="chat-confirm-msg" class="error-modal-msg">
-          {props.message}
-        </p>
-        <div class="account-modal-actions">
+        <div class="yco-confirm-actions">
           {props.cancelLabel && (
-            <button class="chat-chip is-ghost" type="button" autoFocus onClick={() => onAnswer(false)}>
-              {props.cancelLabel}
+            <button class="ycoButton variant_secondary tone_neutral size_medium" type="button" autoFocus onClick={() => onAnswer(false)}>
+              <span class="label">{props.cancelLabel}</span>
             </button>
           )}
-          <button class="chat-chip is-primary" type="button" onClick={() => onAnswer(true)}>
-            {props.confirmLabel}
+          <button class="ycoButton variant_primary tone_brand size_medium" type="button" onClick={() => onAnswer(true)}>
+            <span class="label">{props.confirmLabel}</span>
           </button>
         </div>
       </div>
@@ -272,6 +277,49 @@ export function ConfirmModal(props: {
 // showHistory is off on 首頁, whose gallery has its own 最近照片 tab.
 // 右上角的語言切換：一顆地球，點開列出每個語言（用它自己的寫法），選了就換並重新載入。
 // 偏好設定裡的「介面語言」照樣在，這顆是給還沒進對話、找不到設定的人。
+// YCO 字標：「YouCam」原檔是黑色，改成跟著文字色（深色模式下變白）；「Online Editor」維持品牌藍。
+// 原檔沒有深色版，所以內嵌 SVG、只換那一個 fill，其他照原檔。
+const YCO_WORDMARK = ycoWordmarkSvg.replace('fill="black"', 'fill="currentColor"');
+export function YcoWordmark() {
+  return <span class="yco-wordmark" role="img" aria-label="YouCam Online Editor" dangerouslySetInnerHTML={{ __html: YCO_WORDMARK }} />;
+}
+
+// 淺色／深色切換（太陽／月亮）。深色用 YCO 的 dark token（../assets/yco/yco-tokens-dark.css，<html data-theme="dark">），
+// 記在 localStorage，index.html 在第一次繪製前就套上。body[data-theme-mode] 一起切，PhotoMaster 只給淺色用的補丁才會關掉。
+export const COLOR_MODE_KEY = "yco-color-mode";
+function ColorModeToggle() {
+  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === "dark");
+  const toggle = () => {
+    const next = !dark;
+    setDark(next);
+    if (next) document.documentElement.dataset.theme = "dark";
+    else delete document.documentElement.dataset.theme;
+    document.body.dataset.themeMode = next ? "dark" : THEME_MODE[readTheme()];
+    try {
+      localStorage.setItem(COLOR_MODE_KEY, next ? "dark" : "light");
+    } catch {
+      /* storage may be blocked */
+    }
+  };
+  const label = dark ? t("切換成淺色模式") : t("切換成深色模式");
+  return (
+    <button type="button" class="yco-mode-toggle" aria-label={label} title={label} aria-pressed={dark} onClick={toggle}>
+      {/* Lucide「sun」／「moon」（ISC）：淺色時顯示月亮（按了變深色），深色時顯示太陽。 */}
+      {dark ? (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" />
+          <path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" />
+        </svg>
+      ) : (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 // 語言鈕上的短標：English → EN、繁體中文 → 繁中，其他語言用代碼的主標籤（ja → JA）。
 function langCode(code: string) {
   if (code === "en") return "EN";
@@ -377,7 +425,7 @@ export function Header(props: {
       <div class="header-inner">
         <button type="button" class="logo yco-brand" id="logo-home-btn" aria-label="YouCam Online Editor" onClick={props.onHome}>
           <img class="yco-logo-symbol" src={ycoLogoSymbol} alt="" aria-hidden="true" />
-          <img class="yco-wordmark" src={ycoWordmark} alt="YouCam Online Editor" />
+          <YcoWordmark />
         </button>
         {/* 收成 ⋯ 的寬度，新對話跟最近照片不進選單，留在 header 上一鍵就到（寬螢幕不顯示，用攤開的那顆）。 */}
         {props.onNewChat && (
@@ -391,6 +439,7 @@ export function Header(props: {
           </button>
         )}
         {props.showLang && <LangSwitch debugUi={!!props.debugUi} />}
+        <ColorModeToggle />
         {/* YCO 的頭像：深色圓底＋白色人像。每個寬度都用它開選單（取代原本只在手機出現的 ⋯）。 */}
         <button
           type="button"
@@ -464,8 +513,19 @@ export function Header(props: {
 // H02：分隔線預設停在臉中間（鼻樑約在 48%），兩邊各露出半張臉，不用拖就看得出差別。
 function HeroCompare() {
   const [pos, setPos] = useState(48);
+  // 拉到某一邊、那一邊的標籤會被蓋住時把它藏起來：Before 標籤在左，左邊剩下的寬度（pos）放不下它就藏；
+  // After 同理看右邊。拉到底時只剩對的那一個（整張都是 After 就只剩 After）。
+  const box = useRef<HTMLDivElement>(null);
+  const beforeTag = useRef<HTMLSpanElement>(null);
+  const afterTag = useRef<HTMLSpanElement>(null);
+  const width = box.current?.clientWidth || 0;
+  const split = (width * pos) / 100;
+  const b = beforeTag.current;
+  const a = afterTag.current;
+  const hideBefore = !!b && width > 0 && split < b.offsetLeft + b.offsetWidth;
+  const hideAfter = !!a && width > 0 && width - split < width - a.offsetLeft;
   return (
-    <div class="home-compare" style={{ "--pos": `${pos}%` }}>
+    <div class="home-compare" ref={box} style={{ "--pos": `${pos}%` }}>
       <img class="home-compare-img" src={heroBefore} alt={t("修圖前")} />
       <img class="home-compare-img is-after" src={heroAfter} alt={t("修圖後")} />
       <span class="home-compare-line" aria-hidden="true">
@@ -475,8 +535,8 @@ function HeroCompare() {
           </svg>
         </span>
       </span>
-      <span class="home-compare-tag">Before</span>
-      <span class="home-compare-tag is-after">After</span>
+      <span ref={beforeTag} class={`home-compare-tag${hideBefore ? " is-hidden" : ""}`} aria-hidden={hideBefore || undefined}>Before</span>
+      <span ref={afterTag} class={`home-compare-tag is-after${hideAfter ? " is-hidden" : ""}`} aria-hidden={hideAfter || undefined}>After</span>
       <input
         class="home-compare-range"
         type="range"
@@ -510,7 +570,7 @@ export function HomeIntro({ onStart }: { onStart: () => void }) {
           </p>
           <div class="home-start">
             <button type="button" class="btn btn-primary home-start-btn" onClick={onStart}>
-              <Icon name="chat" />
+              <Icon name="messages-circle" />
               {t("開始對話")}
             </button>
             <span class="chat-meta">{t("選一張照片，剩下的用聊的")}</span>
@@ -740,8 +800,13 @@ export function Gallery(props: {
   onRemove?: (id: string) => void;
   // 手機上那一排只放得下幾張，「全部」打開完整的清單：最近照片開側欄，範例照片開範例視窗。
   onAll?: (t: GalleryTab) => void;
+  // 最近照片空狀態的「上傳照片」：打開選檔（跟首頁其他上傳同一個 input）。
+  onUpload?: () => void;
+  // 拖進空狀態那塊的照片，走跟選檔同一條路。
+  onDropFiles?: (files: File[]) => void;
 }) {
   const { tab, selection } = props;
+  const [dragOver, setDragOver] = useState(false);
   const recent = tab === "recent";
   const list = recent ? props.sessions : props.demos;
   const sessions = props.sessions || [];
@@ -789,8 +854,17 @@ export function Gallery(props: {
         )}
       </div>
       <div class="upload-gallery-scroll-frame">
-        <div id="demo-images-grid" class="demo-images-grid">
-          {recent
+        <div
+          id="demo-images-grid"
+          class={`demo-images-grid${list === null ? " is-loading" : ""}`}
+          aria-busy={list === null}
+          aria-label={list === null ? t("正在載入照片") : undefined}
+        >
+          {list === null
+            ? Array.from({ length: 6 }, (_, index) => (
+                <div class="demo-image-tile gallery-skeleton-tile" aria-hidden="true" key={index} />
+              ))
+            : recent
             ? (
                 <>
                   <SessionDays
@@ -814,17 +888,56 @@ export function Gallery(props: {
               ))}
         </div>
       </div>
-      {/* G03：最近照片是空的時候給下一步，按了切到範例照片。 */}
+      {/* G03：最近照片是空的時候給下一步：上傳照片。 */}
       {recent && list && list.length === 0 ? (
-        <div id="demo-images-empty" class="gallery-empty">
+        // 整塊都可以點（開選檔）、也可以把照片拖進來；鍵盤和報讀用裡面那顆「上傳」，這塊本身不另外搶焦點。
+        <div
+          id="demo-images-empty"
+          class={`gallery-empty${props.onUpload ? " is-dropzone" : ""}${dragOver ? " is-dragover" : ""}`}
+          title={props.onUpload ? t("拖曳照片到這裡，或點一下上傳") : undefined}
+          onClick={(e) => {
+            if (!props.onUpload || (e.target as Element).closest("button")) return;
+            props.onUpload();
+          }}
+          onDragOver={(e) => {
+            if (!props.onDropFiles || !e.dataTransfer?.types.includes("Files")) return;
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={(e) => {
+            if (!(e.currentTarget as Element).contains(e.relatedTarget as Node)) setDragOver(false);
+          }}
+          onDrop={(e) => {
+            if (!props.onDropFiles) return;
+            e.preventDefault();
+            setDragOver(false);
+            const files = Array.from(e.dataTransfer?.files || []);
+            if (files.length) props.onDropFiles(files);
+          }}
+        >
           <span class="gallery-empty-icon" aria-hidden="true">
-            <Icon name="plus" size={20} />
+            {/* Lucide「upload」（ISC，lucide.dev/icons/upload）。 */}
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12" />
+              <path d="m17 8-5-5-5 5" />
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            </svg>
           </span>
           <p class="gallery-empty-title">{t("還沒有最近照片")}</p>
           <p class="gallery-empty-sub">{t("修過的照片會出現在這裡。")}</p>
-          <button type="button" class="gallery-empty-btn" onClick={() => props.onTab("sample")}>
-            {t("試試範例照片")}
-          </button>
+          {props.onUpload && (
+            // YCO Button：Primary · Brand · Small。
+            <button
+              type="button"
+              class="ycoButton variant_primary tone_brand size_small gallery-empty-cta"
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onUpload!();
+              }}
+            >
+              <span class="label">{t("上傳")}</span>
+            </button>
+          )}
         </div>
       ) : (
         <p id="demo-images-empty" class="history-empty" hidden={!list || list.length > 0}>
@@ -832,14 +945,19 @@ export function Gallery(props: {
         </p>
       )}
       {!recent && (
+        // YCO Button（yco-collab-space platform/ui/button）：Primary · Brand · Medium（42px 高），class 名照它的 CSS
+        // （../assets/yco/yco-button.css，原檔照抄）。id 不用舊的 #demo-images-confirm-btn：面板模式的
+        // inline style 也會帶進這裡，那個 id 的底色會蓋過 YCO 的樣式。
         <button
-          id="demo-images-confirm-btn"
-          class="btn btn-secondary btn-sm"
+          id="chat-use-selected-btn"
+          class="ycoButton variant_primary tone_brand size_medium gallery-confirm-btn"
           type="button"
           disabled={!names.length}
           onClick={props.onConfirm}
         >
-          {names.length > 1 ? t("使用所選照片（{length} 張）", { length: names.length }) : t("使用所選照片")}
+          <span class="label">
+            {names.length > 1 ? t("使用所選照片（{length} 張）", { length: names.length }) : t("使用所選照片")}
+          </span>
         </button>
       )}
     </div>

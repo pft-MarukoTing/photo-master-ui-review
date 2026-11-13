@@ -387,6 +387,13 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
           class={`compare-card${generated ? " showing-generated" : ""}${fullscreen ? " is-fullscreen" : ""}`}
           id="compare-card"
         >
+          {fullscreen && (
+            <button type="button" class="compare-exit-fullscreen" data-tip={t("返回原視窗")} aria-label={t("返回原視窗")} onClick={() => setFullscreen(false)}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+              </svg>
+            </button>
+          )}
           <div class="photo-frame-wrap" id="photo-frame-wrap">
             <div class="canvas-header-row">
               <div id="compare-hint" class="compare-hint" hidden={!!busy}>
@@ -410,7 +417,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                       class="canvas-btn"
                       type="button"
                       disabled={originPicked}
-                      title={generated ? t("查看原始照片") : t("查看美化結果")}
+                      data-tip={t("比較")}
                       aria-label={generated ? t("查看原始照片") : t("查看美化結果")}
                       onClick={() => setShowGenerated(!showGenerated)}
                     >
@@ -421,11 +428,12 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                       </svg>
                     </button>
                   )}
-                  <button
+                  {/* 簡報 p11 R02：全螢幕時這顆收起來，改由右上角獨立的 ×（結束全螢幕）負責；比較、下載留在工具列。 */}
+                  {!fullscreen && <button
                     id="compare-fullscreen-btn"
                     class="canvas-btn"
                     type="button"
-                    title={fullscreen ? t("返回原視窗") : t("全螢幕檢視比較")}
+                    data-tip={t("全螢幕")}
                     aria-label={fullscreen ? t("返回原視窗") : t("全螢幕檢視比較")}
                     onClick={() => setFullscreen(!fullscreen)}
                   >
@@ -438,7 +446,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                         stroke-linejoin="round"
                       />
                     </svg>
-                  </button>
+                  </button>}
                   {debugUi && job && !busy && !originPicked && (
                     <button
                       id="show-prompt-btn"
@@ -465,7 +473,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                           e.preventDefault();
                           download(job, `photomaster_${photo.photo_id}_v${current!.ordinal}`);
                         }}
-                        title={t("下載結果")}
+                        data-tip={t("下載")}
                         aria-label={t("下載結果")}
                       >
                         <svg width="18" height="18" fill="none" viewBox="0 0 24 24">

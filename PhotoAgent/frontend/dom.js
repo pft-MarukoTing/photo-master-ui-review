@@ -423,7 +423,17 @@ window.PhotoAgentDom = (() => {
     // step is lit is a separate question, answered by the flow stage
     // (setFlowStage, app.js). openInlineAnalysisPanel re-hides it for
     // read-only historical playback, after its own showSection lands.
-    if (els.stepIndicatorSlot) els.stepIndicatorSlot.hidden = name === "upload";
+    // 面板模式沒有舊的上傳頁：空狀態工作區照樣顯示步驟列，停在第一步「上傳」。
+    const pmEmpty = name === "upload" && document.body.classList.contains("pm-panel");
+    if (els.stepIndicatorSlot) els.stepIndicatorSlot.hidden = name === "upload" && !pmEmpty;
+    if (pmEmpty && els.stepIndicatorSlot) {
+      els.stepIndicatorSlot.querySelectorAll(".ap-step").forEach((el, i) => {
+        el.classList.toggle("ap-step--done", false);
+        el.classList.toggle("ap-step--checked", false);
+        el.classList.toggle("ap-step--active", i === 0);
+      });
+      els.stepIndicatorSlot.querySelectorAll(".ap-step-line").forEach((el) => el.classList.remove("ap-step-line--active"));
+    }
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 

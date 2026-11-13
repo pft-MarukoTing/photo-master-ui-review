@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
@@ -234,7 +235,29 @@ def demo_images():
         name for name in os.listdir(demo_dir)
         if os.path.splitext(name)[1].lower() in DEMO_IMAGE_EXTENSIONS
     }
-    return jsonify({"images": _ordered_demo_image_names(demo_dir, available)})
+    # demo_images/order.json 列的照片固定排最前面（照檔案裡的順序），其餘每次隨機排。
+    # 首頁側欄和範例視窗用同一次的清單，同一頁兩邊順序一致；重新整理就換一次。
+    names = _ordered_demo_image_names(demo_dir, available)
+    pinned = _pinned_demo_image_names(demo_dir, available)
+    rest = [n for n in names if n not in pinned]
+    random.shuffle(rest)
+    return jsonify({"images": pinned + rest})
+
+
+def _pinned_demo_image_names(demo_dir, available):
+    """Names listed in demo_images/order.json that still exist, in that order."""
+    try:
+        with open(os.path.join(demo_dir, DEMO_IMAGE_ORDER_FILE), "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    except (OSError, ValueError):
+        return []
+    if not isinstance(manifest, list):
+        return []
+    seen = []
+    for name in manifest:
+        if name in available and name not in seen:
+            seen.append(name)
+    return seen
 
 
 @api_bp.get("/demo-images/<path:filename>")

@@ -5,6 +5,7 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { api, urls } from "./api";
 import { Icon } from "./icons";
+import { markLeavingForPanel } from "./pre-handoff";
 import { qaText } from "./util";
 
 // 新進來的 AI 訊息一字一字打出來：一則打完才換下一則。每 TYPE_MS 出幾個字，
@@ -160,25 +161,42 @@ function typeMessages(msgs: HTMLElement[], revised: Set<Element> = new Set()): (
 }
 
 // The way between this page and 面板模式: 對話 is where you are, 面板 the link
-// over. busy: held while analyzing or rendering (the panel would open on a
-// half-done job); onLeave hands the photo's adjustments over right before.
+// over. The switch stays available while work is running: changing views only
+// carries the current photo and handoff state across. onLeave hands the photo's
+// adjustments over right before.
 // Styles in styles.css (.mode-switch), shared with 面板模式's own copy.
-export type PanelMode = { href: string; busy: boolean; onLeave: () => void };
+// onLeave 回傳 Promise 時（上傳頁要先把照片存起來），等它做完才換頁。
+export type PanelMode = { href: string; busy: boolean; onLeave: () => void | Promise<void> };
 
-export function ModeSwitch({ mode, class: cls }: { mode: PanelMode; class?: string }) {
+// mode 沒給：還沒有可以開的面板（還沒分析或美化），「面板」那段灰掉、不能按。
+export function ModeSwitch({ mode, class: cls }: { mode?: PanelMode; class?: string }) {
   return (
     <nav class={`mode-switch${cls ? ` ${cls}` : ""}`} aria-label={t("檢視方式")}>
       <span class="mode-switch-opt is-active" aria-current="page">
-        <Icon name="chat" size={14} />
+        <Icon name="messages-circle" size={14} />
         {t("對話")}
       </span>
-      {mode.busy ? (
-        <span class="mode-switch-opt" aria-disabled="true" title={t("分析或美化完成後才能切換")}>
+      {!mode ? (
+        // 還沒選照片就沒有東西能帶到面板；一有照片後，任何流程狀態都能切換。
+        <span class="mode-switch-opt" aria-disabled="true" title={t("選好照片後就能切換")}>
           <Icon name="layout" size={14} />
           {t("面板")}
         </span>
       ) : (
-        <a class="mode-switch-opt" href={mode.href} title={t("切換到面板模式")} onClick={mode.onLeave}>
+        <a
+          class="mode-switch-opt"
+          href={mode.href}
+          title={t("切換到面板模式")}
+          onClick={(e) => {
+            // 切到面板模式會把東西帶過去（handoff），不跳「離開網站？」的提醒。
+            markLeavingForPanel();
+            const done = mode.onLeave();
+            if (done && typeof (done as Promise<void>).then === "function") {
+              e.preventDefault();
+              (done as Promise<void>).finally(() => location.assign(mode.href));
+            }
+          }}
+        >
           <Icon name="layout" size={14} />
           {t("面板")}
         </a>
@@ -360,16 +378,13 @@ export function ChatPanel(props: {
         })
       }
     >
+      {/* 左邊固定是「對話」標題；右邊是副標（新對話…）和「對話｜面板」切換。
+          還沒有面板可開（沒給 panelMode）時切換照樣在，「面板」灰掉。 */}
       <div class="chat-panel-head">
-        {props.panelMode ? (
-          <ModeSwitch mode={props.panelMode} />
-        ) : (
-          <>
-            <Icon name="chat" size={14} />
-            <span class="chat-panel-title">{t("對話")}</span>
-          </>
-        )}
-        <span class="chat-panel-sub">{props.sub}</span>
+        <Icon name="messages-circle" size={14} />
+        <span class="chat-panel-title">{t("對話")}</span>
+        {props.sub && <span class="chat-panel-sub">{props.sub}</span>}
+        <ModeSwitch mode={props.panelMode} />
       </div>
       {props.photo && (
         <button type="button" class="chat-panel-photo" onClick={props.photo.onOpen} tabIndex={photoUp ? 0 : -1}>
@@ -427,7 +442,14 @@ export function AssistantMsg({ children, atomic, animate, onTypingComplete, revi
   return (
     <div ref={element} class="chat-msg" data-chat-atomic={atomic ? "true" : undefined} data-chat-typewriter={animate ? "true" : undefined}
       data-chat-revision={revision}>
-      <div class="chat-avatar">P</div>
+      {/* 簡報 p6 C05：YouCam AI Agent 頭像（品牌漸層圓底＋白色機器人，Lucide「bot」，ISC）。不另外寫名字。 */}
+      <div class="chat-avatar" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 8V4H8" />
+          <rect width="16" height="12" x="4" y="8" rx="2" />
+          <path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
+        </svg>
+      </div>
       <div class="chat-body">{children}</div>
     </div>
   );
@@ -462,16 +484,38 @@ export function UploadBubble({ src, text, onOpen }: { src: string; text: string;
   );
 }
 
-// 多張一起上傳：前幾張並排示意，多的寫 +N，不能點。
+// 多張一起上傳：前幾張並排示意，多的寫 +N。簡報 p4 S05：點 +N 就在同一則訊息裡展開全部（格狀），
+// 底下一顆「顯示較少」收回去。
 export function BatchUploadBubble({ srcs, text }: { srcs: string[]; text: string }) {
+  const [open, setOpen] = useState(false);
   const shown = srcs.slice(0, 4);
   const more = srcs.length - shown.length;
+  if (open && more > 0) {
+    return (
+      <div class="chat-upload is-batch is-open">
+        <div class="chat-upload-card">
+          <p class="chat-upload-card-title">{text}</p>
+          <div class="chat-upload-grid">
+            {srcs.map((s) => <img key={s} src={s} alt="" loading="lazy" />)}
+          </div>
+          {/* YCO Button：Secondary · Neutral · Tiny。 */}
+          <button type="button" class="ycoButton variant_secondary tone_neutral size_tiny chat-upload-less" onClick={() => setOpen(false)}>
+            <span class="label">{t("顯示較少")}</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div class="chat-upload is-batch">
       {shown.length > 0 && (
-        <div class="chat-upload-stack" aria-hidden="true">
-          {shown.map((s) => <img key={s} src={s} alt="" />)}
-          {more > 0 && <span>+{more}</span>}
+        <div class="chat-upload-stack">
+          {shown.map((s) => <img key={s} src={s} alt="" aria-hidden="true" />)}
+          {more > 0 && (
+            <button type="button" class="chat-upload-more" aria-label={t("顯示全部 {n} 張", { n: srcs.length })} onClick={() => setOpen(true)}>
+              +{more}
+            </button>
+          )}
         </div>
       )}
       <div class="chat-bubble">{text}</div>
@@ -536,6 +580,38 @@ export function Chip(props: {
       {shownLabel(props.label)}
       {badge}
     </button>
+  );
+}
+
+// 簡報 p5 A01：「分析」和「一鍵美化」同等份量的兩顆 YCO Button（Primary · Neutral：黑底白字＋圖示）。
+// settled：這一輪答過了，留在對話裡當紀錄，不再是按鈕；picked 是當時按的那顆（維持黑底），沒選的那顆變淡。
+export function ActionChoice(props: {
+  label: string;
+  icon: string;
+  title?: string;
+  picked?: boolean;
+  settled?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  const dim = props.settled && !props.picked;
+  const cls = `ycoButton ${dim ? "variant_secondary tone_neutral" : "variant_primary tone_neutral"} size_small chat-action-btn${props.settled ? " is-static" : ""}`;
+  const inner = (
+    <>
+      <span class="buttonIcon"><Icon name={props.icon} size={16} /></span>
+      <span class="label">{shownLabel(props.label)}</span>
+    </>
+  );
+  return (
+    <div class={`chat-action-choice${props.picked ? " is-picked" : ""}`}>
+      {props.settled ? (
+        <span class={cls} title={props.title}>{inner}</span>
+      ) : (
+        <button type="button" class={cls} title={props.title} disabled={props.disabled} onClick={props.onClick}>
+          {inner}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -763,7 +839,9 @@ function Elapsed({ since }: { since: number }) {
   return <span class="chat-working-time">{text}</span>;
 }
 
-export function WorkingCard({ done, now, since }: { done: string[]; now: string; since: number }) {
+// title：簡報 p6 A03，詳細進度集中在對話裡 -- 卡片上方先講在做什麼（「正在分析照片…」）加一條進度條，
+// 底下再一句句講細節；畫布上只留簡短的階段標籤。後端沒有百分比，進度條是不確定型（來回跑）。
+export function WorkingCard({ done, now, since, title }: { done: string[]; now: string; since: number; title?: string }) {
   const rows = [...done.slice(-2), now];
   // 每一句在這一段裡是第幾句，當 key：同一句換位置時是同一個節點，才移得過去。
   const first = done.length + 1 - rows.length;
@@ -802,6 +880,12 @@ export function WorkingCard({ done, now, since }: { done: string[]; now: string;
   }, [now]);
   return (
     <div class="chat-card chat-working">
+      {title && (
+        <div class="chat-working-head">
+          <p class="chat-working-title">{title}…</p>
+          <div class="chat-working-bar" role="progressbar" aria-label={title} />
+        </div>
+      )}
       <ol ref={list}>
         {rows.map((t, k) => {
           const age = rows.length - 1 - k;
@@ -1539,6 +1623,8 @@ export function Composer(props: {
               onClick={() => (onSample ? setMenu((v) => !v) : input.current?.click())}
             >
               <Icon name="image" />
+              {/* 獨立的 composer 卡片裡，這顆是上面一排的膠囊（像 YCO AI Agent 的「Add Media」），帶文字。 */}
+              <span class="chat-attach-label">{props.attachTitle || (onSample ? t("換一張照片") : t("上傳照片"))}</span>
             </button>
             {menu && onSample && (
               <div class="chat-attach-menu" role="menu">
@@ -1976,10 +2062,13 @@ export function SamplePicker(props: {
             <span class="sample-modal-count" aria-live="polite">
               {chosen.length ? (full ? t("已選 {length} 張（最多 {max} 張）", { length: chosen.length, max }) : t("已選 {length} 張", { length: chosen.length })) : t("可以選多張，最多 {max} 張", { max })}
             </span>
-            <div class="chat-choices">
-              <button type="button" class="chat-chip is-ghost" onClick={onClose}>{t("取消")}</button>
-              <button type="button" class="chat-chip is-primary" disabled={!chosen.length} onClick={() => props.onPick(chosen)}>
-                {t("選好了")}
+            {/* 簡報 p3 S01：取消／完成改用 YCO Button（Secondary · Neutral／Primary · Brand，Medium 42px）。 */}
+            <div class="sample-modal-actions">
+              <button type="button" class="ycoButton variant_secondary tone_neutral size_medium" onClick={onClose}>
+                <span class="label">{t("取消")}</span>
+              </button>
+              <button type="button" class="ycoButton variant_primary tone_brand size_medium" disabled={!chosen.length} onClick={() => props.onPick(chosen)}>
+                <span class="label">{t("選好了")}</span>
               </button>
             </div>
           </div>

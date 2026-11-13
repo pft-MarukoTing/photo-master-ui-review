@@ -390,14 +390,16 @@ body[data-theme="sky"] {
   --bg: var(--n04); --card: var(--n09); --card-2: var(--n14); --card-3: var(--n24);
   --text: var(--n100); --text-2: var(--n64); --text-3: var(--n74); --text-4: var(--n84);
   --border: rgba(17,24,26,.10); --border-2: rgba(17,24,26,.18);
-  --accent: #06A6D9; --accent-2: #0E9BA6; --accent-rgb: 6,166,217; --accent-2-rgb: 14,155,166;
-  --scrollbar-accent-rgb: 6,166,217;
-  --accent-soft-rgb: 93,208,245; --on-surface-rgb: 17,24,26; --on-surface-color: #12181A;
+  /* sky（介面上叫 YCO）的主色改成 YCO 品牌色：--fill-brand-strong（#03ADE2）。*-rgb 要給 rgba() 用，只能寫數字（同 #03ADE2）。 */
+  --accent: var(--fill-brand-strong); --accent-2: var(--fill-brand-strong); --accent-rgb: 3,173,226; --accent-2-rgb: 3,173,226;
+  --scrollbar-accent-rgb: 3,173,226;
+  --accent-soft-rgb: 3,173,226; --on-surface-rgb: 17,24,26; --on-surface-color: #12181A;
   --glass-rgb: 255,255,255;
-  --accent-pale-color: #D8F6FD; --accent-pale-grad: linear-gradient(110deg, #F2FCFF 0%, #D8F6FD 68%, #A5E4E8 100%);
+  --accent-pale-color: var(--fill-brand-weak); --accent-pale-grad: linear-gradient(110deg, var(--background-base) 0%, var(--fill-brand-weak) 100%);
   --header-bg: rgba(250,252,253,.82); --card-sheen: linear-gradient(160deg, rgba(var(--on-surface-rgb),.08), rgba(var(--on-surface-rgb),0) 55%);
-  --mv-grad: linear-gradient(135deg, #5DD0F5 0%, #06A6D9 52%, #0B85A8 100%);
-  --bg-glow-1: rgba(6,166,217,.09); --bg-glow-2: rgba(14,155,166,.08); --shadow-accent: 0 10px 30px rgba(6,166,217,.18);
+  /* 主題漸層＝YCO 品牌漸層（Figma color style「Gradient」：#03ADE2 → #3FD75B；終點還沒有對應的 token）。 */
+  --mv-grad: linear-gradient(90deg, var(--fill-brand-strong) 0%, #3fd75b 100%);
+  --bg-glow-1: rgba(3,173,226,.09); --bg-glow-2: rgba(3,173,226,.06); --shadow-accent: 0 10px 30px rgba(3,173,226,.18);
   /* Same light-theme shadow retint as paper above, see its comment. */
   --shadow-sm: 0 2px 10px rgba(var(--on-surface-rgb),.09);
   --shadow-lg: 0 16px 40px rgba(var(--on-surface-rgb),.10);
@@ -2526,7 +2528,7 @@ body[data-theme-mode="light"] .ios-thumb {
 .theme-swatch-purple-light { background: linear-gradient(135deg, #eeeef1, #8b5cf6 45%, #3730a3); }
 .theme-swatch-lilac-dark { background: linear-gradient(135deg, #d876a9, #804595 50%, #141014); }
 .theme-swatch-caramel-dark { background: linear-gradient(135deg, #f9d178, #d56723 50%, #141210); }
-.theme-swatch-sky { background: linear-gradient(135deg, #edf3f5, #06a6d9 45%, #0b85a8); }
+.theme-swatch-sky { background: linear-gradient(135deg, var(--fill-brand-strong) 0%, #3fd75b 100%); } /* YCO 品牌漸層 */
 /* applyTheme (app.js) writes the current theme's own name into this label. Any
    width change here moves the whole header: every header button to this one's
    left shifts with it, and so does #report-btn, which is position:fixed at
@@ -6962,3 +6964,8 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
   text-align: start;
 }
 :where([dir="rtl"]) .aspect-ratio-picker :is(.ar-scale, .ar-shape-row) { direction: ltr; }
+
+/* scrollbar 一律用 YCO stroke-weak（所有捲動區、兩種模式、亮暗色）。 */
+* { scrollbar-color: var(--stroke-weak) transparent !important; }
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb:hover { background-color: var(--stroke-weak) !important; }

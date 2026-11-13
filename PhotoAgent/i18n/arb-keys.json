@@ -1578,6 +1578,12 @@
         "chat"
       ]
     },
+    "chat_apply_edits_right_away": {
+      "zh": "直接套用",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_aspect_ratio": {
       "zh": "長寬比：{v}",
       "where": [
@@ -1598,6 +1604,12 @@
     },
     "chat_at_the_top_right": {
       "zh": "右上角",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_available_once_you_pick_a": {
+      "zh": "選好照片後就能切換",
       "where": [
         "chat"
       ]
@@ -1752,6 +1764,12 @@
         "chat"
       ]
     },
+    "chat_compare": {
+      "zh": "比較",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_compare_before_after_on_the": {
       "zh": "左側可比較 Before / After，也可從「美化紀錄」切換版本。",
       "where": [
@@ -1796,6 +1814,12 @@
     },
     "chat_compiling_suggested_adjustments": {
       "zh": "正在彙整建議的美化項目…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_confirm": {
+      "zh": "請確認",
       "where": [
         "chat"
       ]
@@ -1886,6 +1910,12 @@
     },
     "chat_drag_to_resize_the_photo": {
       "zh": "拖動調整照片和對話的大小",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_drop_photos_here_or_click": {
+      "zh": "拖曳照片到這裡，或點一下上傳",
       "where": [
         "chat"
       ]
@@ -2066,6 +2096,12 @@
     },
     "chat_for_the_overall_image_lighting": {
       "zh": "畫面的部分（光線、色調、構圖這些），我有 {v1} 項建議，預設都會套用。要看一下嗎？",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_full_screen": {
+      "zh": "全螢幕",
       "where": [
         "chat"
       ]
@@ -3292,6 +3328,7 @@
     "chat_remove": {
       "zh": "移除",
       "where": [
+        "panel",
         "chat"
       ]
     },
@@ -3473,6 +3510,12 @@
         "chat"
       ]
     },
+    "chat_review_suggestions_first": {
+      "zh": "先看建議",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_running_a_final_quality_check": {
       "zh": "正在做最後的品質檢查…",
       "where": [
@@ -3617,6 +3660,18 @@
         "chat"
       ]
     },
+    "chat_show_all_photos": {
+      "zh": "顯示全部 {n} 張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_show_fewer": {
+      "zh": "顯示較少",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_show_in_panel": {
       "zh": "在面板上顯示",
       "where": [
@@ -3757,6 +3812,18 @@
     },
     "chat_switch": {
       "zh": "更換",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_switch_to_dark_mode": {
+      "zh": "切換成深色模式",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_switch_to_light_mode": {
+      "zh": "切換成淺色模式",
       "where": [
         "chat"
       ]
@@ -4348,12 +4415,6 @@
     },
     "chat_today": {
       "zh": "今天 {hm}",
-      "where": [
-        "chat"
-      ]
-    },
-    "chat_try_a_sample": {
-      "zh": "試試範例照片",
       "where": [
         "chat"
       ]
@@ -5043,6 +5104,7 @@
     "common_choose_a_sample_photo": {
       "zh": "從範例照片挑選",
       "where": [
+        "panel",
         "chat",
         "backend labels"
       ]
@@ -7332,6 +7394,12 @@
         "panel"
       ]
     },
+    "panel_couldnt_load_the_sample_photo": {
+      "zh": "無法載入範例照片。",
+      "where": [
+        "panel"
+      ]
+    },
     "panel_couldnt_load_the_sample_photos": {
       "zh": "載入範例照片失敗：{v1}",
       "where": [
@@ -7664,6 +7732,12 @@
     },
     "panel_e_g_brighten_it_up": {
       "zh": "例如：增加亮度，調整成冷色調，模糊背景。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_each_run_creates_a_new": {
+      "zh": "每次美化都會產生一個新版本。",
       "where": [
         "panel"
       ]
@@ -8226,6 +8300,18 @@
         "panel"
       ]
     },
+    "panel_no_photo_uploaded_yet": {
+      "zh": "尚未上傳照片",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_photos_yet": {
+      "zh": "還沒有照片",
+      "where": [
+        "panel"
+      ]
+    },
     "panel_no_qa_result_yet": {
       "zh": "尚未取得 QA 檢查結果。",
       "where": [
@@ -8346,6 +8432,18 @@
         "panel"
       ]
     },
+    "panel_once_you_upload_a_photo": {
+      "zh": "上傳照片後，AI 會在這裡說明照片的內容。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_once_you_upload_a_photo_2": {
+      "zh": "上傳照片後，AI 的修圖建議會在這裡，也能在這裡微調。",
+      "where": [
+        "panel"
+      ]
+    },
     "panel_one_photo_retouched_just_for": {
       "zh": "一張照片，開啟專屬美化體驗",
       "where": [
@@ -8387,6 +8485,12 @@
     },
     "panel_open_settings_differs_from_the": {
       "zh": "開啟設定：{summary}（設定與目前結果不同）",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_or_drag_photos_here": {
+      "zh": "也可以把照片拖到這裡",
       "where": [
         "panel"
       ]
@@ -8465,6 +8569,18 @@
     },
     "panel_photo_overview": {
       "zh": "照片總覽",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_photo_preview": {
+      "zh": "照片預覽",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_photos_you_upload_appear_here": {
+      "zh": "上傳的照片會放在這裡。",
       "where": [
         "panel"
       ]
@@ -8790,6 +8906,12 @@
     },
     "panel_remove_photo": {
       "zh": "移除照片",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_remove_this_photo": {
+      "zh": "移除這張照片",
       "where": [
         "panel"
       ]
@@ -9508,6 +9630,12 @@
         "panel"
       ]
     },
+    "panel_the_original_photo_before_any": {
+      "zh": "還沒美化的原始照片。",
+      "where": [
+        "panel"
+      ]
+    },
     "panel_the_output_quality_check_hasnt": {
       "zh": "尚未執行輸出品質檢查。",
       "where": [
@@ -9721,12 +9849,6 @@
         "panel"
       ]
     },
-    "panel_try_a_different_shot_to": {
-      "zh": "換一種拍法，重新詮釋照片氛圍",
-      "where": [
-        "panel"
-      ]
-    },
     "panel_turn_off_body_shape": {
       "zh": "關閉身形調整",
       "where": [
@@ -9793,6 +9915,12 @@
         "panel"
       ]
     },
+    "panel_unselected_categories_cycle_through_two": {
+      "zh": "未選擇的分類會輪播兩張預覽照片。",
+      "where": [
+        "panel"
+      ]
+    },
     "panel_update_available": {
       "zh": "可更新",
       "where": [
@@ -9801,6 +9929,12 @@
     },
     "panel_updated_individual_settings_to_match": {
       "zh": "已配合 {poseLabel} 調整個人設定",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_upload_a_photo_to_get": {
+      "zh": "上傳一張照片開始",
       "where": [
         "panel"
       ]
@@ -9986,6 +10120,12 @@
     },
     "panel_you_havent_made_any_changes": {
       "zh": "你沒有做任何修改，確定要再執行一次美化嗎？",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_your_requests": {
+      "zh": "你的需求",
       "where": [
         "panel"
       ]
