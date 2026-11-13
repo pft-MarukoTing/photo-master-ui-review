@@ -3235,6 +3235,23 @@ window.PhotoAgentResults = (() => {
       if (recipeItems.length) addControl(tr("畫面調整"), "ap-review-tab-recipe", recipeItems);
       if (styleItems.length) addControl(tr("美化風格"), "ap-review-tab-style", styleItems);
       if (!pending && personalization) addControl(tr("個人化"), "ap-review-tab-prompt", personalization);
+      // 編輯器：這份資料沒有「實際執行」的證據（或還在 mock）時，先放四顆示意 tags（之後接真實資料就會自動換成上面那些）。
+      if (document.body.classList.contains("pm-panel") && !pending && !els.recipeTags.querySelector(".recipe-tag-personalize")) {
+        [["ap-review-tab-face", tr("人像")], ["ap-review-tab-recipe", tr("場景")], ["ap-review-tab-style", tr("美化風格")], ["ap-review-tab-prompt", tr("個人化需求")]].forEach(([tabId, label]) => {
+          const tag = document.createElement("button");
+          tag.type = "button";
+          tag.className = "portrait-check-toggle result-detail-toggle recipe-tag-personalize is-placeholder";
+          tag.tabIndex = -1;
+          tag.setAttribute("aria-hidden", "true");
+          const icon = document.querySelector(`#${tabId} svg`);
+          if (icon) { const copy = icon.cloneNode(true); copy.setAttribute("aria-hidden", "true"); tag.appendChild(copy); }
+          const caption = document.createElement("b");
+          caption.className = "result-detail-label";
+          caption.textContent = label;
+          tag.appendChild(caption);
+          els.recipeTags.appendChild(tag);
+        });
+      }
       fitRecipeTagsRow(els.recipeTags);
     }
     els.resultSummary.textContent = analysis.photo_summary || tr("已完成影像分析與輸出。");

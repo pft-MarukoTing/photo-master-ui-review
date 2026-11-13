@@ -5387,7 +5387,9 @@
       background: linear-gradient(90deg, var(--fill-brand-strong, #03ADE2) 0 30%, var(--fill-disabled) 30% 100%); background-size: 240px 4px;
       animation: pm-retouch-bar 1.6s ease-in-out infinite;
     }
-    @keyframes pm-retouch-bar { 0% { background-position: -170px 0; } 100% { background-position: 170px 0; } }
+    @keyframes pm-retouch-bar { 0% { background-position: -72px 0; } 100% { background-position: 240px 0; } }
+    /* 每次出現都從頭開始跑（app.js 在畫面顯示時暫時加上這個 class 再拿掉，強迫動畫重來）。 */
+    .pm-bar-restart .proc-text::before, .pm-bar-restart .pm-wait-progress > span { animation: none !important; }
     @media (prefers-reduced-motion: reduce) { .pm-panel .batch-main-loading:not(.is-error) .proc-text::before { animation: none; } }
     .pm-panel .batch-main-loading:not(.is-error) .proc-eyebrow { color: var(--text-weak); margin: 0 0 var(--spacing-4); }
     .pm-panel .batch-main-loading:not(.is-error) #batch-main-loading-title { color: var(--text-strong); font-size: 28px; margin: 0 0 var(--spacing-8); }
@@ -5504,13 +5506,90 @@
     }
     :is(.pm-panel, body) #compare-card .canvas-header-row .canvas-btn:hover { background: color-mix(in srgb, var(--n09) 90%, var(--text-strong)) !important; }
     :is(.pm-panel, body) #compare-card .canvas-header-row #compare-hint {
-      border: 0; background: var(--n09) !important; color: var(--text-strong) !important; box-shadow: 0 1px 4px rgba(0,0,0,.16);
-      -webkit-backdrop-filter: none; backdrop-filter: none;
+      border: 0; background: rgba(24,22,20,.72) !important; color: #fff !important; box-shadow: none;
+      -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
     }
+    /* Before／After 標籤：貼在「照片本身」的左上角（照片依比例完整顯示，框內有留白，所以位置要跟著照片算：--img-x/--img-y 由 app.js 設）；
+       標題列鋪滿整個照片框，工具鈕固定在框的右上。 */
+    .pm-panel #compare-card:not(.is-fullscreen) .canvas-header-row { inset: 0; display: block; padding: 0; pointer-events: none; }
+    .pm-panel #compare-card:not(.is-fullscreen) .canvas-header-row .canvas-actions { position: absolute; top: var(--spacing-8); right: var(--spacing-8); display: flex; align-items: center; gap: var(--spacing-8); pointer-events: auto; }
+    .pm-panel #compare-card:not(.is-fullscreen) #compare-hint {
+      position: absolute; left: calc(var(--img-x, 0px) + var(--spacing-12)); top: calc(var(--img-y, 0px) + var(--spacing-12)); right: auto; width: auto; height: auto; margin: 0;
+      padding: var(--spacing-4) var(--spacing-12); border-radius: var(--corner-radius-8, 8px); pointer-events: none;
+      font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small); font-weight: var(--font-weight-strong);
+    }
+    /* 照片下面中間的 tags（人像／場景／風格／需求）：半透明黑底膠囊 + 白字 + 白色線條圖示。 */
+    .pm-panel #recipe-tags { left: 12px; right: 12px; bottom: 16px; gap: var(--spacing-8); }
+    .pm-panel #recipe-tags .recipe-tag-personalize {
+      display: inline-flex; align-items: center; gap: var(--spacing-8); height: auto; padding: var(--spacing-4) var(--spacing-16) var(--spacing-4) var(--spacing-12); border: 0; border-radius: 999px;
+      background: rgba(24,22,20,.72); color: #fff; box-shadow: none; text-decoration: none; overflow: visible; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    }
+    .pm-panel #recipe-tags .recipe-tag-personalize::before { content: none; }
+    .pm-panel #recipe-tags .recipe-tag-personalize svg { width: 16px; height: 16px; flex: none; }
+    .pm-panel #recipe-tags .recipe-tag-personalize .result-detail-label { font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small); font-weight: var(--font-weight-strong); color: #fff; }
+    .pm-panel #recipe-tags .recipe-tag-personalize svg { color: #fff; }
+    .pm-panel #recipe-tags .recipe-tag-personalize.is-placeholder { pointer-events: none; }
     /* 照片上下的留白（照片依比例完整顯示時）用 fill-weak 當底色。 */
     .pm-panel #compare-card:not(.is-fullscreen) #photo-frame-wrap { background: var(--fill-weak); }
     /* 我的照片標題列不放「全部下載」。 */
     .pm-panel #batch-download-all-btn { display: none !important; }
+    /* 四張主要卡片（我的照片、照片、總覽、分析）圓角統一 12px；重試中的卡片也一樣。 */
+    .pm-panel #compare-card, .pm-panel #batch-sidebar, .pm-panel #ap-photo-summary, .pm-panel #ap-analysis-shell,
+    .pm-panel .batch-main-loading:not([hidden]):not(.is-error) { border-radius: 12px; }
+    /* 設定視窗（長寬比／輸出尺寸）：YCO 的 modal + 下拉。標籤不用大寫，下拉是白底細邊框、右邊 chevron-down，
+       展開的選項面板跟著白底細邊框，選到的那個用品牌藍框 + 淡藍底。 */
+    .pm-panel #ap-case-settings-modal .error-modal-box { border: 1px solid var(--stroke-weak); border-radius: var(--corner-radius-16, 16px); background: var(--background-overlay); box-shadow: 0 8px 24px -4px rgba(0,0,0,.16); }
+    .pm-panel #ap-case-settings-modal .error-modal-hdr { border-bottom: 0; }
+    .pm-panel #ap-case-settings-modal .error-modal-hdr > span { font-family: var(--font-family-heading); font-size: var(--font-size-heading-3); line-height: var(--line-height-heading-3); font-weight: var(--font-weight-strong); color: var(--text-strong); }
+    .pm-panel #ap-case-settings-modal .option-pill-label { text-transform: none; letter-spacing: 0; font-family: var(--font-family-body); font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); font-weight: var(--font-weight-weak); color: var(--text-weak); }
+    .pm-panel #ap-case-settings-modal .ap-style-trigger {
+      min-height: 40px; padding: 0 var(--spacing-12); border: 1px solid var(--stroke-strong); border-radius: 12px; background: var(--n09); box-shadow: none;
+      font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small); font-weight: var(--font-weight-strong); color: var(--text-strong);
+    }
+    .pm-panel #ap-case-settings-modal .ap-style-trigger:hover { background: var(--fill-hover); }
+    .pm-panel #ap-case-settings-modal .ap-style-item[open] > .ap-style-trigger { background: var(--n09); border-color: var(--stroke-selected); box-shadow: 0 0 0 3px var(--stroke-focus); }
+    .pm-panel #ap-case-settings-modal .ap-style-trigger::after {
+      content: ""; width: 16px; height: 16px; flex: none; margin-inline-start: auto; background: var(--icon-neutral, currentColor); transform: none;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    .pm-panel #ap-case-settings-modal .ap-style-item[open] > .ap-style-trigger::after { transform: rotate(180deg); }
+    .pm-panel #ap-case-settings-modal .ap-style-panel { border: 1px solid var(--stroke-weak); border-radius: 12px; background: var(--n09); box-shadow: none; }
+    .pm-panel #ap-case-settings-modal .ar-smart-option,
+    .pm-panel #ap-case-settings-modal .ar-shape-option { border: 1px solid var(--stroke-weak); border-radius: 12px; background: var(--n09); box-shadow: none; }
+    .pm-panel #ap-case-settings-modal .ar-smart-option:hover,
+    .pm-panel #ap-case-settings-modal .ar-shape-option:hover { background: var(--fill-hover); }
+    .pm-panel #ap-case-settings-modal :is(.ar-smart-option, .ar-shape-option):has(input:checked) {
+      border-color: var(--stroke-selected); box-shadow: 0 0 0 1px var(--stroke-selected); background: color-mix(in srgb, var(--stroke-selected) 9%, var(--n09));
+    }
+    .pm-panel #ap-case-settings-modal :is(.ar-smart-option, .ar-shape-option) b { color: var(--text-strong); }
+    .pm-panel #ap-case-settings-modal .ar-smart-option:has(input:checked) b { color: var(--text-brand); }
+    /* 下拉選項清單（輸出尺寸等）不用 checkbox：整列可點，選到的那列淡藍底 + 品牌色字。 */
+    .pm-panel .ap-style-panel .step-inline-list .step-cb { position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none; }
+    .pm-panel .ap-style-panel .step-inline-list .step-cb-box { display: none; }
+    .pm-panel .ap-style-panel .step-inline-list li > label { display: flex; align-items: center; gap: 0; padding: var(--spacing-8) var(--spacing-12); border-radius: 8px; cursor: pointer; }
+    .pm-panel .ap-style-panel .step-inline-list li > label:hover { background: var(--fill-hover); }
+    .pm-panel .ap-style-panel .step-inline-list li > label:has(input:checked) { background: color-mix(in srgb, var(--stroke-selected) 9%, var(--n09)); }
+    .pm-panel .ap-style-panel .step-inline-list li > label:has(input:checked) .step-cb-label { color: var(--text-brand); font-weight: var(--font-weight-strong); }
+    .pm-panel .ap-style-panel .step-inline-list li > label:has(input:focus-visible) { box-shadow: 0 0 0 3px var(--stroke-focus); }
+    /* Style 選擇視窗：不要包那麼多層（拿掉外面那個灰色圓角框），選項一列 3～4 張、依數量自動填滿不留空欄，
+       每個選項是單層卡片：圖在上、名字在下；選到的用品牌藍框 + 淡藍底。 */
+    .pm-panel #ap-style-modal .step-list-frame { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+    .pm-panel #ap-style-modal .ap-style-options-hdr { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--spacing-4) var(--spacing-8); margin: 0 0 var(--spacing-16); }
+    .pm-panel #ap-style-modal .ap-style-options-title { font-family: var(--font-family-heading); font-size: var(--font-size-heading-4, 18px); line-height: 1.3; font-weight: var(--font-weight-strong); color: var(--text-strong); }
+    .pm-panel #ap-style-modal .ap-style-options-note { font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); color: var(--text-weak); }
+    .pm-panel #ap-style-modal .ap-style-option-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: var(--spacing-12); margin: 0; padding: 0; list-style: none; }
+    .pm-panel #ap-style-modal .ap-style-option-grid > li:not(:has(label)) { display: none; }
+    .pm-panel #ap-style-modal .ap-style-option-grid > li { min-width: 0; margin: 0; padding: 0; }
+    .pm-panel #ap-style-modal .ap-style-option-btn {
+      display: flex; flex-direction: column; align-items: stretch; gap: 0; width: 100%; height: 100%; padding: 0; overflow: hidden; cursor: pointer;
+      border: 1px solid var(--stroke-weak); border-radius: 12px; background: var(--n09); box-shadow: none;
+    }
+    .pm-panel #ap-style-modal .ap-style-option-btn:hover { border-color: var(--stroke-strong); background: var(--n09); }
+    .pm-panel #ap-style-modal .ap-style-option-thumb { display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; border: 0; border-radius: 0; box-shadow: none; background: var(--fill-weak); }
+    .pm-panel #ap-style-modal .ap-style-option-label { padding: var(--spacing-12); text-align: start; font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small); font-weight: var(--font-weight-strong); color: var(--text-strong); }
+    .pm-panel #ap-style-modal .ap-style-option-btn:has(input:checked) { border-color: var(--stroke-selected); box-shadow: 0 0 0 1px var(--stroke-selected); background: color-mix(in srgb, var(--stroke-selected) 9%, var(--n09)); }
+    .pm-panel #ap-style-modal .ap-style-option-btn:has(input:checked) .ap-style-option-label { color: var(--text-brand); }
+    .pm-panel #ap-style-modal .ap-style-option-btn:has(input:focus-visible) { box-shadow: 0 0 0 3px var(--stroke-focus); }
     /* 全螢幕時按鈕在右下角：tooltip 往上彈（往下會被卡片邊緣裁掉），箭頭改朝下。 */
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn::before { top: auto; bottom: calc(100% + 4px); border-bottom: 0; border-top: 6px solid var(--fill-strong); transform: translateY(2px); }
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn::after { top: auto; bottom: calc(100% + 10px); transform: translateY(2px); }
@@ -5519,15 +5598,15 @@
     /* Before / After 標籤：放在上面（不會被右上的 × 擋到），深色半透明底 + 白字。 */
     :is(.pm-panel, body) #compare-card.is-fullscreen #compare-hint {
       position: absolute; top: var(--spacing-12); left: var(--spacing-12); right: auto; width: auto; height: auto; margin: 0; padding: var(--spacing-4) var(--spacing-12);
-      border: 0; border-radius: var(--corner-radius-8, 8px); background: var(--n09) !important; color: var(--text-strong) !important;
-      -webkit-backdrop-filter: none; backdrop-filter: none;
+      border: 0; border-radius: var(--corner-radius-8, 8px); background: rgba(24,22,20,.72) !important; color: #fff !important;
+      -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
       font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small); font-weight: var(--font-weight-strong);
     }
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row .canvas-btn {
-      width: 40px; height: 40px; border: 0 !important; border-radius: 50%; background: var(--n09) !important; background-image: none !important;
-      color: var(--text-strong) !important; box-shadow: 0 1px 4px rgba(0,0,0,.2) !important; -webkit-backdrop-filter: none; backdrop-filter: none;
+      width: 40px; height: 40px; border: 0 !important; border-radius: 50%; background: rgba(24,22,20,.72) !important; background-image: none !important;
+      color: #fff !important; box-shadow: none !important; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
     }
-    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row .canvas-btn:hover { background: color-mix(in srgb, var(--n09) 90%, var(--text-strong)) !important; }
+    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row .canvas-btn:hover { background: rgba(24,22,20,.9) !important; }
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row .canvas-btn svg { width: 24px; height: 24px; }
     .pm-panel #compare-card .photo-frame { width: 100%; height: 100%; border-radius: 0; }
     .pm-panel #compare-card .compare-img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; object-position: center; border-radius: 0; }

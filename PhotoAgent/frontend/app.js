@@ -13981,14 +13981,17 @@
     }
     // 編輯器：剛 Retouch 完、只有一個結果時也要出現照片上的縮圖列（原圖 + 第 1 版），
     // 所以幫這個結果補上「第 1 版」的標記；之後有新版本，refreshBatchVersionsAfterEdit 會換成完整標記的清單。
-    if (runs.length === 1 && document.body.classList.contains("pm-panel") && runs[0].status === "done" && !runs[0].versionTotal) {
+    if (runs.length === 1 && document.body.classList.contains("pm-panel") && runs[0].status === "done") {
       const r0 = runs[0];
-      r0.versionId = r0.versionId || "live-1";
-      r0.versionNumber = r0.versionNumber || 1;
-      r0.versionTotal = 1;
-      r0.runInVersion = 1;
-      r0.runsInVersion = 1;
-      if (r0.sourceRun == null) r0.sourceRun = r0.run || 1;
+      // 已經標過（再渲染一次）就維持，不要掉到下面的 reset 又被藏起來。
+      if (!r0.versionTotal) {
+        r0.versionId = r0.versionId || "live-1";
+        r0.versionNumber = r0.versionNumber || 1;
+        r0.versionTotal = 1;
+        r0.runInVersion = 1;
+        r0.runsInVersion = 1;
+        if (r0.sourceRun == null) r0.sourceRun = r0.run || 1;
+      }
     } else if (runs.length <= 1) {
       resetRunSwitcher();
       return;
@@ -16191,6 +16194,47 @@
     frame.addEventListener("pointercancel", end);
     const reset = () => { frame.style.removeProperty("--pan-x"); frame.style.removeProperty("--pan-y"); };
     frame.querySelectorAll(".compare-img").forEach((img) => new MutationObserver(reset).observe(img, { attributes: true, attributeFilter: ["src"] }));
+  })();
+  // 重試中的進度條動畫：每次畫面出現都要從頭開始跑（不然會接著上一次的進度、看起來從一半開始）。
+  (function setupLoadingBarRestart() {
+    const restart = (el) => {
+      el.classList.add("pm-bar-restart");
+      void el.offsetWidth;
+      requestAnimationFrame(() => el.classList.remove("pm-bar-restart"));
+    };
+    ["#batch-main-loading", "#canvas-loading"].forEach((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return;
+      let wasHidden = el.hidden;
+      new MutationObserver(() => {
+        if (wasHidden && !el.hidden) restart(el);
+        wasHidden = el.hidden;
+      }).observe(el, { attributes: true, attributeFilter: ["hidden", "class"] });
+    });
+  })();
+  // 照片依比例完整顯示（contain）時框裡有留白：算出照片本身在框裡的左上角位置，
+  // 給 #compare-hint（Before／After 標籤）貼在照片左上角用（--img-x / --img-y）。
+  (function setupPhotoImgBox() {
+    const wrap = els.photoFrameWrap;
+    if (!wrap) return;
+    const sync = () => {
+      if (!document.body.classList.contains("pm-panel")) return;
+      const img = [...wrap.querySelectorAll(".compare-img")].find((i) => i.offsetParent && i.naturalWidth);
+      if (!img) return;
+      const fw = wrap.clientWidth;
+      const fh = wrap.clientHeight;
+      if (!fw || !fh) return;
+      const scale = Math.min(fw / img.naturalWidth, fh / img.naturalHeight);
+      wrap.style.setProperty("--img-x", `${Math.max(0, Math.round((fw - img.naturalWidth * scale) / 2))}px`);
+      wrap.style.setProperty("--img-y", `${Math.max(0, Math.round((fh - img.naturalHeight * scale) / 2))}px`);
+    };
+    wrap.querySelectorAll(".compare-img").forEach((img) => {
+      img.addEventListener("load", sync);
+      new MutationObserver(sync).observe(img, { attributes: true, attributeFilter: ["src", "hidden", "class", "style"] });
+    });
+    if (window.ResizeObserver) new ResizeObserver(sync).observe(wrap);
+    window.addEventListener("resize", sync);
+    if (els.compareCard) new MutationObserver(sync).observe(els.compareCard, { attributes: true, attributeFilter: ["class"] });
   })();
   // 轉成橫向或視窗拉寬，超過手機寬度就收起來，回到原本的版面。
   photoViewerMedia.addEventListener("change", (e) => {
