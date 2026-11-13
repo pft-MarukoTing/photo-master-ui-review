@@ -541,7 +541,7 @@
       background: var(--border-2);
     }
     .ap-step-line--active {
-      background: linear-gradient(90deg, var(--accent), var(--border-2));
+      background: var(--border-2);
     }
     /* Narrow phones: .ap-step's row layout (num circle + name side by side)
        has nowhere near enough width for 4 steps' worth of circle+label pairs
@@ -5384,10 +5384,12 @@
     .pm-panel .batch-main-loading:not(.is-error) .proc-text { position: relative; z-index: 1; flex: 0 0 auto; align-self: center; width: 100%; max-width: 560px; margin: 0; padding: 0; }
     .pm-panel .batch-main-loading:not(.is-error) .proc-text::before {
       content: ""; display: block; width: 240px; height: 4px; margin: 0 auto var(--spacing-20); border-radius: 4px;
-      background: linear-gradient(90deg, var(--fill-brand-strong, #03ADE2) 0 30%, var(--fill-disabled) 30% 100%); background-size: 240px 4px;
+      /* 兩層：底下固定的灰色軌道，上面一段「不重複」的藍色，只有藍色那層在動——
+         一段整個跑出右邊，下一段才從左邊重新進來（不會同時看到兩段）。 */
+      background: linear-gradient(var(--fill-brand-strong, #03ADE2), var(--fill-brand-strong, #03ADE2)) no-repeat 0 0 / 72px 100%, var(--fill-disabled);
       animation: pm-retouch-bar 1.6s ease-in-out infinite;
     }
-    @keyframes pm-retouch-bar { 0% { background-position: -72px 0; } 100% { background-position: 240px 0; } }
+    @keyframes pm-retouch-bar { 0% { background-position: -72px 0, 0 0; } 100% { background-position: 240px 0, 0 0; } }
     /* 每次出現都從頭開始跑（app.js 在畫面顯示時暫時加上這個 class 再拿掉，強迫動畫重來）。 */
     .pm-bar-restart .proc-text::before, .pm-bar-restart .pm-wait-progress > span { animation: none !important; }
     @media (prefers-reduced-motion: reduce) { .pm-panel .batch-main-loading:not(.is-error) .proc-text::before { animation: none; } }
@@ -5590,6 +5592,70 @@
     .pm-panel #ap-style-modal .ap-style-option-btn:has(input:checked) { border-color: var(--stroke-selected); box-shadow: 0 0 0 1px var(--stroke-selected); background: color-mix(in srgb, var(--stroke-selected) 9%, var(--n09)); }
     .pm-panel #ap-style-modal .ap-style-option-btn:has(input:checked) .ap-style-option-label { color: var(--text-brand); }
     .pm-panel #ap-style-modal .ap-style-option-btn:has(input:focus-visible) { box-shadow: 0 0 0 3px var(--stroke-focus); }
+    /* Style 卡片底下的名字縮小一點（12px），「Camera Angle」才放得下；箭頭也跟著縮、左右內距收緊。 */
+    .pm-panel #ap-review-style .ap-style-card-name,
+    .pm-panel #ap-review-style .ap-style-card-value {
+      font-size: 12px; line-height: 16px; padding-block: var(--spacing-8); padding-inline: var(--spacing-8) var(--spacing-4);
+    }
+    .pm-panel #ap-review-style .ap-style-card::after { width: 14px; height: 14px; margin-inline-end: var(--spacing-8); }
+    /* 手機（≤768px）的編輯器：header 不放「新對話」「最近照片」兩顆圖示、左上角的「我的照片」抽屜鈕也不要；
+       照片卡片要有明確高度（原本是 0，結果圖沒地方顯示、Photo Overview 上面一片空白），結果直接顯示在最上面。 */
+    @media (max-width: 768px) {
+      .pm-panel .site-header .header-icon-btn,
+      .pm-panel #batch-drawer-trigger,
+      .pm-panel #step-indicator-slot { display: none !important; }
+      .pm-panel #compare-card:not(.is-fullscreen) { height: min(112vw, 62dvh); min-height: 320px; }
+      .pm-panel #results-canvas-col, .pm-panel #results-canvas-top { height: auto; }
+    }
+    /* 手機（≤600px）編輯器的照片卡片：跟寬螢幕一樣——卡片高度貼著照片比例（--img-ar 由 app.js 設），
+       左上 Before/After 標籤，右上兩顆白色圓形鈕（全螢幕、下載），不用半透明膠囊和「Enlarge」。 */
+    @media (max-width: 600px) {
+      .pm-panel #compare-card:not(.is-fullscreen) { height: auto; min-height: 0; aspect-ratio: var(--img-ar, 4 / 3); }
+      .pm-panel #compare-card:not(.is-fullscreen) #compare-hint { display: block !important; }
+      .pm-panel #compare-card:not(.is-fullscreen) #compare-fullscreen-btn { display: flex !important; }
+      .pm-panel #compare-card .canvas-header-row .canvas-tools { display: contents; height: auto; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+      .pm-panel #compare-card .canvas-header-row .canvas-version-btn { display: none; }
+      .pm-panel #compare-card .canvas-header-row .canvas-actions { height: auto; gap: var(--spacing-8); }
+      .pm-panel #compare-card .canvas-header-row .canvas-actions .canvas-btn { width: 44px; height: 44px; border-radius: 50%; }
+      .pm-panel #compare-card .canvas-header-row .canvas-btn-wrap { height: auto; }
+    }
+    /* 手機（≤600px）底下固定的 Settings / Retouch：兩顆左右撐滿，整組墊一層往上淡出的白色漸層，
+       捲到下面的內容時不會跟按鈕列硬碰硬。 */
+    @media (max-width: 600px) {
+      .pm-panel .ap-actions-row {
+        padding: var(--spacing-24, 24px) var(--spacing-16) var(--spacing-16);
+        background: linear-gradient(to top, var(--n09) 0%, var(--n09) 55%, transparent 100%);
+      }
+      .pm-panel .ap-actions-row .ap-settings-run-row { display: flex; width: 100%; margin-inline-start: 0; gap: var(--spacing-8); }
+      .pm-panel .ap-actions-row .ap-settings-run-row > button:not([hidden]) { flex: 1 1 0; min-width: 0; justify-content: center; }
+    }
+    /* 照片總覽：不設高度上限（原本收合時用 max-height 裁，文字少時「顯示分析」會疊在文字上）；
+       自己撐開、不被 flex 壓扁，下面留出放按鈕的 40px，太高就讓外面的面板捲動。 */
+    .pm-panel .ap-photo-summary,
+    .pm-panel .ap-photo-summary.ap-photo-summary--compact,
+    .pm-panel .ap-photo-summary.ap-photo-summary--expanded { flex: 0 0 auto !important; max-height: none; overflow: visible; padding-bottom: 40px; }
+    /* 寬螢幕、螢幕矮的時候：照片總覽＋分析調整整段一起捲（外層 #ap-options-card-inline 捲動），
+       裡面不再各自裁切、各自捲；底下的 Settings / Retouch 還是 sticky 在最下面。 */
+    @media (min-width: 601px) {
+      .pm-panel #ap-options-card-inline { overflow-y: auto !important; overflow-x: hidden; }
+      .pm-panel #ap-options-card-inline > :not(.ap-actions-row) { flex: 0 0 auto !important; }
+      .pm-panel #ap-analysis-shell { min-height: 0 !important; height: auto !important; overflow: visible; }
+      .pm-panel #ap-analysis-shell :is(#ap-review-panel, .ap-toggle-card-body, #ap-face-detail, .ap-photo-issues-list-frame) { max-height: none; overflow: visible; }
+      .pm-panel #ap-analysis-shell #ap-review-panel { min-height: 0; }
+      .pm-panel #ap-analysis-shell #ap-face-detail { flex: none; }
+      /* app.js 的 syncAnalysisPanelHeights 把這三層鎖成固定像素高（填滿原本的 494px 欄），整段改成跟著內容長之後，
+         高度一律讓內容決定，不然高螢幕時下面會留一大塊空白。 */
+      .pm-panel #ap-analysis-shell .ap-analysis-shell-body,
+      .pm-panel #ap-analysis-shell #ap-review-panel,
+      .pm-panel #ap-analysis-shell .ap-toggle-card-body { height: auto !important; }
+      .pm-panel #ap-face-detail.has-more-below::after { display: none; }
+      /* 按鈕列自己一條乾淨的底（不透明白底 + 上緣細線），捲動的內容在它後面被擋住，不會透出來或疊上去。 */
+      .pm-panel #ap-options-card-inline > .ap-actions-row { z-index: 10; margin-top: 0; padding-top: var(--spacing-12); padding-bottom: var(--spacing-4); background: var(--n09); }
+    }
+    /* 分析與調整：分頁列（Portrait / Scene / Style / My Requests）貼滿卡片，不留外圈內距；
+       分頁底下的內容自己留 14px 左右內距。 */
+    .pm-panel #ap-analysis-shell .ap-analysis-shell-body { padding: 0; }
+    .pm-panel #ap-analysis-shell .ap-toggle-card-body { padding-inline: var(--spacing-14, 14px); padding-bottom: var(--spacing-14, 14px); }
     /* 全螢幕時按鈕在右下角：tooltip 往上彈（往下會被卡片邊緣裁掉），箭頭改朝下。 */
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn::before { top: auto; bottom: calc(100% + 4px); border-bottom: 0; border-top: 6px solid var(--fill-strong); transform: translateY(2px); }
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn::after { top: auto; bottom: calc(100% + 10px); transform: translateY(2px); }

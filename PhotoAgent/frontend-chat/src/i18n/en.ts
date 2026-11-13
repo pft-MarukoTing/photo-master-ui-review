@@ -327,6 +327,8 @@ export const EN: Record<string, string> = {
   "這次要修的照片": "Photo to retouch",
   "點一下看大圖": "Tap to enlarge",
   "看大圖": "Enlarge",
+  "點圖可以放大看。": "Tap a photo to enlarge it.",
+  "點照片可以放大，按住不放可以看原圖。": "Click the photo to enlarge it; press and hold to see the original.",
   "照片大圖": "Enlarged photo",
   "取消指定{v1}": "Deselect {v1}",
   "指定{v1}": "Select {v1}",

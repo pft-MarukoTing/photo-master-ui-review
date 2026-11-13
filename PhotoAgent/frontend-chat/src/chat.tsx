@@ -1003,7 +1003,7 @@ export function ResultCard({ job, ordinal, from, failed, next, continuable, note
         )}
         {!noting && <p class="chat-text chat-muted">
           {failed > 0 && t("有 {failed} 張沒有成功，已略過。", { failed })}
-          <span class="chat-result-hint-wide">{rtl ? t("右側可比較 Before / After，也可從「美化紀錄」切換版本。") : t("左側可比較 Before / After，也可從「美化紀錄」切換版本。")}</span>
+          <span class="chat-result-hint-wide">{t("點照片可以放大，按住不放可以看原圖。")}</span>
           <span class="chat-result-hint-narrow">{rtl ? t("上方照片可以跟原圖比，點左上的版本也能切換。") : t("上方照片可以跟原圖比，點右上的版本也能切換。")}</span>
         </p>}
         {next && !noting && <p class="chat-text">{continuable

@@ -730,6 +730,8 @@ const analysisJob = (p: Photo) => p.analysis_job_id || p.analyze_job_id;
 
 export function App() {
   const drawerLayout = useMedia(DRAWER_LAYOUT);
+  // 手機（≤768px）：批次總覽上面不放「我的照片」那一塊，「全部…」那排鍵放進對話裡。
+  const phone = useMedia("(max-width:768px)");
   const [caps, setCaps] = useState<Capabilities | null>(null);
   // 開機時打開的 #case= 連結也要用到 caps，那時 state 還沒更新到 closure 裡。
   const capsRef = useRef<Capabilities | null>(null);
@@ -3511,7 +3513,7 @@ export function App() {
       : t("還沒改過需求或設定，會照原本的再美化一次，結果可能跟上次不太一樣");
     const redoLbl = redoLabel(redoKeys().length, batch.length);
     const labels = { analyze: allLabel("analyze", pending, batch.length), render: allLabel("render", renderableAll, batch.length), redo: redoLbl };
-    const chipsNow: OverviewChips | null = drawerLayout ? null
+    const chipsNow: OverviewChips | null = drawerLayout && !phone ? null
       : finished ? { pending: false, renderable: false, finished: true, redo: !!redoAll, labels }
       : pending || renderable ? { pending: !!pending, renderable: !!renderable, labels } : null;
     const btn = chipsNow ? t("下面@@按鈕位置") : spot;
@@ -3589,7 +3591,7 @@ export function App() {
       const has: OverviewChips = live
         ? { pending: !finished && !!pending, renderable: !finished && !!renderable, finished, redo: !!redoAll, labels } : c;
       const lb = has.labels || { analyze: "全部分析", render: "全部一鍵美化" };
-      if (live && (askOpen || drawerLayout || !(has.pending || has.renderable || has.finished))) return null;
+      if (live && (askOpen || (drawerLayout && !phone) || !(has.pending || has.renderable || has.finished))) return null;
       return (
         // 跟單張上傳頁那排同一款（ActionChoice）：黑底白字＋圖示的 YCO 按鈕，設定是緊跟在後的圖示鈕。
         <div class="chat-choices chat-actions is-yco">
@@ -3649,7 +3651,7 @@ export function App() {
             notes.filter((n) => n.kept !== false && !n.dropped).map((n) => n.text).join("\n"),
           ),
         }}
-        top={drawerLayout &&
+        top={drawerLayout && !phone &&
           <BatchOverviewGrid
             key={sourceSrc(batch[0])}
             sources={batch}
@@ -3723,7 +3725,6 @@ export function App() {
                 ? t("這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換美化引擎或長寬比；只想改某一張，從{where}選取那張就好。", { btn: introBtn, where })
                 : t("這裡是這批照片的總覽：{btn}可以一次美化全部，也可以先按「設定」統一換長寬比；只想改某一張，從{where}選取那張就好。", { btn: introBtn, where })
               : t("這裡是這批照片的總覽：{btn}可以一次處理全部，也可以從{where}選取某一張個別調整。", { btn: introBtn, where })}</p>
-          <p class="chat-text chat-muted">{t("之後想回來這裡，點{where}「我的照片」最上面的「總覽」。", { where: photosSpot() })}</p>
           {chipRow(intro?.chips, introLive)}
         </AssistantMsg>}
         {overview.map((ot, i) => {
@@ -3763,7 +3764,11 @@ export function App() {
               <AssistantMsg key={ot.id}>
                 <p class="chat-text">{(parts.length ? t("剛剛送出的都處理完成了，目前 {list}。", { list: parts.join(t("、")) }) : t("剛剛送出的都處理完成了。"))
                   + hintFor(ot).replace(/。$/, "；")
-                  + (ot.failed ? t("沒成功的在{where}會標「失敗」，選取那張可以看原因。", { where }) : t("想看哪張的結果，從{where}選取那張。", { where }))}</p>
+                  + (ot.failed ? t("沒成功的在{where}會標「失敗」，選取那張可以看原因。", { where }) : (phone ? t("點圖可以放大看。") : t("想看哪張的結果，從{where}選取那張。", { where })))}</p>
+                {phone && <BatchResultStrip items={batch.flatMap((b) => {
+                  const v = batchLive[sourceSrc(b)]?.active_version;
+                  return v ? [{ thumb: urls.resultThumb(v.job_id, v.run), full: urls.resultImage(v.job_id, v.run) }] : [];
+                })} />}
                 {chipRow(turnHints.current[ot.id]?.chips, latest)}
               </AssistantMsg>
             );
@@ -4007,7 +4012,7 @@ export function App() {
                   hop={hopTrigger}
                   onHopped={() => setHopTrigger(false)}
                 />
-              ) : session.photos.length > 1 && (
+              ) : (session.photos.length > 1 || !drawerLayout) && (
                 <BatchSidebar
                   photos={session.photos}
                   messages={session.messages || []}
@@ -4036,6 +4041,7 @@ export function App() {
             onSelectVersion={selectVersion}
             onRender={renderPhoto}
             onFile={pickFile}
+            onSample={showSamples}
             onAsk={askPhoto}
             onContinue={caps?.features?.render_from_version ? continuePhoto : undefined}
             onAnswerWaiting={answerWaiting}
@@ -4455,6 +4461,22 @@ const GRID_MIN_CELL_WIDE = 104;
 const GRID_GAP = 8;
 // 「我的照片」收成左邊抽屜的寬度，跟 chat.css 那兩段 @media 同一條。
 const DRAWER_MEDIA = "(max-width: 900px), (max-width: 1200px) and (orientation: portrait)";
+
+// 手機上沒有「我的照片」可以點：跑完的結果直接放在訊息裡，點圖放大。
+function BatchResultStrip({ items }: { items: { thumb: string; full: string }[] }) {
+  const [viewing, setViewing] = useState<string | null>(null);
+  if (!items.length) return null;
+  return (
+    <div class="batch-result-strip">
+      {items.map((x) => (
+        <button key={x.full} type="button" class="batch-result-thumb" aria-label={t("看大圖")} onClick={() => setViewing(x.full)}>
+          <img src={x.thumb} alt="" loading="lazy" />
+        </button>
+      ))}
+      <PhotoViewer src={viewing} onClose={() => setViewing(null)} />
+    </div>
+  );
+}
 
 function BatchOverviewGrid(props: {
   sources: Source[];
@@ -4972,7 +4994,7 @@ export function BatchSidebar(props: {
           <h2 class="batch-sidebar-title">{t("我的照片")}</h2>
           <BatchDownloadButton plan={downloadOf(photos.filter((p) => photoState(p).key === "done"), photos.length)} busy={downloading} onDownload={download} />
         </div>
-        {todo.length ? (
+        {todo.length && photos.length > 1 ? (
           <div class="batch-sidebar-all chat-actions is-yco">
             <div class="chat-actions-main">
             <ActionChoice
@@ -5635,6 +5657,8 @@ export function SessionView(props: {
   onContinue?: (v: Version, text: string, styles: Record<string, string>, ratio: string) => Promise<boolean>;
   // 只剩拖放進畫布這條路會用到 -- 丟一張新的照片進來等於開一個新對話。
   onFile: (f: File) => void;
+  // 輸入框裡的「換一張照片」：跟上傳頁同一顆；沒給就只有「上傳照片」。
+  onSample?: () => void;
   // faces 只在沒有分析時用：指的人是本地偵測的框和位置，取代 subjectIndices 送出。
   onAsk: (text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string, picked?: boolean) => Promise<boolean>;
   onAnswerWaiting: (messageId: string, screen: Screen) => void;
@@ -7616,6 +7640,8 @@ export function SessionView(props: {
                       />
                       <Composer
                         disabled={busy || photoBusy || photo.status === "failed" || contReviewing}
+                        onFile={props.onFile}
+                        onSample={props.onSample}
                         onSend={send}
                         placeholder={continuing
                           ? [t("想在第 {n} 版上改什麼？", { n: continuing.ordinal }), t("想改什麼？")]

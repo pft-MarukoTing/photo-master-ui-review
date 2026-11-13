@@ -16222,6 +16222,8 @@
       if (!document.body.classList.contains("pm-panel")) return;
       const img = [...wrap.querySelectorAll(".compare-img")].find((i) => i.offsetParent && i.naturalWidth);
       if (!img) return;
+      // 手機：卡片高度貼著照片比例（index.html 的 aspect-ratio: var(--img-ar)）。
+      if (els.compareCard) els.compareCard.style.setProperty("--img-ar", `${img.naturalWidth} / ${img.naturalHeight}`);
       const fw = wrap.clientWidth;
       const fh = wrap.clientHeight;
       if (!fw || !fh) return;

@@ -423,6 +423,16 @@ export function Header(props: {
     // 原本攤在 header 上的按鈕（回到首頁、設定、回報…）收進頭像點開的選單，功能都還在。
     <header class="site-header yco-header">
       <div class="header-inner">
+        {/* 手機版（YCO Mobile ≤768px）：左邊是漢堡選單 + logo 圖示，右邊只有頭像。漢堡開「最近照片」，沒有最近照片的畫面就開頭像選單。 */}
+        <button
+          type="button"
+          class="chat-header-menu"
+          aria-label={t("選單")}
+          title={t("選單")}
+          onClick={props.showHistory ? props.onHistory : () => setMenu(!menu)}
+        >
+          <Icon name="menu" size={22} />
+        </button>
         <button type="button" class="logo yco-brand" id="logo-home-btn" aria-label="YouCam Online Editor" onClick={props.onHome}>
           <img class="yco-logo-symbol" src={ycoLogoSymbol} alt="" aria-hidden="true" />
           <YcoWordmark />

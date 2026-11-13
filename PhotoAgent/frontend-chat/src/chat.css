@@ -514,10 +514,11 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 .chat-error{color:var(--danger)}
 .chat-panel.is-dragging{outline:2px dashed var(--accent);outline-offset:-4px}
 .chat-verdict b.is-warn{background:var(--warn-bg);color:var(--warn)}
-.chat-chip:not([disabled]):not(.is-static):hover{border-color:var(--accent);color:var(--accent-text)}
-.chat-chip.is-primary:not([disabled]):hover{background:var(--tonal-hi)}
-.chat-chip.is-ghost:not([disabled]):hover{background:var(--tonal-lo)}
-.chat-send:not([disabled]):hover{background:var(--tonal-hi)}
+/* hover 一律在原本的底色上疊一層 fill-hover，不換字色、邊框色或底色。 */
+.chat-chip:not([disabled]):not(.is-static):hover,
+.chat-chip.is-primary:not([disabled]):hover,
+.chat-chip.is-ghost:not([disabled]):hover,
+.chat-send:not([disabled]):hover{background-image:linear-gradient(var(--fill-hover),var(--fill-hover))}
 .home-start-btn:not([disabled]):hover{filter:brightness(1.05)}
 /* The dialog's own hover feedback, in the same block as the rest. */
 .sample-tile:not(.is-full):hover{border-color:rgba(var(--accent-rgb),.72)}
@@ -2716,4 +2717,59 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   #results-detail #compare-card:not(.is-fullscreen) .photo-frame img,
   #results-detail #compare-card:not(.is-fullscreen) .photo-frame-wrap > .compare-img{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;object-fit:cover;border-radius:0}
   #results-detail #compare-card:not(.is-fullscreen) .version-strip{flex:none;margin:0;border-radius:0}
+}
+
+
+/* ═══ 手機 header（Figma Navigation header · 03_Mobile ≤768px）═══
+   高 64、左右 16；左邊漢堡選單 32 + logo 圖示 32（間距 12），右邊只有 32 的深色圓形頭像。
+   新對話、最近照片的圖示收進頭像選單／漢堡，不再各佔一格；左上角的「我的照片」抽屜鈕不要。 */
+.chat-header-menu{display:none}
+@media (max-width:768px){
+  html:root{--header-h:64px}
+  .site-header.yco-header .header-inner{height:64px;padding:0 var(--spacing-16);gap:var(--spacing-12)}
+  .chat-header-menu{display:flex;align-items:center;justify-content:center;flex:0 0 auto;width:32px;height:32px;margin:0;padding:0;border:0;border-radius:var(--corner-radius-8,8px);
+    background:transparent;color:var(--text-strong);cursor:pointer}
+  .chat-header-menu:hover{background:var(--fill-hover)}
+  .chat-header-menu:focus-visible{outline:0;box-shadow:0 0 0 3px var(--stroke-focus)}
+  .site-header.yco-header .yco-brand{margin-inline-end:auto}
+  .yco-logo-symbol{width:32px;height:32px}
+  .site-header.yco-header .yco-wordmark{display:none}
+  .site-header.yco-header .chat-header-icon{display:none !important}
+  .yco-avatar{width:32px;height:32px}
+  .yco-avatar svg{width:18px;height:18px}
+  .batch-drawer-trigger,#results-body.batch-mode>.batch-drawer-trigger{display:none !important}
+  #upload-section .upload-content-row:has(>.batch-drawer-trigger) .chat-panel>:is(.chat-panel-head,.chat-panel-photo){padding-inline-start:var(--spacing-16)}
+  /* 對話面板的標題列：「對話」圖示、標題、副標（新對話…）都不要，只留 對話｜編輯器 切換。 */
+  .chat-panel-head>svg,.chat-panel-head .chat-panel-title,.chat-panel-head .chat-panel-sub{display:none !important}
+  .chat-panel-head .mode-switch{margin-inline:auto}
+}
+
+/* 手機：批次結果直接放在訊息裡（BatchResultStrip），點圖放大 */
+.batch-result-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin:12px 0 4px}
+.batch-result-thumb{display:block;padding:0;border:0;background:none;border-radius:12px;cursor:zoom-in}
+.batch-result-thumb img{display:block;width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:12px;border:1px solid var(--n24);box-sizing:border-box}
+.batch-result-thumb:focus-visible{outline:2px solid var(--stroke-brand-strong);outline-offset:2px}
+
+/* 手機：設定欄位撐滿整排（兩格各一半），不要留空的第三格把下拉擠到被截字 */
+@media (max-width:768px){
+  .chat-settings-fields,.chat-settings-fields:has(> :nth-child(4)){grid-template-columns:repeat(auto-fit,minmax(0,1fr))}
+}
+
+/* 手機首頁：範例／最近照片那排不放「全部」 */
+@media (max-width:768px){
+  .upload-gallery-all{display:none !important}
+}
+
+/* 桌機的對話結果頁：不要左邊那塊大圖（Before/After、版本紀錄），版型跟上傳頁一樣——
+   左邊「我的照片」、右邊對話撐滿；成品直接在對話的卡片裡，點圖用大圖檢視。 */
+@media (min-width:1201px),(min-width:901px) and (orientation:landscape){
+  #results-canvas-row.showing-analysis #results-canvas-col{display:none !important}
+  .results-canvas-row.showing-analysis .results-analysis-slot{flex:1 1 0;max-width:none}
+}
+
+/* 桌機結果頁的左右欄：跟上傳頁同一組尺寸（我的照片 280、對話欄之間 16、側欄不多留內距），
+   兩頁切換時標題列和卡片位置才不會跳。 */
+@media (min-width:1201px),(min-width:901px) and (orientation:landscape){
+  body #results-body.batch-mode #batch-sidebar{flex:0 0 280px !important;max-width:280px !important;width:280px !important;padding-top:0 !important;border-top-width:0}
+  #results-body.batch-mode{gap:16px !important}
 }

@@ -150,6 +150,17 @@ const ICONS: Record<string, { sw: number; body: JSX.Element; mirror?: boolean }>
       </>
     ),
   },
+  // 手機 header 的漢堡選單（lucide menu）。
+  menu: {
+    sw: 2,
+    body: (
+      <>
+        <path d="M4 6h16" />
+        <path d="M4 12h16" />
+        <path d="M4 18h16" />
+      </>
+    ),
+  },
   // 最近照片: the old header's history clock, so both modes draw it the same.
   clock: {
     sw: 2.5,
