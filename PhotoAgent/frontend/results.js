@@ -1439,7 +1439,8 @@ window.PhotoAgentResults = (() => {
     // symmetrically with 收合 instead of leaving one half of the toggle
     // phrased as a destination and the other as a verb. The pill's mark moved
     // off the chevron for the same split (see .ap-photo-summary-toggle).
-    toggle.textContent = photoSummaryExpanded ? tr("收合") : tr("展開");
+    // 照片總覽的開關：收合時寫「顯示分析」、展開時寫「隱藏分析」（其他地方的展開／收合不動）。
+    toggle.textContent = photoSummaryExpanded ? tr("隱藏分析") : tr("顯示分析");
     toggle.setAttribute("aria-expanded", String(photoSummaryExpanded));
     if (photoSummaryExpanded) {
       summary.classList.add("ap-photo-summary--expanded");

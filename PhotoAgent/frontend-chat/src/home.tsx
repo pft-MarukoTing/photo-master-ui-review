@@ -438,8 +438,7 @@ export function Header(props: {
             <Icon name="clock" size={22} />
           </button>
         )}
-        {props.showLang && <LangSwitch debugUi={!!props.debugUi} />}
-        <ColorModeToggle />
+        {/* header 上不放換語言、換色彩模式（EN／月亮）。 */}
         {/* YCO 的頭像：深色圓底＋白色人像。每個寬度都用它開選單（取代原本只在手機出現的 ⋯）。 */}
         <button
           type="button"
@@ -512,7 +511,18 @@ export function Header(props: {
 // result, aligned and cropped to the same 4:5 frame so the slider lines up.
 // H02：分隔線預設停在臉中間（鼻樑約在 48%），兩邊各露出半張臉，不用拖就看得出差別。
 function HeroCompare() {
-  const [pos, setPos] = useState(48);
+  // A 版（直式人像）鼻樑在 48%；B 版（橫向海岸照）人臉在 67% 左右，預設也停在臉上。切換 A／B 時重設。
+  const defaultPos = () => (document.documentElement.classList.contains("ab-home-b") ? 67 : 48);
+  const [pos, setPos] = useState(defaultPos);
+  useEffect(() => {
+    let last = defaultPos();
+    const mo = new MutationObserver(() => {
+      const next = defaultPos();
+      if (next !== last) { last = next; setPos(next); }
+    });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => mo.disconnect();
+  }, []);
   // 拉到某一邊、那一邊的標籤會被蓋住時把它藏起來：Before 標籤在左，左邊剩下的寬度（pos）放不下它就藏；
   // After 同理看右邊。拉到底時只剩對的那一個（整張都是 After 就只剩 After）。
   const box = useRef<HTMLDivElement>(null);

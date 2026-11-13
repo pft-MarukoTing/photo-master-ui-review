@@ -3,6 +3,7 @@
 import { rtl, shownLabel, shownRecipe, t } from "./i18n";
 import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { createPortal } from "preact/compat";
 import { api, urls } from "./api";
 import { Icon } from "./icons";
 import { markLeavingForPanel } from "./pre-handoff";
@@ -180,7 +181,7 @@ export function ModeSwitch({ mode, class: cls }: { mode?: PanelMode; class?: str
         // 還沒選照片就沒有東西能帶到面板；一有照片後，任何流程狀態都能切換。
         <span class="mode-switch-opt" aria-disabled="true" title={t("選好照片後就能切換")}>
           <Icon name="layout" size={14} />
-          {t("面板")}
+          {t("編輯器")}
         </span>
       ) : (
         <a
@@ -198,7 +199,7 @@ export function ModeSwitch({ mode, class: cls }: { mode?: PanelMode; class?: str
           }}
         >
           <Icon name="layout" size={14} />
-          {t("面板")}
+          {t("編輯器")}
         </a>
       )}
     </nav>
@@ -486,23 +487,32 @@ export function UploadBubble({ src, text, onOpen }: { src: string; text: string;
 
 // 多張一起上傳：前幾張並排示意，多的寫 +N。簡報 p4 S05：點 +N 就在同一則訊息裡展開全部（格狀），
 // 底下一顆「顯示較少」收回去。
-export function BatchUploadBubble({ srcs, text }: { srcs: string[]; text: string }) {
+export function BatchUploadBubble({ srcs, text, fullSrcs }: { srcs: string[]; text: string; fullSrcs?: string[] }) {
   const [open, setOpen] = useState(false);
+  // 點縮圖放大：fullSrcs 是跟 srcs 同順序的原圖網址；沒給就放大縮圖本身。
+  const [viewing, setViewing] = useState<string | null>(null);
+  const bigOf = (i: number) => (fullSrcs && fullSrcs[i]) || srcs[i];
   const shown = srcs.slice(0, 4);
   const more = srcs.length - shown.length;
+  const viewer = <PhotoViewer src={viewing} onClose={() => setViewing(null)} />;
   if (open && more > 0) {
     return (
       <div class="chat-upload is-batch is-open">
         <div class="chat-upload-card">
           <p class="chat-upload-card-title">{text}</p>
           <div class="chat-upload-grid">
-            {srcs.map((s) => <img key={s} src={s} alt="" loading="lazy" />)}
+            {srcs.map((s, i) => (
+              <button key={s} type="button" class="chat-upload-thumb" aria-label={t("看大圖")} onClick={() => setViewing(bigOf(i))}>
+                <img src={s} alt="" loading="lazy" />
+              </button>
+            ))}
           </div>
           {/* YCO Button：Secondary · Neutral · Tiny。 */}
           <button type="button" class="ycoButton variant_secondary tone_neutral size_tiny chat-upload-less" onClick={() => setOpen(false)}>
             <span class="label">{t("顯示較少")}</span>
           </button>
         </div>
+        {viewer}
       </div>
     );
   }
@@ -510,7 +520,11 @@ export function BatchUploadBubble({ srcs, text }: { srcs: string[]; text: string
     <div class="chat-upload is-batch">
       {shown.length > 0 && (
         <div class="chat-upload-stack">
-          {shown.map((s) => <img key={s} src={s} alt="" aria-hidden="true" />)}
+          {shown.map((s, i) => (
+            <button key={s} type="button" class="chat-upload-thumb" aria-label={t("看大圖")} onClick={() => setViewing(bigOf(i))}>
+              <img src={s} alt="" />
+            </button>
+          ))}
           {more > 0 && (
             <button type="button" class="chat-upload-more" aria-label={t("顯示全部 {n} 張", { n: srcs.length })} onClick={() => setOpen(true)}>
               +{more}
@@ -519,6 +533,7 @@ export function BatchUploadBubble({ srcs, text }: { srcs: string[]; text: string
         </div>
       )}
       <div class="chat-bubble">{text}</div>
+      {viewer}
     </div>
   );
 }
@@ -536,13 +551,15 @@ export function PhotoViewer({ src, onClose }: { src: string | null; onClose: () 
   }, [src, onClose]);
 
   if (!src) return null;
-  return (
+  // 掛到 body：放在有 transform 的卡片裡，position:fixed 會被限制在卡片範圍（變成帶白邊的小框、× 被切掉）。
+  return createPortal(
     <div class="photo-viewer" role="dialog" aria-modal="true" aria-label={t("照片大圖")} onClick={onClose}>
       <img src={src} alt={t("待美化的照片")} onClick={(e) => e.stopPropagation()} />
       <button type="button" class="photo-viewer-close" aria-label={t("關閉")} onClick={onClose}>
         <Icon name="x" size={18} />
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

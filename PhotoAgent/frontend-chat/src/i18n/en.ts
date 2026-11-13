@@ -65,6 +65,7 @@ export const EN: Record<string, string> = {
   "重新構圖：": "Reframe:",
   "對話": "Chat",
   "面板": "Panel",
+  "編輯器": "Editor",
 
   // Upload page
   "好，這個我記下來了。還有其他想改的地方嗎？沒有的話，可以從下面選「分析」或「一鍵美化」喔！":
@@ -206,6 +207,9 @@ export const EN: Record<string, string> = {
   "要先看我對這張照片的分析，還是直接幫你美化？": "Would you like to see my analysis first, or should I go ahead and retouch it?",
   "「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完；想換引擎或長寬比，先按「設定」。":
     "“Analyze” shows you what I plan to fix before I start; “One-Tap Retouch” does everything in one go. To change the engine or aspect ratio, tap “Settings” first.",
+  "「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完。": "“Analyze” shows you what I plan to fix before I start; “One-Tap Retouch” does everything in one go.",
+  "想換引擎或長寬比，先按「設定」。": "To change the engine or aspect ratio, tap “Settings” first.",
+  "想換長寬比，先按「設定」。": "To change the aspect ratio, tap “Settings” first.",
   "AI 正在回覆": "AI is replying",
   "當時的設定": "Settings at the time",
   "詳細解說：{v}": "Detailed explanations: {v}",
@@ -285,7 +289,7 @@ export const EN: Record<string, string> = {
   "這次美化沒有成功：{error}。": "The retouch failed: {error}.",
   "可以回到首頁換一張照片，或按「看美化項目」換個方式再試。": "You can go back to the home page and choose another photo, or tap “Review Edits” and try a different approach.",
   "已{by}規劃好新構圖，下次美化時會套用到照片上。": "Planned the new framing {by}; it will be applied to the photo on the next retouch. ",
-  "已沿用面板模式{by}規劃的構圖，下次美化時會套用到照片上。": "Using the framing planned {by} in panel mode; it will be applied to the photo on the next retouch. ",
+  "已沿用面板模式{by}規劃的構圖，下次美化時會套用到照片上。": "Using the framing planned {by} in Editor mode; it will be applied to the photo on the next retouch. ",
   "還想調整其他項目可以點下面的項目，或按「{goLabel}」我就開始。": "To adjust anything else, tap an item below, or tap “{goLabel}” to start.",
   "按下面的按鈕就會用新構圖美化。": "Tap the button below to retouch with the new framing.",
   "{by}重新構圖沒有成功：{error}。比例先改回「{ratio}」": "Reframing {by} failed: {error}. The ratio has been set back to “{ratio}”",
@@ -319,7 +323,7 @@ export const EN: Record<string, string> = {
   // chat.tsx
   "檢視方式": "View",
   "分析或美化完成後才能切換": "Available after analysis or retouching is complete",
-  "切換到面板模式": "Switch to panel mode",
+  "切換到面板模式": "Switch to Editor mode",
   "這次要修的照片": "Photo to retouch",
   "點一下看大圖": "Tap to enlarge",
   "看大圖": "Enlarge",
@@ -347,6 +351,8 @@ export const EN: Record<string, string> = {
   "儲存中…": "Saving…",
   "儲存失敗，將自動重試": "Couldn't save. Retrying automatically…",
   "換一張照片": "Use Another Photo",
+  "還沒有照片": "No photos yet",
+  "上傳照片或挑一張範例，選好的照片會放在這裡。": "Upload a photo or pick a sample; the photos you choose appear here.",
   "上傳照片": "Upload Photo",
   "{length} 位": "{length} {length, plural, one{person} other{people}}",
   "全部取消指定": "Deselect all",
@@ -361,7 +367,7 @@ export const EN: Record<string, string> = {
   "（無）": "(none)",
   "建議的調整": "Suggested adjustments",
   "（已修改）": " (edited)",
-  "在面板上顯示": "Show in panel",
+  "在面板上顯示": "Show in Editor",
   "已有新的建議，這個沒有套用。": "A newer suggestion replaced this one, so it wasn't applied.",
   "已復原，沒有套用。": "Undone; not applied.",
   "已選擇「{v1}」": "Selected “{v1}”",

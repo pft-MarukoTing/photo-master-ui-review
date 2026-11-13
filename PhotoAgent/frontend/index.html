@@ -4630,7 +4630,8 @@
       inset: 0;
       z-index: 2;
       border-radius: inherit;
-      box-shadow: inset 0 0 0 3px var(--accent);
+      /* 雙層框：外圈藍 4px、裡面再一圈白 3px（藍色框貼在藍色照片上也分得出來），都畫在方塊裡面，大小不變。 */
+      box-shadow: inset 0 0 0 4px var(--accent), inset 0 0 0 7px var(--n09);
       pointer-events: none;
     }
     @media (min-width: 901px) {
@@ -5009,11 +5010,15 @@
     .pm-panel .ap-review-tab:hover { background: linear-gradient(var(--fill-hover), var(--fill-hover)) top / 100% calc(100% - 4px) no-repeat; }
     .pm-panel .ap-review-tab.is-active { color: var(--text-brand); box-shadow: inset 0 -4px 0 0 var(--stroke-selected); }
     /* hover 只有被指到的那個 tab 填 fill-hover，不出現外框（焦點框只給鍵盤）。 */
+    /* tabs 外面那層 <summary> 滑過去會整條塞 --card-3 底色（.ap-toggle-card > summary:hover）：這裡不要，只有被指到的那個 tab 填 fill-hover。 */
+    .pm-panel #ap-review-panel > summary:hover,
+    .pm-panel #ap-review-panel > .ap-review-summary:hover { background: transparent; }
     .pm-panel .ap-review-tab:hover { box-shadow: none; }
     .pm-panel .ap-review-tab.is-active:hover { box-shadow: inset 0 -4px 0 0 var(--stroke-selected); }
     .pm-panel .ap-review-tab:focus-visible:not(:hover) { outline: none; box-shadow: inset 0 0 0 2px var(--stroke-focus); }
     .pm-panel .ap-review-tab.is-active:focus-visible:not(:hover) { box-shadow: inset 0 -4px 0 0 var(--stroke-selected), inset 0 0 0 2px var(--stroke-focus); }
-    .pm-panel #ap-review-panel { --active-hue: var(--stroke-weak); background: transparent; border: 0; box-shadow: none; outline: 0; }
+    .pm-panel #ap-review-panel { --active-hue: var(--stroke-weak); background: transparent; border: 0; border-radius: 0; box-shadow: none; outline: 0; }
+    .pm-panel #ap-review-panel .ap-review-tab, .pm-panel #ap-review-panel .ap-review-tabs { border-radius: 0; }
     .pm-panel #ap-review-panel > .ap-review-summary { padding: 0; }
     .pm-panel #ap-review-panel > .ap-toggle-card-body { padding: var(--spacing-16) 0 0; border: 0; box-shadow: none; background: transparent; }
 
@@ -5044,7 +5049,7 @@
       overflow: hidden; text-overflow: ellipsis;
     }
     .pm-panel .ap-style-card-thumbs { display: block; width: 100%; padding: 0 0 var(--spacing-24); }
-    .pm-panel .ap-style-card-stack { width: 100%; max-width: none; aspect-ratio: 2 / 3; perspective: none; }
+    .pm-panel .ap-style-card-stack { display: block; position: relative; width: 100%; max-width: none; aspect-ratio: 2 / 3; perspective: none; }
     .pm-panel .ap-style-card-deep,
     .pm-panel .ap-style-card-back,
     .pm-panel .ap-style-card-front {
@@ -5107,6 +5112,25 @@
     .pm-panel #ap-review-prompt .ap-prompt-box { border-radius: var(--corner-radius-8); }
     .pm-panel #ap-review-prompt .ap-prompt-box:focus-within { box-shadow: 0 0 0 4px var(--stroke-focus); }
     .pm-panel #ap-review-prompt .ap-prompt-box:focus-within .field-ta { border-color: var(--stroke-selected); }
+    /* 上面「僅依需求修改」那條 + 下面輸入框合成一個框：整個框用同一個半徑 R，
+       上條只留上面兩個角、輸入框只留下面兩個角；focus 的外環（4px）是 box-shadow，會自己跟著長成 R+4，內外同心。 */
+    .pm-panel #ap-review-prompt .ap-prompt-box { --pm-r: var(--corner-radius-8, 8px); border-radius: var(--pm-r); }
+    .pm-panel #ap-review-prompt .ap-prompt-overwrite-row { border: 1px solid var(--stroke-strong); border-bottom-width: 0; border-radius: var(--pm-r) var(--pm-r) 0 0; background: var(--fill-weak); }
+    .pm-panel #ap-review-prompt .ap-prompt-box:has(> .ap-prompt-overwrite-row:not([hidden])) > .field-ta { border-radius: 0 0 var(--pm-r) var(--pm-r); }
+    .pm-panel #ap-review-prompt .ap-prompt-box:focus-within .ap-prompt-overwrite-row { border-color: var(--stroke-selected); }
+    /* 「僅依需求修改」checkbox：YCO Checkbox（16px、4px 圓角；選了＝品牌色底 + 白勾），不用瀏覽器預設的藍底黑勾。 */
+    .pm-panel #ap-review-prompt .ap-prompt-overwrite-row { --overwrite-box: 16px; --overwrite-gap: 8px; }
+    .pm-panel #ap-review-prompt .prompt-overwrite-toggle input[type="checkbox"] {
+      -webkit-appearance: none; appearance: none; flex: none; width: 16px; height: 16px; margin: 0; cursor: pointer;
+      border: 1.5px solid var(--stroke-strong); border-radius: 4px; background: var(--n09) center / 12px 12px no-repeat;
+    }
+    .pm-panel #ap-review-prompt .prompt-overwrite-toggle:hover input[type="checkbox"]:not(:checked) { background-color: var(--fill-hover); }
+    .pm-panel #ap-review-prompt .prompt-overwrite-toggle input[type="checkbox"]:checked {
+      border-color: transparent; background-color: var(--fill-brand-strong);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+    }
+    .pm-panel #ap-review-prompt .prompt-overwrite-toggle:hover input[type="checkbox"]:checked { background-color: color-mix(in srgb, var(--fill-brand-strong) 85%, #000); }
+    .pm-panel #ap-review-prompt .prompt-overwrite-toggle input[type="checkbox"]:focus-visible { outline: 0; box-shadow: 0 0 0 4px var(--stroke-focus); }
     .pm-panel #ap-review-panel:has(#ap-review-tab-prompt.is-active) + .ap-actions-row,
     .pm-panel #ap-review-panel:has(#ap-review-tab-prompt.is-active) ~ .ap-actions-row { margin-top: var(--spacing-12); }
 
@@ -5141,20 +5165,35 @@
     .pm-panel .ap-photo-summary-toggle:hover { background: var(--fill-hover); color: var(--text-strong); }
     .pm-panel .ap-photo-summary-toggle:focus-visible { outline: 0; box-shadow: 0 0 0 4px var(--stroke-focus); }
 
-    /* R01 (p10): canvas icon buttons — a tooltip from aria-label on hover and
-       keyboard focus (app.js drops their native title so it doesn't double). */
+    /* R01 (p10): canvas icon buttons — tooltip from aria-label on hover / keyboard focus
+       (app.js drops their native title so it doesn't double). 樣式照 YCO Tooltip（Tiny、箭頭在上）：
+       fill-strong 底、4px 圓角、12px/16px 白字、shadow 0 8 24 / 16%，箭頭 12×6。 */
     .pm-panel #compare-card .canvas-actions .canvas-btn { position: relative; }
+    .pm-panel #compare-card .canvas-actions .canvas-btn::before,
     .pm-panel #compare-card .canvas-actions .canvas-btn::after {
-      content: attr(aria-label);
-      position: absolute; top: calc(100% + 8px); right: 0; z-index: 30;
-      padding: var(--spacing-4) var(--spacing-8); border-radius: var(--corner-radius-4);
-      background: var(--background-inverse); color: var(--text-inverse-strong);
-      font-family: var(--font-family-body); font-size: var(--font-size-caption); line-height: var(--line-height-micro); font-weight: var(--font-weight-strong);
-      white-space: nowrap; pointer-events: none;
+      position: absolute; z-index: 30; pointer-events: none;
       opacity: 0; transform: translateY(-2px); transition: opacity .12s ease, transform .12s ease;
     }
+    .pm-panel #compare-card .canvas-actions .canvas-btn::before {
+      content: ""; top: calc(100% + 4px); right: 16px; width: 0; height: 0;
+      border-inline: 6px solid transparent; border-bottom: 6px solid var(--fill-strong);
+    }
+    .pm-panel #compare-card .canvas-actions .canvas-btn::after {
+      content: attr(aria-label); top: calc(100% + 10px); right: 0;
+      padding: var(--spacing-4) var(--spacing-8); border-radius: var(--corner-radius-4);
+      background: var(--fill-strong); color: var(--text-inverse-strong); box-shadow: 0 8px 24px rgba(0, 0, 0, .16);
+      font-family: var(--font-family-body); font-size: var(--font-size-micro, 12px); line-height: var(--line-height-micro, 16px); font-weight: 400;
+      white-space: nowrap;
+    }
+    .pm-panel #compare-card .canvas-actions .canvas-btn:is(:hover, :focus-visible)::before,
     .pm-panel #compare-card .canvas-actions .canvas-btn:is(:hover, :focus-visible)::after { opacity: 1; transform: none; }
+    .pm-panel #compare-card .canvas-actions .canvas-btn[aria-expanded="true"]::before,
     .pm-panel #compare-card .canvas-actions .canvas-btn[aria-expanded="true"]::after { opacity: 0; }
+
+    /* 預覽卡：沒有邊框；工具鈕離邊 8px；hover 是 hover 色（不是藍色）。 */
+    .pm-panel #compare-card { border: 0; }
+    .pm-panel #compare-card .canvas-header-row { top: 8px; left: 8px; right: 8px; }
+    .pm-panel #compare-card .canvas-btn:hover { background-image: linear-gradient(var(--fill-hover), var(--fill-hover)); border-color: rgba(var(--on-surface-rgb), .16); transform: none; }
 
     /* R03 (p10): the selected version's one-line summary under the strip. */
     .pm-panel .pm-version-summary {
@@ -5227,8 +5266,10 @@
       text-align: center; color: var(--text-weak); border: 1px solid var(--stroke-weak); border-radius: var(--corner-radius-24, 24px); background: var(--background-raised, #fff); padding: var(--spacing-28, 28px); box-sizing: border-box;
     }
     .pm-panel #pm-empty .pm-empty-inner { flex: 1; align-self: stretch; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--spacing-8);
-      border: 2px dashed var(--stroke-selected); border-radius: var(--corner-radius-16); }
-    .pm-panel #pm-empty .pm-empty-drop.is-over .pm-empty-inner { background: var(--fill-brand-weak); }
+      /* 虛線用 SVG 畫（CSS 的 dashed 不能調線段長度）：細線（1.5px）、短線段圓頭（約 6px，間隔約 6px）、品牌藍 60% 透明，比較精緻。 */
+      border: 0; border-radius: var(--corner-radius-16);
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'%3E%3Crect width='100%25' height='100%25' rx='16' ry='16' fill='none' stroke='%2303ADE2' stroke-opacity='.6' stroke-width='3' stroke-dasharray='3 9' stroke-linecap='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+    .pm-panel #pm-empty .pm-empty-drop.is-over .pm-empty-inner { background-color: var(--fill-brand-weak); }
     .pm-panel #pm-empty .pm-empty-drop-icon { display: inline-flex; padding: var(--spacing-16); border-radius: var(--corner-radius-16); background: var(--fill-brand-weak); color: var(--text-brand); }
     .pm-panel #pm-empty .pm-empty-drop-title { font-size: var(--font-size-large, 18px); font-weight: var(--font-weight-strong); color: var(--text-strong); }
     .pm-panel #pm-empty .pm-empty-drop-sub { font-size: var(--font-size-tiny); }
@@ -5239,19 +5280,270 @@
     .pm-sample-head { display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-16) var(--spacing-20, 20px); border-bottom: 1px solid var(--stroke-weak); }
     .pm-sample-title { font-weight: var(--font-weight-strong); color: var(--text-strong); }
     .pm-sample-close { border: 0; background: none; font-size: 22px; line-height: 1; cursor: pointer; color: var(--text-weak); }
-    .pm-sample-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: var(--spacing-8); padding: var(--spacing-16); overflow-y: auto; }
-    .pm-sample-grid button { aspect-ratio: 1; padding: 0; border: 0; border-radius: var(--corner-radius-8); overflow: hidden; cursor: pointer; background: var(--fill-hover); }
-    .pm-sample-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .pm-sample-grid button:hover { outline: 2px solid var(--stroke-selected); }
+    .pm-sample-card { min-height: 0; }
+    .pm-sample-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); grid-auto-rows: max-content; gap: var(--spacing-8); padding: var(--spacing-16); overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+    .pm-sample-grid button { position: relative; display: block; width: 100%; aspect-ratio: 1 / 1; padding: 0; border: 0; border-radius: var(--corner-radius-8); overflow: hidden; cursor: pointer; background: var(--fill-hover); }
+    .pm-sample-grid img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+    .pm-sample-grid button:hover { outline: 2px solid var(--stroke-hover, var(--stroke-strong)); outline-offset: -2px; }
+    .pm-sample-grid button.is-picked { outline: 3px solid var(--stroke-selected); outline-offset: -3px; }
+    .pm-sample-grid .pm-sample-check { position: absolute; top: 5px; inset-inline-end: 5px; z-index: 1; display: none; width: 22px; height: 22px; align-items: center; justify-content: center; border-radius: 50%; background: var(--fill-brand-strong); color: #fff; font-size: 13px; font-weight: 700; }
+    .pm-sample-grid button.is-picked .pm-sample-check { display: flex; }
+    .pm-sample-foot { display: flex; justify-content: flex-end; padding: var(--spacing-12) var(--spacing-20, 20px); border-top: 1px solid var(--stroke-weak); }
+    /* 「我的照片」標題列跟 Chat 標題列同款：粗體標題、下面一條分隔線（面板模式）。 */
+    .pm-panel #batch-sidebar > .batch-sidebar-header { display: flex; align-items: center; gap: var(--spacing-8); box-sizing: border-box; min-height: 53px;
+      margin: 0 -14px var(--spacing-12); padding: 0 var(--spacing-16); border-bottom: 1px solid var(--stroke-weak); }
+    .pm-panel #batch-sidebar > .batch-sidebar-header .batch-sidebar-title { margin: 0; font-family: Roboto, var(--cjk-sans, "Noto Sans TC"), system-ui, sans-serif; font-size: 20px; font-weight: 600; line-height: 1.3; letter-spacing: .02em; text-transform: none; color: var(--n100); }
+    /* 美化旁邊的設定鈕：中性色（透明底＋灰色邊框，不是藍色），跟美化鈕間距 4px。 */
+    .pm-panel .ap-actions-row .ap-settings-run-row { gap: var(--spacing-4); }
+    .pm-panel .ap-case-settings-trigger,
+    .pm-panel .ap-case-settings-trigger:has(.ap-case-settings-dirty:not([hidden])) {
+      width: auto; height: 40px; padding: 0 var(--spacing-16); gap: var(--spacing-8); border-radius: 999px; background: var(--n09); border: 1px solid var(--stroke-strong); color: var(--text-strong); box-shadow: none; }
+    .pm-panel .ap-case-settings-label { font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small); font-weight: var(--font-weight-strong); }
+    .pm-panel .ap-case-settings-trigger:hover { background: var(--n09) linear-gradient(var(--fill-hover), var(--fill-hover)); border-color: var(--stroke-strong); color: var(--text-strong); box-shadow: none; transform: none; }
+    .pm-panel .ap-case-settings-trigger:focus-visible { outline: 0; box-shadow: 0 0 0 4px var(--stroke-focus); }
+    /* 照片總覽收合時，Expand 底下不要漸層（原本有一層從透明到卡片色的 48px 淡出）。 */
+    .pm-panel .ap-photo-summary.ap-photo-summary--compact::after { display: none; }
+    /* 「我的照片」標題列的底色：跟對話標題列同色（--n04），上面兩個圓角跟卡片一樣。 */
+    .pm-panel #batch-sidebar > .batch-sidebar-header { background: var(--n04); border-start-start-radius: inherit; border-start-end-radius: inherit; }
+    /* 「我的需求」輸入框：高度矮一點（約 3 行，不像一大塊 textarea）；focus 外圈（4px）被外層 overflow:hidden 切掉，
+       所以框自己留 4px 外距，讓外圈剛好落在容器裡面。 */
+    .pm-panel #ap-review-prompt .ap-prompt-box { margin: 4px; flex: 0 0 auto; height: auto; }
+    .pm-panel #ap-review-prompt .ap-prompt-box .field-ta { height: 92px; min-height: 0; flex: 0 0 auto; }
+    /* 標題列整條滿版（左右上都貼到卡片邊，圓角角落也填滿）：summary 自己不留內距，內距放在標題列裡。 */
+    .pm-panel #ap-analysis-shell > .ap-analysis-shell-summary { padding: 0; display: block; }
+    /* 照片總覽展開後，亮點和待改善之間的那條直線拿掉。 */
+    .pm-panel .ap-photo-summary .ap-photo-summary-divider { display: none; border: 0; }
+    .pm-panel .ap-photo-summary .ap-photo-secondary-sections > * { border-inline-start: 0; border-inline-end: 0; }
+    /* 兩欄時（容器 ≥560px）「待改善」左邊那條直線：原本的規則帶一長串 :has() 選擇器，優先權很高，這裡要用 !important 才蓋得掉。 */
+    .pm-panel .ap-photo-secondary-sections > .ap-photo-issues { border-inline-start: 0 !important; }
+    /* 「待改善」右上角的「3 items」拿掉。 */
+    .pm-panel #ap-photo-summary-badge { display: none !important; }
+    /* Style 分頁：還沒選的卡片只讓照片一直換，不要下面的小圓點和「Choose one」；選了才在照片下面寫選的名字。 */
+    .pm-panel .ap-style-card-stack::after { display: none; }
+    .pm-panel .ap-style-card:not(.is-picked) .ap-style-card-value { display: none; }
+    .pm-panel .ap-style-card-thumbs { padding-bottom: var(--spacing-8); }
+    /* Style 卡片（照 Figma 的 Default / Selected）：上面照片、下面一列名字 + ›；
+       選了：藍框、左上 ✓、右上 ×，下面變淺藍並多一行選的名字。 */
+    /* padding 2px：選中那張的外環（box-shadow 往外 1px）在最左／最右時才不會被容器裁掉。 */
+    .pm-panel #ap-review-style .ap-style-cards { gap: var(--spacing-12); padding: 2px; }
+    .pm-panel #ap-review-style .ap-style-card {
+      display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-areas: "thumbs thumbs" "name chev" "value chev";
+      align-items: center; gap: 0; overflow: hidden; border: 1px solid var(--stroke-weak); border-radius: 12px; background: var(--n09);
+      box-shadow: none; cursor: pointer;
+    }
+    .pm-panel #ap-review-style .ap-style-card:hover { border: 1px solid var(--stroke-strong); background: var(--n09); }
+    .pm-panel #ap-review-style .ap-style-card.is-picked,
+    .pm-panel #ap-review-style .ap-style-card.is-picked:hover { border-color: var(--stroke-selected); box-shadow: 0 0 0 1px var(--stroke-selected); background: color-mix(in srgb, var(--stroke-selected) 9%, var(--n09)); }
+    .pm-panel #ap-review-style .ap-style-card-thumbs { grid-area: thumbs; position: relative; padding: 0; }
+    .pm-panel #ap-review-style .ap-style-card-stack { aspect-ratio: 4 / 5; }
+    .pm-panel #ap-review-style :is(.ap-style-card-deep,.ap-style-card-back,.ap-style-card-front),
+    .pm-panel #ap-review-style .ap-style-card.is-picked .ap-style-card-front { border: 0; border-radius: 0; outline: 0; }
+    .pm-panel #ap-review-style .ap-style-card-name { grid-area: name; padding: var(--spacing-12) var(--spacing-4) var(--spacing-12) var(--spacing-12); }
+    /* 選了：選的名字（Night）直接取代類別名（Lighting），不多一排。 */
+    .pm-panel #ap-review-style .ap-style-card.is-picked .ap-style-card-name { display: none; }
+    .pm-panel #ap-review-style .ap-style-card-value { grid-area: name; min-height: 0; padding: var(--spacing-12) var(--spacing-4) var(--spacing-12) var(--spacing-12);
+      font-size: var(--font-size-small); line-height: var(--line-height-small); font-weight: var(--font-weight-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pm-panel #ap-review-style .ap-style-card::after {
+      content: ""; grid-area: chev; grid-row: name / value; align-self: center; width: 16px; height: 16px; margin-inline-end: var(--spacing-12);
+      background: currentColor; color: var(--text-strong);
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 6 6 6-6 6'/%3E%3C/svg%3E") center / contain no-repeat;
+              mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 6 6 6-6 6'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    .pm-panel #ap-review-style .ap-style-card-clear {
+      top: 8px; inset-inline-end: 8px; z-index: 3; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      padding: 0; line-height: 1; font-size: 16px; background: #fff; color: var(--text-strong); box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    }
+    .pm-panel #ap-review-style .ap-style-card-clear[hidden] { display: none; }
+    .pm-panel #ap-review-style .ap-style-card-clear:hover { background: #fff; filter: brightness(.94); }
+    /* 人像分頁：頭像那排下面的分隔線拿掉（那條是 <summary> 的底線）。 */
+    .pm-panel #ap-review-panel > summary, .pm-panel #ap-review-panel .ap-review-summary { border-bottom: 0; }
+    /* 「Needs fixing」和頭像右上角的提示：橘色（跟「待改善」同一個橘），底下墊白色，不透出後面的頭像。 */
+    .pm-panel .adherence-icon.is-pending,
+    .pm-panel .ap-face-tab-badge {
+      background: linear-gradient(rgba(249,115,22,.18), rgba(249,115,22,.18)), #fff;
+      color: #F97316;
+    }
+    /* Checkbox：YCO 樣式。選中＝實心品牌藍＋白色粗勾；hover 深一階；focus 外圈 4px 淡藍。 */
+    .pm-panel .step-cb-box { border: 1.5px solid var(--stroke-strong); border-radius: 4px; background: var(--n09); }
+    .pm-panel .step-cb:hover .step-cb-box { background: var(--fill-hover); }
+    .pm-panel .step-cb input:checked + .step-cb-box { background: var(--fill-brand-strong); border-color: transparent; }
+    .pm-panel .step-cb:hover input:checked + .step-cb-box { background: color-mix(in srgb, var(--fill-brand-strong) 85%, #000); }
+    .pm-panel .step-cb-box::after { border-color: #fff; border-width: 2.5px; left: 6px; top: 2px; width: 6px; height: 11px; }
+    .pm-panel .step-cb input:focus-visible + .step-cb-box { box-shadow: 0 0 0 4px var(--stroke-focus); }
+    /* 美化中：卡片跟預覽卡一樣大；照片（完整、不裁切）置中在上面，下面依序是進度條、標題、說明，
+       右上角有工具鈕（比較／全螢幕／下載，這時先停用）。 */
+    .pm-panel .batch-main-loading:not([hidden]):not(.is-error) {
+      position: relative; flex: 1 1 0; min-width: 0; align-self: stretch; box-sizing: border-box; overflow: hidden;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--spacing-24);
+      min-height: 0; padding: var(--spacing-64) var(--spacing-32) var(--spacing-40); border-radius: 12px; background: var(--n09); color: var(--text-strong); text-align: center;
+    }
+    .pm-panel .batch-main-loading:not(.is-error) .proc-visual { position: relative; flex: 1 1 0; min-height: 0; width: 100%; height: auto; }
+    .pm-panel .batch-main-loading:not(.is-error) .think-ring { display: none; }
+    .pm-panel .batch-main-loading:not(.is-error) .think-center { position: absolute; inset: 0; width: auto; height: auto; border-radius: 0; background: none; display: flex; align-items: center; justify-content: center; }
+    .pm-panel .batch-main-loading:not(.is-error) .proc-thumb { flex: none; max-width: none; max-height: none; border-radius: 16px; object-fit: cover; filter: none; animation: none; }
+    .pm-panel .batch-main-loading:not(.is-error) .proc-text { position: relative; z-index: 1; flex: 0 0 auto; align-self: center; width: 100%; max-width: 560px; margin: 0; padding: 0; }
+    .pm-panel .batch-main-loading:not(.is-error) .proc-text::before {
+      content: ""; display: block; width: 240px; height: 4px; margin: 0 auto var(--spacing-20); border-radius: 4px;
+      background: linear-gradient(90deg, var(--fill-brand-strong, #03ADE2) 0 30%, var(--fill-disabled) 30% 100%); background-size: 240px 4px;
+      animation: pm-retouch-bar 1.6s ease-in-out infinite;
+    }
+    @keyframes pm-retouch-bar { 0% { background-position: -170px 0; } 100% { background-position: 170px 0; } }
+    @media (prefers-reduced-motion: reduce) { .pm-panel .batch-main-loading:not(.is-error) .proc-text::before { animation: none; } }
+    .pm-panel .batch-main-loading:not(.is-error) .proc-eyebrow { color: var(--text-weak); margin: 0 0 var(--spacing-4); }
+    .pm-panel .batch-main-loading:not(.is-error) #batch-main-loading-title { color: var(--text-strong); font-size: 28px; margin: 0 0 var(--spacing-8); }
+    .pm-panel .batch-main-loading:not(.is-error) .proc-sub { color: var(--text-weak); margin: 0; }
+    .pm-panel .batch-main-loading:not(.is-error) .proc-sub { min-height: 0; max-height: 84px; overflow: hidden; font-size: var(--font-size-small); line-height: var(--line-height-small); }
+    .pm-panel .batch-main-loading:not(.is-error) .progress-feed-list { align-items: center; }
+    .pm-panel .batch-main-loading:not(.is-error) .progress-feed-row { color: var(--text-weak); opacity: .75; }
+    .pm-panel .batch-main-loading:not(.is-error) .progress-feed-row .progress-feed-text { color: var(--text-weak); }
+    .pm-panel .batch-main-loading:not(.is-error) .progress-feed-row.is-latest,
+    .pm-panel .batch-main-loading:not(.is-error) .progress-feed-row.is-latest .progress-feed-text { color: var(--text-strong); }
+    .pm-panel .pm-loading-tools { display: none; }
+    /* 重試中右上角不放工具鈕（比較／全螢幕／下載）：這時還沒有結果可操作。 */
+    .pm-panel .batch-main-loading .pm-loading-tools { display: none !important; }
+    .pm-panel .pm-loading-tools .canvas-btn:disabled { opacity: .55; cursor: default; pointer-events: none; }
+    /* 「我的照片」卡片跟對話模式完全一樣：白底（--n09）、沒有邊框、上緣貼齊；Editor 的工作區比對話頁擠，寬度縮小成 200px。 */
+    .pm-panel #batch-sidebar { background: var(--n09) !important; padding-top: 0 !important; border: 0 !important; }
+    @media (min-width: 901px) { .pm-panel #results-body #batch-sidebar { flex: 0 0 200px !important; max-width: 200px !important; width: 200px !important; } }
     /* 面板的「我的照片」跟對話模式同一個樣子：新增、下載、每張的 ×；沒有「全部美化 / Retouch All」。 */
     .pm-panel #batch-sidebar .batch-sidebar-all { display: none !important; }
     .pm-panel #batch-sidebar .batch-sidebar-actions { display: flex; gap: 4px; margin-inline-start: auto; flex: none; }
     .pm-panel #batch-sidebar .batch-sidebar-actions .batch-download-all-btn { position: static; width: 26px; height: 26px; }
     .pm-panel #batch-sidebar .batch-sidebar-item { position: relative; }
     .pm-panel #batch-sidebar .history-cube-remove {
-      position: absolute; top: 6px; inset-inline-end: 6px; z-index: 3; display: flex; align-items: center; justify-content: center;
-      width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(17,24,26,.62); color: #fff; font-size: 14px; line-height: 1; cursor: pointer;
+      position: absolute; top: 5px; inset-inline-end: 5px; z-index: 3; display: flex; align-items: center; justify-content: center;
+      width: 20px; height: 20px; border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; font-size: 14px; line-height: 1; cursor: pointer;
     }
+    .pm-panel #batch-sidebar .history-cube-remove:hover { background: rgba(220,60,60,.9); }
+    /* 照片總覽、分析與調整：標題列下面的線和標題前面的星星圖示都拿掉。 */
+    .pm-panel #ap-photo-summary > .ap-photo-summary-header { border-bottom: 1px solid var(--stroke-weak) !important; }
+    .pm-panel #ap-analysis-shell .ap-analysis-shell-summary { border-bottom: 0; }
+    .pm-panel #ap-photo-summary .ap-photo-summary-label > svg,
+    .pm-panel #ap-analysis-shell .ap-analysis-shell-icon { display: none; }
+    /* 照片被 cover 裁掉的部分：滑過去是手，按住拖曳移動觀看區域（app.js setupPhotoPan）。 */
+    .pm-panel #compare-card .compare-img { object-position: var(--pan-x, 50%) var(--pan-y, 50%); -webkit-user-drag: none; user-select: none; }
+    @media (hover: hover) {
+      .pm-panel #compare-card .photo-frame { cursor: zoom-in; }
+      .pm-panel #compare-card .photo-frame :is(button, a) { cursor: pointer; }
+    }
+    /* 確認視窗：YCO 樣式（跟對話模式的確認視窗同款）。標題「請確認」、內文、右上 ×、按鈕用 YCO Button。 */
+    #confirm-modal .error-modal-backdrop { background: var(--fill-overlay-weak, rgba(0,0,0,.45)); }
+    #confirm-modal .yco-confirm-modal { position: relative; display: flex; flex-direction: column; align-items: flex-end; gap: var(--spacing-24, 24px);
+      width: min(500px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); box-sizing: border-box; padding: var(--spacing-32, 32px); overflow-y: auto;
+      border: 1px solid var(--stroke-weak); border-radius: var(--corner-radius-16, 16px); background: var(--background-overlay); color: var(--text-strong);
+      box-shadow: 0 8px 24px -4px rgba(0,0,0,.16); }
+    #confirm-modal .yco-confirm-content { display: flex; flex-direction: column; align-items: flex-start; gap: var(--spacing-8, 8px); width: 100%; padding-inline-end: var(--spacing-48, 48px); box-sizing: border-box; }
+    #confirm-modal .yco-confirm-title { margin: 0; font-family: var(--font-family-heading); font-size: var(--font-size-heading-3); line-height: var(--line-height-heading-3); font-weight: var(--font-weight-strong); color: var(--text-strong); }
+    #confirm-modal .yco-confirm-message { width: 100%; margin: 0; font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small); font-weight: var(--font-weight-weak); color: var(--text-strong); white-space: pre-line; }
+    #confirm-modal .yco-confirm-actions { display: flex; align-items: flex-start; justify-content: flex-end; gap: var(--spacing-8, 8px); flex-wrap: wrap; }
+    #confirm-modal .yco-confirm-close { position: absolute; top: 11px; right: 11px; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; color: var(--icon-neutral); cursor: pointer; }
+    #confirm-modal .yco-confirm-close:hover { background: var(--fill-hover); border-radius: var(--corner-radius-4, 4px); }
+    /* 提示（#notice-modal）／錯誤（#error-modal）視窗：跟 #confirm-modal 同一套 YCO modal。 */
+    :is(#notice-modal, #error-modal) .error-modal-backdrop { background: var(--fill-overlay-weak, rgba(0,0,0,.45)); }
+    :is(#notice-modal, #error-modal) .error-modal-box { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: var(--spacing-8, 8px);
+      width: min(500px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); box-sizing: border-box; padding: var(--spacing-32, 32px); overflow-y: auto;
+      border: 1px solid var(--stroke-weak); border-radius: var(--corner-radius-16, 16px); background: var(--background-overlay); color: var(--text-strong);
+      box-shadow: 0 8px 24px -4px rgba(0,0,0,.16); }
+    :is(#notice-modal, #error-modal) .error-modal-hdr { margin: 0; padding: 0 var(--spacing-48, 48px) 0 0; border: 0; background: none; }
+    :is(#notice-modal, #error-modal) .error-modal-hdr > span { font-family: var(--font-family-heading); font-size: var(--font-size-heading-3); line-height: var(--line-height-heading-3); font-weight: var(--font-weight-strong); color: var(--text-strong); }
+    #notice-modal .notice-modal-title em { font-style: normal; color: inherit; background: none; -webkit-text-fill-color: currentColor; }
+    :is(#notice-modal, #error-modal) .error-modal-msg { margin: 0; font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small); font-weight: var(--font-weight-weak); color: var(--text-strong); white-space: pre-line; }
+    :is(#notice-modal, #error-modal) .error-modal-file { margin: 0; font-size: var(--font-size-tiny); color: var(--text-weak); }
+    :is(#notice-modal, #error-modal) .error-modal-file:empty { display: none; }
+    #notice-modal .notice-modal-actions { display: flex; align-items: flex-start; justify-content: flex-end; gap: var(--spacing-8, 8px); flex-wrap: wrap; margin-top: var(--spacing-16, 16px); padding: 0; }
+    :is(#notice-modal, #error-modal) .error-modal-close { position: absolute; top: 11px; right: 11px; width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--icon-neutral); font-size: 22px; line-height: 1; cursor: pointer; }
+    :is(#notice-modal, #error-modal) .error-modal-close:hover { background: var(--fill-hover); border-radius: var(--corner-radius-4, 4px); }
+    #confirm-modal .yco-confirm-close:focus-visible { outline: 2px solid var(--stroke-brand-strong); outline-offset: 2px; border-radius: var(--corner-radius-4, 4px); }
+    @media (max-width: 560px) { #confirm-modal .yco-confirm-modal { padding: var(--spacing-24, 24px); } #confirm-modal .yco-confirm-content { padding-inline-end: var(--spacing-32, 32px); } #confirm-modal .yco-confirm-actions { width: 100%; } #confirm-modal .yco-confirm-actions .ycoButton { flex: 1 1 auto; } }
+    /* 面板模式的版面寬度比照對話模式（對話模式的內容容器上限是 1720px（面板原本是 1500px）、左右各留 28px）：
+       切換 Chat / Panel 時，欄位和右上角的切換鈕位置才會對得上。 */
+    .pm-panel .container { max-width: 1720px; }
+    /* 預覽照片那塊（Before / After）：白底，不要灰藍漸層。 */
+    .pm-panel #compare-card { background: var(--n09); background-image: none; }
+    /* 照片滿版：卡片沒有內距，照片鋪滿整張卡（cover），工具鈕直接壓在照片上。 */
+    .pm-panel #compare-card { padding: 0; overflow: hidden; }
+    /* 照片鋪滿卡片上半部，版本列（Version History）接在照片下面，不壓在照片上。 */
+    .pm-panel #compare-card { display: flex; flex-direction: column; }
+    .pm-panel #compare-card #photo-frame-wrap { position: relative; inset: auto; flex: 1 1 0; min-height: 0; width: 100%; height: auto; }
+    /* 縮圖疊在照片底部（不另佔一條白底）：只留縮圖跟版本名，標題/說明收起來。 */
+    .pm-panel #compare-card { position: relative; }
+    .pm-panel #compare-card .version-strip {
+      position: relative; flex: none; margin: 0; padding: var(--spacing-12) var(--spacing-16); border: 0; border-top: 1px solid var(--stroke-weak); border-radius: 0;
+      /* 縮圖區在照片下面，自己一塊白底（照片只留在上半區，不延伸到縮圖後面）。 */
+      background: var(--n09); -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--text-strong);
+    }
+    .pm-panel #compare-card .version-strip-head,
+    .pm-panel #compare-card .pm-version-summary { display: none !important; }
+    .pm-panel #compare-card .version-strip .version-group-label { color: var(--text-strong); text-shadow: none; }
+    .pm-panel #batch-sidebar-filters { display: none !important; }
+    .pm-panel .pm-run-hint { display: none !important; }
+    /* Photo Overview / Analysis & Adjustments：標題區下面加回一條淺淺的分隔線（stroke-weak）。 */
+    .pm-panel #ap-photo-summary .ap-photo-summary-header,
+    .pm-panel #ap-analysis-shell .ap-analysis-shell-summary-inner { border-bottom: 1px solid var(--stroke-weak) !important; }
+    /* 全螢幕：置中、放大，照片整張看得到（contain），不被上面的 position:relative 蓋掉。 */
+    .pm-panel #compare-card.is-fullscreen { position: fixed; inset: 24px; width: auto; height: auto; margin: 0; border-radius: 20px; background: #0d1215; z-index: 1000; }
+    .pm-panel #compare-card.is-fullscreen #photo-frame-wrap { position: relative; flex: 1 1 0; min-height: 0; width: 100%; height: auto; }
+    .pm-panel #compare-card.is-fullscreen .photo-frame { width: 100%; height: 100%; max-height: none; display: flex; align-items: center; justify-content: center; }
+    .pm-panel #compare-card.is-fullscreen .compare-img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; object-position: center; }
+    .pm-panel #compare-card.is-fullscreen .version-strip { display: none !important; }
+    /* 全螢幕（Figma Modal）：外面已經有整頁的暗色底，照片直接放在底上不再包黑框；
+       卡片依照片比例縮到剛好貼合（--fs-w/--fs-h 由 app.js 算），× 在右上，比較／下載在右下，深色半透明圓 + 白圖示。 */
+    :is(.pm-panel, body) #compare-card.is-fullscreen {
+      position: fixed; inset: 0; margin: auto; padding: 0; border: 0; border-radius: 0; background: transparent !important; box-shadow: none;
+      display: block; overflow: visible; width: var(--fs-w, calc(100vw - 48px)); height: var(--fs-h, calc(100vh - 48px));
+    }
+    :is(.pm-panel, body) #compare-card.is-fullscreen #photo-frame-wrap { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 12px; overflow: hidden; }
+    :is(.pm-panel, body) #compare-card.is-fullscreen .compare-img { object-fit: cover; }
+    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row { inset: 0; display: block; padding: 0; z-index: 30; pointer-events: none; }
+    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row > * { pointer-events: auto; }
+    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row .canvas-actions { position: absolute; right: var(--spacing-12); bottom: var(--spacing-12); display: flex; align-items: center; gap: var(--spacing-8); }
+    /* 照片上的 Before／After 標籤和工具鈕（比較、全螢幕、下載）：白底黑字／黑圖示（全螢幕也是同一套）。 */
+    :is(.pm-panel, body) #compare-card .canvas-header-row .canvas-btn {
+      border: 0 !important; background: var(--n09) !important; background-image: none !important; color: var(--text-strong) !important; box-shadow: 0 1px 4px rgba(0,0,0,.16) !important;
+      -webkit-backdrop-filter: none; backdrop-filter: none;
+    }
+    :is(.pm-panel, body) #compare-card .canvas-header-row .canvas-btn:hover { background: color-mix(in srgb, var(--n09) 90%, var(--text-strong)) !important; }
+    :is(.pm-panel, body) #compare-card .canvas-header-row #compare-hint {
+      border: 0; background: var(--n09) !important; color: var(--text-strong) !important; box-shadow: 0 1px 4px rgba(0,0,0,.16);
+      -webkit-backdrop-filter: none; backdrop-filter: none;
+    }
+    /* 照片上下的留白（照片依比例完整顯示時）用 fill-weak 當底色。 */
+    .pm-panel #compare-card:not(.is-fullscreen) #photo-frame-wrap { background: var(--fill-weak); }
+    /* 我的照片標題列不放「全部下載」。 */
+    .pm-panel #batch-download-all-btn { display: none !important; }
+    /* 全螢幕時按鈕在右下角：tooltip 往上彈（往下會被卡片邊緣裁掉），箭頭改朝下。 */
+    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn::before { top: auto; bottom: calc(100% + 4px); border-bottom: 0; border-top: 6px solid var(--fill-strong); transform: translateY(2px); }
+    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn::after { top: auto; bottom: calc(100% + 10px); transform: translateY(2px); }
+    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn:is(:hover, :focus-visible)::before,
+    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn:is(:hover, :focus-visible)::after { transform: none; }
+    /* Before / After 標籤：放在上面（不會被右上的 × 擋到），深色半透明底 + 白字。 */
+    :is(.pm-panel, body) #compare-card.is-fullscreen #compare-hint {
+      position: absolute; top: var(--spacing-12); left: var(--spacing-12); right: auto; width: auto; height: auto; margin: 0; padding: var(--spacing-4) var(--spacing-12);
+      border: 0; border-radius: var(--corner-radius-8, 8px); background: var(--n09) !important; color: var(--text-strong) !important;
+      -webkit-backdrop-filter: none; backdrop-filter: none;
+      font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small); font-weight: var(--font-weight-strong);
+    }
+    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row .canvas-btn {
+      width: 40px; height: 40px; border: 0 !important; border-radius: 50%; background: var(--n09) !important; background-image: none !important;
+      color: var(--text-strong) !important; box-shadow: 0 1px 4px rgba(0,0,0,.2) !important; -webkit-backdrop-filter: none; backdrop-filter: none;
+    }
+    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row .canvas-btn:hover { background: color-mix(in srgb, var(--n09) 90%, var(--text-strong)) !important; }
+    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row .canvas-btn svg { width: 24px; height: 24px; }
+    .pm-panel #compare-card .photo-frame { width: 100%; height: 100%; border-radius: 0; }
+    .pm-panel #compare-card .compare-img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; object-position: center; border-radius: 0; }
+    /* 照片總覽、分析與調整兩張卡的標題列，也用「我的照片」那一套：整條標題列（--n04 底色＋下面一條分隔線），
+       標題是 Roboto 20px／600，卡片本體是白底（--n09）。 */
+    .pm-panel #ap-photo-summary, .pm-panel #ap-analysis-shell { background: var(--n09); }
+    .pm-panel #ap-photo-summary { padding-top: 0; gap: var(--spacing-8); }
+    .pm-panel #ap-photo-summary > .ap-photo-summary-header {
+      box-sizing: border-box; min-height: 53px; margin: 0 -12px; padding: 0 var(--spacing-16);
+      background: var(--n04); border-bottom: 1px solid var(--stroke-weak); border-start-start-radius: inherit; border-start-end-radius: inherit; }
+    /* 標題和下面那行說明一起放進標題列（--n04 底色，下面一條分隔線就是 summary 本身的底線）。 */
+    .pm-panel #ap-analysis-shell .ap-analysis-shell-summary-inner {
+      display: flex; flex-direction: column; box-sizing: border-box; margin: 0; width: 100%; padding: var(--spacing-12) var(--spacing-16);
+      background: var(--n04); border-start-start-radius: inherit; border-start-end-radius: inherit; }
+    .pm-panel #ap-analysis-shell .ap-analysis-shell-summary-inner > .ap-analysis-shell-title { display: flex; align-items: center; gap: var(--spacing-8); }
+    .pm-panel #ap-analysis-shell .ap-analysis-shell-desc { display: block; margin-top: var(--spacing-4); }
     .pm-panel #batch-sidebar .history-cube-remove:hover { background: rgba(220,60,60,.9); }
     /* 步驟列：文字和圖示都縮小（文字 13px、圓圈 22px、勾勾／轉圈 11px）。 */
     .pm-panel .ap-step { gap: var(--spacing-8); font-size: 13px; line-height: 18px; }
@@ -5268,6 +5560,15 @@
     /* 目前這一步：不是轉圈圈，是 2px 藍色邊框的空心圓（勾勾出現時顏色同藍）。 */
     .pm-panel .ap-step--active .ap-step-num { background: transparent; box-shadow: inset 0 0 0 2px var(--stroke-selected); color: var(--text-brand); }
     .pm-panel .ap-step--active:not(.ap-step--checked) .ap-step-num-spinner { display: none; }
+    /* 目前這一步：字是藍色；還在進行是空心圓、沒有勾勾；這一步完成了（.ap-step--checked）就換成實心＋白勾勾。 */
+    .pm-panel .ap-step--active { color: var(--text-brand); }
+    .pm-panel .ap-step--active .ap-step-name { color: var(--text-brand); }
+    .pm-panel .ap-step--active.ap-step--checked .ap-step-num { background: var(--fill-brand-strong); box-shadow: none; color: #fff; }
+    .pm-panel .ap-step--active.ap-step--checked .ap-step-num-check { color: #fff; }
+    /* 已完成的步驟：實心圓＋白勾勾，圓圈和文字一起用 disabled 的樣子。 */
+    .pm-panel .ap-step--done { color: var(--text-disabled); }
+    .pm-panel .ap-step--done .ap-step-num { background: var(--fill-disabled); box-shadow: none; color: #fff; }
+    .pm-panel .ap-step--done .ap-step-num-check { color: #fff; }
     /* 步驟列跟「對話｜面板」切換鈕垂直置中對齊（桌機同一行時）。 */
     @media (min-width: 561px) {
       .pm-panel .step-indicator-slot:not([hidden]) { align-items: center; }
@@ -5281,53 +5582,33 @@
     /* W02 (p14): while retouching, the workspace keeps the photo — preview on
        the left, a YouCam AI Agent status card (title, current step, a
        progress bar) on the right — instead of rings in an empty column. */
+    /* 單張流程的重試中畫面：跟 #batch-main-loading 同一套——白底卡片、圓角照片置中在上，
+       下面依序是進度條、「Photo Master is working」、標題、說明；不放工具鈕、不放「照片預覽」標籤。 */
     .pm-panel .canvas-loading:not([hidden]) {
-      display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); align-items: stretch;
-      gap: var(--spacing-16); height: auto; min-height: max(420px, calc(100vh - var(--header-h) - var(--step-indicator-h, 52px) - 64px)); padding: var(--spacing-16);
-      border: 1px solid var(--stroke-weak); border-radius: var(--corner-radius-16); background: var(--background-base);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--spacing-24);
+      height: calc(100vh - var(--header-h) - var(--step-indicator-h, 52px) - 64px); min-height: 420px; box-sizing: border-box;
+      padding: var(--spacing-64) var(--spacing-32) var(--spacing-40); border: 0; border-radius: 12px; background: var(--n09); color: var(--text-strong); text-align: center;
     }
-    .pm-panel .canvas-loading .proc-visual {
-      position: relative; width: auto; height: auto; min-height: 380px; grid-row: auto; align-self: stretch;
-      border-radius: var(--corner-radius-12); overflow: hidden; background: var(--background-alternate);
-    }
+    .pm-panel .canvas-loading .proc-visual { position: relative; flex: 1 1 0; min-height: 0; width: 100%; height: auto; overflow: visible; background: none; }
     .pm-panel .canvas-loading .think-ring { display: none; }
-    .pm-panel .canvas-loading .think-center { inset: 0; border-radius: 0; background: none; }
-    .pm-panel .canvas-loading .proc-thumb { border-radius: 0; object-fit: contain; animation: none; filter: none; }
-    .pm-panel .canvas-loading .pm-wait-tag {
-      position: absolute; top: var(--spacing-12); left: var(--spacing-12);
-      padding: var(--spacing-4) var(--spacing-12); border-radius: var(--corner-radius-32);
-      background: var(--background-raised); color: var(--text-strong);
-      font-family: var(--font-family-body); font-size: var(--font-size-caption); line-height: var(--line-height-micro); font-weight: var(--font-weight-strong);
-    }
+    .pm-panel .canvas-loading .think-center { position: absolute; inset: 0; width: auto; height: auto; border-radius: 0; background: none; display: flex; align-items: center; justify-content: center; }
+    .pm-panel .canvas-loading .proc-thumb { flex: none; max-width: none; max-height: none; border-radius: 16px; object-fit: cover; animation: none; filter: none; }
+    .pm-panel .canvas-loading .pm-wait-tag { display: none; }
     .pm-panel .canvas-loading .pm-wait-card {
-      display: flex; flex-direction: column; justify-content: center; gap: var(--spacing-12);
-      padding: var(--spacing-24); border: 1px solid var(--stroke-weak); border-radius: var(--corner-radius-12); background: var(--background-raised);
+      display: flex; flex-direction: column; align-items: center; gap: 0; width: 100%; max-width: 560px; padding: 0; border: 0; border-radius: 0; background: none;
     }
+    .pm-panel .canvas-loading .pm-wait-progress { order: -1; width: 240px; margin: 0 auto var(--spacing-20); }
+    .pm-panel .canvas-loading .pm-agent-avatar { display: none; }
     .pm-panel .canvas-loading .canvas-loading-eyebrow {
-      display: flex; align-items: center; gap: var(--spacing-8); margin: 0;
-      text-transform: none; letter-spacing: 0; text-align: start;
-      font-family: var(--font-family-body); font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); font-weight: var(--font-weight-strong); color: var(--text-brand);
+      justify-content: center; gap: 0; margin: 0 0 var(--spacing-4); text-transform: uppercase; letter-spacing: .12em; text-align: center;
+      font-family: var(--font-family-body); font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); font-weight: var(--font-weight-strong); color: var(--text-weak);
     }
-    .pm-panel .pm-agent-avatar {
-      display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%;
-      background: var(--yco-gradient, var(--fill-brand-strong)); color: var(--fill-white);
-    }
-    .pm-panel .canvas-loading .canvas-loading-title {
-      margin: 0; text-align: start; letter-spacing: 0;
-      font-family: var(--font-family-body); font-size: var(--font-size-heading-4); line-height: var(--line-height-heading-4); font-weight: var(--font-weight-strong); color: var(--text-strong);
-    }
-    .pm-panel .canvas-loading .canvas-loading-status {
-      max-width: none; margin: 0; padding: 0; text-align: start;
-      font-family: var(--font-family-body); font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); font-weight: var(--font-weight-weak); color: var(--text-weak);
-    }
+    .pm-panel .canvas-loading .canvas-loading-title { margin: 0 0 var(--spacing-8); text-align: center; font-size: 28px; line-height: 1.25; font-weight: var(--font-weight-strong); color: var(--text-strong); }
+    .pm-panel .canvas-loading .canvas-loading-status { max-width: none; margin: 0; padding: 0; text-align: center; font-size: var(--font-size-small); line-height: var(--line-height-small); color: var(--text-weak); }
     .pm-panel .pm-wait-progress { position: relative; height: 4px; margin-top: var(--spacing-8); border-radius: 2px; background: var(--fill-press); overflow: hidden; }
     .pm-panel .pm-wait-progress > span { position: absolute; top: 0; bottom: 0; left: -35%; width: 35%; border-radius: 2px; background: var(--fill-brand-strong); animation: pm-wait-bar 1.6s ease-in-out infinite; }
     @keyframes pm-wait-bar { to { left: 100%; } }
     @media (prefers-reduced-motion: reduce) { .pm-panel .pm-wait-progress > span { animation: none; left: 0; width: 35%; } }
-    @media (max-width: 900px) {
-      .pm-panel .canvas-loading:not([hidden]) { grid-template-columns: minmax(0, 1fr); }
-      .pm-panel .canvas-loading .proc-visual { min-height: 280px; }
-    }
   </style>
 </head>
 <!-- pm-panel：面板模式專用的樣式掛勾。index.html 的 <style> 也會被帶進對話模式的 build，新加的面板樣式都掛在 .pm-panel 底下，才不會影響對話模式。 -->
@@ -5699,7 +5980,7 @@
           <rect x="3" y="4" width="18" height="16" rx="3"/>
           <path d="M9 4v16"/>
         </svg>
-        面板
+        編輯器
       </span>
     </nav>
   </div>
@@ -6119,6 +6400,7 @@
         <div class="pm-sample-head"><span class="pm-sample-title">從範例照片挑選</span>
           <button type="button" class="pm-sample-close" id="pm-sample-close" aria-label="關閉">×</button></div>
         <div class="pm-sample-grid" id="pm-sample-grid"></div>
+        <div class="pm-sample-foot"><button type="button" class="ycoButton variant_primary tone_brand size_medium" id="pm-sample-confirm" disabled><span class="label">使用所選照片</span></button></div>
       </div>
     </div>
   </section>
@@ -6308,7 +6590,7 @@
                       <hr class="ap-photo-summary-divider">
                       <div class="ap-photo-issues-header">
                         <span class="ap-photo-issues-label">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 7v4"/><path d="M11 15h.01"/></svg>
                           優先改善
                         </span>
                         <span class="ap-photo-summary-badge" id="ap-photo-summary-badge" hidden></span>
@@ -6534,6 +6816,7 @@
                         <circle cx="16" cy="7" r="2.2" stroke="currentColor" stroke-width="1.8"/>
                         <circle cx="10" cy="17" r="2.2" stroke="currentColor" stroke-width="1.8"/>
                       </svg>
+                      <span class="ap-case-settings-label">設定</span>
                       <!-- The "these no longer match the image on screen" hint.
                            A dot, not a word: it sits on a row whose whole job is
                            the 美化 button, and a label there would compete with
@@ -6637,7 +6920,7 @@
           <button id="batch-download-all-btn" class="batch-download-all-btn" type="button" hidden
           title="全部下載" aria-label="全部下載">
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-            <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
+            <path d="M12 15V3M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
@@ -6677,6 +6960,18 @@
            results page rather than a separate section. See
            showBatchMainLoading/showBatchMainError in app.js. -->
       <div id="batch-main-loading" class="batch-main-loading" hidden>
+        <!-- 面板模式：美化中也看得到右上角的工具鈕（比較／全螢幕／下載），這時還沒有結果，所以先停用。 -->
+        <div class="pm-loading-tools" aria-hidden="true">
+          <button type="button" class="canvas-btn" tabindex="-1" disabled>
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M12.11 2H12C11.43 2 10.98 2.49 10.98 3.07V20.91C10.98 21.49 11.42 21.99 12 21.99H12.11C12.63 21.93 13.02 21.46 13.02 20.91V3.08C13.02 2.53 12.63 2.06 12.11 2.01V2ZM4.36 7.11H8.68C9.11 7.11 9.44 6.76 9.48 6.34V6.25C9.48 5.79 9.13 5.4 8.68 5.4H4.08C2.92 5.4 2 6.41 2 7.62V16.59C2.12 17.7 2.99 18.59 4.08 18.59H8.68C9.11 18.59 9.44 18.24 9.48 17.82V17.74C9.48 17.28 9.13 16.89 8.68 16.89H4.36C4 16.89 3.69 16.59 3.65 16.19V16.11V7.89C3.65 7.45 3.98 7.11 4.36 7.11ZM18.98 7.11H19.78C20.05 7.14 20.29 7.37 20.34 7.67V7.81L20.35 8.46L20.36 8.62C20.43 9.02 20.76 9.33 21.17 9.33H21.32C21.66 9.25 21.91 8.97 21.98 8.63V8.62V8.47L21.99 7.63C21.99 6.56 21.28 5.66 20.32 5.45L20.12 5.42L19.92 5.41H18.97C18.51 5.41 18.16 5.8 18.16 6.26V6.35C18.2 6.77 18.54 7.12 18.97 7.12L18.98 7.11ZM21.26 10.35H21.17C20.7 10.35 20.35 10.75 20.35 11.22V13.02V13.03V13.18L20.37 13.19C20.44 13.58 20.77 13.89 21.18 13.89H21.33C21.67 13.81 21.92 13.53 21.99 13.19L22 13.03V11.21C22 10.77 21.69 10.39 21.26 10.34V10.35ZM16.64 16.89H15.31C14.85 16.89 14.5 17.28 14.5 17.74V17.82C14.54 18.24 14.88 18.59 15.31 18.59H16.64C17.07 18.59 17.4 18.24 17.44 17.82V17.74C17.44 17.28 17.09 16.89 16.64 16.89ZM21.26 14.64H21.17C20.7 14.64 20.35 15.04 20.35 15.51V16.19C20.35 16.54 20.12 16.81 19.84 16.87H19.71L18.97 16.88C18.51 16.88 18.16 17.27 18.16 17.73V17.81C18.2 18.23 18.54 18.58 18.97 18.58H20.11C21.11 18.47 21.88 17.63 21.98 16.58V16.36V15.49C21.98 15.05 21.67 14.67 21.24 14.62L21.26 14.64ZM16.64 5.41H15.31C14.85 5.41 14.5 5.8 14.5 6.26V6.35C14.54 6.77 14.88 7.12 15.31 7.12H16.64C17.07 7.12 17.4 6.77 17.44 6.35V6.26C17.44 5.8 17.09 5.41 16.64 5.41Z" fill="currentColor"/></svg>
+          </button>
+          <button type="button" class="canvas-btn" tabindex="-1" disabled>
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button type="button" class="canvas-btn" tabindex="-1" disabled>
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M12 15V3M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
         <div class="proc-visual" id="batch-main-loading-visual">
           <div class="think-ring"></div>
           <div class="think-ring"></div>
@@ -6763,11 +7058,7 @@
                     </div>
                   </div>
                   <button id="compare-toggle-btn" class="canvas-btn" type="button" title="查看原始照片" aria-label="查看原始照片">
-                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                      <rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="2"/>
-                      <path d="M12 4v16" stroke="currentColor" stroke-width="2"/>
-                      <path d="M3 7h9V4" fill="currentColor" opacity=".9" stroke="none"/>
-                    </svg>
+                    <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M12.11 2H12C11.43 2 10.98 2.49 10.98 3.07V20.91C10.98 21.49 11.42 21.99 12 21.99H12.11C12.63 21.93 13.02 21.46 13.02 20.91V3.08C13.02 2.53 12.63 2.06 12.11 2.01V2ZM4.36 7.11H8.68C9.11 7.11 9.44 6.76 9.48 6.34V6.25C9.48 5.79 9.13 5.4 8.68 5.4H4.08C2.92 5.4 2 6.41 2 7.62V16.59C2.12 17.7 2.99 18.59 4.08 18.59H8.68C9.11 18.59 9.44 18.24 9.48 17.82V17.74C9.48 17.28 9.13 16.89 8.68 16.89H4.36C4 16.89 3.69 16.59 3.65 16.19V16.11V7.89C3.65 7.45 3.98 7.11 4.36 7.11ZM18.98 7.11H19.78C20.05 7.14 20.29 7.37 20.34 7.67V7.81L20.35 8.46L20.36 8.62C20.43 9.02 20.76 9.33 21.17 9.33H21.32C21.66 9.25 21.91 8.97 21.98 8.63V8.62V8.47L21.99 7.63C21.99 6.56 21.28 5.66 20.32 5.45L20.12 5.42L19.92 5.41H18.97C18.51 5.41 18.16 5.8 18.16 6.26V6.35C18.2 6.77 18.54 7.12 18.97 7.12L18.98 7.11ZM21.26 10.35H21.17C20.7 10.35 20.35 10.75 20.35 11.22V13.02V13.03V13.18L20.37 13.19C20.44 13.58 20.77 13.89 21.18 13.89H21.33C21.67 13.81 21.92 13.53 21.99 13.19L22 13.03V11.21C22 10.77 21.69 10.39 21.26 10.34V10.35ZM16.64 16.89H15.31C14.85 16.89 14.5 17.28 14.5 17.74V17.82C14.54 18.24 14.88 18.59 15.31 18.59H16.64C17.07 18.59 17.4 18.24 17.44 17.82V17.74C17.44 17.28 17.09 16.89 16.64 16.89ZM21.26 14.64H21.17C20.7 14.64 20.35 15.04 20.35 15.51V16.19C20.35 16.54 20.12 16.81 19.84 16.87H19.71L18.97 16.88C18.51 16.88 18.16 17.27 18.16 17.73V17.81C18.2 18.23 18.54 18.58 18.97 18.58H20.11C21.11 18.47 21.88 17.63 21.98 16.58V16.36V15.49C21.98 15.05 21.67 14.67 21.24 14.62L21.26 14.64ZM16.64 5.41H15.31C14.85 5.41 14.5 5.8 14.5 6.26V6.35C14.54 6.77 14.88 7.12 15.31 7.12H16.64C17.07 7.12 17.4 6.77 17.44 6.35V6.26C17.44 5.8 17.09 5.41 16.64 5.41Z" fill="currentColor"/></svg>
                   </button>
                   <button id="compare-fullscreen-btn" class="canvas-btn" type="button" title="全螢幕檢視比較" aria-label="全螢幕檢視比較">
                     <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
@@ -6784,7 +7075,7 @@
                   <div class="canvas-btn-wrap" id="download-menu-wrap">
                     <a id="download-link" class="canvas-btn" download="photomaster-output.zip" title="下載結果" aria-label="下載結果" hidden>
                       <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                        <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
+                        <path d="M12 15V3M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5"
                           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
                     </a>
@@ -6896,12 +7187,7 @@
                 <span class="pm-wait-tag">照片預覽</span>
               </div>
               <div class="pm-wait-card">
-                <p id="canvas-loading-eyebrow" class="canvas-loading-eyebrow">
-                  <span class="pm-agent-avatar" aria-hidden="true">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
-                  </span>
-                  YouCam AI Agent
-                </p>
+                <p id="canvas-loading-eyebrow" class="canvas-loading-eyebrow">Photo Master is working</p>
                 <h2 id="canvas-loading-title" class="canvas-loading-title"></h2>
                 <p id="canvas-loading-status" class="canvas-loading-status"></p>
                 <div class="pm-wait-progress" aria-hidden="true"><span></span></div>
@@ -7214,7 +7500,7 @@
              until at least one tile is checked (updateHistoryDownloadSelectedBtn). -->
         <button id="history-download-selected-btn" class="btn btn-outline btn-sm history-download-selected-btn" type="button" hidden disabled aria-label="下載所選">
           <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-            <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
+            <path d="M12 15V3M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <span id="history-download-selected-count"></span>
@@ -7324,9 +7610,9 @@
     </div>
     <p id="notice-modal-msg" class="error-modal-msg"></p>
     <div class="notice-modal-actions">
-      <button id="notice-modal-ok-btn" class="btn btn-grad btn-sm" type="button">OK</button>
-      <button id="notice-modal-action-btn" class="btn btn-grad btn-sm" type="button" hidden></button>
-      <button id="notice-modal-action2-btn" class="btn btn-grad btn-sm" type="button" hidden></button>
+      <button id="notice-modal-ok-btn" class="ycoButton variant_primary tone_brand size_medium" type="button">OK</button>
+      <button id="notice-modal-action-btn" class="ycoButton variant_primary tone_brand size_medium" type="button" hidden></button>
+      <button id="notice-modal-action2-btn" class="ycoButton variant_primary tone_brand size_medium" type="button" hidden></button>
     </div>
   </div>
 </div>
@@ -7466,21 +7752,22 @@
      gets) resolves false, same as Cancel. -->
 <div id="confirm-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
-  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
-    <div class="error-modal-hdr">
-      <span id="confirm-modal-title" class="notice-modal-title">Photo<em>Master</em></span>
+  <div class="error-modal-box yco-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-msg">
+    <button type="button" class="yco-confirm-close" id="confirm-modal-close-btn" aria-label="關閉">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+    <div class="yco-confirm-content">
+      <h2 id="confirm-modal-title" class="yco-confirm-title">請確認</h2>
+      <p id="confirm-modal-msg" class="yco-confirm-message"></p>
+      <!-- Optional cost-estimate row(s) (showConfirmModal's costSteps option,
+           app.js) -- same #preflight-cost-modal row styling (buildPreflightCostRow
+           reused directly). Hidden entirely when a caller passes no cost steps,
+           or the user has turned the preflight cost estimate setting off. -->
+      <div id="confirm-modal-cost-rows" class="cost-modal-rows" hidden></div>
     </div>
-    <p id="confirm-modal-msg" class="error-modal-msg"></p>
-    <!-- Optional cost-estimate row(s) (showConfirmModal's costSteps option,
-         app.js) -- same #preflight-cost-modal row styling (buildPreflightCostRow
-         reused directly) instead of a plain-text price sentence tacked onto
-         the message above. Hidden entirely (not just left empty) when a
-         caller passes no cost steps, or the user has turned the preflight
-         cost estimate setting off. -->
-    <div id="confirm-modal-cost-rows" class="cost-modal-rows" hidden></div>
-    <div class="account-modal-actions">
-      <button id="confirm-modal-cancel-btn" class="btn btn-secondary btn-sm" type="button">取消</button>
-      <button id="confirm-modal-ok-btn" class="btn btn-danger btn-sm" type="button">刪除</button>
+    <div class="yco-confirm-actions">
+      <button id="confirm-modal-cancel-btn" class="ycoButton variant_secondary tone_neutral size_medium" type="button"><span class="label">取消</span></button>
+      <button id="confirm-modal-ok-btn" class="ycoButton variant_primary tone_destructive size_medium" type="button"><span class="label">刪除</span></button>
     </div>
   </div>
 </div>

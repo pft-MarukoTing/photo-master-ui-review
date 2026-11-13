@@ -8707,7 +8707,7 @@
   // Called by every history view in place of just hiding the sidebar.
   // Opening another case of the batch already listed keeps the list where
   // it is and only moves the highlight, then refreshes the rows' states.
-  function showCaseGroupSidebar(caseKey) {
+  function showCaseGroupSidebar(caseKey, job = null) {
     const listed = caseGroupSidebarSession
       && caseKey
       && caseGroupsByKey.get(caseKey)?.session_id === caseGroupSidebarSession;
@@ -8725,7 +8725,16 @@
     (async () => {
       const group = (await loadCaseGroups()).get(caseKey);
       if (token !== caseGroupSidebarToken) return;
+      // 編輯器（pm-panel）的「我的照片」一定要在：這張沒有跟別張一起傳（或找不到那批）時，
+      // 就只列這一張，不要整塊消失。
+      const soloSidebar = () => {
+        if (!document.body.classList.contains("pm-panel") || !job) return false;
+        const ids = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
+        renderCaseGroupSidebar(`solo:${caseKey}`, [{ case_id: caseKey, analyze_job_id: ids[0], soloDone: ids.length > 0 && job.status !== "analyzed" }], caseKey);
+        return true;
+      };
       if (!group) {
+        if (soloSidebar()) return;
         if (listed) hideCaseGroupSidebar();
         return;
       }
@@ -8735,10 +8744,10 @@
       const ids = group.session_ids?.length ? group.session_ids : [group.session_id];
       const sessions = await Promise.all(ids.map((id) => getChatSession(user, id).catch(() => null)));
       // expired, or a transient failure -- the photo still shows on its own
-      if (!sessions.some(Boolean)) return;
+      if (!sessions.some(Boolean)) { soloSidebar(); return; }
       if (token !== caseGroupSidebarToken || getCurrentUser() !== user) return;
       const photos = sessions.flatMap((s) => s?.photos || []).filter((p) => p.case_id);
-      if (photos.length < 2) return;
+      if (photos.length < 2) { soloSidebar(); return; }
       renderCaseGroupSidebar(group.session_id, photos, caseKey);
     })();
   }
@@ -8774,7 +8783,7 @@
     if (photo.status === "failed") return { key: "error", text: tr("失敗") };
     if (photo.status === "rendering" || photo.queued_render || photo.pending_render) return { key: "processing", text: tr("美化中") };
     if (photo.status === "analyzing" || photo.status === "reframing" || photo.pending_reframe) return { key: "analyzing", text: tr("分析中") };
-    if (photo.active_version?.job_id) return { key: "done", text: tr("已美化") };
+    if (photo.soloDone || photo.active_version?.job_id) return { key: "done", text: tr("已美化") };
     return { key: "analyzed", text: tr("已分析") };
   }
 
@@ -8862,8 +8871,10 @@
     const hasAnyAction = !!(noticeModalAction || noticeModalAction2);
     if (els.noticeModalOkBtn) {
       els.noticeModalOkBtn.textContent = dismissLabel;
-      els.noticeModalOkBtn.classList.toggle("btn-grad", !hasAnyAction);
-      els.noticeModalOkBtn.classList.toggle("btn-secondary", hasAnyAction);
+      els.noticeModalOkBtn.classList.toggle("variant_primary", !hasAnyAction);
+      els.noticeModalOkBtn.classList.toggle("tone_brand", !hasAnyAction);
+      els.noticeModalOkBtn.classList.toggle("variant_secondary", hasAnyAction);
+      els.noticeModalOkBtn.classList.toggle("tone_neutral", hasAnyAction);
     }
     if (els.noticeModalActionBtn) {
       els.noticeModalActionBtn.hidden = !noticeModalAction;
@@ -8886,8 +8897,8 @@
     if (els.noticeModal) els.noticeModal.hidden = true;
     if (els.noticeModalOkBtn) {
       els.noticeModalOkBtn.textContent = "OK";
-      els.noticeModalOkBtn.classList.add("btn-grad");
-      els.noticeModalOkBtn.classList.remove("btn-secondary");
+      els.noticeModalOkBtn.classList.add("variant_primary", "tone_brand");
+      els.noticeModalOkBtn.classList.remove("variant_secondary", "tone_neutral");
     }
     if (els.noticeModalActionBtn) {
       els.noticeModalActionBtn.hidden = true;
@@ -9091,6 +9102,7 @@
     if (!confirmModalHandlers) return;
     els.confirmModalOkBtn?.removeEventListener("click", confirmModalHandlers.ok);
     els.confirmModalCancelBtn?.removeEventListener("click", confirmModalHandlers.cancel);
+    document.getElementById("confirm-modal-close-btn")?.removeEventListener("click", confirmModalHandlers.cancel);
     confirmModalHandlers = null;
   }
 
@@ -9127,12 +9139,15 @@
         }
         els.confirmModalCostRows.hidden = !steps?.length;
       }
-      if (els.confirmModalCancelBtn) els.confirmModalCancelBtn.textContent = cancelLabel;
+      const setLabel = (btn, text) => { const l = btn.querySelector(".label"); (l || btn).textContent = text; };
+      if (els.confirmModalCancelBtn) setLabel(els.confirmModalCancelBtn, cancelLabel);
       if (els.confirmModalOkBtn) {
-        els.confirmModalOkBtn.textContent = confirmLabel;
-        els.confirmModalOkBtn.classList.toggle("btn-danger", danger);
-        els.confirmModalOkBtn.classList.toggle("btn-grad", !danger);
+        setLabel(els.confirmModalOkBtn, confirmLabel);
+        // YCO Button：刪除這類用 destructive，其他用 brand。
+        els.confirmModalOkBtn.classList.toggle("tone_destructive", danger);
+        els.confirmModalOkBtn.classList.toggle("tone_brand", !danger);
       }
+      const closeBtn = document.getElementById("confirm-modal-close-btn");
       const finish = (result) => {
         clearConfirmModalWait();
         els.confirmModal.hidden = true;
@@ -9141,6 +9156,7 @@
       confirmModalHandlers = { ok: () => finish(true), cancel: () => finish(false) };
       els.confirmModalOkBtn?.addEventListener("click", confirmModalHandlers.ok);
       els.confirmModalCancelBtn?.addEventListener("click", confirmModalHandlers.cancel);
+      closeBtn?.addEventListener("click", confirmModalHandlers.cancel);
       els.confirmModal.hidden = false;
     });
   }
@@ -11087,7 +11103,7 @@
     const analyzeJobId = Array.isArray(job.runs) && job.runs.length ? job.runs[0] : job.job_id;
     const previewUrl = sourceImageUrl(analyzeJobId);
     currentBatchRecord = null;
-    showCaseGroupSidebar(job.image_key);
+    showCaseGroupSidebar(job.image_key, job);
     if (els.showPromptBtn) els.showPromptBtn.hidden = true;
     if (els.costBtn) els.costBtn.hidden = true;
     if (els.canvasLoading) els.canvasLoading.hidden = true;
@@ -11235,7 +11251,7 @@
 
     showSection("results");
     currentBatchRecord = null;
-    showCaseGroupSidebar(job.image_key);
+    showCaseGroupSidebar(job.image_key, job);
     pendingResultsActive = false; // see viewHistoryRecord
     // No result -- and so no prompts -- yet for #show-prompt-btn to show.
     if (els.showPromptBtn) els.showPromptBtn.hidden = true;
@@ -11745,7 +11761,7 @@
     // that was uploaded together with others in 對話模式 lists that batch
     // instead (showCaseGroupSidebar).
     currentBatchRecord = null;
-    showCaseGroupSidebar(job.image_key);
+    showCaseGroupSidebar(job.image_key, job);
     // A 待美化 review this record replaced (opened from the drawer without
     // going Home) left this set, and handleDownloadClick checks it first --
     // 下載結果 on this finished record then saved the review's original
@@ -12811,11 +12827,29 @@
     }, 420);
   }
 
+  // 全螢幕：卡片縮到跟照片同比例、剛好放進視窗（四邊留 24px），照片不留黑邊。
+  function sizeCompareFullscreen() {
+    const card = els.compareCard;
+    if (!card || !card.classList.contains("is-fullscreen")) return;
+    let ar = 0;
+    card.querySelectorAll(".compare-img").forEach((img) => {
+      if (img.naturalWidth && img.naturalHeight && img.naturalWidth > (ar ? 0 : -1)) ar = ar || img.naturalWidth / img.naturalHeight;
+    });
+    const availW = window.innerWidth - 48;
+    const availH = window.innerHeight - 48;
+    if (!ar) { card.style.removeProperty("--fs-w"); card.style.removeProperty("--fs-h"); return; }
+    const w = Math.min(availW, availH * ar);
+    card.style.setProperty("--fs-w", `${Math.round(w)}px`);
+    card.style.setProperty("--fs-h", `${Math.round(w / ar)}px`);
+  }
+
   function openCompareFullscreen() {
     if (!els.compareCard || isCompareFullscreen()) return;
     const parent = els.compareCard.parentElement;
     if (parent) parent.style.height = `${parent.getBoundingClientRect().height}px`;
     els.compareCard.classList.add("is-fullscreen");
+    sizeCompareFullscreen();
+    window.addEventListener("resize", sizeCompareFullscreen);
     if (els.compareFullscreenBackdrop) els.compareFullscreenBackdrop.hidden = false;
     setCompareFullscreenBtnState(true);
     refreshCompareOverlaysAfterLayout();
@@ -12824,6 +12858,9 @@
   function closeCompareFullscreen() {
     if (!els.compareCard || !isCompareFullscreen()) return;
     els.compareCard.classList.remove("is-fullscreen");
+    window.removeEventListener("resize", sizeCompareFullscreen);
+    els.compareCard.style.removeProperty("--fs-w");
+    els.compareCard.style.removeProperty("--fs-h");
     const parent = els.compareCard.parentElement;
     if (parent) parent.style.height = "";
     if (els.compareFullscreenBackdrop) els.compareFullscreenBackdrop.hidden = true;
@@ -13933,8 +13970,26 @@
   // viewHistoryRecord) keeps using that record's own settings instead of
   // falling back to showBatchDoneMain's batchSettings default.
   function renderRunSwitcher(record, settings = batchSettings) {
-    const runs = record.runs || [];
-    if (runs.length <= 1) {
+    let runs = record.runs || [];
+    // 編輯器：第一次 Retouch 完成時紀錄還沒有 runs 清單（只有 jobId 和結果），也要出現縮圖列（原圖 + 第 1 版）：
+    // 為顯示合成一份只有「第 1 版」的清單，快取在紀錄上（同一份才不會每次重畫）；之後有真的版本清單就改用真的。
+    if (!runs.length && document.body.classList.contains("pm-panel") && record.status === "done" && record.jobId) {
+      if (!record._liveRuns || record._liveRuns[0].jobId !== record.jobId) {
+        record._liveRuns = [{ jobId: record.jobId, status: "done", run: 1, sourceRun: 1, versionId: "live-1", versionNumber: 1, versionTotal: 1, runInVersion: 1, runsInVersion: 1 }];
+      }
+      runs = record._liveRuns;
+    }
+    // 編輯器：剛 Retouch 完、只有一個結果時也要出現照片上的縮圖列（原圖 + 第 1 版），
+    // 所以幫這個結果補上「第 1 版」的標記；之後有新版本，refreshBatchVersionsAfterEdit 會換成完整標記的清單。
+    if (runs.length === 1 && document.body.classList.contains("pm-panel") && runs[0].status === "done" && !runs[0].versionTotal) {
+      const r0 = runs[0];
+      r0.versionId = r0.versionId || "live-1";
+      r0.versionNumber = r0.versionNumber || 1;
+      r0.versionTotal = 1;
+      r0.runInVersion = 1;
+      r0.runsInVersion = 1;
+      if (r0.sourceRun == null) r0.sourceRun = r0.run || 1;
+    } else if (runs.length <= 1) {
       resetRunSwitcher();
       return;
     }
@@ -15772,7 +15827,7 @@
     document.getElementById("chat-mode-switch-link"),
   ]) {
     if (!chatUiLink) continue;
-    chatUiLink.setAttribute("href", `chat/${location.search}`);
+    chatUiLink.setAttribute("href", `chat/${location.search}#new`);
     chatUiLink.addEventListener("click", async (event) => {
       // A new tab leaves this page as it is.
       if (event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -15790,7 +15845,8 @@
         }
       }
       // 還沒有 case：把照片放進 IndexedDB，對話頁接回上傳頁選好照片那一步（frontend-chat/src/pre-handoff.ts takeBackHandoff）。
-      if (!caseKey) await writeBackPhotos();
+      // 一律把手上的照片帶過去：對話頁開得了這張 case 就用 case；開不了（或沒有 case）就接回這張照片。
+      await writeBackPhotos(jobId || null);
       if (!writeModeHandoff(caseKey) && isReviewDirty()) {
         const leave = await showConfirmModal(
           tr("這張照片還沒美化的調整沒辦法帶到對話模式，切過去就會清掉。確定要切換嗎？"),
@@ -15799,14 +15855,45 @@
         if (!leave) return;
       }
       leaveConfirmed = true;
-      location.href = `chat/${location.search}${caseKey ? `#case=${encodeURIComponent(caseKey)}` : ""}`;
+      // 沒有 case 就回到對話頁本身（#new），不是首頁；有照片的話對話頁會接回照片（takeBackHandoff）。
+      location.href = `chat/${location.search}${caseKey ? `#case=${encodeURIComponent(caseKey)}` : "#new"}`;
     });
   }
+  // 美化中的照片：縮圖解析度低，CSS 的 max-* 不會放大，所以依容器和圖片比例算出「剛好放進去」的尺寸，
+  // 圓角才會套在照片本身（不是看不見的外框）。
+  (function setupLoadingThumbFit() {
+    const fitOne = (img) => {
+      const box = img && img.closest(".proc-visual");
+      if (!img || !box) return;
+      const fit = () => {
+        if (!document.body.classList.contains("pm-panel") || !img.naturalWidth || !img.naturalHeight) return;
+        const bw = box.clientWidth;
+        const bh = box.clientHeight;
+        if (!bw || !bh) return;
+        const scale = Math.min(bw / img.naturalWidth, bh / img.naturalHeight);
+        img.style.width = `${Math.floor(img.naturalWidth * scale)}px`;
+        img.style.height = `${Math.floor(img.naturalHeight * scale)}px`;
+      };
+      img.addEventListener("load", fit);
+      if (window.ResizeObserver) new ResizeObserver(fit).observe(box);
+      window.addEventListener("resize", fit);
+    };
+    // 批次的重試中畫面和單張流程的重試中畫面共用同一套版面。
+    fitOne(els.batchMainLoadingThumb);
+    fitOne(document.querySelector("#canvas-loading-thumb"));
+  })();
   setupHeaderMenu();
-  async function writeBackPhotos() {
+  async function writeBackPhotos(jobId = null) {
     try {
       const files = batchRecords.length ? batchRecords.map((r) => r.file) : (selectedFile ? [selectedFile] : []);
       const photos = files.filter(Boolean).map((f) => ({ name: f.name, blob: f }));
+      // 從歷史／case 打開的照片沒有 File：用它的原圖（伺服器上的）抓下來帶過去。
+      if (!photos.length && jobId) {
+        try {
+          const res = await fetch(sourceImageUrl(jobId));
+          if (res.ok) photos.push({ name: "photo.jpg", blob: await res.blob() });
+        } catch (_) { /* 抓不到就照舊切過去 */ }
+      }
       if (!photos.length || !window.indexedDB) return;
       const db = await new Promise((resolve, reject) => {
         const req = indexedDB.open("photoagent-pre-handoff", 1);
@@ -15927,10 +16014,26 @@
     ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("is-over"); }));
     drop.addEventListener("drop", (e) => { if (e.dataTransfer && e.dataTransfer.files.length) startFromEmpty(e.dataTransfer.files); });
 
-    // 從範例照片挑選：一個小視窗列出範例，點哪張就用哪張開始。
+    // 從範例照片挑選：一個小視窗列出範例，可以多選，按「使用所選照片」一次開始。
     const modal = document.getElementById("pm-sample-modal");
     const grid = document.getElementById("pm-sample-grid");
     const sampleBtn = document.getElementById("pm-empty-sample-btn");
+    const confirmBtn = document.getElementById("pm-sample-confirm");
+    const picked = new Set();
+    const syncConfirm = () => {
+      // 選了幾張就標第幾張（照選的順序），不是打勾。
+      const order = [...picked];
+      if (grid) grid.querySelectorAll("button[data-name]").forEach((el) => {
+        const i = order.indexOf(el.dataset.name);
+        el.classList.toggle("is-picked", i >= 0);
+        const badge = el.querySelector(".pm-sample-check");
+        if (badge) badge.textContent = i >= 0 ? String(i + 1) : "";
+      });
+      if (!confirmBtn) return;
+      confirmBtn.disabled = picked.size === 0;
+      const label = confirmBtn.querySelector(".label");
+      if (label) label.textContent = picked.size ? tr("使用所選照片 ({count})", { count: picked.size }) : tr("使用所選照片");
+    };
     const closeModal = () => { if (modal) modal.hidden = true; };
     if (sampleBtn && modal && grid) {
       sampleBtn.addEventListener("click", async () => {
@@ -15945,19 +16048,35 @@
             im.src = demoImageThumbnailUrl(name);
             im.alt = name;
             im.loading = "lazy";
-            b.appendChild(im);
-            b.addEventListener("click", async () => {
-              try {
-                const response = await fetch(demoImageUrl(name));
-                if (!response.ok) throw new Error("fetch failed");
-                const blob = await response.blob();
-                closeModal();
-                startFromEmpty([new File([blob], name, { type: blob.type || "image/jpeg" })]);
-              } catch (_) { showError(tr("無法載入範例照片。")); }
+            const check = document.createElement("span");
+            check.className = "pm-sample-check";
+            b.append(im, check);
+            b.dataset.name = name;
+            b.addEventListener("click", () => {
+              if (picked.has(name)) picked.delete(name); else picked.add(name);
+              syncConfirm();
             });
             grid.appendChild(b);
           });
         }
+      });
+      if (confirmBtn) confirmBtn.addEventListener("click", async () => {
+        if (!picked.size) return;
+        confirmBtn.disabled = true;
+        try {
+          const files = [];
+          for (const name of picked) {
+            const response = await fetch(demoImageUrl(name));
+            if (!response.ok) throw new Error("fetch failed");
+            const blob = await response.blob();
+            files.push(new File([blob], name, { type: blob.type || "image/jpeg" }));
+          }
+          picked.clear();
+          grid.querySelectorAll(".is-picked").forEach((el) => el.classList.remove("is-picked"));
+          syncConfirm();
+          closeModal();
+          startFromEmpty(files);
+        } catch (_) { showError(tr("無法載入範例照片。")); syncConfirm(); }
       });
       document.getElementById("pm-sample-close").addEventListener("click", closeModal);
       modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
@@ -16017,12 +16136,62 @@
   // 手機上點照片本身也打開大圖（照片上的按鈕、分析框不算）。
   if (els.photoFrameWrap) {
     els.photoFrameWrap.addEventListener("click", (e) => {
-      if (!photoViewerMedia.matches) return;
       if (!e.target.closest(".photo-frame") || e.target.closest("button, a, input, label")) return;
       if (els.compareCard?.classList.contains("is-fullscreen")) return;
+      // 編輯器（桌機）：點一下照片 = 全螢幕放大；按住拖曳是抓手平移（拖完那下的 click 已在 setupPhotoPan 吃掉）。
+      if (document.body.classList.contains("pm-panel") && !photoViewerMedia.matches) { openCompareFullscreen(); return; }
+      if (!photoViewerMedia.matches) return;
       openPhotoViewer();
     });
   }
+  // 預覽照片是滿版 cover，會裁掉一部分：滑過去是手（grab），按住拖曳就移動觀看區域。
+  // 位置存在 .photo-frame 的 --pan-x / --pan-y（object-position 用）；換照片就回到置中。
+  (function setupPhotoPan() {
+    const frame = els.photoFrameWrap && els.photoFrameWrap.querySelector(".photo-frame");
+    if (!frame) return;
+    const clamp = (v) => Math.max(0, Math.min(100, v));
+    let drag = null;
+    frame.addEventListener("pointerdown", (e) => {
+      if (!document.body.classList.contains("pm-panel") || e.button !== 0 || e.target.closest("button, a, input, label")) return;
+      const img = [...frame.querySelectorAll(".compare-img")].find((i) => i.offsetParent && i.naturalWidth);
+      if (!img) return;
+      // 照片依比例完整顯示（contain）時沒有被裁掉的部分，不需要平移。
+      if (getComputedStyle(img).objectFit !== "cover") return;
+      const fw = frame.clientWidth;
+      const fh = frame.clientHeight;
+      const scale = Math.max(fw / img.naturalWidth, fh / img.naturalHeight);
+      const ox = img.naturalWidth * scale - fw;
+      const oy = img.naturalHeight * scale - fh;
+      if (ox < 1 && oy < 1) return;
+      const cs = getComputedStyle(frame);
+      const px = parseFloat(cs.getPropertyValue("--pan-x"));
+      const py = parseFloat(cs.getPropertyValue("--pan-y"));
+      drag = { x: e.clientX, y: e.clientY, px: Number.isFinite(px) ? px : 50, py: Number.isFinite(py) ? py : 50, ox, oy, moved: false };
+      frame.setPointerCapture(e.pointerId);
+      frame.classList.add("is-panning");
+    });
+    frame.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x;
+      const dy = e.clientY - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+      if (drag.ox >= 1) frame.style.setProperty("--pan-x", `${clamp(drag.px - (dx / drag.ox) * 100)}%`);
+      if (drag.oy >= 1) frame.style.setProperty("--pan-y", `${clamp(drag.py - (dy / drag.oy) * 100)}%`);
+    });
+    const end = (e) => {
+      if (!drag) return;
+      const moved = drag.moved;
+      drag = null;
+      frame.classList.remove("is-panning");
+      try { frame.releasePointerCapture(e.pointerId); } catch (_) { /* already released */ }
+      // 拖完那下的 click 吃掉，不要打開手機的大圖檢視。
+      if (moved) frame.addEventListener("click", (ev) => ev.stopPropagation(), { capture: true, once: true });
+    };
+    frame.addEventListener("pointerup", end);
+    frame.addEventListener("pointercancel", end);
+    const reset = () => { frame.style.removeProperty("--pan-x"); frame.style.removeProperty("--pan-y"); };
+    frame.querySelectorAll(".compare-img").forEach((img) => new MutationObserver(reset).observe(img, { attributes: true, attributeFilter: ["src"] }));
+  })();
   // 轉成橫向或視窗拉寬，超過手機寬度就收起來，回到原本的版面。
   photoViewerMedia.addEventListener("change", (e) => {
     if (!e.matches) closePhotoViewer();

@@ -11,7 +11,7 @@
  */
 (function () {
   var KEY = "photomaster-home-ab";
-  var VARIANTS = ["a", "b", "c"];
+  var VARIANTS = ["a", "b"]; // C 版已拿掉（程式還留著，沒有入口）
   var PROMPT_KEY = "photomaster-home-c-prompt";
 
   function read() {
@@ -25,6 +25,9 @@
   }
   function apply(v) {
     setClass(v);
+    swapHeroImages();
+    syncNextArrow();
+    requestAnimationFrame(fitHomeB);
     try { localStorage.setItem(KEY, v); } catch (e) {}
     var btns = document.querySelectorAll(".ab-switch-opt");
     for (var i = 0; i < btns.length; i++) {
@@ -50,7 +53,7 @@
        一個畫面剛好放下：上面滿版主視覺（before/after 當背景，文字壓在左邊），
        下面靠左的「最近／範例」分頁加一排橫向捲動的照片。 */
     "@media (min-width:1201px),(min-width:901px) and (max-width:1200px) and (orientation:landscape){",
-    "  html.ab-home-b{--abg-gutter:clamp(24px,4vw,64px);--abg-tile-h:clamp(110px,19vh,190px)}",
+    "  html.ab-home-b{--abg-gutter:9.5vw;--abg-tile-h:clamp(84px,13vh,132px)}",
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-container{padding:0 !important}",
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-grid{height:100%}",
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-content-row{flex-direction:column;align-items:stretch;justify-content:flex-start;",
@@ -59,27 +62,38 @@
     "  html.ab-home-b #upload-section:has(.home-intro) .home-intro{flex:1 1 auto;min-height:0;width:100%;padding:0 !important;margin:0}",
     "  html.ab-home-b #upload-section:has(.home-intro) .home-hero{position:relative;display:block;width:100%;height:100%;max-width:none;margin:0;padding:0;",
     "    background:var(--surface-default,#fff)}",
-    "  html.ab-home-b #upload-section:has(.home-intro) .home-compare{position:absolute !important;top:0;left:30%;margin:0 !important;width:70% !important;height:100% !important;",
+    "  html.ab-home-b #upload-section:has(.home-intro) .home-compare{position:absolute !important;top:0;left:0;margin:0 !important;width:100% !important;height:100% !important;",
     "    max-width:none;aspect-ratio:auto;border:0 !important;outline:0 !important;border-radius:0 !important;box-shadow:none !important}",
-    "  html.ab-home-b #upload-section:has(.home-intro) .home-compare-img{object-position:50% 28%}",
+    /* 把圖放大，讓人物大一點（頭頂約在 hero 的 15%）；以臉為中心放大，臉不會離開分割線。before／after 一起放大才對得上。 */
+    "  html.ab-home-b #upload-section:has(.home-intro) .home-compare-img{object-position:50% 28%;transform:scale(1.36);transform-origin:67% 54%}",
+    /* after 圖的裁切寫在圖片本身，圖放大後裁切邊緣也被推走（會露出一條 before）：換算回放大前的座標，邊緣才會剛好在分割線上。 */
+    "  html.ab-home-b #upload-section:has(.home-intro) .home-compare-img.is-after{clip-path:inset(0 0 0 calc(67% + (var(--pos) - 67%) / 1.36))}",
     "  html.ab-home-b #upload-section:has(.home-intro) .home-compare-tag{top:24px}",
+    /* B 版的 Before / After 標籤跟著滑桿走，不會像 A 版那樣被滑桿蓋住，所以一直顯示、不淡出。 */
+    "  html.ab-home-b #upload-section:has(.home-intro) .home-compare-tag.is-hidden{opacity:1 !important}",
     "  html.ab-home-b #upload-section:has(.home-intro) .home-compare-tag:not(.is-after){left:auto;right:calc(100% - var(--pos,50%) + 16px)}",
     "  html.ab-home-b #upload-section:has(.home-intro) .home-compare-tag.is-after{left:calc(var(--pos,50%) + 16px);right:auto}",
     /* 文字壓在左邊，底下墊一層往右淡掉的白，字才讀得清楚 */
     "  html.ab-home-b #upload-section:has(.home-intro) .home-hero-copy{position:relative;z-index:3;display:flex;flex-direction:column;justify-content:center;",
-    "    width:min(600px,44%);height:100%;padding:0 0 0 var(--abg-gutter);pointer-events:none}",
+    "    width:min(640px,46%);height:100%;padding:0 0 0 9.5vw;pointer-events:none}",
     "  html.ab-home-b #upload-section:has(.home-intro) .home-hero-copy>*{pointer-events:auto}",
     /* 照片左緣淡進左邊的底色，文字和照片接在一起 */
-    "  html.ab-home-b #upload-section:has(.home-intro) .home-hero::before{content:'';position:absolute;top:0;bottom:0;left:calc(30% - 4px);z-index:2;width:22%;pointer-events:none;",
-    "    background:linear-gradient(90deg,var(--surface-default,#fff) 0%,rgba(255,255,255,0) 100%)}",
-    "  html[data-theme=dark].ab-home-b #upload-section:has(.home-intro) .home-hero::before{background:linear-gradient(90deg,var(--surface-default,#12181a) 0%,rgba(18,24,26,0) 100%)}",
-    "  html.ab-home-b #upload-section:has(.home-intro) .home-headline{font-size:clamp(32px,3.6vw,56px)}",
+    "  html.ab-home-b #upload-section:has(.home-intro) .home-hero::before{content:'';position:absolute;top:0;bottom:0;left:0;z-index:2;width:60%;pointer-events:none;",
+    "    background:linear-gradient(90deg,rgba(255,255,255,.86) 0%,rgba(255,255,255,.82) 32%,rgba(255,255,255,0) 100%)}",
+    "  html[data-theme=dark].ab-home-b #upload-section:has(.home-intro) .home-hero::before{background:linear-gradient(90deg,rgba(18,24,26,.86) 0%,rgba(18,24,26,.82) 32%,rgba(18,24,26,0) 100%)}",
+    /* 照片底部往下淡成全白（跟下面的白底接在一起，底邊沒有細節、沒有硬邊） */
+    "  html.ab-home-b #upload-section:has(.home-intro) .home-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;z-index:2;height:34%;pointer-events:none;",
+    "    background:linear-gradient(180deg,rgba(255,255,255,0) 0%,var(--surface-default,#fff) 100%)}",
+    "  html[data-theme=dark].ab-home-b #upload-section:has(.home-intro) .home-hero::after{background:linear-gradient(180deg,rgba(18,24,26,0) 0%,var(--surface-default,#12181a) 100%)}",
+    "  html.ab-home-b #upload-section:has(.home-intro) .home-headline{font-size:clamp(26px,min(3.6vw,6.2vh),56px)}",
     /* 照片列：從右邊固定欄變成主視覺下方的一條 */
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col{position:relative !important;inset:auto !important;flex:0 0 auto;width:100% !important;height:auto !important;",
-    "    max-width:none;margin:0;padding:8px var(--abg-gutter) 20px !important;border:0 !important;background:var(--surface-default,#fff) !important;box-shadow:none !important}",
+    "    max-width:none;margin:0;padding:8px var(--abg-gutter) 24px !important;border:0 !important;background:var(--surface-default,#fff) !important;box-shadow:none !important}",
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-heading{width:100%;justify-content:flex-start;margin:0 0 16px;border-bottom:1px solid var(--stroke-weak,rgba(17,24,26,.1))}",
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-tabs{width:auto;flex:0 0 auto}",
-    "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-tab-recent-group,html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-tab{flex:0 0 auto;min-width:0;padding-inline:20px}",
+    /* 分頁的灰色底線要跟分頁（hover 範圍）等寬：padding 只給分頁本身，外面那層 group 不要再加。 */
+    "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-tab-recent-group{flex:0 0 auto;min-width:0;padding-inline:0}",
+    "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-tab{flex:0 0 auto;min-width:0;padding-inline:20px}",
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-scroll-frame{height:auto !important;max-height:none !important;padding:0 !important;overflow:visible !important}",
     /* 一排、橫向捲動；卡片 3:2，高度跟著視窗高度走 */
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .demo-images-grid{display:flex !important;flex-wrap:nowrap;gap:16px !important;",
@@ -91,8 +105,18 @@
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .history-grid{display:flex !important;gap:16px !important}",
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .history-grid>*{flex:0 0 auto;width:calc(var(--abg-tile-h) * 1.5) !important;height:var(--abg-tile-h) !important;aspect-ratio:auto !important}",
     /* 「使用所選照片」：放在分頁那一行的右邊 */
-    "  html.ab-home-b #upload-section:has(.home-intro) .gallery-confirm-btn{position:absolute !important;top:8px;right:var(--abg-gutter);z-index:5;width:auto !important;",
-    "    min-width:180px;margin:0 !important}",
+    /* B 版照片列最後面的向右箭頭：還有更多照片的提示，也能按它往右捲 */
+    ".abg-next{position:absolute;z-index:6;display:none;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border:1px solid var(--stroke-weak,rgba(17,24,26,.12));border-radius:50%;",
+    "  background:var(--surface-default,#fff);color:var(--text-strong,#11181a);box-shadow:0 4px 12px rgba(0,0,0,.16);cursor:pointer}",
+    ".abg-next:hover{background:var(--surface-default,#fff) linear-gradient(var(--fill-hover,rgba(17,24,26,.04)),var(--fill-hover,rgba(17,24,26,.04)))}",
+    "html.ab-home-b .abg-next.is-on{display:flex}",
+    /* 沒有「使用所選照片」了：選好的照片直接飛進「Start a Chat」，數量寫在那顆鍵後面 */
+    "  html.ab-home-b #upload-section:has(.home-intro) .gallery-confirm-btn{display:none !important}",
+    "  html.ab-home-b .home-start-btn .abg-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;margin-inline-start:8px;padding:0 6px;box-sizing:border-box;",
+    "    border-radius:999px;background:var(--fill-overlay,rgba(17,24,26,.7));color:var(--text-inverse-strong,#fff);font-size:13px;font-weight:700;line-height:1}",
+    /* 「使用所選照片」：右下角（固定在視窗角落，浮在照片列上） */
+    "  html.ab-home-b #upload-section:has(.home-intro) .gallery-confirm-btn{position:fixed !important;top:auto !important;bottom:24px;right:var(--abg-gutter);z-index:5;width:auto !important;",
+    "    min-width:180px;margin:0 !important;box-shadow:0 8px 24px rgba(0,0,0,.16)}",
     "}",
 
     /* ── C 版：置中大輸入框 ── */
@@ -100,7 +124,7 @@
     "html.ab-home-c #upload-section:has(.home-intro) .home-hero{display:none !important}",
     "html.ab-home-c #upload-section:has(.home-intro) .abc-hero{position:relative;display:flex;flex-direction:column;align-items:center;width:100%;max-width:1100px;margin:0 auto;padding:0 16px;text-align:center}",
     /* 標題 Wix Madefor Display 粗體；副標和提示字 Wix Madefor Text 細體（中文落到 Noto Sans） */
-    ".abc-title{margin:0;font:800 clamp(30px,3.4vw,52px)/1.2 'Wix Madefor Display',var(--cjk-sans,'Noto Sans TC'),system-ui,sans-serif;letter-spacing:-.01em;color:var(--text-strong,#11181a)}",
+    ".abc-title{margin:0;font:800 clamp(30px,3.4vw,52px)/1.2 'Wix Madefor Display',var(--cjk-sans,'Noto Sans TC'),system-ui,sans-serif;letter-spacing:-.01em;color:transparent;background:var(--yco-gradient,linear-gradient(90deg,#03ade2,#3fd75b));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}",
     ".abc-sub{margin:12px 0 0;font:400 clamp(15px,1.3vw,19px)/1.5 'Wix Madefor Text',var(--cjk-sans,'Noto Sans TC'),system-ui,sans-serif;color:var(--text-weak,#4b5a5e)}",
     ".abc-box{position:relative;z-index:2;display:flex;flex-direction:column;width:min(760px,100%);margin:clamp(20px,3.5vh,40px) 0 0;padding:20px 20px 16px 24px;",
     "  border:1px solid var(--stroke-weak,rgba(17,24,26,.12));border-radius:24px;background:var(--surface-default,#fff);box-shadow:0 10px 30px rgba(9,22,26,.08);text-align:start}",
@@ -108,7 +132,10 @@
     ".abc-input{width:100%;min-height:56px;resize:none;border:0;outline:0;background:none;padding:0;font:400 18px/1.5 'Wix Madefor Text',var(--cjk-sans,'Noto Sans TC'),system-ui,sans-serif;color:var(--text-strong,#11181a)}",
     ".abc-input::placeholder{color:var(--text-weak,#8a979a);font-weight:400}",
     /* 下面點選的照片直接顯示在輸入框裡（新增照片鈕旁邊），× 取消選取 */
-    ".abc-attach{display:flex;align-items:center;gap:10px;flex:1 1 auto;min-width:0;overflow-x:auto;padding:2px 4px}",
+    ".abc-attach{display:flex;align-items:center;gap:10px;flex:0 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;padding:8px 10px 2px 4px;margin:-8px 0 -2px}",
+    /* 有選照片時，照片排在第一個位置，新增鈕接在照片後面。 */
+    ".abc-left.has-photos .abc-attach{order:1}",
+    ".abc-left.has-photos .abc-add{order:2}",
     ".abc-left{display:flex;align-items:center;gap:10px;flex:1 1 auto;min-width:0}",
     ".abc-thumb{position:relative;flex:none;width:48px;height:48px;border-radius:12px;overflow:visible}",
     ".abc-thumb img{display:block;width:100%;height:100%;object-fit:cover;border-radius:12px;box-shadow:0 0 0 1px rgba(17,24,26,.08)}",
@@ -266,6 +293,8 @@
     if (box.getAttribute("data-key") === key) return;
     box.setAttribute("data-key", key);
     box.innerHTML = "";
+    var left = box.parentElement;
+    if (left) left.classList.toggle("has-photos", items.length > 0);
     items.forEach(function (x, i) {
       var t = document.createElement("span");
       t.className = "abc-thumb";
@@ -306,11 +335,15 @@
     var box = document.createElement("div");
     box.className = "ab-switch";
     box.setAttribute("role", "group");
-    box.setAttribute("aria-label", "首頁版本");
+    // 介面是英文時不出現中文（title／aria-label 也一樣）。
+    var en = !/^zh/i.test(document.documentElement.lang || "zh");
+    var T = en
+      ? { a: "A: sample photos on the right", b: "B: full-bleed hero, sample photos below", c: "C: centered prompt box, sample photos below" }
+      : { a: "A：範例照片在右側", b: "B：滿版主視覺，範例照片在下方", c: "C：置中輸入框，範例照片在下方" };
+    box.setAttribute("aria-label", en ? "Home version" : "首頁版本");
     box.innerHTML =
-      '<button type="button" class="ab-switch-opt" data-v="a" title="A：範例照片在右側">A</button>' +
-      '<button type="button" class="ab-switch-opt" data-v="b" title="B：滿版主視覺，範例照片在下方">B</button>' +
-      '<button type="button" class="ab-switch-opt" data-v="c" title="C：置中輸入框，範例照片在下方">C</button>';
+      '<button type="button" class="ab-switch-opt" data-v="a" title="' + T.a + '">A</button>' +
+      '<button type="button" class="ab-switch-opt" data-v="b" title="' + T.b + '">B</button>';
     box.addEventListener("click", function (e) {
       var b = e.target.closest(".ab-switch-opt");
       if (!b) return;
@@ -318,6 +351,15 @@
       window.scrollTo({ top: 0 });
     });
     document.body.appendChild(box);
+    // 之後切換介面語言：title／aria-label 跟著換。
+    new MutationObserver(function () {
+      var e2 = !/^zh/i.test(document.documentElement.lang || "zh");
+      var T2 = e2
+        ? { a: "A: sample photos on the right", b: "B: full-bleed hero, sample photos below", c: "C: centered prompt box, sample photos below" }
+        : { a: "A：範例照片在右側", b: "B：滿版主視覺，範例照片在下方", c: "C：置中輸入框，範例照片在下方" };
+      box.setAttribute("aria-label", e2 ? "Home version" : "首頁版本");
+      ["a", "b"].forEach(function (k) { var el = box.querySelector('[data-v="' + k + '"]'); if (el) el.title = T2[k]; });
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
     apply(read());
 
     // 只在首頁顯示切換鈕：首頁才有 .home-intro。頁面是 SPA，換頁時跟著更新。
@@ -339,9 +381,150 @@
       }
       fillPrompt();
       syncAttach();
+      swapHeroImages();
+      syncNextArrow();
+      syncPickCount();
     };
     sync();
-    new MutationObserver(sync).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+    // 整個頁面一有 DOM／class 變動就跑 sync，而 sync 裡有讀版面（getBoundingClientRect）、查一堆元素。
+    // 切換 A／B／C 時整頁重排，會連續冒出大量變動，每一個都跑一次就會卡住。
+    // 這裡改成：同一個畫面幀內的變動只跑一次（requestAnimationFrame 合併），而且跑的時候先停止觀察，
+    // 不會被 sync 自己改的東西（箭頭鈕的 class、換圖、重畫 C 版）再觸發一輪。
+    var observeOpts = { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] };
+    var pendingSync = false;
+    var observer = new MutationObserver(function () {
+      if (pendingSync) return;
+      pendingSync = true;
+      requestAnimationFrame(function () {
+        pendingSync = false;
+        observer.disconnect();
+        try { sync(); fitHomeB(); } finally { observer.observe(document.body, observeOpts); }
+      });
+    });
+    observer.observe(document.body, observeOpts);
+  }
+
+  // B 版主視覺的 Before / After 換成這兩張（assets/home/，1860×846 的寬圖，配 B 版滿版的主視覺）；
+  // 切回 A、C 版就還原成原本那組。原本的 src 記在 data-ab-orig，換版或重畫都會再檢查一次。
+  var HERO_B = { before: "../assets/home/hero-b-before.jpg", after: "../assets/home/hero-b-after.jpg" };
+  // B 版：照片列右邊有更多照片時，在列的右端放一顆向右箭頭（按下去往右捲一頁），捲到底就收起來。
+  function syncNextArrow() {
+    var col = document.querySelector(".upload-gallery-col");
+    var grid = col && col.querySelector(".demo-images-grid");
+    var b = document.documentElement.classList.contains("ab-home-b") && window.matchMedia("(min-width:901px) and (orientation:landscape)").matches;
+    var btn = col && col.querySelector(".abg-next");
+    if (!b || !grid) { if (btn) btn.classList.remove("is-on"); return; }
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "abg-next";
+      btn.setAttribute("aria-label", "Next photos");
+      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
+      btn.addEventListener("click", function () {
+        var g = col.querySelector(".demo-images-grid");
+        if (g) g.scrollBy({ left: Math.max(240, g.clientWidth * 0.8), behavior: "smooth" });
+      });
+      col.appendChild(btn);
+      var scrollPending = false;
+      grid.addEventListener("scroll", function () {
+        if (scrollPending) return;
+        scrollPending = true;
+        requestAnimationFrame(function () { scrollPending = false; syncNextArrow(); });
+      }, { passive: true });
+    }
+    var cr = col.getBoundingClientRect(), gr = grid.getBoundingClientRect();
+    btn.style.top = Math.round(gr.top - cr.top + gr.height / 2 - 20) + "px";
+    btn.style.right = "calc(var(--abg-gutter) - 20px)";
+    btn.classList.toggle("is-on", grid.scrollLeft + grid.clientWidth < grid.scrollWidth - 4);
+  }
+
+  // B 版：選了照片就在「Start a Chat」後面顯示張數；新選的那張縮圖飛進那顆鍵（落下時張數跳一下）。
+  var prevPicked = {};
+  function syncPickCount() {
+    var b = document.documentElement.classList.contains("ab-home-b");
+    var btn = document.querySelector(".home-start-btn");
+    if (!btn) return;
+    var badge = btn.querySelector(".abg-count");
+    var picked = b ? Array.prototype.slice.call(document.querySelectorAll(".upload-gallery-col .is-selected")) : [];
+    if (!picked.length) {
+      if (badge) badge.remove();
+      prevPicked = {};
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "abg-count";
+      btn.appendChild(badge);
+    }
+    badge.textContent = String(picked.length);
+    var next = {};
+    picked.forEach(function (tile) {
+      var img = tile.querySelector("img:not(.demo-image-tile-bg)") || tile.querySelector("img");
+      var key = img && img.getAttribute("src");
+      if (!key) return;
+      next[key] = true;
+      if (!prevPicked[key]) flyToButton(img, btn, badge);
+    });
+    prevPicked = next;
+  }
+  function flyToButton(img, btn, badge) {
+    if (!img.animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var from = img.getBoundingClientRect(), to = badge.getBoundingClientRect();
+    if (!from.width || !to.width) return;
+    var ghost = img.cloneNode(false);
+    ghost.removeAttribute("id");
+    ghost.style.cssText = "position:fixed;z-index:2147483000;pointer-events:none;margin:0;object-fit:cover;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);" +
+      "left:" + from.left + "px;top:" + from.top + "px;width:" + from.width + "px;height:" + from.height + "px";
+    document.body.appendChild(ghost);
+    var dx = to.left + to.width / 2 - (from.left + from.width / 2);
+    var dy = to.top + to.height / 2 - (from.top + from.height / 2);
+    var anim = ghost.animate([
+      { transform: "translate(0,0) scale(1)", opacity: 1 },
+      { transform: "translate(" + dx + "px," + dy + "px) scale(" + (22 / from.width) + ")", opacity: 0.35 }
+    ], { duration: 480, easing: "cubic-bezier(.4,0,.2,1)", fill: "forwards" });
+    var done = false;
+    var finish = function () {
+      if (done) return;
+      done = true;
+      ghost.remove();
+      if (badge.isConnected) badge.animate([{ transform: "scale(1)" }, { transform: "scale(1.4)" }, { transform: "scale(1)" }], { duration: 260, easing: "ease-out" });
+    };
+    anim.onfinish = finish;
+    // 分頁在背景時動畫不會跑完：保險起見，時間到就收掉飛行中的縮圖。
+    setTimeout(finish, 900);
+  }
+
+  // B 版：視窗矮的時候文字區（標題、說明、按鈕）會被下面的 sample 列擠到。
+  // 量文字實際需要的高度，放不下就一格一格把 sample 縮小（最小 48px），上下各留 20px 喘息空間。
+  function fitHomeB() {
+    var root = document.documentElement;
+    if (!root.classList.contains("ab-home-b")) { root.style.removeProperty("--abg-tile-h"); return; }
+    var copy = document.querySelector(".home-hero-copy");
+    if (!copy || !copy.offsetParent || !copy.children.length) return;
+    var t = Math.min(132, Math.max(84, window.innerHeight * 0.13));
+    var need = function () {
+      var first = copy.children[0].getBoundingClientRect();
+      var last = copy.children[copy.children.length - 1].getBoundingClientRect();
+      return last.bottom - first.top;
+    };
+    root.style.setProperty("--abg-tile-h", t + "px");
+    var guard = 0;
+    while (need() > copy.clientHeight - 40 && t > 48 && guard++ < 30) {
+      t -= 4;
+      root.style.setProperty("--abg-tile-h", t + "px");
+    }
+  }
+  window.addEventListener("resize", function () { requestAnimationFrame(fitHomeB); });
+
+  function swapHeroImages() {
+    var b = document.documentElement.classList.contains("ab-home-b");
+    var imgs = document.querySelectorAll(".home-compare-img");
+    for (var i = 0; i < imgs.length; i++) {
+      var img = imgs[i];
+      if (!img.hasAttribute("data-ab-orig")) img.setAttribute("data-ab-orig", img.getAttribute("src") || "");
+      var want = b ? (img.classList.contains("is-after") ? HERO_B.after : HERO_B.before) : img.getAttribute("data-ab-orig");
+      if (want && img.getAttribute("src") !== want) img.setAttribute("src", want);
+    }
   }
 
   // 先套上 class，避免首屏先畫 A 再跳到別版。

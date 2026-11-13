@@ -746,6 +746,12 @@
         "chat"
       ]
     },
+    "「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完。": {
+      "en": "“Analyze” shows you what I plan to fix before I start; “One-Tap Retouch” does everything in one go.",
+      "where": [
+        "chat"
+      ]
+    },
     "「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完；想換引擎或長寬比，先按「設定」。": {
       "en": "“Analyze” shows you what I plan to fix before I start; “One-Tap Retouch” does everything in one go. To change the engine or aspect ratio, tap “Settings” first.",
       "where": [
@@ -877,6 +883,12 @@
       "en": "Once you upload a photo, the AI's suggestions show up here and you can fine-tune them.",
       "where": [
         "panel"
+      ]
+    },
+    "上傳照片或挑一張範例，選好的照片會放在這裡。": {
+      "en": "Upload a photo or pick a sample; the photos you choose appear here.",
+      "where": [
+        "chat"
       ]
     },
     "上傳的照片會放在這裡。": {
@@ -2626,7 +2638,7 @@
       ]
     },
     "切換到面板模式": {
-      "en": "Switch to panel mode",
+      "en": "Switch to Editor mode",
       "where": [
         "chat"
       ]
@@ -3315,7 +3327,7 @@
       ]
     },
     "在面板上顯示": {
-      "en": "Show in panel",
+      "en": "Show in Editor",
       "where": [
         "chat"
       ]
@@ -4219,7 +4231,7 @@
       ]
     },
     "已沿用面板模式{by}規劃的構圖，下次美化時會套用到照片上。": {
-      "en": "Using the framing planned {by} in panel mode; it will be applied to the photo on the next retouch. ",
+      "en": "Using the framing planned {by} in Editor mode; it will be applied to the photo on the next retouch. ",
       "where": [
         "chat"
       ]
@@ -4682,6 +4694,18 @@
     },
     "想換一種氛圍的話，先挑想改的類別再選風格；不選就維持照片原本的樣子。": {
       "en": "For a different mood, choose a category and then a style. Leave it blank to keep the photo's original look.",
+      "where": [
+        "chat"
+      ]
+    },
+    "想換引擎或長寬比，先按「設定」。": {
+      "en": "To change the engine or aspect ratio, tap “Settings” first.",
+      "where": [
+        "chat"
+      ]
+    },
+    "想換長寬比，先按「設定」。": {
+      "en": "To change the aspect ratio, tap “Settings” first.",
       "where": [
         "chat"
       ]
@@ -7661,6 +7685,13 @@
       ],
       "note": "Panel card title shown while the user edits on top of a chosen version, next to the 返回 (Back) button."
     },
+    "編輯器": {
+      "en": "Editor",
+      "where": [
+        "panel",
+        "chat"
+      ]
+    },
     "總覽": {
       "en": "Overview",
       "where": [
@@ -8377,6 +8408,7 @@
     "請確認": {
       "en": "Confirm",
       "where": [
+        "panel",
         "chat"
       ]
     },
@@ -9402,7 +9434,8 @@
     "還沒有照片": {
       "en": "No photos yet",
       "where": [
-        "panel"
+        "panel",
+        "chat"
       ]
     },
     "還沒有照片，按「開始對話」挑一張吧。": {
@@ -9862,6 +9895,12 @@
       "note": "Hint under the 9:16 aspect-ratio option: the social-media Stories format; keep very short.",
       "max": "one word, about 9 Latin letters or 5 CJK characters"
     },
+    "隱藏分析": {
+      "en": "Hide analysis",
+      "where": [
+        "panel"
+      ]
+    },
     "雜誌 editorial": {
       "en": "Magazine Editorial",
       "where": [
@@ -9961,6 +10000,12 @@
       "en": "Show all {n} photos",
       "where": [
         "chat"
+      ]
+    },
+    "顯示分析": {
+      "en": "Show analysis",
+      "where": [
+        "panel"
       ]
     },
     "顯示第一階段圖": {

@@ -1011,7 +1011,7 @@ export function App() {
         if (location.hash === "#new") setSessionHash(null);
         const id = sessionHash();
         // Staying undrawn when it hands the case to 面板模式 instead.
-        if (id && (await openSession(id)) === "left") return;
+        if (id && (await openSession(id, true)) === "left") return;
         await listed;
       } catch (e) {
         setBootError(errorText(e));
@@ -1049,7 +1049,7 @@ export function App() {
   // `id` is a session, or `case:<case_id>` for a history case: that case's
   // own session, or one rebuilt from history. A case the chat page cannot
   // open (no analysis left, or the AIPoC path) opens in 面板模式 instead.
-  async function openSession(id: string): Promise<"left" | void> {
+  async function openSession(id: string, stayInChat = false): Promise<"left" | void> {
     setDrawer(false);
     setError("");
     try {
@@ -1061,6 +1061,13 @@ export function App() {
           if (r.created) refreshSessions();
         } catch (e) {
           if (e instanceof ApiError && e.status === 409) {
+            // 從面板按「對話」過來時，這張在對話模式開不了也要留在對話頁（回到對話首頁），不要又被丟回面板。
+            if (stayInChat) {
+              newChat();
+              // 面板模式按「對話」帶過來的照片：接回來，停在選好照片那一步。
+              void takeBackHandoff().then((files) => { if (files.length) void pickFiles(files); });
+              return;
+            }
             location.href = urls.oldUi(caseId);
             return "left";
           }
@@ -1071,6 +1078,7 @@ export function App() {
       if (!s.photos.length) throw new Error(t("這個對話沒有照片"));
       let handedVersion: string | null = null;
       if (caseId) {
+        void takeBackHandoff(); // 這張在對話頁開得了，面板帶來的備份照片用不到，清掉
         const handed = await applyHandoff(s, caseId);
         s = handed.session;
         handedVersion = handed.version_id || null;
@@ -3317,17 +3325,17 @@ export function App() {
       class={`home-chat${source ? "" : " is-solo"}`}
       sub={batchIndex >= 0 ? t("第 {v1} 張", { v1: batchIndex + 1 }) : t("新對話")}
       photo={source ? { src: thumbSrc(source), onOpen: () => setViewing(true) } : undefined}
-      // 選好照片就能切到面板模式：照片帶過去，在那邊接著做；還沒選照片時「面板」灰掉。
-      panelMode={source || batch?.length
-        ? {
-            href: urls.oldUi(null),
-            busy: !!busy,
-            onLeave: () => writePreHandoff(
-              (batch?.length ? batch : [source!]).map(preHandoffPhoto),
-              notes.filter((n) => n.kept !== false && !n.dropped).map((n) => n.text).join("\n"),
-            ),
-          }
-        : undefined}
+      // 隨時能切到面板模式：有照片就帶過去，在那邊接著做；還沒選照片就是面板的空狀態（上傳／挑範例）。
+      panelMode={{
+        href: urls.oldUi(null),
+        busy: !!busy,
+        onLeave: () => source || batch?.length
+          ? writePreHandoff(
+            (batch?.length ? batch : [source!]).map(preHandoffPhoto),
+            notes.filter((n) => n.kept !== false && !n.dropped).map((n) => n.text).join("\n"),
+          )
+          : undefined,
+      }}
       onDropFiles={busy || loadingPhotos ? undefined : batch ? appendFiles : pickFiles}
       footer={
         <>
@@ -3484,6 +3492,8 @@ export function App() {
     const where = drawerLayout ? t("上面@@照片位置") : rtl ? t("右邊的「我的照片」@@照片位置") : t("左邊的「我的照片」@@照片位置");
     const thumbOf = new Map(batch.map((s) => [sourceSrc(s), thumbSrc(s)]));
     const uploadThumbs = (srcs: string[]) => srcs.filter((s) => have.has(s)).map((s) => thumbOf.get(s) || s);
+    const fullOf = new Map(batch.map((s) => [sourceSrc(s), fullSrc(s)]));
+    const uploadFulls = (srcs: string[]) => srcs.filter((s) => have.has(s)).map((s) => fullOf.get(s) || s);
     // 最底下那句跟著現在的進度，點出接下來能做什麼：還在跑的等它們、沒開始的按哪顆、開始過一些
     // 但還沒做完的是哪幾張。剛上傳什麼都還沒做時，開場白已經講過，不再重複。
     // 只講張數，不列是哪幾張：一批可能很多張，要看哪張在左邊「我的照片」看得到。
@@ -3694,6 +3704,7 @@ export function App() {
         <UserMsg>
           <BatchUploadBubble
             srcs={uploadThumbs(firstUpload)}
+            fullSrcs={uploadFulls(firstUpload)}
             text={t("上傳了 {n} 張照片", { n: photoLoad && first && photoLoad.entry === first.id ? photoLoad.total : firstUpload.length })}
           />
         </UserMsg>
@@ -3720,7 +3731,7 @@ export function App() {
           if (ot === overview[0] && ot.kind === "upload") return null;
           if (ot.kind === "upload") return (
             <div key={ot.id}>
-              <UserMsg><BatchUploadBubble srcs={uploadThumbs(ot.srcs)} text={t("新增了 {n} 張照片", { n: photoLoad?.entry === ot.id ? photoLoad.total : ot.srcs.length })} /></UserMsg>
+              <UserMsg><BatchUploadBubble srcs={uploadThumbs(ot.srcs)} fullSrcs={uploadFulls(ot.srcs)} text={t("新增了 {n} 張照片", { n: photoLoad?.entry === ot.id ? photoLoad.total : ot.srcs.length })} /></UserMsg>
               {photoLoad?.entry === ot.id ? <PhotoLoadMsg {...photoLoad} /> : <AssistantMsg>
                 <p class="chat-text">{ot.srcs.length > 1 ? t("好，加進來了，這幾張加到{where}裡了。", { where }) : t("好，加進來了，這張加到{where}裡了。", { where })}</p>
               </AssistantMsg>}
@@ -5291,18 +5302,16 @@ function PreChat(props: {
           {!greeted && <AssistantMsg><div class="chat-typing" aria-label={t("AI 正在看照片")}><span /><span /><span /></div></AssistantMsg>}
           {greeted && (
           <AssistantMsg>
-            <p class="chat-text">{t("照片選好了。想怎麼修，直接打在下面的對話框告訴我。")}</p>
-            {/* 底下那三顆鍵都只有兩四個字，差在哪得自己猜。這裡一顆補一句：分
-                析是先看過再決定，一鍵美化是現在就動手，設定是動手前先換工具。寫
-                「讓你看」不寫「跟你確認」——分析完照樣可以直接按美化，一項一項
-                挑是可以做的事，不是非做不可。 */}
-            <p class="chat-text">{t("要先看我對這張照片的分析，還是直接幫你美化？")}</p>
-            <p class="chat-text chat-muted">{enginesVisible()
-              ? t("「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完；想換引擎或長寬比，先按「設定」。")
-              : t("「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完；想換長寬比，先按「設定」。")}</p>
+            <p class="chat-text chat-pick-confirm">{t("照片選好了。想怎麼修，直接打在下面的對話框告訴我。")}</p>
+            {/* 選圖確認（16/400）→ 下一步提問（16/600，獨立一段）→ 操作說明（14/400 次要色，按鈕名稱 500 主文字色，
+                設定的說明另起一行）。「分析」「一鍵美化」「設定」用引號框起來的字會被標成 .chat-key，對照下面的按鈕。 */}
+            <p class="chat-text chat-pick-ask">{t("要先看我對這張照片的分析，還是直接幫你美化？")}</p>
+            <p class="chat-text chat-pick-help">{keyed(t("「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完。"))}</p>
+            <p class="chat-text chat-pick-help">{keyed(enginesVisible()
+              ? t("想換引擎或長寬比，先按「設定」。")
+              : t("想換長寬比，先按「設定」。"))}</p>
           </AssistantMsg>
           )}
-          {props.previewError && <AssistantMsg><p class="chat-text chat-muted">{props.previewError}</p></AssistantMsg>}
 
         </>
       )}
@@ -5391,6 +5400,9 @@ function PreChat(props: {
         );
       })}
       {source && greeted && !pending && !(last && "ask" in last && (last.ask.asked || last.ask.offered)) && <div class="prechat-actions">{actions}</div>}
+      {source && greeted && props.previewError && (
+        <p class="prechat-preview-note"><Icon name="info" size={14} /><span>{props.previewError}</span></p>
+      )}
 
       {/* 需求要怎麼套用，只有使用者自己知道：「把背景換成海邊」可能是只想換
           背景，也可能是想順便整張修好。整體美化亮起來當建議，但不替人預設。 */}
@@ -7919,5 +7931,12 @@ export function AskBubble({ text, faces, meta }: { text: string; faces?: FaceRef
         <span>{text}</span>
       </div>
     </UserMsg>
+  );
+}
+
+// 把文字裡用引號框起來的按鈕名稱（「分析」／“Analyze”）標成 .chat-key：500 字重、主文字色，對照下面的按鈕。
+function keyed(text: string) {
+  return text.split(/([「“][^」”]+[」”])/).map((part, i) =>
+    i % 2 ? <b key={i} class="chat-key">{part}</b> : part,
   );
 }

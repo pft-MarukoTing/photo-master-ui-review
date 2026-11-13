@@ -201,6 +201,17 @@ const ICONS: Record<string, { sw: number; body: JSX.Element; mirror?: boolean }>
       </>
     ),
   },
+  // Lucide「info」（ISC，lucide.dev/icons/info）。
+  info: {
+    sw: 2,
+    body: (
+      <>
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 16v-4" />
+        <path d="M12 8h.01" />
+      </>
+    ),
+  },
   more: { sw: 3.2, body: <path d="M5 12h.01M12 12h.01M19 12h.01" /> },
   next: { sw: 2, mirror: true, body: <path d="M9 6l6 6-6 6" /> },
   globe: {
