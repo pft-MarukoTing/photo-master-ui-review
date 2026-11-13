@@ -23,6 +23,17 @@
   window.PhotoAgentDemo = api;
   if (!on) return;
 
+  // The first page opened in a tab is the Chat home (the one with the A/B switch), not the Editor's upload
+  // screen: the root URL hands over to /chat/ once. Moving between Chat and Editor afterwards is untouched.
+  var VISITED = "pm-demo-visited";
+  var visited = false;
+  try { visited = sessionStorage.getItem(VISITED) === "1"; } catch (e) { /* storage blocked */ }
+  try { sessionStorage.setItem(VISITED, "1"); } catch (e) { /* storage blocked */ }
+  if (!IS_CHAT && !visited && !location.hash.replace("#", "")) {
+    location.replace(ROOT + "/chat/" + location.search);
+    return;
+  }
+
   var DATA = window.__DEMO_DATA__ || {};
   var origFetch = window.fetch.bind(window);
 

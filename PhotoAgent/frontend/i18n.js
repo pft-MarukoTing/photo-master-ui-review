@@ -69,6 +69,13 @@
       try { localStorage.setItem(KEY, asked); } catch { /* the URL still says it */ }
       return asked;
     }
+    // Demo mode (demo-api.js): the page is shown to people who can't switch language, so it opens in English
+    // (?lang= still wins). Same on/off rule as demo-api.js: *.vercel.app or ?demo=1, ?demo=0 turns it off.
+    try {
+      const flag = new URLSearchParams(location.search).get("demo");
+      const stored = localStorage.getItem("photomaster-demo");
+      if (flag === "1" || (flag !== "0" && (stored === "1" || /\.vercel\.app$/.test(location.hostname)))) return "en";
+    } catch { /* storage may be blocked */ }
     let kept = "";
     try { kept = localStorage.getItem(KEY) || ""; } catch { /* storage may be blocked */ }
     return normalize(kept) || SOURCE;

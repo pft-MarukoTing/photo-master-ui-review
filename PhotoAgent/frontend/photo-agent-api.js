@@ -619,6 +619,8 @@ window.PhotoAgentApi = (() => {
   }
 
   function demoImageUrl(filename) {
+    const demo = demoImage("demo", filename);
+    if (demo) return demo;
     return `${BASE_URL}/api/photo-agent/demo-images/${encodeURIComponent(filename)}`;
   }
 
@@ -628,6 +630,8 @@ window.PhotoAgentApi = (() => {
   // real file via demoImageUrl, so the actual upload/analysis always runs
   // against the full-resolution source, never this thumbnail.
   function demoImageThumbnailUrl(filename) {
+    const demo = demoImage("demoThumb", filename);
+    if (demo) return demo;
     return `${BASE_URL}/api/photo-agent/demo-images/${encodeURIComponent(filename)}/thumbnail`;
   }
 

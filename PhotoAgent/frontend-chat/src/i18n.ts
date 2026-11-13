@@ -68,6 +68,8 @@ function resolve(): string {
     }
     return asked;
   }
+  // 展示模式（demo-api.js）：看的人沒辦法切語言，所以預設英文（?lang= 還是優先）。
+  if ((window as unknown as { PhotoAgentDemo?: { on: boolean } }).PhotoAgentDemo?.on) return "en";
   return normalize(remembered()) || SOURCE;
 }
 
