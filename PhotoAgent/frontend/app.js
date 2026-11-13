@@ -13975,23 +13975,24 @@
     // 為顯示合成一份只有「第 1 版」的清單，快取在紀錄上（同一份才不會每次重畫）；之後有真的版本清單就改用真的。
     if (!runs.length && document.body.classList.contains("pm-panel") && record.status === "done" && record.jobId) {
       if (!record._liveRuns || record._liveRuns[0].jobId !== record.jobId) {
-        record._liveRuns = [{ jobId: record.jobId, status: "done", run: 1, sourceRun: 1, versionId: "live-1", versionNumber: 1, versionTotal: 1, runInVersion: 1, runsInVersion: 1 }];
+        record._liveRuns = [{ jobId: record.jobId, status: "done", run: 1, sourceRun: 1, versionId: "live-1", versionNumber: 1, versionTotal: 1, runInVersion: 1, runsInVersion: 1, liveTag: true }];
       }
       runs = record._liveRuns;
     }
-    // 編輯器：剛 Retouch 完、只有一個結果時也要出現照片上的縮圖列（原圖 + 第 1 版），
-    // 所以幫這個結果補上「第 1 版」的標記；之後有新版本，refreshBatchVersionsAfterEdit 會換成完整標記的清單。
-    if (runs.length === 1 && document.body.classList.contains("pm-panel") && runs[0].status === "done") {
-      const r0 = runs[0];
-      // 已經標過（再渲染一次）就維持，不要掉到下面的 reset 又被藏起來。
-      if (!r0.versionTotal) {
-        r0.versionId = r0.versionId || "live-1";
-        r0.versionNumber = r0.versionNumber || 1;
-        r0.versionTotal = 1;
-        r0.runInVersion = 1;
-        r0.runsInVersion = 1;
-        if (r0.sourceRun == null) r0.sourceRun = r0.run || 1;
-      }
+    // 編輯器：剛 Retouch 完（還沒有歷史紀錄可讀）也要出現縮圖列（原圖 + 第 N 版），
+    // 所以把即時流程裡已完成的結果依序標成第 1、2、3… 版（liveTag）。這種標記不擋 refreshBatchVersionsAfterEdit：
+    // 讀得到真的歷史紀錄就換成完整版本清單，讀不到（例如展示模式）就維持這個。
+    const liveOnly = runs.length >= 1 && runs.every((r) => r.status === "done" && (!r.versionTotal || r.liveTag));
+    if (document.body.classList.contains("pm-panel") && liveOnly) {
+      runs.forEach((r, idx) => {
+        r.liveTag = true;
+        r.versionId = `live-${idx + 1}`;
+        r.versionNumber = idx + 1;
+        r.versionTotal = runs.length;
+        r.runInVersion = 1;
+        r.runsInVersion = 1;
+        if (r.sourceRun == null) r.sourceRun = r.run || 1;
+      });
     } else if (runs.length <= 1) {
       resetRunSwitcher();
       return;
@@ -14449,7 +14450,7 @@
   // lookup would come back with nothing to show for every photo in it.
   async function refreshBatchVersionsAfterEdit(record) {
     const live = Array.isArray(record.runs) && record.runs.length ? record.runs : null;
-    if (!live || live.some((r) => r.versionId)) return;
+    if (!live || live.some((r) => r.versionId && !r.liveTag)) return;
     const user = getCurrentUser();
     const mirrored = record.mirrorIndex != null ? live[record.mirrorIndex] : null;
     const anchor = mirrored && mirrored.status === "done" ? mirrored : live.find((r) => r.status === "done");

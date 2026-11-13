@@ -363,16 +363,21 @@ const withRun = (url: string, run?: number) => (run ? `${url}?run=${run}` : url)
 // 面板模式的一鍵美化是一支合併 job，/result 把成果包在 runs 裡（api.py result）；
 // 對話模式的版本只看第一個 run（resultImage 不帶 run 也是它），攤平成單一 job 的樣子。
 const firstRun = (r: Dict) => (r?.runs ? { status: r.status, ...r.runs[0] } : r);
+// 展示模式（demo-api.js）：<img src> 不會經過 fetch，所以圖片網址改由假 API 給（沒開展示模式就維持原本的後端網址）。
+const demo = (kind: string, id: string, run?: number): string | null => {
+  const d = (window as unknown as { PhotoAgentDemo?: { on: boolean; imageUrl: (k: string, i: string, r?: number) => string } }).PhotoAgentDemo;
+  return d?.on ? d.imageUrl(kind, id, run) : null;
+};
 export const urls = {
-  previewImage: (job: string) => `${CHAT}/previews/${enc(job)}/image${q()}`,
-  sourceImage: (job: string) => `${API}/photo-agent/source/${enc(job)}/image`,
-  sourceThumb: (job: string) => `${API}/photo-agent/source/${enc(job)}/thumbnail`,
-  resultImage: (job: string, run?: number) => withRun(`${API}/photo-agent/result/${enc(job)}/image`, run),
-  resultThumb: (job: string, run?: number) => withRun(`${API}/photo-agent/result/${enc(job)}/thumbnail`, run),
-  resultPreview: (job: string, run?: number) => withRun(`${API}/photo-agent/result/${enc(job)}/preview`, run),
-  preEditImage: (job: string) => `${API}/photo-agent/result/${enc(job)}/pre_edit_image`,
-  demoImage: (f: string) => `${API}/photo-agent/demo-images/${enc(f)}`,
-  demoThumb: (f: string) => `${API}/photo-agent/demo-images/${enc(f)}/thumbnail`,
+  previewImage: (job: string) => demo("preview", job) ?? `${CHAT}/previews/${enc(job)}/image${q()}`,
+  sourceImage: (job: string) => demo("source", job) ?? `${API}/photo-agent/source/${enc(job)}/image`,
+  sourceThumb: (job: string) => demo("sourceThumb", job) ?? `${API}/photo-agent/source/${enc(job)}/thumbnail`,
+  resultImage: (job: string, run?: number) => demo("result", job, run) ?? withRun(`${API}/photo-agent/result/${enc(job)}/image`, run),
+  resultThumb: (job: string, run?: number) => demo("resultThumb", job, run) ?? withRun(`${API}/photo-agent/result/${enc(job)}/thumbnail`, run),
+  resultPreview: (job: string, run?: number) => demo("resultPreview", job, run) ?? withRun(`${API}/photo-agent/result/${enc(job)}/preview`, run),
+  preEditImage: (job: string) => demo("preEdit", job) ?? `${API}/photo-agent/result/${enc(job)}/pre_edit_image`,
+  demoImage: (f: string) => demo("demo", f) ?? `${API}/photo-agent/demo-images/${enc(f)}`,
+  demoThumb: (f: string) => demo("demoThumb", f) ?? `${API}/photo-agent/demo-images/${enc(f)}/thumbnail`,
   styleThumb: (group: string, value: string) => `${BASE}/assets/optional_style/${group}/thumbs/${styleThumbFile(group, value)}.webp`,
   // With a case, 面板模式 opens straight on it.
   oldUi: (caseId?: string | null) => `${BASE}/${location.search}${caseId ? `#case=${encodeURIComponent(caseId)}` : ""}`,

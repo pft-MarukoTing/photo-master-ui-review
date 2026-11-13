@@ -211,6 +211,12 @@ window.PhotoAgentApi = (() => {
     return data; // { status, runs: [{ run, image_url, result }], run_count }
   }
 
+  // 展示模式（demo-api.js）：<img src> 不會經過 fetch，圖片網址由假 API 給；沒開就回 null，走原本的後端網址。
+  function demoImage(kind, jobId, run) {
+    const d = window.PhotoAgentDemo;
+    return d && d.on ? d.imageUrl(kind, jobId, run) : null;
+  }
+
   // Same-origin URL for a result image (vs. the presigned S3/AIPoC URL
   // getJobResult/getJobRuns return, which has no CORS headers for fetch()).
   // Used only when the browser needs to read the image's bytes itself (e.g.
@@ -218,6 +224,8 @@ window.PhotoAgentApi = (() => {
   // fine. `run` (1-based) selects which RUN's image for a multi-RUN job;
   // omit for a single-run job.
   function resultImageUrl(jobId, { path = "local", run } = {}) {
+    const demo = demoImage("result", jobId, run);
+    if (demo) return demo;
     const base = `${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}/image`;
     return run ? `${base}?run=${encodeURIComponent(run)}` : base;
   }
@@ -229,6 +237,8 @@ window.PhotoAgentApi = (() => {
   // 404s for a job that ran single_pass_edit or ai_photo_editing=False,
   // since neither ever produces a stage-1 image distinct from the final one.
   function preEditImageUrl(jobId, { path = "local", run } = {}) {
+    const demo = demoImage("preEdit", jobId, run);
+    if (demo) return demo;
     const base = `${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}/pre_edit_image`;
     return run ? `${base}?run=${encodeURIComponent(run)}` : base;
   }
@@ -238,6 +248,8 @@ window.PhotoAgentApi = (() => {
   // which only ever renders this at a few dozen CSS pixels and shouldn't pay
   // for a full-res download to do it.
   function resultThumbnailUrl(jobId, { run } = {}) {
+    const demo = demoImage("resultThumb", jobId, run);
+    if (demo) return demo;
     const base = `${BASE_URL}/api/photo-agent/result/${encodeURIComponent(jobId)}/thumbnail`;
     return run ? `${base}?run=${encodeURIComponent(run)}` : base;
   }
@@ -246,12 +258,16 @@ window.PhotoAgentApi = (() => {
   // for why there's no AIPoC equivalent. Used for the history page's
   // before/after compare when revisiting a past job.
   function sourceImageUrl(jobId) {
+    const demo = demoImage("source", jobId);
+    if (demo) return demo;
     return `${BASE_URL}/api/photo-agent/source/${encodeURIComponent(jobId)}/image`;
   }
 
   // Small JPEG counterpart of sourceImageUrl -- used for the history grid's
   // still-processing tiles instead of downloading the full-res upload.
   function sourceThumbnailUrl(jobId) {
+    const demo = demoImage("sourceThumb", jobId);
+    if (demo) return demo;
     return `${BASE_URL}/api/photo-agent/source/${encodeURIComponent(jobId)}/thumbnail`;
   }
 
