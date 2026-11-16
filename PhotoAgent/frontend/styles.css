@@ -6390,13 +6390,12 @@ a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
      otherwise a short list (not a full 16-tile cycle) leaves the dense
      grid with a hole it can't backfill, which shows up as a blank
      row/gap in the layout. */
-  #upload-section .upload-gallery-col .demo-images-grid > .demo-image-tile:nth-child(16n + 1):nth-last-child(n + 4),
-  #upload-section .upload-gallery-col .history-grid > .history-cube:nth-child(16n + 1):nth-last-child(n + 4) {
+  /* 最近照片（.history-cube）不放大：每張一樣大，跟範例照片那邊一樣整齊；只有範例照片保留這個節奏。 */
+  #upload-section .upload-gallery-col .demo-images-grid > .demo-image-tile:nth-child(16n + 1):nth-last-child(n + 4) {
     grid-column: 1 / span 2;
     grid-row: span 2;
   }
-  #upload-section .upload-gallery-col .demo-images-grid > .demo-image-tile:nth-child(16n + 9):nth-last-child(n + 4),
-  #upload-section .upload-gallery-col .history-grid > .history-cube:nth-child(16n + 9):nth-last-child(n + 4) {
+  #upload-section .upload-gallery-col .demo-images-grid > .demo-image-tile:nth-child(16n + 9):nth-last-child(n + 4) {
     grid-column: 2 / span 2;
     grid-row: span 2;
   }

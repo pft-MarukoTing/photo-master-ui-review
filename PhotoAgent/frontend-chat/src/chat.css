@@ -1483,8 +1483,7 @@ div.chat-proposal-row{cursor:default}
    框本身 1px，再由 ::after 在拼貼上面補 1px 內框，合起來 2px，不會被照片蓋掉。 */
 .history-drawer .chat-history-grid>.demo-image-tile:hover,.history-drawer .chat-history-grid>.demo-image-tile.is-selected{border-color:var(--accent)}
 .history-drawer .chat-history-grid>.demo-image-tile.is-selected{--tile-ring:1px}
-.history-drawer .chat-history-grid>.demo-image-tile:nth-child(16n+1):nth-last-child(n+4){grid-column:1/span 2;grid-row:span 2}
-.history-drawer .chat-history-grid>.demo-image-tile:nth-child(16n+9):nth-last-child(n+4){grid-column:2/span 2;grid-row:span 2}
+/* 最近照片：每張一樣大（不放大某幾張），跟範例照片那邊一樣整齊。 */
 
 /* The home rail's day grids. The old sheet already lays .history-grid out as
    the three-column dense mosaic and shows the headings under .showing-recent;
@@ -1492,12 +1491,12 @@ div.chat-proposal-row{cursor:default}
    selects the old UI's .history-cube and these tiles are .demo-image-tile.
    The :nth-last-child guard is the old one's: a tile only doubles when four
    or more follow it, so a short day doesn't open a hole nothing can backfill. */
-@media (min-width:1201px){
-  /* 跟抽屜同一套間距：磚之間 6px，圓角 8px，不加陰影。範例照片那一格維持原樣。 */
-  #upload-section .upload-gallery-col .history-grid{gap:6px}
-  #upload-section .upload-gallery-col .history-grid>.demo-image-tile{border-radius:8px;box-shadow:none}
-  #upload-section .upload-gallery-col .history-grid>.demo-image-tile:nth-child(16n+1):nth-last-child(n+4){grid-column:1/span 2;grid-row:span 2}
-  #upload-section .upload-gallery-col .history-grid>.demo-image-tile:nth-child(16n+9):nth-last-child(n+4){grid-column:2/span 2;grid-row:span 2}
+/* 最近照片跟範例照片（G02）排成一樣：等高三欄、間距 8px、圓角 4px、不放大、不加陰影。
+   原本最近照片的列高固定 104px、磚只有 92px，直向多出 12px，變成上下間距比左右大（看起來亂）；現在列高跟著磚。 */
+@media (min-width:1201px),(min-width:901px) and (max-width:1200px) and (orientation:landscape){
+  #upload-section .upload-gallery-col .history-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:auto;gap:var(--spacing-8);align-content:start}
+  #upload-section .upload-gallery-col .history-grid>*{grid-column:auto !important;grid-row:auto !important;
+    width:100%;height:auto;min-height:0;aspect-ratio:1/1;padding-top:0;margin:0;border-radius:var(--corner-radius-4);box-shadow:none}
 }
 
 /* Header buttons: same compact pill 面板模式 gives its header row
@@ -2788,3 +2787,15 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   #upload-section .upload-content-row.is-chat>#batch-sidebar,
   #upload-section .upload-content-row.is-chat>.home-chat{height:calc(100dvh - var(--header-h,64px) - 68px);max-height:none;min-height:0;align-self:flex-start}
 }
+
+/* 四塊白底卡片（對話模式、編輯器各一欄「我的照片」＋一張大卡）用同一組陰影，值跟 .chat-panel 一樣
+   （編輯器那邊是 index.html 的 --pm-shell-shadow）。桌機才套：手機的「我的照片」是抽屜，有自己的樣子。 */
+@media (min-width:901px) and (orientation:landscape){
+  aside.batch-sidebar{box-shadow:0 10px 30px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)}
+}
+
+/* 「我的照片」欄的大磚：狀態標籤離邊緣 15px、右上角 × 離邊緣 12px。
+   選中的磚有一圈外框（內縮的藍框），原本 6px／4px 的位置會壓到框、看起來超出照片。 */
+#batch-sidebar .session-tile-badge{inset-inline-start:15px;bottom:15px;max-width:calc(100% - 30px)}
+#batch-sidebar .history-cube-remove{top:12px;inset-inline-end:12px}
+#batch-sidebar .history-cube .rc-badge{inset-inline-start:15px;bottom:15px;max-width:calc(100% - 30px)}

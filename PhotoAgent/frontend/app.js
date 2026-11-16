@@ -5105,7 +5105,10 @@
     const from = redo && runs.find((run) => run.versionId === redo.version_id)?.versionNumber;
     // R04 (UI/UX audit p10): once this photo already has a version, the
     // button says 再美化 and the hint beside it says the run adds a version.
-    const hasVersion = runs.some((run) => run.versionNumber != null);
+    // 從對話模式／歷史打開的照片沒有 singleRuns：美化紀錄條有版本、或「下一次從…美化」列有版本可選，也算已經有版本。
+    const hasVersion = runs.some((run) => run.versionNumber != null)
+      || (els.versionStrip && !els.versionStrip.hidden && !!els.versionStripTrack?.querySelector(".version-tile"))
+      || apContinueRuns().length > 0;
     label.textContent = redo || hasVersion ? tr("再美化") : tr("美化");
     const hint = document.getElementById("ap-run-new-version-hint");
     // Shown only beside a visible button: CSS hides it while #inline-analysis-continue-btn is hidden.

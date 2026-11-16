@@ -521,17 +521,38 @@ export function Header(props: {
 // result, aligned and cropped to the same 4:5 frame so the slider lines up.
 // H02：分隔線預設停在臉中間（鼻樑約在 48%），兩邊各露出半張臉，不用拖就看得出差別。
 function HeroCompare() {
-  // A 版（直式人像）鼻樑在 48%；B 版（橫向海岸照）人臉在 67% 左右，預設也停在臉上。切換 A／B 時重設。
-  const defaultPos = () => (document.documentElement.classList.contains("ab-home-b") ? 67 : 48);
-  const [pos, setPos] = useState(defaultPos);
+  // 進場（A、B 一樣）：先整張都是 Before（分隔線在最右），1 秒內滑到停點；
+  // A 版停在正中間（各半），B 版（橫向海岸照）停在人臉上（67%）；切換 A／B 時重播。
+  // 使用者一碰滑桿就停下來，不跟他搶。減少動態效果（prefers-reduced-motion）就直接停在停點。
+  const isB = () => document.documentElement.classList.contains("ab-home-b");
+  const restPos = () => (isB() ? 67 : 50);
+  const SWEEP_MS = 1000;
+  const [pos, setPos] = useState(100);
+  const frame = useRef(0);
+  const stopSweep = () => cancelAnimationFrame(frame.current);
+  const play = () => {
+    stopSweep();
+    const rest = restPos();
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setPos(rest); return; }
+    const t0 = performance.now();
+    setPos(100);
+    const step = (now: number) => {
+      const p = Math.min(1, (now - t0) / SWEEP_MS);
+      const eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      setPos(100 + (rest - 100) * eased);
+      if (p < 1) frame.current = requestAnimationFrame(step);
+    };
+    frame.current = requestAnimationFrame(step);
+  };
   useEffect(() => {
-    let last = defaultPos();
+    let last = isB();
+    play();
     const mo = new MutationObserver(() => {
-      const next = defaultPos();
-      if (next !== last) { last = next; setPos(next); }
+      const next = isB();
+      if (next !== last) { last = next; play(); }
     });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => mo.disconnect();
+    return () => { mo.disconnect(); stopSweep(); };
   }, []);
   // 拉到某一邊、那一邊的標籤會被蓋住時把它藏起來：Before 標籤在左，左邊剩下的寬度（pos）放不下它就藏；
   // After 同理看右邊。拉到底時只剩對的那一個（整張都是 After 就只剩 After）。
@@ -562,9 +583,10 @@ function HeroCompare() {
         type="range"
         min={0}
         max={100}
-        value={pos}
+        value={Math.round(pos)}
         aria-label={t("拖曳比較修圖前後")}
-        onInput={(e) => setPos(Number(e.currentTarget.value))}
+        onPointerDown={stopSweep}
+        onInput={(e) => { stopSweep(); setPos(Number(e.currentTarget.value)); }}
       />
     </div>
   );

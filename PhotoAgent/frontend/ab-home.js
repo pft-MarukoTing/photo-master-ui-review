@@ -104,6 +104,20 @@
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .history-day-heading{display:none}",
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .history-grid{display:flex !important;gap:16px !important}",
     "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .history-grid>*{flex:0 0 auto;width:calc(var(--abg-tile-h) * 1.5) !important;height:var(--abg-tile-h) !important;aspect-ratio:auto !important}",
+    /* 「最近」還沒有照片時的空狀態：不能比「範例」那一排高（切分頁時整頁會跳），高度＝一排照片（--abg-tile-h＋下面 6px）。
+       橫向排成一列：左＝圖示、中＝標題和說明、右＝上傳鈕。 */
+    "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .gallery-empty{display:grid !important;flex:none;grid-template-columns:auto auto auto;",
+    "    grid-template-areas:'icon title cta' 'icon sub cta';column-gap:20px;row-gap:2px;align-items:center;justify-content:center;text-align:start;",
+    "    height:calc(var(--abg-tile-h) + 6px);min-height:0;padding:0 !important;overflow:hidden}",
+    "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .gallery-empty .gallery-empty-icon{grid-area:icon;width:48px;height:48px;margin:0}",
+    "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .gallery-empty .gallery-empty-title{grid-area:title;align-self:end}",
+    "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .gallery-empty .gallery-empty-sub{grid-area:sub;align-self:start}",
+    "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .gallery-empty .gallery-empty-cta{grid-area:cta;margin:0 0 0 12px}",
+    /* B 版：「最近」第一張要跟分頁、「範例」一樣靠左（原本日期群組的 ::before 在前面佔了一塊，整排被推開約 24px）；
+       「範例」和「最近」的磚圓角一樣（8px）。 */
+    "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .history-day-group::before{display:none !important}",
+    "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .demo-images-grid>.demo-image-tile,",
+    "  html.ab-home-b #upload-section:has(.home-intro) .upload-gallery-col .history-grid>*{border-radius:var(--corner-radius-8,8px) !important}",
     /* 「使用所選照片」：放在分頁那一行的右邊 */
     /* B 版照片列最後面的向右箭頭：還有更多照片的提示，也能按它往右捲 */
     ".abg-next{position:absolute;z-index:6;display:none;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border:1px solid var(--stroke-weak,rgba(17,24,26,.12));border-radius:50%;",
@@ -413,7 +427,8 @@
     var grid = col && col.querySelector(".demo-images-grid");
     var b = document.documentElement.classList.contains("ab-home-b") && window.matchMedia("(min-width:901px) and (orientation:landscape)").matches;
     var btn = col && col.querySelector(".abg-next");
-    if (!b || !grid) { if (btn) btn.classList.remove("is-on"); return; }
+    // 不是 B 版桌機橫向（切回 A、視窗變窄）時，這顆鈕的樣式（在 media 裡）不會套用，要直接藏起來，不然會變成一條沒樣式的灰框。
+    if (!b || !grid) { if (btn) { btn.classList.remove("is-on"); btn.style.display = "none"; } return; }
     if (!btn) {
       btn = document.createElement("button");
       btn.type = "button";
@@ -433,6 +448,7 @@
       }, { passive: true });
     }
     var cr = col.getBoundingClientRect(), gr = grid.getBoundingClientRect();
+    btn.style.display = "";
     btn.style.top = Math.round(gr.top - cr.top + gr.height / 2 - 20) + "px";
     btn.style.right = "calc(var(--abg-gutter) - 20px)";
     btn.classList.toggle("is-on", grid.scrollLeft + grid.clientWidth < grid.scrollWidth - 4);
