@@ -16001,9 +16001,6 @@
   // /sessions/from-case).
   // Both ways there -- the header's #chat-ui-btn and the 對話 half of the
   // step row's 對話｜面板 switch -- behave the same.
-  // 手機標頭的「開新對話」：開一個全新的對話，不帶目前這張的 case。
-  const pmNewChat = document.getElementById("pm-new-chat");
-  if (pmNewChat) pmNewChat.setAttribute("href", `chat/${location.search}#new`);
   for (const chatUiLink of [
     document.getElementById("chat-ui-btn"),
     document.getElementById("chat-mode-switch-link"),

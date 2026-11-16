@@ -2737,7 +2737,7 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
 .chat-header-menu{display:none}
 @media (max-width:768px){
   html:root{--header-h:64px}
-  .site-header.yco-header .header-inner{height:64px;padding:0 var(--spacing-16);gap:var(--spacing-12)}
+  .site-header.yco-header .header-inner{height:64px;padding:0 var(--spacing-12) 0 var(--spacing-16);gap:var(--spacing-4)}
   .chat-header-menu{display:flex;align-items:center;justify-content:center;flex:0 0 auto;width:32px;height:32px;margin:0;padding:0;border:0;border-radius:var(--corner-radius-8,8px);
     background:transparent;color:var(--text-strong);cursor:pointer}
   .chat-header-menu:hover{background:var(--fill-hover)}
@@ -2755,6 +2755,14 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   /* 手機：New Chat 在左邊（原本切換的位置），Chat｜Editor 切換移到最右邊 */
   .chat-panel-head .chat-panel-new{margin-inline-start:0}
   .chat-panel-head .mode-switch,.chat-panel-head:has(.chat-panel-new) .mode-switch{margin-inline:auto 0}
+}
+
+/* 標頭跟 Editor 完全一樣：手機（≤600）左 16 右 12、間距 4、漢堡＋logo 32＋頭像 32；601–768 沒有漢堡，logo 和頭像 40，左右 32、間距 12 */
+@media (min-width:601px) and (max-width:768px){
+  .site-header.yco-header .header-inner{padding:0 var(--spacing-32);gap:var(--spacing-12)}
+  .chat-header-menu{display:none}
+  .yco-logo-symbol,.yco-avatar{width:40px;height:40px}
+  .yco-avatar svg{width:20px;height:20px}
 }
 
 /* 手機：批次結果直接放在訊息裡（BatchResultStrip），點圖放大 */

@@ -474,15 +474,6 @@
     /* 「對話｜面板」跟對話模式右上角那組一模一樣（styles.css 的 .mode-switch 膠囊：灰軌道、選中那段白底＋陰影），
        位置也對齊：對話模式那組在對話卡片標頭裡，離畫面右緣多 16px、往下 5px，這裡補同樣的距離，切換模式時不會跳。 */
     .step-indicator-slot > .mode-switch { margin: 2px 16px 0 0; }
-    .step-indicator-slot > .pm-new-chat { display: none; }
-    /* 「開新對話」：跟 Chat 頁標頭同一顆（高 30、圓角 15、字 13/500、白底細框）。只有桌機（>768）顯示，在「對話｜編輯器」切換的左邊；手機左邊是「我的照片」入口 */
-    .pm-new-chat {
-      align-items: center; gap: 6px; height: 30px; padding: 0 14px 0 10px; border-radius: 15px; box-sizing: border-box;
-      border: 1px solid var(--stroke-strong); background: var(--background-raised); color: var(--text-strong);
-      font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap; text-decoration: none; cursor: pointer;
-    }
-    .pm-new-chat:hover { background-image: linear-gradient(var(--fill-hover), var(--fill-hover)); }
-    @media (min-width: 769px) { .pm-panel .step-indicator-slot > .pm-new-chat { display: inline-flex; } }
 
     /* 這列在的時候開關就是回對話的入口，header 不用再放一顆一樣的。 */
     body:has(#step-indicator-slot:not([hidden])) #chat-ui-btn { display: none; }
@@ -5903,7 +5894,7 @@
       /* 標頭：第一欄空著（底下是「我的照片」），流程列和切換排在卡片那一欄。 */
       .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .step-indicator-slot:not([hidden]) {
         display: grid;
-        grid-template-columns: var(--pm-shell-side) minmax(0, 1fr) auto auto;
+        grid-template-columns: var(--pm-shell-side) minmax(0, 1fr) auto;
         column-gap: var(--pm-shell-gap);
         align-items: center;
         box-sizing: border-box;
@@ -5913,7 +5904,7 @@
       }
       .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .step-indicator-slot::after {
         content: "";
-        grid-column: 2 / -1;
+        grid-column: 2 / 4;
         grid-row: 1;
         align-self: stretch;
         z-index: -1;
@@ -5930,11 +5921,8 @@
         width: auto; margin: 0 calc(var(--pm-switch-gap) - var(--pm-shell-gap)) 0 var(--spacing-16);
       }
       .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .step-indicator-slot > .mode-switch {
-        grid-column: 4; grid-row: 1;
+        grid-column: 3; grid-row: 1;
         margin: 0 var(--spacing-16) 0 0;
-      }
-      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .step-indicator-slot > .pm-new-chat {
-        grid-column: 3; grid-row: 1; justify-self: end; margin: 0 -4px 0 0; /* 欄距 16 → 跟 Chat 標頭一樣 12 */
       }
       /* 「我的照片」：寬 20、上緣往上對齊卡片標頭、圓角跟對話模式那欄一樣。 */
       .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .results-body { gap: var(--pm-shell-gap); }
@@ -6503,11 +6491,6 @@
          照片交接跟 #chat-ui-btn 走同一套（app.js）；分析或美化中也能切換。
          只在這列出現時才有它，上傳畫面沒有這列，就交給 header 的
          #chat-ui-btn。 -->
-    <!-- 「開新對話」：桌機在「對話｜編輯器」切換的左邊。手機的左邊是「我的照片」入口（#batch-drawer-trigger），不放這顆。 -->
-    <a class="pm-new-chat" id="pm-new-chat" href="chat/#new">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-      <span>開新對話</span>
-    </a>
     <nav class="mode-switch" aria-label="檢視方式">
       <a id="chat-mode-switch-link" class="mode-switch-opt" href="chat/" title="切換到對話模式">
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
