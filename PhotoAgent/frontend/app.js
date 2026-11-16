@@ -13775,7 +13775,41 @@
       : run && run.versionTotal ? tr("第 {versionNumber} 版", { versionNumber: run.versionNumber }) : tr("看大圖");
   }
 
+  // 預覽（非全螢幕）左右箭頭：多張照片時換「我的照片」裡上一張／下一張（跟 Chat 總覽預覽同一個做法）。
+  // 桌機滑過預覽才出現，手機、平板一直都在（CSS）。
+  function syncPreviewArrows() {
+    const card = els.compareCard;
+    if (!card) return;
+    const recs = batchRecords || [];
+    const on = recs.length >= 2 && !!currentBatchRecord && recs.includes(currentBatchRecord);
+    let prev = card.querySelector(".pm-pv-arrow.is-prev");
+    // classList.add／remove 就算沒有變化也會觸發 class 的 MutationObserver（會繞回 syncPhotoViewer 變成無限迴圈），所以先比對再動
+    if (!on) { if (card.classList.contains("has-pv-arrows")) card.classList.remove("has-pv-arrows"); return; }
+    if (!prev) {
+      const mk = (cls, d, path, label) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = `pm-pv-arrow ${cls}`;
+        b.setAttribute("aria-label", label);
+        b.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
+        b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const list = batchRecords || [];
+          const i = list.indexOf(currentBatchRecord);
+          if (i < 0 || list.length < 2) return;
+          selectBatchRecord(list[(i + d + list.length) % list.length]);
+        });
+        els.photoFrameWrap.appendChild(b);
+        return b;
+      };
+      mk("is-prev", -1, "m15 18-6-6 6-6", tr("上一張"));
+      mk("is-next", 1, "m9 18 6-6-6-6", tr("下一張"));
+    }
+    if (!card.classList.contains("has-pv-arrows")) card.classList.add("has-pv-arrows");
+  }
+
   function syncPhotoViewer() {
+    syncPreviewArrows();
     syncCanvasVersionBtn();
     syncCompareFsStrip();
     if (photoViewerOpen) renderPhotoViewer();

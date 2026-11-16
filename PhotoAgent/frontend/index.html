@@ -475,6 +475,15 @@
        位置也對齊：對話模式那組在對話卡片標頭裡，離畫面右緣多 16px、往下 5px，這裡補同樣的距離，切換模式時不會跳。 */
     .step-indicator-slot > .mode-switch { margin: 2px 16px 0 0; }
     .step-indicator-slot > .pm-new-chat { display: none; }
+    /* 「開新對話」：跟 Chat 頁標頭同一顆（高 30、圓角 15、字 13/500、白底細框）。只有桌機（>768）顯示，在「對話｜編輯器」切換的左邊；手機左邊是「我的照片」入口 */
+    .pm-new-chat {
+      align-items: center; gap: 6px; height: 30px; padding: 0 14px 0 10px; border-radius: 15px; box-sizing: border-box;
+      border: 1px solid var(--stroke-strong); background: var(--background-raised); color: var(--text-strong);
+      font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap; text-decoration: none; cursor: pointer;
+    }
+    .pm-new-chat:hover { background-image: linear-gradient(var(--fill-hover), var(--fill-hover)); }
+    @media (min-width: 769px) { .pm-panel .step-indicator-slot > .pm-new-chat { display: inline-flex; } }
+
     /* 這列在的時候開關就是回對話的入口，header 不用再放一顆一樣的。 */
     body:has(#step-indicator-slot:not([hidden])) #chat-ui-btn { display: none; }
     .ap-step {
@@ -5524,6 +5533,21 @@
     @media (max-width: 900px), (max-width: 1200px) and (orientation: portrait) {
       .pm-panel #compare-card.is-fullscreen .pm-fullscreen-exit { top: 16px; right: 16px; }
     }
+    /* 預覽左右箭頭（多張照片）：桌機滑過預覽才出現，手機、平板一直都在；全螢幕有自己的箭頭 */
+    .pm-pv-arrow { display: none; }
+    #compare-card.has-pv-arrows:not(.is-fullscreen) .pm-pv-arrow {
+      position: absolute; top: 50%; transform: translateY(-50%); z-index: 20;
+      display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border-radius: 50%;
+      background: var(--fill-strong); color: var(--text-inverse-strong, #fff); border: 1px solid var(--stroke-strong); cursor: pointer;
+    }
+    #compare-card.has-pv-arrows:not(.is-fullscreen) .pm-pv-arrow:hover { background-image: linear-gradient(var(--fill-inverse-hover), var(--fill-inverse-hover)); }
+    #compare-card.has-pv-arrows:not(.is-fullscreen) .pm-pv-arrow.is-prev { left: 12px; }
+    #compare-card.has-pv-arrows:not(.is-fullscreen) .pm-pv-arrow.is-next { right: 12px; }
+    @media (min-width: 1201px), (min-width: 901px) and (orientation: landscape) {
+      #compare-card.has-pv-arrows:not(.is-fullscreen) .pm-pv-arrow { opacity: 0; pointer-events: none; transition: opacity .16s ease; }
+      #compare-card.has-pv-arrows:not(.is-fullscreen):hover .pm-pv-arrow,
+      #compare-card.has-pv-arrows:not(.is-fullscreen) .pm-pv-arrow:focus-visible { opacity: 1; pointer-events: auto; }
+    }
     /* 全螢幕的底：跟共用大圖同一個（黑 80% + 模糊），手機模糊更重，縮圖列疊在文字上才不會互相干擾 */
     #compare-fullscreen-backdrop { background: rgba(0,0,0,.8); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
     @media (max-width: 900px), (max-width: 1200px) and (orientation: portrait) {
@@ -5879,7 +5903,7 @@
       /* 標頭：第一欄空著（底下是「我的照片」），流程列和切換排在卡片那一欄。 */
       .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .step-indicator-slot:not([hidden]) {
         display: grid;
-        grid-template-columns: var(--pm-shell-side) minmax(0, 1fr) auto;
+        grid-template-columns: var(--pm-shell-side) minmax(0, 1fr) auto auto;
         column-gap: var(--pm-shell-gap);
         align-items: center;
         box-sizing: border-box;
@@ -5889,7 +5913,7 @@
       }
       .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .step-indicator-slot::after {
         content: "";
-        grid-column: 2 / 4;
+        grid-column: 2 / -1;
         grid-row: 1;
         align-self: stretch;
         z-index: -1;
@@ -5906,8 +5930,11 @@
         width: auto; margin: 0 calc(var(--pm-switch-gap) - var(--pm-shell-gap)) 0 var(--spacing-16);
       }
       .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .step-indicator-slot > .mode-switch {
-        grid-column: 3; grid-row: 1;
+        grid-column: 4; grid-row: 1;
         margin: 0 var(--spacing-16) 0 0;
+      }
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .step-indicator-slot > .pm-new-chat {
+        grid-column: 3; grid-row: 1; justify-self: end; margin: 0 -4px 0 0; /* 欄距 16 → 跟 Chat 標頭一樣 12 */
       }
       /* 「我的照片」：寬 20、上緣往上對齊卡片標頭、圓角跟對話模式那欄一樣。 */
       .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .results-body { gap: var(--pm-shell-gap); }
@@ -6056,13 +6083,11 @@
     @media (max-width: 600px) {
       .pm-panel #step-indicator-slot:not([hidden]) {
         display: flex !important; flex-direction: row; justify-content: space-between; align-items: center;
-        height: auto; padding: var(--spacing-12) var(--spacing-16) 0; gap: 0;
+        /* 跟 Chat 頁手機標頭一模一樣：同樣的總高（64px header + 53px 這一列）、底色、底線，切換 Chat／Editor 時不會跳 */
+        height: 53px; box-sizing: border-box; padding: 8px var(--spacing-16); gap: 0;
+        background: var(--n04); border-bottom: 1px solid var(--border);
       }
-      .pm-panel #step-indicator-slot > .pm-new-chat {
-        display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px 0 10px; border-radius: 15px; box-sizing: border-box;
-        border: 1px solid var(--stroke-strong); background: var(--background-raised); color: var(--text-strong);
-        font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap; text-decoration: none;
-      }
+      html:root:has(.pm-panel) { --header-h: 64px; }
       .pm-panel #step-indicator-slot > .ap-step-indicator { display: none; }
       .pm-panel #step-indicator-slot > .mode-switch { order: 0; align-self: center; margin: 0 0 0 auto; }
     }
@@ -6071,7 +6096,7 @@
        點開的還是原本的抽屜（openBatchDrawer）；只有「我的照片」列了兩張以上才出現。 */
     @media (max-width: 768px) {
       .pm-panel .results-body.batch-mode:has(#batch-sidebar-list .batch-sidebar-item:nth-child(2)) #batch-drawer-trigger {
-        display: inline-flex !important; position: fixed; top: calc(var(--header-h) + var(--spacing-12)); inset-inline-start: calc(var(--spacing-16) + 107px + var(--spacing-8)); inset-inline-end: auto;
+        display: inline-flex !important; position: fixed; top: calc(var(--header-h) + 8px); inset-inline-start: var(--spacing-16); inset-inline-end: auto;
         width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px; box-shadow: none;
         background: var(--fill-weak); color: var(--text-strong);
       }
@@ -6478,7 +6503,7 @@
          照片交接跟 #chat-ui-btn 走同一套（app.js）；分析或美化中也能切換。
          只在這列出現時才有它，上傳畫面沒有這列，就交給 header 的
          #chat-ui-btn。 -->
-    <!-- 手機版標頭：左邊「開新對話」，右邊「對話｜編輯器」，跟 Chat 頁一樣；其他寬度不顯示。 -->
+    <!-- 「開新對話」：桌機在「對話｜編輯器」切換的左邊。手機的左邊是「我的照片」入口（#batch-drawer-trigger），不放這顆。 -->
     <a class="pm-new-chat" id="pm-new-chat" href="chat/#new">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       <span>開新對話</span>
