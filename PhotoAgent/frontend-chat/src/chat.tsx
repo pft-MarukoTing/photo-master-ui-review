@@ -242,6 +242,8 @@ export function ChatPanel(props: {
   // Above the conversation and outside its scroll: stays in view while the
   // timeline follows its newest message (the batch overview's photo grid).
   top?: ComponentChildren;
+  // 桌機：放在對話卡片裡、標題列底下左邊的預覽區（上傳頁的照片）；沒給就不佔位，對話撐滿。
+  stage?: ComponentChildren;
 }) {
   const timeline = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -358,7 +360,7 @@ export function ChatPanel(props: {
     <div
       class={`chat-panel${props.class ? ` ${props.class}` : ""}${dragging ? " is-dragging" : ""}${
         props.photo ? " has-photo" : ""
-      }${photoUp ? " is-photo-out" : ""}`}
+      }${props.stage ? " has-stage" : ""}${photoUp ? " is-photo-out" : ""}`}
       onDragOver={
         drop &&
         ((e) => {
@@ -397,6 +399,7 @@ export function ChatPanel(props: {
           <Icon name="expand" size={16} />
         </button>
       )}
+      {props.stage && <div class="chat-panel-stage">{props.stage}</div>}
       {props.top && <div class="chat-panel-top">{props.top}</div>}
       <div
         class="chat-timeline"
@@ -1003,8 +1006,8 @@ export function ResultCard({ job, ordinal, from, failed, next, continuable, note
         )}
         {!noting && <p class="chat-text chat-muted">
           {failed > 0 && t("有 {failed} 張沒有成功，已略過。", { failed })}
-          <span class="chat-result-hint-wide">{t("點照片可以放大，按住不放可以看原圖。")}</span>
-          <span class="chat-result-hint-narrow">{rtl ? t("上方照片可以跟原圖比，點左上的版本也能切換。") : t("上方照片可以跟原圖比，點右上的版本也能切換。")}</span>
+          <span class="chat-result-hint-wide">{rtl ? t("右側可比較 Before / After，也可從「美化紀錄」切換版本。") : t("左側可比較 Before / After，也可從「美化紀錄」切換版本。")}</span>
+          <span class="chat-result-hint-narrow">{t("點照片可以放大，按住不放可以看原圖。")}</span>
         </p>}
         {next && !noting && <p class="chat-text">{continuable
           ? t("想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」；想接續某一版修改，在輸入框上方把「原圖」換成那一版。也可以直接打字跟我說。")

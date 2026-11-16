@@ -3327,6 +3327,7 @@ export function App() {
       class={`home-chat${source ? "" : " is-solo"}`}
       sub={batchIndex >= 0 ? t("第 {v1} 張", { v1: batchIndex + 1 }) : t("新對話")}
       photo={source ? { src: thumbSrc(source), onOpen: () => setViewing(true) } : undefined}
+      stage={source ? <PreStage source={source} onOpen={() => setViewing(true)} /> : undefined}
       // 隨時能切到面板模式：有照片就帶過去，在那邊接著做；還沒選照片就是面板的空狀態（上傳／挑範例）。
       panelMode={{
         href: urls.oldUi(null),
@@ -3645,6 +3646,13 @@ export function App() {
     const overviewPanel = !source && (
       <ChatPanel
         class="home-chat is-overview"
+        stage={(() => {
+          // 只要有照片就出現預覽，預設放第一張（修過了就放它的結果）。
+          const first = batch[0];
+          if (!first) return undefined;
+          const v = batchLive[sourceSrc(first)]?.active_version;
+          return v ? <PreStage url={urls.resultImage(v.job_id, v.run)} tag="After" /> : <PreStage source={first} />;
+        })()}
         sub=""
         // 總覽也能隨時切到面板模式：這批照片和已經打的需求一起帶過去（pre-handoff.ts），那邊接著分析。
         panelMode={{
@@ -3769,10 +3777,10 @@ export function App() {
                 <p class="chat-text">{(parts.length ? t("剛剛送出的都處理完成了，目前 {list}。", { list: parts.join(t("、")) }) : t("剛剛送出的都處理完成了。"))
                   + hintFor(ot).replace(/。$/, "；")
                   + (ot.failed ? t("沒成功的在{where}會標「失敗」，選取那張可以看原因。", { where }) : (phone ? t("點圖可以放大看。") : t("想看哪張的結果，從{where}選取那張。", { where })))}</p>
-                {phone && <BatchResultStrip items={batch.flatMap((b) => {
+                <BatchResultStrip items={batch.flatMap((b) => {
                   const v = batchLive[sourceSrc(b)]?.active_version;
                   return v ? [{ thumb: urls.resultThumb(v.job_id, v.run), full: urls.resultImage(v.job_id, v.run) }] : [];
-                })} />}
+                })} />
                 {chipRow(turnHints.current[ot.id]?.chips, latest)}
               </AssistantMsg>
             );
@@ -4150,12 +4158,24 @@ export function App() {
 // in the same place the session's canvas will appear. It mounts only once a
 // photo exists -- an empty frame beside an empty conversation was two empty
 // halves, so until then the conversation holds the page on its own.
-function PreStage({ source }: { source: Source }) {
+function PreStage({ source, url, tag, onOpen }: { source?: Source | null; url?: string; tag?: string; onOpen?: () => void }) {
+  const [big, setBig] = useState(false);
+  const src = url || (source ? fullSrc(source) : "");
+  if (!src) return <div class="prechat-stage is-empty" />;
+  // 預覽區跟編輯器的預覽一樣：灰底、照片依比例完整顯示，左上 Before／After 標籤，右上全螢幕和下載兩顆白色圓鈕。
   return (
     <div class="prechat-stage">
       <div class="prechat-shot">
-        <img src={fullSrc(source)} alt={t("待美化的照片")} />
+        <span class="prechat-shot-box">
+          <img src={src} alt={t("待美化的照片")} />
+          <span class="prechat-tag">{tag || "Before"}</span>
+        </span>
       </div>
+      <div class="prechat-tools">
+        <button type="button" class="prechat-tool" aria-label={t("看大圖")} onClick={onOpen || (() => setBig(true))}><Icon name="expand" size={20} /></button>
+        <a class="prechat-tool" aria-label={t("下載")} href={src} download><Icon name="down" size={20} /></a>
+      </div>
+      {!onOpen && <PhotoViewer src={big ? src : null} onClose={() => setBig(false)} />}
     </div>
   );
 }
@@ -4308,6 +4328,8 @@ export function BatchPreSidebar(props: {
   const full = sources.length >= MAX_BATCH;
   const pick = (s: Source) => {
     close();
+    // 再點一下正在看的這張＝取消選取，回到這批照片的總覽（單張、沒有總覽可回的就照舊）。
+    if (current && sourceSrc(s) === current && props.onOverview) return props.onOverview();
     props.onPick(s);
   };
   // 各張到哪了：列表上面的篩選用這份，跟總覽照片格的篩選同樣的字，照要處理的先後排。最前面固定
@@ -5695,6 +5717,8 @@ export function SessionView(props: {
     edit?: { field: string; value: string },
   ) => Promise<boolean>;
 }) {
+  // 桌機：預覽區直接套編輯器預覽的樣式（編輯器的規則寫在 .pm-panel 底下，這裡把同一個 class 掛在預覽那一列）。
+  const wideStage = !useMedia(DRAWER_LAYOUT);
   const { caps, session, photo, analysis, busy } = props;
   const pid = photo.photo_id;
   // 照片正在分析、構圖、美化：左邊不能切版本、輸入框上方不能換底、也不能打字，
@@ -7602,7 +7626,7 @@ export function SessionView(props: {
         <div class={`container results-body showing-analysis${props.sidebar ? " batch-mode" : ""}`} id="results-body">
           {props.sidebar}
           <div class="results-container" id="results-detail">
-            <div class="results-canvas-row showing-analysis" id="results-canvas-row">
+            <div class={`results-canvas-row showing-analysis${wideStage ? " pm-panel" : ""}`} id="results-canvas-row">
               <ResultsCanvas
                 caps={caps}
                 photo={photo}

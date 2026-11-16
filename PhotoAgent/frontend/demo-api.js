@@ -81,18 +81,40 @@
   }
 
   // ── image URLs (<img src> never goes through fetch, so the page asks here) ──
+  // 換頁後假資料要先從 IndexedDB 讀回來才有圖；讀回來之前被問到的圖先給一張透明圖，網址尾巴記著要什麼，
+  // 讀完後 repairImages 把這些 <img> 換成真的（頁面載入時 <img> 的網址是同步要的，等不了）。
+  var loaded = false, PH = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==#pmdemo|";
+  function repairImages() {
+    document.querySelectorAll('img[src*="#pmdemo|"]').forEach(function (img) {
+      var parts = img.getAttribute("src").split("#pmdemo|")[1].split("|");
+      var real = api.imageUrl(parts[0], decodeURIComponent(parts[1]), parts[2] ? +parts[2] : undefined);
+      if (real && real.indexOf("#pmdemo|") < 0) img.src = real;
+    });
+  }
   api.imageUrl = function (kind, id, run) {
+    var u = realImageUrl(kind, id, run);
+    if (!u && !loaded) return PH + kind + "|" + encodeURIComponent(id) + "|" + (run || "");
+    return u;
+  };
+  // 沒有自己原檔的 job（例如 Chat 修出來的某一版）：用它所屬 case 的第一張（分析那張）當原圖。
+  function caseBlob(id) {
+    var key = S.caseOf && S.caseOf[id];
+    var kc = key && S.cases && S.cases[key];
+    var first = kc && kc.versions && kc.versions[0] && kc.versions[0].runs && kc.versions[0].runs[0];
+    return first ? S.blobs[first] : null;
+  }
+  function realImageUrl(kind, id, run) {
     if (kind === "demo" || kind === "demoThumb") return ROOT + "/assets/demo-images/" + encodeURIComponent(id);
     if (kind === "preview") { var pv = S.previews[id]; return pv ? objectUrl("p:" + id, pv.blob) : ""; }
     if (kind === "source" || kind === "sourceThumb" || kind === "preEdit") {
-      var b = S.blobs[id]; return b ? objectUrl("s:" + id, b) : "";
+      var b = S.blobs[id] || caseBlob(id); return b ? objectUrl("s:" + id, b) : "";
     }
     // result / resultThumb / resultPreview
     var r = S.results[id];
     if (r) return objectUrl("r:" + id, r.blob);
-    var src = S.blobs[id];
+    var src = S.blobs[id] || caseBlob(id);
     return src ? objectUrl("s:" + id, src) : "";
-  };
+  }
 
   // ── the "retouch": a gentle colour lift done on a canvas ────────────────────
   function retouch(blob, variant) {
@@ -453,6 +475,32 @@
     S.caseOf[id] = id;
     return id;
   }
+  // 從 Chat 修的照片到 Editor：Chat 的照片不是 Editor 的 case，在這裡用對話裡的紀錄臨時組一個
+  // （第一版＝分析，之後每個「第 N 版完成」一版），Editor 的美化紀錄條才讀得到、圖才不會掉。
+  function caseFromChat(key) {
+    var hit = null;
+    Object.keys(S.sessions).some(function (k) {
+      var sess = S.sessions[k];
+      var ph = (sess.photos || []).filter(function (p) { return p.case_id === key || p.analyze_job_id === key; })[0];
+      if (ph) { hit = { s: sess, p: ph }; return true; }
+      return false;
+    });
+    if (!hit) return null;
+    var base = hit.p.analyze_job_id;
+    var kase = { image_key: hit.p.case_id, created_at: now(), versions: [{ version_id: base, kind: "analyze", created_at: now(), based_on: null, params: { stage: "analyze" }, path: "local", runs: [base], results: [] }] };
+    var msgs = (hit.s.messages || []).concat(hit.s._pending || []);
+    msgs.filter(function (m) { return m.card && m.card.type === "render_done" && m.card.photo_id === hit.p.photo_id; }).forEach(function (m) {
+      var prev = kase.versions[kase.versions.length - 1];
+      var run = (m.card.job_ids || [m.card.version_id])[0];
+      kase.versions.push({ version_id: m.card.version_id || run, kind: "finish", created_at: now(), based_on: prev.version_id, params: { stage: "finish" }, path: "local", runs: [run], results: [] });
+      S.caseOf[run] = kase.image_key;
+      // Editor 把每一版的 job 也當成「原圖」來源要縮圖／原圖：指向同一張原檔（跟 Editor 自己修圖時的做法一樣）。
+      if (S.blobs[base] && !S.blobs[run]) S.blobs[run] = S.blobs[base];
+    });
+    S.caseOf[base] = kase.image_key;
+    S.cases[kase.image_key] = kase;
+    return kase;
+  }
   api.handleEditor = function (method, path, params, init, input, lang) {
     var m;
     if (method === "POST" && path === "/photo-agent/analyze-batch") {
@@ -490,10 +538,18 @@
       var user = decodeURIComponent(m[1]);
       if (m[2] === "/case") {
         var key = params.get("image_key") || S.caseOf[params.get("job_id")];
-        var kc = S.cases[key];
-        return kc ? J({ user: user, case: { image_key: kc.image_key, created_at: kc.created_at, versions: clone(kc.versions) } }) : fail("not found", 404);
+        var kc = S.cases[key] || caseFromChat(key);
+        if (!kc) return fail("not found", 404);
+        // 真的後端回的 case 是「最新一版的摘要＋versions」：Editor 用 job_id／runs／path／stage 決定怎麼打開這個 case。
+        var last = kc.versions[kc.versions.length - 1];
+        return J({ user: user, case: { job_id: last.runs[0], runs: last.runs.slice(), path: "local", stage: last.kind === "analyze" ? "analyze" : "finish", preset: "natural", ts: kc.created_at,
+          image_key: kc.image_key, created_at: kc.created_at, versions: clone(kc.versions) } });
       }
       if (method === "GET") {
+        // Chat 修好的照片也要出現在 Editor 的最近照片／紀錄裡：先把每張修過的照片組成 case。
+        Object.keys(S.sessions).forEach(function (sk) {
+          (S.sessions[sk].photos || []).forEach(function (ph) { if (ph.active_version && !S.cases[ph.case_id]) caseFromChat(ph.case_id); });
+        });
         var jobs = Object.keys(S.cases).map(function (k2) { return S.cases[k2]; })
           .filter(function (c) { return c.versions.some(function (v) { return v.kind !== "analyze"; }); })
           .sort(function (a, b) { return b.created_at - a.created_at; })
@@ -516,14 +572,63 @@
 
   // ── install ────────────────────────────────────────────────────────────
   api.helpers = { J: J, fail: fail, hex: hex, jobId: jobId, now: now, clone: clone, wait: wait, retouch: retouch, analysisFor: analysisFor, peopleOf: peopleOf, S: S, objectUrl: objectUrl, isEn: isEn, bodyOf: bodyOf, filesOf: filesOf, formOf: formOf, DATA: DATA };
+  // ── 跨頁保存 ────────────────────────────────────────────────────────────
+  // Chat 和 Editor 是兩個頁面（整頁跳轉），記憶體裡的假資料會跟著頁面消失，到另一邊就「找不到這張照片的紀錄」、圖掉光。
+  // 這裡把假資料（對話、照片原檔、修圖結果、紀錄）存進 IndexedDB（可以直接存 Blob），新頁面載入時先讀回來，
+  // 讀完才開始回應 /api。存不了（無痕、被擋）就照舊只活在這一頁。
+  var DB_NAME = "photomaster-demo", DB_KEY = "state";
+  var KEYS = ["sessions", "blobs", "results", "previews", "overviews", "ed", "cases", "caseOf"];
+  function openDb() {
+    return new Promise(function (resolve, reject) {
+      try {
+        var req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = function () { req.result.createObjectStore("kv"); };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error); };
+      } catch (e) { reject(e); }
+    });
+  }
+  var ready = openDb().then(function (db) {
+    return new Promise(function (resolve) {
+      var get = db.transaction("kv").objectStore("kv").get(DB_KEY);
+      get.onsuccess = function () {
+        var saved = get.result;
+        if (saved) KEYS.forEach(function (k) { if (saved[k]) S[k] = saved[k]; });
+        loaded = true;
+        resolve(db);
+      };
+      get.onerror = function () { resolve(db); };
+    });
+  }).catch(function () { return null; });
+  ready.then(function () {
+    loaded = true;
+    repairImages();
+    // 讀完之後才畫出來的圖（頁面還在載入、晚到的 <img>）也一併修
+    try { new MutationObserver(function () { if (document.querySelector('img[src*="#pmdemo|"]')) repairImages(); }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["src"] }); } catch (e) { /* no observer */ }
+  });
+  var saveTimer = 0;
+  function persistNow() {
+    ready.then(function (db) {
+      if (!db) return;
+      var snap = {};
+      KEYS.forEach(function (k) { snap[k] = S[k]; });
+      try { db.transaction("kv", "readwrite").objectStore("kv").put(snap, DB_KEY); } catch (e) { /* too big or blocked: stay in memory */ }
+    });
+  }
+  function persistSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(persistNow, 300); }
+  window.addEventListener("pagehide", persistNow);
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") persistNow(); });
+
   window.fetch = function (input, init) {
     var url;
     try { url = new URL(typeof input === "string" ? input : input.url, location.href); } catch (e) { return origFetch(input, init); }
     var i = url.pathname.indexOf("/api/");
     if (i < 0 || url.origin !== location.origin) return origFetch(input, init);
     var method = String((init && init.method) || (typeof input !== "string" && input.method) || "GET").toUpperCase();
-    return wait(60 + Math.random() * 120).then(function () {
-      return handle(method, url.pathname.slice(i + 4), url.searchParams, init, typeof input === "string" ? null : input);
+    return ready.then(function () { return wait(60 + Math.random() * 120); }).then(function () {
+      var out = handle(method, url.pathname.slice(i + 4), url.searchParams, init, typeof input === "string" ? null : input);
+      persistSoon();
+      return out;
     });
   };
 })();

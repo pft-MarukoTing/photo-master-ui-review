@@ -326,8 +326,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
   font:600 var(--chat-fs-md)/1.3 Inter,var(--cjk-sans),system-ui,sans-serif;
   background:var(--card);color:var(--n84);border:1px solid var(--n34);cursor:pointer}
 .chat-chip svg{width:14px;height:14px}
-.chat-chip.is-primary{background:var(--tonal);color:var(--accent-text);border-color:var(--accent);font-weight:700;
-  box-shadow:inset 0 0 0 1px var(--accent)}  /* doubles the 1px border into a 2px ring without changing the box */
+.chat-chip.is-primary{background:var(--fill-strong);color:var(--text-inverse-strong);border-color:transparent;font-weight:700}  /* 主要動作鍵：跟 YCO Primary · Neutral 一樣的深色鍵 */
 .chat-chip.is-ghost{background:transparent;color:var(--n64)}  /* keeps the chip's border and padding -- a borderless label stops reading
      as a button. The demotion is carried by the muted text plus the group
      gutter in .chat-actions, which is enough next to a tonal pair. */
@@ -2768,8 +2767,8 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
 /* 桌機的對話結果頁：不要左邊那塊大圖（Before/After、版本紀錄），版型跟上傳頁一樣——
    左邊「我的照片」、右邊對話撐滿；成品直接在對話的卡片裡，點圖用大圖檢視。 */
 @media (min-width:1201px),(min-width:901px) and (orientation:landscape){
-  #results-canvas-row.showing-analysis #results-canvas-col{display:none !important}
-  .results-canvas-row.showing-analysis .results-analysis-slot{flex:1 1 0;max-width:none}
+  
+  #results-canvas-row.showing-analysis #results-analysis-slot{flex:1 1 0% !important;width:auto !important;min-width:0 !important;max-width:none !important}
 }
 
 /* 桌機結果頁的左右欄：跟上傳頁同一組尺寸（我的照片 280、對話欄之間 16、側欄不多留內距），
@@ -2777,6 +2776,8 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
 @media (min-width:1201px),(min-width:901px) and (orientation:landscape){
   body #results-body.batch-mode #batch-sidebar{flex:0 0 280px !important;max-width:280px !important;width:280px !important;padding-top:0 !important;border-top-width:0}
   #results-body.batch-mode{gap:16px !important}
+  #results-canvas-row.showing-analysis{gap:0 40px !important}
+  #results-canvas-row.showing-analysis #results-canvas-col{flex:1 1 0 !important;min-width:0}
 }
 
 /* 對話模式還沒選照片時，「我的照片」和對話卡片的位置跟編輯器（index.html 的 --pm-shell-*）一樣：
@@ -2799,3 +2800,99 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
 #batch-sidebar .session-tile-badge{inset-inline-start:15px;bottom:15px;max-width:calc(100% - 30px)}
 #batch-sidebar .history-cube-remove{top:12px;inset-inline-end:12px}
 #batch-sidebar .history-cube .rc-badge{inset-inline-start:15px;bottom:15px;max-width:calc(100% - 30px)}
+
+/* 深色主要鍵的 hover：疊 fill-inverse-hover（淺色疊層），不換底色。 */
+.chat-chip.is-primary:not([disabled]):hover{background-image:linear-gradient(var(--fill-inverse-hover),var(--fill-inverse-hover))}
+
+/* 桌機對話頁：預覽區包在 Chat 卡片裡——標題列橫跨整張卡片，底下左邊預覽、右邊對話（各一半、中間 40px）。
+   還沒選照片時沒有預覽區，對話撐滿。手機和直拿平板不放預覽區。 */
+.chat-panel-stage{display:none}
+@media (min-width:1201px),(min-width:901px) and (orientation:landscape){
+  .chat-panel.has-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);column-gap:40px;
+    padding-inline:0}
+  .chat-panel.has-stage>.chat-panel-head{grid-column:1/-1;grid-row:1}
+  .chat-panel.has-stage>.chat-panel-stage{display:flex;grid-column:1;grid-row:2/span 6;min-width:0;min-height:0;padding:var(--spacing-20,20px) 0 var(--spacing-20,20px) var(--spacing-20,20px)}
+  .chat-panel.has-stage>.chat-panel-stage .prechat-stage{flex:1 1 auto;width:100%;height:100%;max-height:none;min-height:0;box-shadow:none}
+  .chat-panel.has-stage>:not(.chat-panel-head):not(.chat-panel-stage){grid-column:2}
+  .chat-panel.has-stage>.chat-timeline{grid-row:2;min-height:0}
+  /* 對話欄在卡片右半邊，不再用「放在卡片中間」的置中寬度 */
+  .chat-panel.has-stage>.chat-composer,.chat-panel.has-stage>.chat-footbar{width:auto;max-width:none;margin-inline:0}
+}
+
+/* 桌機結果頁：預覽（照片、Before/After、美化紀錄）也包進 Chat 卡片——標題列橫跨整張卡片，
+   底下左邊預覽、右邊對話。DOM 上預覽和對話是兄弟，所以讓外層那一列變成這張卡，
+   對話面板和它的外框用 display:contents 攤平，標題列、時間軸、輸入框直接排進這列的格子。 */
+@media (min-width:1201px),(min-width:901px) and (orientation:landscape){
+  #results-canvas-row.showing-analysis{display:grid !important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto;
+    column-gap:40px !important;row-gap:0;height:100%;min-height:0;background:var(--n09);border-radius:20px;overflow:hidden;
+    box-shadow:0 10px 30px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)}
+  #results-canvas-row.showing-analysis #results-analysis-slot,
+  #results-canvas-row.showing-analysis #results-analysis-slot>.chat-panel{display:contents !important}
+  #results-canvas-row.showing-analysis .chat-panel-head{grid-column:1/-1;grid-row:1}
+  #results-canvas-row.showing-analysis #results-canvas-col{grid-column:1;grid-row:2/span 4;min-width:0;min-height:0;
+    padding:var(--spacing-20,20px) 0 var(--spacing-20,20px) var(--spacing-20,20px) !important;box-sizing:border-box;flex:none !important}
+  #results-canvas-row.showing-analysis .chat-timeline{grid-column:2;grid-row:2;min-height:0;padding:var(--sp-5) var(--sp-5) var(--sp-3) 0}
+  #results-canvas-row.showing-analysis .chat-footbar,
+  #results-canvas-row.showing-analysis .chat-composer{grid-column:2;width:auto;max-width:none;margin-inline:0}
+  #results-canvas-row.showing-analysis .split-grip,
+  #results-canvas-row.showing-analysis .sheet-mode-switch{display:none !important}
+}
+
+
+/* 輸入框上面那一條（Choose People、Next retouch from）不要底色，跟輸入框同一片白。 */
+.chat-panel .chat-footbar{background:transparent}
+
+/* 預覽在左、對話在右時：輸入框和上面那條跟時間軸（內距 24）左右對齊，不貼卡片右邊。 */
+@media (min-width:1201px),(min-width:901px) and (orientation:landscape){
+  .chat-panel.has-stage>.chat-footbar,#results-canvas-row.showing-analysis .chat-footbar{padding-inline:var(--sp-5,24px)}
+  .chat-panel.has-stage>.chat-composer,#results-canvas-row.showing-analysis .chat-composer{margin-inline:var(--sp-5,24px) !important;width:auto !important}
+}
+
+/* 「我的照片」欄寬固定 280：預覽區出現、對話卡片變窄時也不縮。 */
+@media (min-width:1201px),(min-width:901px) and (orientation:landscape){
+  #upload-section .upload-content-row.is-chat>#batch-sidebar,
+  body #results-body.batch-mode #batch-sidebar{flex:0 0 280px !important;width:280px !important;min-width:280px !important;max-width:280px !important}
+}
+
+
+/* 對話頁上傳後、修圖前的預覽區照編輯器的預覽：灰底（fill-weak）、12px 圓角、不加陰影，照片依比例完整顯示，
+   左上 Before 標籤（深色半透明），右上全螢幕、下載兩顆白色圓鈕。 */
+@media (min-width:1201px),(min-width:901px) and (orientation:landscape){
+  .chat-panel.has-stage>.chat-panel-stage .prechat-stage{
+    position:relative;background:var(--fill-weak) !important;background-image:none !important;border:0 !important;border-radius:12px !important;box-shadow:none !important;padding:0 !important}
+  .prechat-stage .prechat-shot{flex:1 1 auto;width:100%;min-height:0;display:flex;align-items:center;justify-content:center}
+  .prechat-shot-box{position:relative;display:inline-flex;max-width:100%;max-height:100%}
+  .prechat-stage .prechat-shot img{max-width:100%;max-height:100%;object-fit:contain;border-radius:0;box-shadow:none;display:block}
+  .prechat-tag{position:absolute;top:var(--spacing-12);inset-inline-start:var(--spacing-12);padding:var(--spacing-4) var(--spacing-12);border-radius:var(--corner-radius-8,8px);
+    background:rgba(24,22,20,.72);color:#fff;font-size:var(--font-size-small);line-height:var(--line-height-small);font-weight:var(--font-weight-strong);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);pointer-events:none}
+  .prechat-tools{position:absolute;top:var(--spacing-8);inset-inline-end:var(--spacing-8);display:flex;gap:var(--spacing-8)}
+  .prechat-tool{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border:0;border-radius:50%;padding:0;background:var(--n09);color:var(--text-strong);
+    box-shadow:0 1px 4px rgba(0,0,0,.16);cursor:pointer;text-decoration:none}
+  .prechat-tool:hover{background-image:linear-gradient(var(--fill-hover),var(--fill-hover))}
+}
+
+/* 結果預覽跟編輯器一樣：灰底（fill-weak）墊在照片後面、四個角都是 12px 圓角、下面沒有線；
+   照片依原始比例完整出現（contain），所以上下或左右會露出灰底。 */
+@media (min-width:1201px),(min-width:901px) and (orientation:landscape){
+  #results-canvas-row.showing-analysis #compare-card:not(.is-fullscreen){background:transparent !important;border:0 !important;box-shadow:none !important;border-radius:12px !important}
+  #results-canvas-row.showing-analysis #photo-frame-wrap{background:var(--fill-weak) !important;border-radius:12px !important;overflow:hidden;border:0 !important}
+  #results-canvas-row.showing-analysis #compare-card .photo-frame{border:0 !important;border-bottom:0 !important;box-shadow:none !important}
+  #results-canvas-row.showing-analysis #compare-card .compare-img{object-fit:contain !important;border-radius:0 !important}
+  #results-canvas-row.showing-analysis #version-strip{border-top:0 !important;box-shadow:none !important}
+}
+
+/* 預覽裡的照片本身不做圓角（圓角只在灰底那張卡上）。 */
+.prechat-stage .prechat-shot img,.prechat-stage:not(.is-batch) .prechat-shot img{border-radius:0 !important;box-shadow:none !important}
+
+/* 手機／直拿平板：對話頁不放預覽（上面那張照片和「第 N 版」膠囊），對話撐滿；
+   成品就在對話的卡片裡，點了開大圖檢視。 */
+@media (max-width:900px),(max-width:1200px) and (orientation:portrait){
+  #results-canvas-row.showing-analysis #results-canvas-col{display:none !important}
+  #results-canvas-row.showing-analysis #results-analysis-slot{top:0 !important;border-radius:0 !important;
+    background:var(--n04) !important;-webkit-backdrop-filter:none !important;backdrop-filter:none !important;box-shadow:none !important}
+  #results-canvas-row.showing-analysis .split-grip{display:none !important}
+  #results-canvas-row.showing-analysis #results-analysis-slot{padding-top:48px}
+  #results-canvas-row.showing-analysis .sheet-mode-switch{top:var(--sp-2) !important;inset-inline:0 !important;margin-inline:auto;width:max-content}
+  .chat-result-shot{width:min(100%,280px) !important}
+}

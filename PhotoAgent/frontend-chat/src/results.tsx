@@ -337,6 +337,33 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
     positionTail();
   }, [tags, shown, generated, fullscreen]);
 
+  // 編輯器預覽的 Before／After 標籤貼在「照片本身」的左上角（照片依比例完整顯示，框內有灰底留白）：
+  // 照片在框裡的位置寫成 --img-x／--img-y，樣式（.pm-panel #compare-hint）照這兩個值定位。
+  useEffect(() => {
+    const wrap = document.getElementById("photo-frame-wrap");
+    if (!wrap) return;
+    const sync = () => {
+      const img = Array.from(wrap.querySelectorAll<HTMLImageElement>(".compare-img")).find((i) => i.offsetParent && i.naturalWidth);
+      if (!img) return;
+      const fw = wrap.clientWidth, fh = wrap.clientHeight;
+      if (!fw || !fh) return;
+      const k = Math.min(fw / img.naturalWidth, fh / img.naturalHeight);
+      wrap.style.setProperty("--img-x", `${Math.max(0, Math.round((fw - img.naturalWidth * k) / 2))}px`);
+      wrap.style.setProperty("--img-y", `${Math.max(0, Math.round((fh - img.naturalHeight * k) / 2))}px`);
+    };
+    wrap.querySelectorAll(".compare-img").forEach((i) => i.addEventListener("load", sync));
+    const ro = new ResizeObserver(sync);
+    ro.observe(wrap);
+    const mo = new MutationObserver(sync);
+    wrap.querySelectorAll(".compare-img").forEach((i) => mo.observe(i, { attributes: true, attributeFilter: ["src", "hidden", "class", "style"] }));
+    sync();
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      wrap.querySelectorAll(".compare-img").forEach((i) => i.removeEventListener("load", sync));
+    };
+  }, [shown, generated, fullscreen]);
+
   // Window resize, rotating a phone and the fullscreen toggle all change how
   // much room the row has, independent of any re-render -- and each of those
   // moves the button under an open bubble, so the tail follows the re-fit.

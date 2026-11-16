@@ -5427,7 +5427,7 @@
     .pm-panel .pm-loading-tools .canvas-btn:disabled { opacity: .55; cursor: default; pointer-events: none; }
     /* 「我的照片」卡片跟對話模式完全一樣：白底（--n09）、沒有邊框、上緣貼齊；Editor 的工作區比對話頁擠，寬度縮小成 200px。 */
     .pm-panel #batch-sidebar { background: var(--n09) !important; padding-top: 0 !important; border: 0 !important; }
-    @media (min-width: 901px) { .pm-panel #results-body #batch-sidebar { flex: 0 0 200px !important; max-width: 200px !important; width: 200px !important; } }
+    @media (min-width: 901px) { .pm-panel #results-body #batch-sidebar { flex: 0 0 280px !important; max-width: 280px !important; width: 280px !important; min-width: 280px !important; } }
     /* 面板的「我的照片」跟對話模式同一個樣子：新增、下載、每張的 ×；沒有「全部美化 / Retouch All」。 */
     .pm-panel #batch-sidebar .batch-sidebar-all { display: none !important; }
     .pm-panel #batch-sidebar .batch-sidebar-actions { display: flex; gap: 4px; margin-inline-start: auto; flex: none; }
@@ -5697,6 +5697,10 @@
     /* 「Next retouch from」那一列：body 沒有內距，這列原本貼著卡片左邊；左右跟標題一樣留 16px，上面留 12px。 */
     .pm-panel #ap-analysis-shell .ap-continue-base { padding: var(--spacing-12) var(--spacing-16) 0; }
     .pm-panel #ap-analysis-shell .ap-toggle-card-body { padding-inline: var(--spacing-14, 14px); padding-bottom: var(--spacing-14, 14px); }
+    /* 編輯器的「我的照片」欄寬跟對話頁一樣是 280（空狀態和有照片都是），兩邊切換時欄位不跳。 */
+    @media (min-width: 901px) {
+      .pm-panel #pm-empty .pm-empty-side { flex: 0 0 280px !important; width: 280px; min-width: 280px; max-width: 280px; }
+    }
     /* 全螢幕時按鈕在右下角：tooltip 往上彈（往下會被卡片邊緣裁掉），箭頭改朝下。 */
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn::before { top: auto; bottom: calc(100% + 4px); border-bottom: 0; border-top: 6px solid var(--fill-strong); transform: translateY(2px); }
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn::after { top: auto; bottom: calc(100% + 10px); transform: translateY(2px); }
@@ -5809,7 +5813,7 @@
         --pm-shell-bottom: 58px;   /* 卡片下緣到視窗底 */
         --pm-shell-head-h: 53px;   /* .chat-panel-head 的高度 */
         --pm-switch-gap: 40px;     /* 流程列 ↔ 「對話｜編輯器」切換 */
-        --pm-shell-side: calc((100% - var(--pm-shell-gap)) * .2);
+        --pm-shell-side: 280px;     /* 「我的照片」欄寬：跟對話頁一樣固定 280；流程列的欄、空狀態、有照片的側欄都吃這個值，才會對齊 */
         --pm-shell-shadow: 0 10px 30px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
         --step-indicator-h: calc(var(--pm-shell-top) + var(--pm-shell-head-h));
       }
