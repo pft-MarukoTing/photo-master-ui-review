@@ -4915,6 +4915,21 @@
     .site-header.yco-header .yco-brand:focus-visible, .yco-avatar:focus-visible { outline: 2px solid var(--stroke-brand-strong); outline-offset: 2px; }
     body.is-opening-case .yco-avatar { visibility: hidden !important; }
     @media (min-width: 601px) { html:root { --header-h: 64px; } }
+    /* 手機 header 左邊的漢堡選單（32px，跟對話模式 .chat-header-menu 一樣），logo 前面。 */
+    .header-menu-btn { display: none; }
+    @media (max-width: 600px) {
+      .site-header.yco-header .header-inner { padding-inline: 16px; }
+      .header-menu-btn {
+        display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+        width: 32px; height: 32px; margin: 0; padding: 0; border: 0; border-radius: var(--corner-radius-8, 8px);
+        background: transparent; color: var(--text-strong); cursor: pointer;
+      }
+      .header-menu-btn:hover { background: var(--fill-hover); }
+      .header-menu-btn:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--stroke-focus); }
+      body.is-opening-case .header-menu-btn { visibility: hidden; }
+      .site-header.yco-header .yco-logo-symbol { width: 32px; height: 32px; }
+      .site-header.yco-header .yco-avatar { width: 32px; height: 32px; }
+    }
     @media (min-width: 1280px) {
       #report-btn.btn, #report-btn-spacer.btn { display: none; }
       .site-header .header-actions { display: none; }
@@ -4953,7 +4968,7 @@
     .canvas-tools { display: contents; }
     #photo-viewer { z-index: 999; }
     @media (max-width: 600px) {
-      .version-strip, #compare-hint, #compare-fullscreen-btn { display: none !important; }
+      #compare-hint, #compare-fullscreen-btn { display: none !important; }
       .canvas-header-row {
         top: 8px; inset-inline-end: 8px; inset-inline-start: auto;
         display: flex; align-items: center; gap: 8px;
@@ -5619,15 +5634,35 @@
       .pm-panel #compare-card .canvas-header-row .canvas-actions .canvas-btn { width: 44px; height: 44px; border-radius: 50%; }
       .pm-panel #compare-card .canvas-header-row .canvas-btn-wrap { height: auto; }
     }
-    /* 手機（≤600px）底下固定的 Settings / Retouch：兩顆左右撐滿，整組墊一層往上淡出的白色漸層，
-       捲到下面的內容時不會跟按鈕列硬碰硬。 */
+    /* 手機（≤600px）底下固定的 Settings / Retouch：兩顆左右撐滿，整組墊一層往上淡出的漸層，
+       底色是頁面背景（--n04，兩顆按鈕之間那塊灰白底），捲到下面的內容時不會跟按鈕列硬碰硬。 */
     @media (max-width: 600px) {
       .pm-panel .ap-actions-row {
         padding: var(--spacing-24, 24px) var(--spacing-16) var(--spacing-16);
-        background: linear-gradient(to top, var(--n09) 0%, var(--n09) 55%, transparent 100%);
+        background: linear-gradient(to top, var(--n04) 0%, var(--n04) 55%, transparent 100%);
       }
       .pm-panel .ap-actions-row .ap-settings-run-row { display: flex; width: 100%; margin-inline-start: 0; gap: var(--spacing-8); }
       .pm-panel .ap-actions-row .ap-settings-run-row > button:not([hidden]) { flex: 1 1 0; min-width: 0; justify-content: center; }
+    }
+    /* 手機／窄螢幕（≤900px）的美化中畫面：版面跟桌機一樣（照片 → 動態進度條 → 標題和說明）。
+       桌機的卡片和照片區是 flex:1 撐滿固定高度的工作區；手機這裡的外層高度是跟著內容長的，
+       flex:1 1 0 會把照片區壓成 0 高（app.js setupLoadingThumbFit 依照片區大小算照片尺寸，所以照片也是 0），
+       進度條和文字跟著被 overflow 裁掉。改成照片區有明確高度，卡片跟著內容長。 */
+    @media (max-width: 900px) {
+      .pm-panel .batch-main-loading:not([hidden]):not(.is-error) {
+        flex: none; justify-content: flex-start; gap: var(--spacing-24);
+        padding: var(--spacing-24) var(--spacing-16) var(--spacing-32);
+      }
+      .pm-panel .batch-main-loading:not(.is-error) .proc-visual { flex: none; width: 100%; height: auto; aspect-ratio: var(--img-ar, 4 / 3); max-height: 52vh; }
+    }
+    /* 手機／窄螢幕（≤900px）：Settings / Retouch 是固定在畫面底部的浮動列（styles.css，底是透明的），
+       捲到下面的內容會從按鈕後面透出來。整列墊一層頁面背景色（--n04，就是照片和卡片之間那塊灰白底）往上淡出的漸層。
+       列本身 pointer-events:none，漸層不會擋住底下內容的點擊和捲動。 */
+    @media (max-width: 900px) {
+      .pm-panel #results-canvas-row .ap-actions-row:has(.ap-settings-run-row > :not([hidden])) {
+        padding: var(--spacing-24, 24px) 28px calc(16px + env(safe-area-inset-bottom, 0px));
+        background: linear-gradient(to top, var(--n04) 0%, var(--n04) 55%, transparent 100%);
+      }
     }
     /* 照片總覽：不設高度上限（原本收合時用 max-height 裁，文字少時「顯示分析」會疊在文字上）；
        自己撐開、不被 flex 壓扁，下面留出放按鈕的 40px，太高就讓外面的面板捲動。 */
@@ -5655,6 +5690,8 @@
     /* 分析與調整：分頁列（Portrait / Scene / Style / My Requests）貼滿卡片，不留外圈內距；
        分頁底下的內容自己留 14px 左右內距。 */
     .pm-panel #ap-analysis-shell .ap-analysis-shell-body { padding: 0; }
+    /* 「Next retouch from」那一列：body 沒有內距，這列原本貼著卡片左邊；左右跟標題一樣留 16px，上面留 12px。 */
+    .pm-panel #ap-analysis-shell .ap-continue-base { padding: var(--spacing-12) var(--spacing-16) 0; }
     .pm-panel #ap-analysis-shell .ap-toggle-card-body { padding-inline: var(--spacing-14, 14px); padding-bottom: var(--spacing-14, 14px); }
     /* 全螢幕時按鈕在右下角：tooltip 往上彈（往下會被卡片邊緣裁掉），箭頭改朝下。 */
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn::before { top: auto; bottom: calc(100% + 4px); border-bottom: 0; border-top: 6px solid var(--fill-strong); transform: translateY(2px); }
@@ -5754,6 +5791,180 @@
     .pm-panel .pm-wait-progress > span { position: absolute; top: 0; bottom: 0; left: -35%; width: 35%; border-radius: 2px; background: var(--fill-brand-strong); animation: pm-wait-bar 1.6s ease-in-out infinite; }
     @keyframes pm-wait-bar { to { left: 100%; } }
     @media (prefers-reduced-motion: reduce) { .pm-panel .pm-wait-progress > span { animation: none; left: 0; width: 35%; } }
+    /* ══ 編輯器的外框跟對話模式統一（桌機）══
+       對話模式是「我的照片」一張卡＋右邊一張大卡（標頭＋內容）。編輯器照同一套：
+       左邊「我的照片」佔 20，右邊一張卡佔 80；卡片標頭放流程列（Progress bar）和
+       「對話｜編輯器」切換，卡片內容是畫布 50＋工具設定 30。上下緣、圓角、陰影、間距
+       都跟對話模式的 .chat-panel / .chat-panel-head 對齊，切換模式時外框不會跳。
+       #step-indicator-slot 在 <main> 底下、不在 #results-detail 裡面（見它自己的註解），
+       所以這裡用同一組欄寬把它排成卡片的標頭，#results-detail 當卡片的下半。 */
+    @media (min-width: 901px) {
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) {
+        --pm-shell-gap: var(--spacing-16);
+        --pm-shell-top: 10px;      /* header 底到卡片上緣，跟對話模式（已選照片時）一樣 */
+        --pm-shell-bottom: 58px;   /* 卡片下緣到視窗底 */
+        --pm-shell-head-h: 53px;   /* .chat-panel-head 的高度 */
+        --pm-switch-gap: 40px;     /* 流程列 ↔ 「對話｜編輯器」切換 */
+        --pm-shell-side: calc((100% - var(--pm-shell-gap)) * .2);
+        --pm-shell-shadow: 0 10px 30px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+        --step-indicator-h: calc(var(--pm-shell-top) + var(--pm-shell-head-h));
+      }
+      /* 標頭：第一欄空著（底下是「我的照片」），流程列和切換排在卡片那一欄。 */
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .step-indicator-slot:not([hidden]) {
+        display: grid;
+        grid-template-columns: var(--pm-shell-side) minmax(0, 1fr) auto;
+        column-gap: var(--pm-shell-gap);
+        align-items: center;
+        box-sizing: border-box;
+        height: var(--step-indicator-h);
+        padding-top: var(--pm-shell-top);
+        isolation: isolate;
+      }
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .step-indicator-slot::after {
+        content: "";
+        grid-column: 2 / 4;
+        grid-row: 1;
+        align-self: stretch;
+        z-index: -1;
+        background: var(--n04);
+        border-bottom: 1px solid var(--border);
+        border-radius: 20px 20px 0 0;
+        box-shadow: var(--pm-shell-shadow);
+        clip-path: inset(-40px -40px 0 -40px);
+      }
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .step-indicator-slot > .ap-step-indicator {
+        grid-column: 2; grid-row: 1;
+        /* 流程列和切換之間的距離（欄間距 16 + 這裡的右 margin）：桌機 40px，視窗變窄時縮小，
+           把寬度還給步驟之間的連線（見下面兩個斷點）。 */
+        width: auto; margin: 0 calc(var(--pm-switch-gap) - var(--pm-shell-gap)) 0 var(--spacing-16);
+      }
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .step-indicator-slot > .mode-switch {
+        grid-column: 3; grid-row: 1;
+        margin: 0 var(--spacing-16) 0 0;
+      }
+      /* 「我的照片」：寬 20、上緣往上對齊卡片標頭、圓角跟對話模式那欄一樣。 */
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) .results-body { gap: var(--pm-shell-gap); }
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) #results-body.batch-mode #batch-sidebar.is-panel {
+        /* !important：前面「我的照片」固定 200px 那條是 !important。 */
+        flex: 0 0 var(--pm-shell-side) !important; width: auto !important; max-width: none !important;
+        position: relative; top: auto;
+        margin: calc(var(--pm-shell-head-h) * -1) 0 0;
+        height: calc(100vh - var(--header-h) - var(--pm-shell-top) - var(--pm-shell-bottom));
+        max-height: none; box-sizing: border-box;
+        padding-top: 0;
+        border: 0; border-radius: 18px;
+      }
+      /* 卡片下半：白底、下圓角，裡面畫布 50＋工具設定 30。 */
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) #results-body.batch-mode #results-detail {
+        box-sizing: border-box;
+        height: calc(100vh - var(--header-h) - var(--step-indicator-h) - var(--pm-shell-bottom));
+        padding: var(--spacing-16);
+        background: var(--n09);
+        border-radius: 0 0 20px 20px;
+        /* 不能在這張卡上用 clip-path 或 box-shadow 裁陰影：clip-path 會建立新的 stacking context，
+           全螢幕檢視（.compare-card.is-fullscreen，position:fixed、z-index 1000）就會被關在這張卡裡面——
+           被 z-index 999 的深色遮罩蓋住變暗，還會被這張卡的範圍裁掉。陰影改畫在 ::before（下面），裁切只裁它自己。 */
+        position: relative;
+      }
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) #results-body.batch-mode #results-detail::before {
+        content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+        border-radius: inherit; box-shadow: var(--pm-shell-shadow);
+        clip-path: inset(0 -40px -40px -40px);
+      }
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) #results-body.batch-mode .results-canvas-row.showing-analysis { gap: var(--pm-shell-gap); }
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) #results-body.batch-mode .results-canvas-row.showing-analysis .results-canvas-col { flex: 50 1 0%; }
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) #results-body.batch-mode .results-canvas-row.showing-analysis .results-analysis-slot { flex: 30 1 0%; }
+    }
+    @media (min-width: 901px) and (max-width: 1279px) {
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) { --pm-switch-gap: 32px; }
+    }
+    @media (min-width: 901px) and (max-width: 999px) {
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) { --pm-switch-gap: 24px; }
+    }
+    /* 空狀態（#pm-empty）：外框同上，左 20 是空的「我的照片」，右邊卡片 50 上傳區＋30 工具設定（先放空的）。 */
+    @media (min-width: 901px) {
+      .pm-panel:has(#upload-section.visible) #pm-empty .pm-empty-wrap {
+        display: flex; align-items: flex-start; justify-content: flex-start; gap: var(--pm-shell-gap);
+        height: auto; min-height: 0; padding: 0 28px;
+      }
+      .pm-panel #pm-empty .pm-empty-side {
+        flex: 0 0 var(--pm-shell-side); box-sizing: border-box;
+        margin-top: calc(var(--pm-shell-head-h) * -1);
+        height: calc(100vh - var(--header-h) - var(--pm-shell-top) - var(--pm-shell-bottom));
+        display: flex; flex-direction: column; overflow: hidden;
+        background: var(--n09); border-radius: 18px; box-shadow: 0 2px 10px rgba(17,24,26,.09);
+      }
+      .pm-panel #pm-empty .pm-empty-side-head {
+        flex: none; display: flex; align-items: center; height: var(--pm-shell-head-h); box-sizing: border-box;
+        padding: 0 var(--spacing-16); background: var(--n04);
+      }
+      .pm-panel #pm-empty .pm-empty-side-title { margin: 0; font-size: 18px; line-height: 1.3; font-weight: 700; color: var(--text-strong); }
+      .pm-panel #pm-empty .pm-empty-side-body {
+        flex: 1; display: flex; align-items: center; justify-content: center; padding: var(--spacing-16);
+        font-size: var(--font-size-small); font-weight: var(--font-weight-strong); color: var(--text-strong);
+      }
+      .pm-panel #pm-empty .pm-empty-card {
+        flex: 1 1 0%; min-width: 0; display: flex; gap: var(--pm-shell-gap); box-sizing: border-box;
+        height: calc(100vh - var(--header-h) - var(--step-indicator-h) - var(--pm-shell-bottom));
+        padding: var(--spacing-16); background: var(--n09);
+        border-radius: 0 0 20px 20px; box-shadow: var(--pm-shell-shadow); clip-path: inset(0 -40px -40px -40px);
+      }
+      .pm-panel #pm-empty .pm-empty-card > .pm-empty-drop {
+        flex: 50 1 0%; width: auto; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent;
+      }
+      .pm-panel #pm-empty .pm-empty-tools { flex: 30 1 0%; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+      .pm-panel #pm-empty .pm-empty-tool-card {
+        display: flex; flex-direction: column; overflow: hidden; background: var(--n09);
+        border: 1px solid var(--stroke-weak); border-radius: 12px;
+      }
+      .pm-panel #pm-empty .pm-empty-tool-card.is-grow { flex: 1; }
+      .pm-panel #pm-empty .pm-empty-tool-head {
+        flex: none; display: flex; align-items: center; height: var(--pm-shell-head-h); box-sizing: border-box;
+        padding: 0 var(--spacing-16); background: var(--n04); font-size: var(--font-size-small); font-weight: var(--font-weight-strong); color: var(--text-strong);
+      }
+      .pm-panel #pm-empty .pm-empty-tool-text { margin: 0; padding: var(--spacing-12) var(--spacing-16); font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); color: var(--text-weak); }
+    }
+    /* 手機：空狀態維持單欄，只留上傳區（左邊「我的照片」和右邊工具設定是桌機版面）。 */
+    @media (max-width: 900px) {
+      .pm-panel #pm-empty .pm-empty-side, .pm-panel #pm-empty .pm-empty-tools { display: none; }
+      .pm-panel #pm-empty .pm-empty-card { display: contents; }
+    }
+    /* 工具設定欄底部的 Settings / Retouch 列（桌機）：白底（--n09），見上面 min-width:601px 那條。 */
+    /* 手機／窄螢幕（≤900px）單張流程的重試中畫面（#canvas-loading）：跟上面 #batch-main-loading 同一個問題、同一個解法——
+       桌機是固定高度的卡片，手機外層（.compare-card）高度跟著內容，照片區 flex:1 1 0 會被壓成 0 高，
+       進度條和文字被 overflow:hidden 裁掉。照片區改用照片比例（--img-ar，沒有就 4:3）決定高度、最高 52vh，外層跟著內容長。
+       放在這個 <style> 最後面，才蓋得過上面 .canvas-loading 的桌機尺寸。 */
+    @media (max-width: 900px) {
+      /* .compare-card 平常用照片比例（aspect-ratio）決定高度，美化中改成跟著內容長。 */
+      .pm-panel #compare-card:has(.canvas-loading:not([hidden])) { height: auto !important; min-height: 0 !important; aspect-ratio: auto !important; }
+      .pm-panel .canvas-loading:not([hidden]) {
+        height: auto; min-height: 0; justify-content: flex-start;
+        padding: var(--spacing-24) var(--spacing-16) var(--spacing-32);
+      }
+      .pm-panel .canvas-loading .proc-visual { flex: none; width: 100%; height: auto; aspect-ratio: var(--img-ar, 4 / 3); max-height: 52vh; }
+    }
+    /* 手機（≤600px）的美化紀錄縮圖（Original / Version 1…）：放在照片下面，跟桌機一樣看得到、點得到。
+       桌機的卡片是「照片＋下面一條縮圖」同一張白底卡；手機照片是圓角獨立一張、縮圖直接放在頁面底上，
+       所以卡片本身不再畫底／裁切（照片區自己畫圓角），縮圖那條透明、貼在照片下面。 */
+    @media (max-width: 600px) {
+      .pm-panel #compare-card:not(.is-fullscreen) {
+        height: auto; min-height: 0; aspect-ratio: auto; overflow: visible;
+        display: flex; flex-direction: column; background: transparent; box-shadow: none; border-radius: 0;
+      }
+      .pm-panel #compare-card:not(.is-fullscreen) #photo-frame-wrap {
+        flex: none; width: 100%; height: auto; aspect-ratio: var(--img-ar, 4 / 3);
+        border-radius: 12px; overflow: hidden;
+      }
+      .pm-panel #compare-card:not(.is-fullscreen) .version-strip {
+        margin: 0; padding: var(--spacing-12) 0 0; border: 0; background: transparent;
+      }
+      /* 全螢幕也要有左上角的 Before／After 標籤（跟桌機一樣）。 */
+      .pm-panel #compare-card.is-fullscreen #compare-hint { display: block !important; }
+      /* 全螢幕：分類小標籤（Portrait／Scene…）原本貼在照片底部，會壓到右下角的比較／下載鈕，往上抬到鈕上面。 */
+      .pm-panel #compare-card.is-fullscreen #recipe-tags { bottom: calc(var(--spacing-12) + 40px + var(--spacing-8)); }
+    }
+    /* 畫布（照片卡）不加陰影。全螢幕本來就沒有，這裡只管一般狀態。 */
+    .pm-panel #compare-card:not(.is-fullscreen) { box-shadow: none !important; }
   </style>
 </head>
 <!-- pm-panel：面板模式專用的樣式掛勾。index.html 的 <style> 也會被帶進對話模式的 build，新加的面板樣式都掛在 .pm-panel 底下，才不會影響對話模式。 -->
@@ -5822,6 +6033,12 @@
      左邊 YouCam Online Editor logo，右邊頭像；原本攤開的按鈕全部收進頭像點開的選單（setupHeaderMenu, app.js）。 -->
 <header class="site-header yco-header">
   <div class="header-inner">
+    <!-- 手機（≤600px）才出現，跟對話模式的 header 一樣：左邊是漢堡選單，開「最近照片」；沒有最近照片時開頭像選單（app.js setupHeaderMenu）。 -->
+    <button type="button" id="header-menu-btn" class="header-menu-btn" aria-label="選單" title="選單">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </button>
     <button type="button" class="logo yco-brand" id="logo-home-btn" aria-label="YouCam Online Editor">
       <img class="yco-logo-symbol" src="assets/yco/logo-symbol.svg" alt="" aria-hidden="true">
       <img class="yco-wordmark" src="assets/yco/logo-en-desktop.svg" alt="YouCam Online Editor">
@@ -6523,6 +6740,12 @@
        選了照片就走跟對話模式帶過來一樣的流程（startFromEmpty, app.js），落在工作區。 -->
   <section id="pm-empty" class="section" aria-label="尚未上傳照片">
     <div class="container pm-empty-wrap">
+      <!-- 空狀態的版面跟有照片時一樣：左 20「我的照片」，右 80 一張卡（50 上傳區＋30 工具設定）。 -->
+      <aside class="pm-empty-side" aria-label="我的照片">
+        <div class="pm-empty-side-head"><h2 class="pm-empty-side-title">我的照片</h2></div>
+        <div class="pm-empty-side-body">還沒有照片</div>
+      </aside>
+      <div class="pm-empty-card">
       <div class="pm-empty-drop" id="pm-empty-drop">
        <div class="pm-empty-inner">
         <span class="pm-empty-drop-icon" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></span>
@@ -6538,6 +6761,16 @@
           </button>
         </div>
        </div>
+      </div>
+      <div class="pm-empty-tools" aria-hidden="true">
+        <div class="pm-empty-tool-card">
+          <div class="pm-empty-tool-head">照片總覽</div>
+          <p class="pm-empty-tool-text">上傳照片後，AI 的分析和可調整的項目會出現在這裡。</p>
+        </div>
+        <div class="pm-empty-tool-card is-grow">
+          <div class="pm-empty-tool-head">分析與調整</div>
+        </div>
+      </div>
       </div>
     </div>
     <div class="pm-sample-modal" id="pm-sample-modal" hidden role="dialog" aria-modal="true" aria-label="從範例照片挑選">
@@ -7998,7 +8231,7 @@
       <button id="photo-viewer-hold" type="button" class="version-viewer-hold" aria-pressed="false">按住看原圖</button>
       <button id="photo-viewer-download" type="button" class="version-viewer-btn" aria-label="下載" title="下載">
         <svg width="18" height="18" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 4v11M7 10l5 5 5-5M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12 15V3M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
     </div>

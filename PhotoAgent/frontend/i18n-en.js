@@ -250,6 +250,7 @@ window.PHOTOAGENT_CATALOGS.en = {
   "正在整理這版的修圖說明…": "Writing up the notes on this version…",
   "依 AI 分析的建議美化。": "Retouched from the AI analysis's suggestions.",
   "照片總覽": "Photo Overview",
+  "上傳照片後，AI 的分析和可調整的項目會出現在這裡。": "Once you upload a photo, the AI's analysis and adjustable settings will show up here.",
   "照片亮點": "Highlights",
   "畫面氛圍": "Mood",
   "視覺焦點": "Focus",

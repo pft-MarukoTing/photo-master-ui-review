@@ -1930,8 +1930,6 @@ div.chat-proposal-row{cursor:default}
   .results-analysis-slot>.chat-panel>.chat-panel-head{display:none}
   .sheet-mode-switch{display:inline-flex;position:absolute;top:calc((var(--split-overlap) - 26px) / 2);inset-inline-end:var(--sp-3);z-index:1;padding:2px}
   .sheet-mode-switch .mode-switch-opt{height:22px;padding:0 10px;border-radius:11px;font-size:12px}
-  .sheet-mode-switch{background:rgba(var(--accent-rgb),.06)}
-  .sheet-mode-switch .mode-switch-opt.is-active{background:rgba(var(--accent-rgb),.14);box-shadow:none}
   .sheet-mode-switch .mode-switch-opt svg{display:none}
   .results-analysis-slot>.chat-panel .chat-timeline{padding:var(--sp-1) var(--sp-4) var(--sp-3);
     -webkit-mask:linear-gradient(to bottom,transparent 0,#000 18px);mask:linear-gradient(to bottom,transparent 0,#000 18px)}
@@ -2097,7 +2095,7 @@ div.chat-proposal-row{cursor:default}
 .report-view-when{flex-shrink:0;padding:2px}
 .report-view-when .mode-switch-opt{height:26px;padding:0 12px;border-radius:13px;font-size:12.5px}
 button.mode-switch-opt{border:0;background:transparent;font-family:inherit;cursor:pointer}
-button.mode-switch-opt:not(.is-active):not(:disabled):hover{background:rgba(var(--accent-rgb),.08);color:var(--text)}
+button.mode-switch-opt:not(.is-active):not(:disabled):hover{background:var(--fill-press);color:var(--text-strong)}
 button.mode-switch-opt:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button.mode-switch-opt:disabled{cursor:not-allowed}
 button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
@@ -2453,6 +2451,12 @@ html[data-theme="dark"] .home-compare-knob{background:var(--background-raised);c
 .chat-action-btn{display:flex;width:max-content;min-width:0;height:32px;min-height:32px;padding:0 var(--spacing-12,12px);justify-content:center;align-items:center;gap:var(--spacing-4,4px);
   border-radius:var(--corner-radius-32,32px);background:var(--fill-strong);font-size:14px;line-height:20px}
 .chat-action-btn .buttonIcon,.chat-action-btn .buttonIcon svg{width:16px;height:16px}
+/* 按鈕寬度跟著內容，不固定、也不被壓縮：一排放不下就整顆換到下一行，不要把按鈕壓窄、文字擠成兩行。
+   真的比整行還寬（極窄螢幕）才用 max-width:100% 加省略號。 */
+.chat-actions-main{min-width:0}
+.chat-action-choice{flex:0 0 auto;max-width:100%}
+.chat-action-btn{flex:0 0 auto;max-width:100%;white-space:nowrap}
+.chat-action-btn .label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-action-btn.is-static{cursor:default;pointer-events:none}
 .chat-action-choice:not(.is-picked) .chat-action-btn.is-static{color:var(--text-weaker);border-color:var(--stroke-weak)}
 
@@ -2520,6 +2524,8 @@ html[data-theme="dark"] body{--n84:var(--text-strong);--n74:var(--text-weak);--n
 .chat-msg:not(.is-user)>.chat-body{grid-row:1}
 /* 頭像垂直置中在訊息第一行：第一行行高＝.chat-text 的 15px × 1.8 = 27px，28px 頭像往上半個像素。 */
 .chat-msg:not(.is-user)>.chat-avatar{margin-top:calc((15px * 1.8 - 28px) / 2)}
+/* Agent 回覆的文字最寬 600px，寬螢幕上一行不會拉太長；照片、卡片、按鈕不受影響。 */
+.chat-msg:not(.is-user) .chat-text{max-width:600px}
 
 /* 對話標頭右上角的「對話｜面板」：沿用 styles.css 的 .mode-switch 膠囊樣式（灰底軌道、選中那段白底＋品牌色＋圖示），排在副標後面。 */
 .chat-panel-head{align-items:center}
@@ -2642,10 +2648,10 @@ aside.batch-sidebar>.batch-sidebar-header .batch-sidebar-title{margin:0;font-fam
 aside.batch-sidebar{background:var(--n09)}
 aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-start-radius:inherit;border-start-end-radius:inherit}
 
-/* 「我的照片」欄：寬一點（224→280），跟旁邊對話框的間距縮小（40→16）。 */
+/* 「我的照片」欄佔整排的 20（跟編輯器那欄同一個算式，index.html 的 --pm-shell-side），跟旁邊對話框的間距 16。 */
 @media (min-width:901px) and (orientation:landscape){
   #upload-section .upload-content-row.is-chat{column-gap:16px}
-  #upload-section .upload-content-row>#batch-sidebar{flex:0 0 280px;max-width:280px}
+  #upload-section .upload-content-row>#batch-sidebar{flex:0 0 calc((100% - 16px) * .2);max-width:none}
 }
 /* 空狀態的「上傳照片」不用藍色主按鈕（在這欄太突兀）：跟旁邊的 Choose a Sample Photo 一樣的次要中性樣式。 */
 .batch-sidebar-empty .gallery-empty-btn{background:transparent;color:var(--text-strong);border:1px solid var(--stroke-strong);height:36px;padding:0 var(--spacing-16);font-weight:600}

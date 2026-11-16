@@ -4,7 +4,7 @@
 // Chinese page never goes through a catalog; text a language has not
 // translated shows in English, then in Chinese.
 //
-// Chosen by ?lang= (remembered), else the remembered choice, else Chinese.
+// Chosen by ?lang= (remembered), else the remembered choice, else English.
 // Changing it reloads the page. The backend gets it with every request
 // (X-PhotoAgent-Lang) and writes its replies and analyses in it; what was
 // written before stays in the language it was written in.
@@ -70,7 +70,7 @@ function resolve(): string {
   }
   // 展示模式（demo-api.js）：看的人沒辦法切語言，所以預設英文（?lang= 還是優先）。
   if ((window as unknown as { PhotoAgentDemo?: { on: boolean } }).PhotoAgentDemo?.on) return "en";
-  return normalize(remembered()) || SOURCE;
+  return normalize(remembered()) || "en";
 }
 
 export const lang = resolve();

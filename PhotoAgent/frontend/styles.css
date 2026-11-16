@@ -5669,7 +5669,7 @@ body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle:hover {
   gap: 2px;
   padding: 3px;
   border-radius: 20px;
-  background: var(--n14);
+  background: var(--fill-weak);
 }
 .mode-switch-opt {
   display: inline-flex;
@@ -5680,21 +5680,21 @@ body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle:hover {
   border-radius: 15px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-2);
+  color: var(--text-weak);
   text-decoration: none;
   white-space: nowrap;
   transition: background .15s, color .15s;
 }
+/* 選中那段黑底白字（YCO fill-strong / text-inverse-strong），另一段 fill-weak 底＋text-weak 字。 */
 .mode-switch-opt.is-active {
-  background: var(--card);
-  color: var(--accent);
+  background: var(--fill-strong);
+  color: var(--text-inverse-strong);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0,0,0,.1);
 }
-a.mode-switch-opt:hover { background: rgba(var(--accent-rgb), .08); color: var(--text); }
+a.mode-switch-opt:hover { background: var(--fill-press); color: var(--text-strong); }
 a.mode-switch-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .mode-switch-opt[aria-disabled]:not([aria-disabled="false"]) { opacity: .45; cursor: not-allowed; }
-a.mode-switch-opt[aria-disabled]:not([aria-disabled="false"]):hover { background: transparent; color: var(--text-2); }
+a.mode-switch-opt[aria-disabled]:not([aria-disabled="false"]):hover { background: transparent; color: var(--text-weak); }
 /* A link button can't be :disabled -- #chat-ui-btn is held via aria-disabled. */
 a.btn[aria-disabled] { opacity: .35; cursor: not-allowed; }
 a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }

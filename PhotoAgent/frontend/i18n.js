@@ -1,7 +1,7 @@
 // The language panel mode is shown in: Traditional Chinese (the source), or a
 // language with a catalog (i18n-en.js, and generated/l10n.js made by
 // scripts/l10n_prepare.py). The same choice as the chat page
-// (frontend-chat/src/i18n.ts): ?lang= (remembered) or the remembered choice.
+// (frontend-chat/src/i18n.ts): ?lang= (remembered), the remembered choice, else English.
 //
 // The Chinese text is the key: tr() returns it as it is in Chinese, so the
 // Chinese page never goes through a catalog; text a language has not
@@ -78,7 +78,7 @@
     } catch { /* storage may be blocked */ }
     let kept = "";
     try { kept = localStorage.getItem(KEY) || ""; } catch { /* storage may be blocked */ }
-    return normalize(kept) || SOURCE;
+    return normalize(kept) || "en";
   }
 
   const lang = resolve();

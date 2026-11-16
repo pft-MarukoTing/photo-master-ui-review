@@ -1783,6 +1783,14 @@
     proxy("header-new-icon", els.newChatButton);
     proxy("header-history-icon", els.accountBadge);
     proxy("header-menu-report-btn", els.reportBtn);
+    // 手機的漢堡選單：有最近照片（#account-badge 沒藏）就開最近照片，沒有就開頭像選單，跟對話模式一樣。
+    const menuBtn = document.getElementById("header-menu-btn");
+    if (menuBtn) {
+      menuBtn.addEventListener("click", () => {
+        if (els.accountBadge && !els.accountBadge.hidden) els.accountBadge.click();
+        else document.getElementById("header-more-btn")?.click();
+      });
+    }
   }
 
   // Merged 修圖模型/影像品質 selector -- one option per valid model+quality
@@ -16142,8 +16150,9 @@
     els.photoFrameWrap.addEventListener("click", (e) => {
       if (!e.target.closest(".photo-frame") || e.target.closest("button, a, input, label")) return;
       if (els.compareCard?.classList.contains("is-fullscreen")) return;
-      // 編輯器（桌機）：點一下照片 = 全螢幕放大；按住拖曳是抓手平移（拖完那下的 click 已在 setupPhotoPan 吃掉）。
-      if (document.body.classList.contains("pm-panel") && !photoViewerMedia.matches) { openCompareFullscreen(); return; }
+      // 編輯器：點一下照片 = 全螢幕放大（手機也是，樣子跟桌機一樣：滿版照片、Before/After 標籤、關閉、下載）；
+      // 按住拖曳是抓手平移（拖完那下的 click 已在 setupPhotoPan 吃掉）。
+      if (document.body.classList.contains("pm-panel")) { openCompareFullscreen(); return; }
       if (!photoViewerMedia.matches) return;
       openPhotoViewer();
     });
