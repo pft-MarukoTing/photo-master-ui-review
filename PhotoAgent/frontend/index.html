@@ -5515,6 +5515,22 @@
       position: fixed; inset: 0; margin: auto; padding: 0; border: 0; border-radius: 0; background: transparent !important; box-shadow: none;
       display: block; overflow: visible; width: var(--fs-w, calc(100vw - 48px)); height: var(--fs-h, calc(100vh - 48px));
     }
+    /* 全螢幕底下的縮圖列（原圖 + 各版，共用 photo-lightbox.js 的縮圖）：卡片上移，縮圖列放在照片正下方 */
+    /* 照片比例不同時卡片大小會變，但縮圖列和箭頭固定：卡片在「上面 24px 到縮圖列」這塊區域裡垂直置中 */
+    :is(.pm-panel, body) #compare-card.is-fullscreen.has-fs-strip { inset: calc(24px + (100vh - 144px - var(--fs-h, 100vh)) / 2) 0 auto 0; inset: calc(24px + (100dvh - 144px - var(--fs-h, 100dvh)) / 2) 0 auto 0; }
+    #compare-card #pm-fs-strip { display: none; }
+    #compare-card.is-fullscreen #pm-fs-strip { display: block; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); width: min(100vw - 48px, 720px); }
+    #compare-card .pm-fs-arrow { display: none; }
+    #compare-card.is-fullscreen .pm-fs-arrow { display: flex; z-index: 40; }
+    #compare-card.is-fullscreen .pm-fs-arrow.pmlb-prev { left: 16px; }
+    #compare-card.is-fullscreen .pm-fs-arrow.pmlb-next { right: 16px; }
+    /* 桌機：箭頭在照片外面，貼著視窗左右各 40px，垂直對齊照片中線（跟共用大圖一樣） */
+    @media (min-width: 1201px), (min-width: 901px) and (orientation: landscape) {
+      #compare-card.is-fullscreen .pm-fs-arrow { position: fixed; top: calc(24px + (100vh - 144px) / 2); top: calc(24px + (100dvh - 144px) / 2); }
+      #compare-card.is-fullscreen .pm-fs-arrow.pmlb-prev { left: 40px; right: auto; }
+      #compare-card.is-fullscreen .pm-fs-arrow.pmlb-next { right: 40px; left: auto; }
+    }
+    #compare-card.is-fullscreen #pm-fs-strip .pmlb-strip { min-height: 80px; }
     :is(.pm-panel, body) #compare-card.is-fullscreen #photo-frame-wrap { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 12px; overflow: hidden; }
     :is(.pm-panel, body) #compare-card.is-fullscreen .compare-img { object-fit: cover; }
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row { inset: 0; display: block; padding: 0; z-index: 30; pointer-events: none; }
@@ -5709,12 +5725,12 @@
     /* 預覽工具鈕的 tooltip：對話頁另外有一條 [data-tip] 的規則（left:50% 置中），跟這裡的 right:0 疊在一起會把提示框壓成 22px 寬、文字被切；
        這裡明講 left:auto，只用 right 對齊。 */
     .pm-panel #compare-card .canvas-actions .canvas-btn::after { left: auto; }
-    /* 下載鈕：黑底白色圖示（Secondary 的深色版），Editor 和對話頁一樣；hover 疊一層淺色疊層，不換色。 */
-    :is(.pm-panel, body) #compare-card .canvas-header-row #download-link,
-    :is(.pm-panel, body) #compare-card .canvas-header-row #download-link.canvas-btn {
+    /* 下載鈕：看的是修圖後的結果（.showing-generated）才是黑底白色圖示；還沒修圖、看原圖時維持白底。Editor 和對話頁一樣；hover 疊一層淺色疊層，不換色。 */
+    :is(.pm-panel, body) #compare-card.showing-generated:not(.is-fullscreen) .canvas-header-row #download-link,
+    :is(.pm-panel, body) #compare-card.showing-generated:not(.is-fullscreen) .canvas-header-row #download-link.canvas-btn {
       background: var(--fill-strong) !important; background-image: none !important; color: var(--text-inverse-strong) !important; box-shadow: none !important;
     }
-    :is(.pm-panel, body) #compare-card .canvas-header-row #download-link:hover {
+    :is(.pm-panel, body) #compare-card.showing-generated:not(.is-fullscreen) .canvas-header-row #download-link:hover {
       background-image: linear-gradient(var(--fill-inverse-hover), var(--fill-inverse-hover)) !important;
     }
     /* 平板、手機（≤900）：右邊「Analysis & Adjustments」跟上面的 Photo Overview 一樣撐滿整欄，不要停在固定的欄寬。 */
@@ -5726,6 +5742,9 @@
       .pm-panel #compare-card:not(.is-fullscreen) { height: auto; min-height: 0; aspect-ratio: var(--img-ar, 4 / 3); }
       .pm-panel #results-canvas-col, .pm-panel #results-canvas-top { height: auto; display: block; }
     }
+    /* 編輯器 header 不放「新對話（＋）」「最近照片（時鐘）」兩顆圖示，所有寬度都一樣。 */
+    .site-header #header-new-icon,
+    .site-header #header-history-icon { display: none !important; }
     /* 全螢幕時按鈕在右下角：tooltip 往上彈（往下會被卡片邊緣裁掉），箭頭改朝下。 */
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn::before { top: auto; bottom: calc(100% + 4px); border-bottom: 0; border-top: 6px solid var(--fill-strong); transform: translateY(2px); }
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn::after { top: auto; bottom: calc(100% + 10px); transform: translateY(2px); }
@@ -5739,10 +5758,11 @@
       font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small); font-weight: var(--font-weight-strong);
     }
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row .canvas-btn {
-      width: 40px; height: 40px; border: 0 !important; border-radius: 50%; background: rgba(24,22,20,.72) !important; background-image: none !important;
+      width: 40px; height: 40px; border: 0 !important; border-radius: 50%; background: var(--fill-overlay) !important; background-image: none !important;
       color: #fff !important; box-shadow: none !important; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
     }
-    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row .canvas-btn:hover { background: rgba(24,22,20,.9) !important; }
+    /* 全螢幕裡右上／右下的圓鈕（比較、下載…）同一個底色：fill-overlay；hover 疊淺色疊層，不換色。 */
+    :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row .canvas-btn:hover { background-image: linear-gradient(var(--fill-inverse-hover), var(--fill-inverse-hover)) !important; }
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-header-row .canvas-btn svg { width: 24px; height: 24px; }
     .pm-panel #compare-card .photo-frame { width: 100%; height: 100%; border-radius: 0; }
     .pm-panel #compare-card .compare-img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; object-position: center; border-radius: 0; }
@@ -8978,6 +8998,7 @@
 <script src="image-tools.js"></script>
 <script src="zip-tool.js"></script>
 <script src="save-images.js"></script>
+<script src="photo-lightbox.js"></script>
 <script src="photo-agent-api.js"></script>
 <script src="results.js"></script>
 <script src="app.js"></script>

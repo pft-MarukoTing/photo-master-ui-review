@@ -3,7 +3,6 @@
 import { rtl, shownLabel, shownRecipe, t } from "./i18n";
 import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { createPortal } from "preact/compat";
 import { api, urls } from "./api";
 import { Icon } from "./icons";
 import { markLeavingForPanel } from "./pre-handoff";
@@ -493,11 +492,17 @@ export function UploadBubble({ src, text, onOpen }: { src: string; text: string;
 export function BatchUploadBubble({ srcs, text, fullSrcs }: { srcs: string[]; text: string; fullSrcs?: string[] }) {
   const [open, setOpen] = useState(false);
   // 點縮圖放大：fullSrcs 是跟 srcs 同順序的原圖網址；沒給就放大縮圖本身。
-  const [viewing, setViewing] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
   const bigOf = (i: number) => (fullSrcs && fullSrcs[i]) || srcs[i];
   const shown = srcs.slice(0, 4);
   const more = srcs.length - shown.length;
-  const viewer = <PhotoViewer src={viewing} onClose={() => setViewing(null)} />;
+  const viewer = (
+    <PhotoViewer
+      items={viewing === null ? undefined : srcs.map((s, i) => ({ src: bigOf(i), thumb: s }))}
+      index={viewing ?? 0}
+      onClose={() => setViewing(null)}
+    />
+  );
   if (open && more > 0) {
     return (
       <div class="chat-upload is-batch is-open">
@@ -505,7 +510,7 @@ export function BatchUploadBubble({ srcs, text, fullSrcs }: { srcs: string[]; te
           <p class="chat-upload-card-title">{text}</p>
           <div class="chat-upload-grid">
             {srcs.map((s, i) => (
-              <button key={s} type="button" class="chat-upload-thumb" aria-label={t("看大圖")} onClick={() => setViewing(bigOf(i))}>
+              <button key={s} type="button" class="chat-upload-thumb" aria-label={t("看大圖")} onClick={() => setViewing(i)}>
                 <img src={s} alt="" loading="lazy" />
               </button>
             ))}
@@ -524,7 +529,7 @@ export function BatchUploadBubble({ srcs, text, fullSrcs }: { srcs: string[]; te
       {shown.length > 0 && (
         <div class="chat-upload-stack">
           {shown.map((s, i) => (
-            <button key={s} type="button" class="chat-upload-thumb" aria-label={t("看大圖")} onClick={() => setViewing(bigOf(i))}>
+            <button key={s} type="button" class="chat-upload-thumb" aria-label={t("看大圖")} onClick={() => setViewing(i)}>
               <img src={s} alt="" />
             </button>
           ))}
@@ -541,29 +546,33 @@ export function BatchUploadBubble({ srcs, text, fullSrcs }: { srcs: string[]; te
   );
 }
 
-// The photo on its own over the page. Tapping anywhere but the photo, the
-// close button or Esc puts it away.
-export function PhotoViewer({ src, onClose }: { src: string | null; onClose: () => void }) {
+// 大圖檢視：外觀和操作都在 frontend/photo-lightbox.js（window.PMLightbox），
+// Chat 和 Editor 共用同一份。單張給 src；多張給 items + index（箭頭、縮圖列、←／→ 都由它處理）。
+declare global {
+  interface Window {
+    PMLightbox?: { open(o: unknown): void; close(): void; isOpen(): boolean };
+  }
+}
+export function PhotoViewer({ src, items, index = 0, tag, onClose }: {
+  src?: string | null;
+  items?: { src: string; thumb?: string; tag?: string; group?: string | number }[];
+  index?: number;
+  tag?: string;
+  onClose: () => void;
+}) {
+  const list = items && items.length ? items : src ? [{ src, tag }] : [];
+  const key = list.map((x) => x.src).join("|") + "#" + index;
   useEffect(() => {
-    if (!src) return;
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    addEventListener("keydown", esc);
-    return () => removeEventListener("keydown", esc);
-  }, [src, onClose]);
-
-  if (!src) return null;
-  // 掛到 body：放在有 transform 的卡片裡，position:fixed 會被限制在卡片範圍（變成帶白邊的小框、× 被切掉）。
-  return createPortal(
-    <div class="photo-viewer" role="dialog" aria-modal="true" aria-label={t("照片大圖")} onClick={onClose}>
-      <img src={src} alt={t("待美化的照片")} onClick={(e) => e.stopPropagation()} />
-      <button type="button" class="photo-viewer-close" aria-label={t("關閉")} onClick={onClose}>
-        <Icon name="x" size={18} />
-      </button>
-    </div>,
-    document.body,
-  );
+    if (!list.length) return;
+    window.PMLightbox?.open({
+      items: list.map((x) => ({ ...x, tag: x.tag || tag, download: { href: x.src, name: "photomaster.jpg" } })),
+      index,
+      label: t("照片大圖"),
+      onClose,
+    });
+    return () => window.PMLightbox?.close();
+  }, [key]);
+  return null;
 }
 
 export function Chip(props: {

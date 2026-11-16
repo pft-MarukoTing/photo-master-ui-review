@@ -695,6 +695,35 @@ function fullSrc(s: Source) {
   return s.kind === "file" ? s.url : s.kind === "remote" ? urls.sourceImage(s.job) : urls.demoImage(s.name);
 }
 
+// 看大圖要放的照片：一批多張時整批都帶進去（箭頭、縮圖列，跟美化後的大圖同一個版型），停在目前這張。
+function viewerProps(viewing: boolean, source: Source | null, batch: Source[] | null) {
+  if (!viewing || !source) return { src: null as string | null };
+  if (batch && batch.length > 1) {
+    const here = sourceSrc(source);
+    const at = batch.findIndex((s) => sourceSrc(s) === here);
+    return { items: batch.map((s) => ({ src: fullSrc(s), thumb: thumbSrc(s) })), index: Math.max(0, at) };
+  }
+  return { src: fullSrc(source) };
+}
+
+// 總覽預覽的大圖：整批照片，每張一組（原圖 +，修過就再放修好的那版），停在預覽現在顯示的那一格。
+function overviewViewerProps(source: Source, batch: Source[], live: Record<string, Photo>, showingAfter: boolean) {
+  const items: { src: string; thumb: string; tag: string; group: string }[] = [];
+  let index = 0;
+  const here = sourceSrc(source);
+  for (const s of batch) {
+    const key = sourceSrc(s);
+    items.push({ src: fullSrc(s), thumb: thumbSrc(s), tag: "Before", group: key });
+    if (key === here && !showingAfter) index = items.length - 1;
+    const v = live[key]?.active_version;
+    if (v) {
+      items.push({ src: urls.resultImage(v.job_id, v.run), thumb: urls.resultThumb(v.job_id, v.run), tag: "After", group: key });
+      if (key === here && showingAfter) index = items.length - 1;
+    }
+  }
+  return { items, index };
+}
+
 // 上傳頁按「面板」要帶過去的照片：自己的檔案帶檔案本身，其他的帶網址（pre-handoff.ts）。
 function preHandoffPhoto(s: Source): PreHandoffPhoto {
   if (s.kind === "file") return { name: s.file.name, blob: s.file };
@@ -3651,7 +3680,7 @@ export function App() {
           const first = batch[0];
           if (!first) return undefined;
           const v = batchLive[sourceSrc(first)]?.active_version;
-          return v ? <PreStage url={urls.resultImage(v.job_id, v.run)} tag="After" /> : <PreStage source={first} />;
+          return v ? <PreStage url={urls.resultImage(v.job_id, v.run)} tag="After" source={first} all={batch} live={batchLive} /> : <PreStage source={first} all={batch} live={batchLive} />;
         })()}
         sub=""
         // 總覽也能隨時切到面板模式：這批照片和已經打的需求一起帶過去（pre-handoff.ts），那邊接著分析。
@@ -3960,7 +3989,7 @@ export function App() {
         {samplesEl}
         {readingEl}{confirmEl}
         {askEl}
-        <PhotoViewer src={viewing && source ? fullSrc(source) : null} onClose={closeViewer} />
+        <PhotoViewer {...viewerProps(viewing, source, batch)} onClose={closeViewer} />
       </>
     );
   }
@@ -4148,7 +4177,7 @@ export function App() {
       {samplesEl}
       {readingEl}{confirmEl}
       {askEl}
-      <PhotoViewer src={viewing && source ? fullSrc(source) : null} onClose={closeViewer} />
+      <PhotoViewer {...viewerProps(viewing, source, batch)} onClose={closeViewer} />
     </>
   );
 }
@@ -4158,7 +4187,7 @@ export function App() {
 // in the same place the session's canvas will appear. It mounts only once a
 // photo exists -- an empty frame beside an empty conversation was two empty
 // halves, so until then the conversation holds the page on its own.
-function PreStage({ source, url, tag, onOpen }: { source?: Source | null; url?: string; tag?: string; onOpen?: () => void }) {
+function PreStage({ source, url, tag, onOpen, all, live }: { source?: Source | null; url?: string; tag?: string; onOpen?: () => void; all?: Source[]; live?: Record<string, Photo> }) {
   const [big, setBig] = useState(false);
   const shot = useRef<HTMLDivElement>(null);
   const src = url || (source ? fullSrc(source) : "");
@@ -4184,7 +4213,7 @@ function PreStage({ source, url, tag, onOpen }: { source?: Source | null; url?: 
   if (!src) return <div class="prechat-stage is-empty" />;
   return (
     <div class="prechat-stage">
-      <div class="prechat-shot" ref={shot}>
+      <div class="prechat-shot" ref={shot} onClick={onOpen || (() => setBig(true))}>
         <img src={src} alt={t("待美化的照片")} />
         <span class="prechat-tag">{tag || "Before"}</span>
       </div>
@@ -4192,7 +4221,7 @@ function PreStage({ source, url, tag, onOpen }: { source?: Source | null; url?: 
         <button type="button" class="prechat-tool" aria-label={t("看大圖")} onClick={onOpen || (() => setBig(true))}><Icon name="expand" size={20} /></button>
         <a class="prechat-tool is-download" aria-label={t("下載")} href={src} download><Icon name="down" size={20} /></a>
       </div>
-      {!onOpen && <PhotoViewer src={big ? src : null} onClose={() => setBig(false)} />}
+      {!onOpen && <PhotoViewer {...(big && source && all && all.length > 1 ? overviewViewerProps(source, all, live || {}, !!url) : { src: big ? src : null })} onClose={() => setBig(false)} />}
     </div>
   );
 }
@@ -4513,16 +4542,20 @@ const DRAWER_MEDIA = "(max-width: 900px), (max-width: 1200px) and (orientation: 
 
 // 手機上沒有「我的照片」可以點：跑完的結果直接放在訊息裡，點圖放大。
 function BatchResultStrip({ items }: { items: { thumb: string; full: string }[] }) {
-  const [viewing, setViewing] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
   if (!items.length) return null;
   return (
     <div class="batch-result-strip">
-      {items.map((x) => (
-        <button key={x.full} type="button" class="batch-result-thumb" aria-label={t("看大圖")} onClick={() => setViewing(x.full)}>
+      {items.map((x, i) => (
+        <button key={x.full} type="button" class="batch-result-thumb" aria-label={t("看大圖")} onClick={() => setViewing(i)}>
           <img src={x.thumb} alt="" loading="lazy" />
         </button>
       ))}
-      <PhotoViewer src={viewing} onClose={() => setViewing(null)} />
+      <PhotoViewer
+        items={viewing === null ? undefined : items.map((x) => ({ src: x.full, thumb: x.thumb }))}
+        index={viewing ?? 0}
+        onClose={() => setViewing(null)}
+      />
     </div>
   );
 }

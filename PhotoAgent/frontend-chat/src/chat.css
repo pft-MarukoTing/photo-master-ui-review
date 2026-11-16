@@ -1797,7 +1797,7 @@ div.chat-proposal-row{cursor:default}
 .photo-viewer{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;box-sizing:border-box;
   padding:calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 24px);
   background:rgba(0,0,0,.84);animation:photo-viewer-in .15s ease-out}
-.photo-viewer img{width:100%;height:100%;object-fit:contain;border:0;outline:0;box-shadow:none;background:none;border-radius:0}
+.photo-viewer img{width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;border:0;outline:0;box-shadow:none;background:none;border-radius:var(--corner-radius-20,20px)}  /* 照片本身 20px 圓角（框縮到照片大小，圓角才會落在照片的角上） */
 .photo-viewer-close{position:absolute;top:calc(env(safe-area-inset-top) + 16px);inset-inline-end:16px;display:flex;align-items:center;justify-content:center;
   width:40px;height:40px;padding:0;border:0;border-radius:50%;background:#fff;color:var(--n100,#11181a);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 .photo-viewer-close:hover{filter:brightness(.94)}
@@ -2906,10 +2906,11 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   .chat-panel.has-stage>.chat-panel-stage .prechat-shot img{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;object-fit:contain}
   .chat-panel.has-stage>.chat-panel-stage .prechat-tag{top:calc(var(--img-y,0px) + var(--spacing-12));inset-inline-start:calc(var(--img-x,0px) + var(--spacing-12))}
   /* 預覽和對話之間的間距：40 → 30（減 10px），預覽前的對話頁和結果頁一起 */
-  .chat-panel.has-stage{column-gap:30px !important}
+  .chat-panel.has-stage{column-gap:15px !important}
   #results-canvas-row.showing-analysis{gap:0 30px !important}
 }
 
-/* 對話頁預覽的下載鈕（修圖前那顆）：黑底白色圖示，跟 Editor 一樣。 */
-.prechat-tool.is-download{background:var(--fill-strong) !important;color:var(--text-inverse-strong) !important;box-shadow:none}
-.prechat-tool.is-download:hover{background-image:linear-gradient(var(--fill-inverse-hover),var(--fill-inverse-hover)) !important}
+/* 修圖前的預覽（看原圖）下載鈕維持白底；黑底只在看修圖結果時（見 frontend/index.html 的 #compare-card.showing-generated）。 */
+
+/* 預覽裡的照片點了可以放大（修圖前和修圖後都是）。 */
+.prechat-shot,#results-canvas-row.showing-analysis #compare-card:not(.is-fullscreen) .photo-frame{cursor:zoom-in}

@@ -12846,8 +12846,9 @@
     card.querySelectorAll(".compare-img").forEach((img) => {
       if (img.naturalWidth && img.naturalHeight && img.naturalWidth > (ar ? 0 : -1)) ar = ar || img.naturalWidth / img.naturalHeight;
     });
-    const availW = window.innerWidth - 48;
-    const availH = window.innerHeight - 48;
+    const desktopArrows = card.classList.contains("has-fs-strip") && window.matchMedia("(min-width:1201px),(min-width:901px) and (orientation:landscape)").matches;
+    const availW = window.innerWidth - 48 - (desktopArrows ? 176 : 0);
+    const availH = window.innerHeight - 48 - (card.classList.contains("has-fs-strip") ? 96 : 0);
     if (!ar) { card.style.removeProperty("--fs-w"); card.style.removeProperty("--fs-h"); return; }
     const w = Math.min(availW, availH * ar);
     card.style.setProperty("--fs-w", `${Math.round(w)}px`);
@@ -12863,12 +12864,16 @@
     window.addEventListener("resize", sizeCompareFullscreen);
     if (els.compareFullscreenBackdrop) els.compareFullscreenBackdrop.hidden = false;
     setCompareFullscreenBtnState(true);
+    syncCompareFsStrip();
     refreshCompareOverlaysAfterLayout();
   }
 
   function closeCompareFullscreen() {
     if (!els.compareCard || !isCompareFullscreen()) return;
-    els.compareCard.classList.remove("is-fullscreen");
+    els.compareCard.classList.remove("is-fullscreen", "has-fs-strip");
+    fsStripSeparators = false;
+    document.getElementById("pm-fs-strip")?.remove();
+    els.compareCard.querySelectorAll(".pm-fs-arrow").forEach((n) => n.remove());
     window.removeEventListener("resize", sizeCompareFullscreen);
     els.compareCard.style.removeProperty("--fs-w");
     els.compareCard.style.removeProperty("--fs-h");
@@ -13772,6 +13777,7 @@
 
   function syncPhotoViewer() {
     syncCanvasVersionBtn();
+    syncCompareFsStrip();
     if (photoViewerOpen) renderPhotoViewer();
   }
 
@@ -13825,6 +13831,7 @@
   }
 
   function renderPhotoViewer() {
+    if (window.PMLightbox) return; // 共用大圖（photo-lightbox.js）自己畫，這支舊版只當備援
     if (!els.photoViewer) return;
     const runs = versionStripRuns;
     const run = photoViewerCurrentRun();
@@ -13899,10 +13906,132 @@
     if (e.key === "Escape") closePhotoViewer();
   }
 
+  // 共用大圖：原圖 + 每一版排成一排縮圖，點縮圖 / 箭頭 = 選那一版（走跟美化紀錄條同一條路）。
+  function currentPhotoItems() {
+    const originalSrc = els.originalImg?.getAttribute("src") || "";
+    const runs = versionStripRuns || [];
+    const hasResult = photoViewerHasResult();
+    const originThumb = els.versionStripTrack?.querySelector(".version-origin-tile img")?.getAttribute("src")
+      || originalImgThumbUrl || originalSrc;
+    const items = [];
+    if (originalSrc) items.push({ src: originalSrc, thumb: originThumb, tag: tr("原圖"), label: tr("原圖"), group: "p", kind: "origin" });
+    if (runs.length) {
+      runs.forEach((r, idx) => {
+        if (!isSelectableRun(r)) return;
+        const src = (currentRunIndex === idx && els.generatedImg?.getAttribute("src")) || resultImageUrl(r.jobId, { run: r.sourceRun });
+        items.push({
+          src,
+          thumb: resultThumbnailUrl(r.jobId, { run: r.sourceRun }),
+          tag: r.versionTotal ? tr("第 {versionNumber} 版", { versionNumber: r.versionNumber }) : tr("美化結果"),
+          label: r.versionTotal ? tr("第 {n} 版", { n: r.versionNumber }) : tr("第 {n} 張", { n: idx + 1 }),
+          group: "p", kind: "run", idx,
+          download: { href: src, name: `photomaster_v${r.versionNumber || idx + 1}.jpg` },
+        });
+      });
+    } else if (hasResult) {
+      const src = els.generatedImg.getAttribute("src");
+      items.push({ src, thumb: src, tag: tr("美化結果"), label: tr("美化結果"), group: "p", kind: "run", idx: -1, download: { href: src, name: "photomaster.jpg" } });
+    }
+    const showOriginal = photoViewerShowingOriginal();
+    let at = items.findIndex((x) => (showOriginal ? x.kind === "origin" : x.kind === "run" && (x.idx === versionStripCurrentIdx || x.idx === -1)));
+    return { items, at: at < 0 ? 0 : at };
+  }
+
+  // 一批多張：每張照片一組（原圖 + 各版），組跟組之間縮圖列畫「｜」；目前這張展開各版，其他張只放原圖。
+  function photoViewerItems() {
+    const cur = currentPhotoItems();
+    const recs = (batchRecords || []).filter((r) => r.previewUrl || r === currentBatchRecord);
+    if (recs.length < 2 || !currentBatchRecord || !recs.includes(currentBatchRecord)) return cur;
+    const items = [];
+    let at = 0;
+    recs.forEach((rec) => {
+      if (rec === currentBatchRecord) {
+        at = items.length + cur.at;
+        cur.items.forEach((x) => items.push({ ...x, group: rec.localId }));
+      } else {
+        items.push({
+          src: rec.previewUrl, thumb: rec.thumbUrl || rec.previewUrl, tag: tr("原圖"),
+          label: rec.file?.name || tr("原圖"), group: rec.localId, kind: "record", rec,
+        });
+      }
+    });
+    return { items, at };
+  }
+
+  function pickPhotoViewerItem(it) {
+    if (it.kind === "record") { selectBatchRecord(it.rec); return; }
+    if (it.kind === "origin") {
+      if (!pickOriginAsBase() && !photoViewerShowingOriginal()) pickVersionStripOrigin();
+    } else if (it.idx >= 0) pickPhotoViewerRun(it.idx);
+  }
+
+  function openSharedPhotoViewer() {
+    const { items, at } = photoViewerItems();
+    if (!items.length) return;
+    let last = at;
+    photoViewerOpen = true;
+    window.PMLightbox.open({
+      items,
+      index: at,
+      label: tr("照片大圖"),
+      onClose: () => { photoViewerOpen = false; },
+      onIndex: (i) => {
+        if (i === last) return;
+        last = i;
+        pickPhotoViewerItem(items[i]);
+      },
+    });
+  }
+
+  // 全螢幕（Enlarge）底下的縮圖列：跟共用大圖同一個元件，一排「原圖 + 各版」，點了就切到那一版。
+  let fsStripSeparators = false;
+  function syncCompareFsStrip() {
+    const card = els.compareCard;
+    if (!card) return;
+    let box = document.getElementById("pm-fs-strip");
+    const on = isCompareFullscreen() && window.PMLightbox?.buildStrip;
+    const data = on ? photoViewerItems() : null;
+    if (!data || data.items.length < 2) {
+      if (box) box.remove();
+      card.querySelectorAll(".pm-fs-arrow").forEach((n) => n.remove());
+      if (card.classList.contains("has-fs-strip")) { card.classList.remove("has-fs-strip"); sizeCompareFullscreen(); }
+      return;
+    }
+    const key = data.items.map((x) => x.thumb).join("|") + "#" + data.at;
+    if (box && box.dataset.key === key) return;
+    if (box) box.remove();
+    card.querySelectorAll(".pm-fs-arrow").forEach((n) => n.remove());
+    box = document.createElement("div");
+    box.id = "pm-fs-strip";
+    box.dataset.key = key;
+    // 分隔線一旦出現（有張照片有了各版）就留到關掉全螢幕，切到沒有版本的那張也不消失。
+    if (data.items.some((x, k) => k > 0 && x.group === data.items[k - 1].group)) fsStripSeparators = true;
+    const built = window.PMLightbox.buildStrip(data.items, (k) => pickPhotoViewerItem(data.items[k]), { separators: fsStripSeparators });
+    box.appendChild(built.strip);
+    card.appendChild(box);
+    // 前後箭頭：貼在照片左右邊，循環切換（跟共用大圖一樣）
+    [["prev", -1, "m15 18-6-6 6-6", tr("上一張")], ["next", 1, "m9 18 6-6-6-6", tr("下一張")]].forEach(([name, d, path, label]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `pmlb-arrow pmlb-${name} pm-fs-arrow`;
+      b.setAttribute("aria-label", label);
+      b.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const n = data.items.length;
+        pickPhotoViewerItem(data.items[(data.at + d + n) % n]);
+      });
+      card.appendChild(b);
+    });
+    if (!card.classList.contains("has-fs-strip")) { card.classList.add("has-fs-strip"); sizeCompareFullscreen(); }
+    window.PMLightbox.markCurrent(built, data.at);
+  }
+
   function openPhotoViewer() {
     if (!els.photoViewer || photoViewerOpen) return;
     if (!els.originalImg?.getAttribute("src") && !photoViewerHasResult()) return;
     closeDownloadMenu();
+    if (window.PMLightbox) { openSharedPhotoViewer(); return; }
     photoViewerOpen = true;
     photoViewerHolding = false;
     els.photoViewer.hidden = false;
@@ -13913,6 +14042,7 @@
   }
 
   function closePhotoViewer() {
+    if (window.PMLightbox?.isOpen()) { window.PMLightbox.close(); photoViewerOpen = false; return; }
     if (!photoViewerOpen) return;
     photoViewerOpen = false;
     photoViewerHolding = false;
@@ -16149,6 +16279,11 @@
   // compare 切 Before/After 的地方很多（按鈕、renderResult、挑原圖），直接看 class 變化。
   if (els.compareCard) {
     new MutationObserver(syncPhotoViewer).observe(els.compareCard, { attributes: true, attributeFilter: ["class"] });
+  }
+  // 換張照片時比例不同：圖載入後重算全螢幕卡片的大小（不然會沿用上一張的比例，把照片裁掉）
+  [els.originalImg, els.generatedImg].forEach((img) => img && img.addEventListener("load", () => { if (isCompareFullscreen()) sizeCompareFullscreen(); }));
+  if (els.originalImg) {
+    new MutationObserver(syncPhotoViewer).observe(els.originalImg, { attributes: true, attributeFilter: ["src"] });
   }
   // 手機上點照片本身也打開大圖（照片上的按鈕、分析框不算）。
   if (els.photoFrameWrap) {

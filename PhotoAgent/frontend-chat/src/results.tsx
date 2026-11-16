@@ -514,7 +514,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                 </div>
               </div>
             </div>
-            <div class="photo-frame" onClick={() => onViewer && matchMedia(SPLIT_LAYOUT).matches && onViewer()}>
+            <div class="photo-frame" onClick={() => onViewer && onViewer()}>
               <img
                 id="original-img"
                 class="compare-img compare-img-original"
