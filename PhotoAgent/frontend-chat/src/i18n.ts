@@ -92,7 +92,8 @@ async function loadCatalog(): Promise<Record<string, string> | undefined> {
 const catalog = await loadCatalog();
 // A language whose fallback is "source" shows what it lacks in Chinese, not English.
 const english: Record<string, string> = LANGS.find((l) => l.code === lang)?.fallback === "source" ? {} : EN;
-if (catalog) document.title = document.title.replace("對話", catalog["對話"] || english["對話"] || "對話");
+// 分享連結的預覽讀的是 HTML 裡寫死的標題，所以那裡是英文（Photo Master · Chat）；頁面載入後再依語言換成「對話」的說法。
+document.title = document.title.replace("Chat", catalog ? (catalog["對話"] || english["對話"] || "Chat") : "對話");
 if (lang === "zh-Hans") {
   const font = document.createElement("link");
   font.rel = "stylesheet";
