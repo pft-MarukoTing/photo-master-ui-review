@@ -2529,6 +2529,14 @@ html[data-theme="dark"] body{--n84:var(--text-strong);--n74:var(--text-weak);--n
 .chat-panel-head{align-items:center}
 .chat-panel-head .chat-panel-sub{margin-inline-start:auto}
 .chat-panel-head .mode-switch{margin-inline-start:var(--spacing-16)}
+/* 標頭的「新對話」：靠右，貼在對話｜面板切換左邊；次要按鈕（白底細框） */
+.chat-panel-new{margin-inline-start:auto;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 14px 0 10px;border-radius:15px;
+  border:1px solid var(--stroke-strong,rgba(17,24,26,.2));background:var(--background-raised,#fff);color:var(--text-strong,#11181a);font-size:13px;font-weight:500;line-height:1;white-space:nowrap;cursor:pointer}
+.chat-panel-new svg{width:14px;height:14px}
+.chat-panel-new:hover{background-image:linear-gradient(var(--fill-hover,rgba(17,24,26,.06)),var(--fill-hover,rgba(17,24,26,.06)))}
+.chat-panel-new:focus-visible{outline:2px solid var(--stroke-focus,#1a8fd6);outline-offset:2px}
+.chat-panel-head:has(.chat-panel-new) .mode-switch{margin-inline-start:0}
+@media (max-width:900px),(max-width:1200px) and (orientation:portrait){.chat-panel-new{display:none}}
 /* 深色模式：軌道和選中那段原本都對到同一階灰（--card / --n14），看不出選了哪個；選中那段改用浮層色、軌道用 fill-weak。 */
 html[data-theme="dark"] .mode-switch{background:var(--fill-weak)}
 html[data-theme="dark"] .mode-switch-opt.is-active{background:var(--background-overlay);color:var(--text-brand)}
@@ -2869,7 +2877,17 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   .prechat-tools{position:absolute;top:var(--spacing-8);inset-inline-end:var(--spacing-8);display:flex;gap:var(--spacing-8)}
   .prechat-tool{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border:0;border-radius:50%;padding:0;background:var(--n09);color:var(--text-strong);
     box-shadow:0 1px 4px rgba(0,0,0,.16);cursor:pointer;text-decoration:none}
+  .prechat-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:2;display:flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border-radius:50%;
+    background:var(--fill-strong,rgba(9,22,26,.95));color:#fff;border:1px solid var(--stroke-strong,rgba(255,255,255,.24));cursor:pointer}
+  /* 桌機：滑過預覽才出現左右箭頭（手機、直拿平板的大圖是另一個元件，箭頭一直都在，還能左右滑） */
+  .prechat-arrow{opacity:0;pointer-events:none;transition:opacity .16s ease}
+  .prechat-stage:hover .prechat-arrow,.prechat-stage:focus-within .prechat-arrow{opacity:1;pointer-events:auto}
+  .prechat-arrow.is-prev{inset-inline-start:12px}.prechat-arrow.is-next{inset-inline-end:12px}
+  .prechat-arrow:hover{background-image:linear-gradient(var(--fill-inverse-hover),var(--fill-inverse-hover))}
   .prechat-tool:hover{background-image:linear-gradient(var(--fill-hover),var(--fill-hover))}
+  /* 標籤是 After（顯示的是修好的成果）時，下載鈕黑底白字；Before 維持白底 */
+  .prechat-tool.is-download.is-after{background:var(--fill-strong);color:var(--text-inverse-strong,#fff)}
+  .prechat-tool.is-download.is-after:hover{background-image:linear-gradient(var(--fill-inverse-hover),var(--fill-inverse-hover))}
 }
 
 /* 結果預覽跟編輯器一樣：灰底（fill-weak）墊在照片後面、四個角都是 12px 圓角、下面沒有線；

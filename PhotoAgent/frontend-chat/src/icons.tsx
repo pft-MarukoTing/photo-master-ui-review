@@ -226,6 +226,7 @@ const ICONS: Record<string, { sw: number; body: JSX.Element; mirror?: boolean }>
   },
   more: { sw: 3.2, body: <path d="M5 12h.01M12 12h.01M19 12h.01" /> },
   next: { sw: 2, mirror: true, body: <path d="M9 6l6 6-6 6" /> },
+  prev: { sw: 2, mirror: true, body: <path d="M15 6l-6 6 6 6" /> },
   globe: {
     sw: 1.8,
     body: (

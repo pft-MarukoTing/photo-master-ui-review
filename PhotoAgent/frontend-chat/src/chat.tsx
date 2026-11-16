@@ -238,6 +238,8 @@ export function ChatPanel(props: {
   // header's buttons. On the phone the head is put away and the photo carries
   // the same switch instead (ResultsCanvas).
   panelMode?: PanelMode;
+  // 標頭右邊「新對話」鈕（對話｜面板切換的左邊）；沒給就不顯示。
+  onNewChat?: () => void;
   // Above the conversation and outside its scroll: stays in view while the
   // timeline follows its newest message (the batch overview's photo grid).
   top?: ComponentChildren;
@@ -386,6 +388,12 @@ export function ChatPanel(props: {
         <Icon name="messages-circle" size={14} />
         <span class="chat-panel-title">{t("對話")}</span>
         {/* 標題旁的副標（New Chat／日期·張數／第 N 張…）沒有實際用處，不顯示。 */}
+        {props.onNewChat && (
+          <button type="button" class="chat-panel-new" onClick={props.onNewChat}>
+            <Icon name="plus" size={16} />
+            <span>{t("開新對話")}</span>
+          </button>
+        )}
         <ModeSwitch mode={props.panelMode} />
       </div>
       {props.photo && (

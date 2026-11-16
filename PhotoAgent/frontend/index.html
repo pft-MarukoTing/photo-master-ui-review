@@ -5515,6 +5515,14 @@
       position: fixed; inset: 0; margin: auto; padding: 0; border: 0; border-radius: 0; background: transparent !important; box-shadow: none;
       display: block; overflow: visible; width: var(--fs-w, calc(100vw - 48px)); height: var(--fs-h, calc(100vh - 48px));
     }
+    /* My Photos 標頭只留「＋」：全部下載、全部清除（任何狀態）都不出現，跟 Chat 一致 */
+    #batch-sidebar .batch-sidebar-actions :is(#batch-download-all-btn, [data-danger]),
+    #pm-empty .pm-empty-side-head .batch-sidebar-actions button:not(#pm-empty-side-add) { display: none !important; }
+    /* 全螢幕的底：跟共用大圖同一個（黑 80% + 模糊），手機模糊更重，縮圖列疊在文字上才不會互相干擾 */
+    #compare-fullscreen-backdrop { background: rgba(0,0,0,.8); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+    @media (max-width: 900px), (max-width: 1200px) and (orientation: portrait) {
+      #compare-fullscreen-backdrop { -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+    }
     /* 全螢幕底下的縮圖列（原圖 + 各版，共用 photo-lightbox.js 的縮圖）：卡片上移，縮圖列放在照片正下方 */
     /* 照片比例不同時卡片大小會變，但縮圖列和箭頭固定：卡片在「上面 24px 到縮圖列」這塊區域裡垂直置中 */
     :is(.pm-panel, body) #compare-card.is-fullscreen.has-fs-strip { inset: calc(24px + (100vh - 144px - var(--fs-h, 100vh)) / 2) 0 auto 0; inset: calc(24px + (100dvh - 144px - var(--fs-h, 100dvh)) / 2) 0 auto 0; }

@@ -43,12 +43,15 @@
     ".pmlb-sep{flex:none;align-self:center;width:1px;height:40px;margin:0 4px;background:rgba(255,255,255,.4);border-radius:1px}",
     ".pmlb-thumb{flex:none;position:relative;display:block;height:60px;min-width:32px;padding:0;border:0;border-radius:12px;overflow:hidden;opacity:.5;cursor:pointer;background:rgba(255,255,255,.08)}",
     ".pmlb-thumb img{display:block;height:100%;width:auto;max-width:none}",
+    ".pmlb-thumb{transition:height .24s cubic-bezier(.3,.7,.2,1),opacity .24s ease,box-shadow .24s ease}",
+    ".pmlb-thumb img{transition:height .24s cubic-bezier(.3,.7,.2,1)}",
+    ".pmlb-img{transition:opacity .2s ease}.pmlb-img.is-swapping{opacity:0}",
     ".pmlb-thumb:hover{opacity:.8}",
     ".pmlb-thumb.is-current{height:80px;opacity:1;box-shadow:inset 0 0 0 3px rgba(255,255,255,.6)}",
     ".pmlb-thumb.is-current img{height:80px;width:auto}",
     ".pmlb-thumb.is-current::after{content:'';position:absolute;inset:0;border-radius:12px;box-shadow:inset 0 0 0 3px rgba(255,255,255,.6)}",
     "@media (max-width:900px),(max-width:1200px) and (orientation:portrait){",
-    "  .pmlb{padding:0;gap:0;justify-content:center}",
+    "  .pmlb{padding:0;gap:0;justify-content:center;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}",
     "  .pmlb-stage{flex:0 1 auto;width:100%;max-height:calc(100% - 112px)}",
     "  .pmlb-frame{width:100%}",
     "  .pmlb-arrow{width:36px;height:36px;border-width:1px}.pmlb-arrow svg{width:20px;height:20px}",
@@ -56,7 +59,7 @@
     "  .pmlb-strip{justify-content:flex-start;width:100%;box-sizing:border-box;padding:16px;height:112px}",
     "  .pmlb-strip.is-short{justify-content:center}",
     "}",
-    "@media (prefers-reduced-motion:reduce){.pmlb{animation:none}}"
+    "@media (prefers-reduced-motion:reduce){.pmlb{animation:none}.pmlb-thumb,.pmlb-thumb img,.pmlb-img{transition:none}}"
   ].join("\n");
 
   var ICON = {
@@ -129,7 +132,7 @@
       b.setAttribute("aria-selected", on ? "true" : "false");
     });
     var cur = built.thumbs[index];
-    if (cur) built.strip.scrollLeft = Math.max(0, cur.offsetLeft - (built.strip.clientWidth - cur.offsetWidth) / 2);
+    if (cur) built.strip.scrollTo({ left: Math.max(0, cur.offsetLeft - (built.strip.clientWidth - cur.offsetWidth) / 2), behavior: "smooth" });
     built.strip.classList.toggle("is-short", built.strip.scrollWidth <= built.strip.clientWidth);
   }
 
@@ -149,6 +152,14 @@
     var n = s.items.length;
     s.index = ((i % n) + n) % n;
     var it = s.items[s.index];
+    if (s.img.getAttribute("src") !== it.src && s.img.getAttribute("src")) {
+      var img = s.img;
+      img.classList.add("is-swapping");
+      var done = function () { img.classList.remove("is-swapping"); img.removeEventListener("load", done); img.removeEventListener("error", done); };
+      img.addEventListener("load", done);
+      img.addEventListener("error", done);
+      setTimeout(done, 600);
+    }
     s.img.src = it.src;
     s.img.alt = it.alt || "";
     s.tag.textContent = it.tag || "";
@@ -167,7 +178,7 @@
         if (on && b.scrollIntoView) {
           var strip = s.strip;
           var left = b.offsetLeft - (strip.clientWidth - b.offsetWidth) / 2;
-          strip.scrollLeft = Math.max(0, left);
+          strip.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
         }
       });
     }
@@ -228,6 +239,22 @@
       s.strip = built.strip;
       s.thumbs = built.thumbs;
       root.appendChild(built.strip);
+    }
+
+    // 手機、平板：在照片上左右滑切換上一張／下一張（箭頭一直都在，滑動是另一種做法）
+    if (multi) {
+      var sx = null, sy = 0, st = 0;
+      stage.addEventListener("touchstart", function (e) {
+        if (e.touches.length !== 1) { sx = null; return; }
+        sx = e.touches[0].clientX; sy = e.touches[0].clientY; st = Date.now();
+      }, { passive: true });
+      stage.addEventListener("touchend", function (e) {
+        if (sx === null) return;
+        var t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+        sx = null;
+        if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - st > 700) return;
+        show(s.index + (dx < 0 ? 1 : -1));
+      }, { passive: true });
     }
 
     // 點照片、按鈕、箭頭、縮圖以外的地方關閉

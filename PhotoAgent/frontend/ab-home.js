@@ -129,6 +129,9 @@
     "  html.ab-home-b .home-start-btn .abg-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;margin-inline-start:8px;padding:0 6px;box-sizing:border-box;",
     "    border-radius:999px;background:var(--fill-overlay-weak,rgba(0,0,0,.45));color:var(--text-inverse-strong,#fff);font-size:13px;font-weight:700;line-height:1}",
     "}",
+    /* A 版也一樣：選的張數寫在「Start a Chat」後面，新選的那張縮圖飛過去。 */
+    ".home-start-btn .abg-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;margin-inline-start:8px;padding:0 6px;box-sizing:border-box;",
+    "  border-radius:999px;background:var(--fill-overlay-weak,rgba(0,0,0,.45));color:var(--text-inverse-strong,#fff);font-size:13px;font-weight:700;line-height:1}",
     /* B 版的主視覺圖是寬圖（1860×846），人物在右邊約 68% 的位置；手機、平板的框比較窄，預設置中裁切會把人物切在邊上。
        object-position 用「讓人物落在框正中間」算出來的值：手機框接近 1.2:1 → 89%，平板框約 0.8:1 → 78%。 */
     "@media (max-width:600px){html.ab-home-b .home-compare-img{object-position:89% 30%}}",
@@ -458,11 +461,10 @@
   // B 版：選了照片就在「Start a Chat」後面顯示張數；新選的那張縮圖飛進那顆鍵（落下時張數跳一下）。
   var prevPicked = {};
   function syncPickCount() {
-    var b = document.documentElement.classList.contains("ab-home-b");
     var btn = document.querySelector(".home-start-btn");
     if (!btn) return;
     var badge = btn.querySelector(".abg-count");
-    var picked = b ? Array.prototype.slice.call(document.querySelectorAll(".upload-gallery-col .is-selected")) : [];
+    var picked = Array.prototype.slice.call(document.querySelectorAll(".upload-gallery-col .is-selected"));
     if (!picked.length) {
       if (badge) badge.remove();
       prevPicked = {};

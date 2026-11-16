@@ -3353,6 +3353,7 @@ export function App() {
   const preChatPanel = (
     <ChatPanel
       key={batch ? preFull : undefined}
+      onNewChat={phase === "chat" && batch ? askNewChat : () => newChat()}
       class={`home-chat${source ? "" : " is-solo"}`}
       sub={batchIndex >= 0 ? t("第 {v1} 張", { v1: batchIndex + 1 }) : t("新對話")}
       photo={source ? { src: thumbSrc(source), onOpen: () => setViewing(true) } : undefined}
@@ -3675,13 +3676,8 @@ export function App() {
     const overviewPanel = !source && (
       <ChatPanel
         class="home-chat is-overview"
-        stage={(() => {
-          // 只要有照片就出現預覽，預設放第一張（修過了就放它的結果）。
-          const first = batch[0];
-          if (!first) return undefined;
-          const v = batchLive[sourceSrc(first)]?.active_version;
-          return v ? <PreStage url={urls.resultImage(v.job_id, v.run)} tag="After" source={first} all={batch} live={batchLive} /> : <PreStage source={first} all={batch} live={batchLive} />;
-        })()}
+        onNewChat={askNewChat}
+        stage={batch[0] ? <OverviewStage batch={batch} live={batchLive} /> : undefined}
         sub=""
         // 總覽也能隨時切到面板模式：這批照片和已經打的需求一起帶過去（pre-handoff.ts），那邊接著分析。
         panelMode={{
@@ -3806,9 +3802,9 @@ export function App() {
                 <p class="chat-text">{(parts.length ? t("剛剛送出的都處理完成了，目前 {list}。", { list: parts.join(t("、")) }) : t("剛剛送出的都處理完成了。"))
                   + hintFor(ot).replace(/。$/, "；")
                   + (ot.failed ? t("沒成功的在{where}會標「失敗」，選取那張可以看原因。", { where }) : (phone ? t("點圖可以放大看。") : t("想看哪張的結果，從{where}選取那張。", { where })))}</p>
-                <BatchResultStrip items={batch.flatMap((b) => {
+                <BatchResultStrip batch={batch} live={batchLive} items={batch.flatMap((b) => {
                   const v = batchLive[sourceSrc(b)]?.active_version;
-                  return v ? [{ thumb: urls.resultThumb(v.job_id, v.run), full: urls.resultImage(v.job_id, v.run) }] : [];
+                  return v ? [{ thumb: urls.resultThumb(v.job_id, v.run), full: urls.resultImage(v.job_id, v.run), source: b }] : [];
                 })} />
                 {chipRow(turnHints.current[ot.id]?.chips, latest)}
               </AssistantMsg>
@@ -4033,6 +4029,7 @@ export function App() {
         <main>
           <SessionView
             key={photo.photo_id}
+            onNewChat={askNewChat}
             sidebar={
               batch && batchHere ? (
                 <BatchPreSidebar
@@ -4187,7 +4184,21 @@ export function App() {
 // in the same place the session's canvas will appear. It mounts only once a
 // photo exists -- an empty frame beside an empty conversation was two empty
 // halves, so until then the conversation holds the page on its own.
-function PreStage({ source, url, tag, onOpen, all, live }: { source?: Source | null; url?: string; tag?: string; onOpen?: () => void; all?: Source[]; live?: Record<string, Photo> }) {
+// 總覽預覽：多張時左右箭頭換預覽裡看的那張（修過的顯示成果 After，沒修過的顯示 Before）。
+function OverviewStage({ batch, live }: { batch: Source[]; live: Record<string, Photo> }) {
+  const [i, setI] = useState(0);
+  const n = batch.length;
+  if (!n) return null;
+  const idx = Math.min(i, n - 1);
+  const first = batch[idx];
+  const v = live[sourceSrc(first)]?.active_version;
+  const step = n > 1 ? (d: number) => setI((idx + d + n) % n) : undefined;
+  return v
+    ? <PreStage url={urls.resultImage(v.job_id, v.run)} tag="After" source={first} all={batch} live={live} onStep={step} />
+    : <PreStage source={first} all={batch} live={live} onStep={step} />;
+}
+
+function PreStage({ source, url, tag, onOpen, all, live, onStep }: { source?: Source | null; url?: string; tag?: string; onOpen?: () => void; all?: Source[]; live?: Record<string, Photo>; onStep?: (d: number) => void }) {
   const [big, setBig] = useState(false);
   const shot = useRef<HTMLDivElement>(null);
   const src = url || (source ? fullSrc(source) : "");
@@ -4219,8 +4230,14 @@ function PreStage({ source, url, tag, onOpen, all, live }: { source?: Source | n
       </div>
       <div class="prechat-tools">
         <button type="button" class="prechat-tool" aria-label={t("看大圖")} onClick={onOpen || (() => setBig(true))}><Icon name="expand" size={20} /></button>
-        <a class="prechat-tool is-download" aria-label={t("下載")} href={src} download><Icon name="down" size={20} /></a>
+        <a class={`prechat-tool is-download${tag === "After" ? " is-after" : ""}`} aria-label={t("下載")} href={src} download><Icon name="down" size={20} /></a>
       </div>
+      {onStep && (
+        <>
+          <button type="button" class="prechat-arrow is-prev" aria-label={t("上一張")} onClick={() => onStep(-1)}><Icon name="prev" size={20} /></button>
+          <button type="button" class="prechat-arrow is-next" aria-label={t("下一張")} onClick={() => onStep(1)}><Icon name="next" size={20} /></button>
+        </>
+      )}
       {!onOpen && <PhotoViewer {...(big && source && all && all.length > 1 ? overviewViewerProps(source, all, live || {}, !!url) : { src: big ? src : null })} onClose={() => setBig(false)} />}
     </div>
   );
@@ -4398,12 +4415,7 @@ export function BatchPreSidebar(props: {
           <div class="batch-sidebar-actions">
           {/* 還沒有照片（空狀態）時不放「＋」：空狀態裡已經有「上傳照片」。 */}
           {props.onAdd && sources.length > 0 && <BatchAddButton full={full} onAdd={props.onAdd} onSamples={props.onSamples} onBefore={() => setOpen(false)} />}
-          <BatchDownloadButton plan={sourcesDownload(sources, runs, live, props.failed)} busy={downloading} onDownload={download} />
-          {props.onClear && (
-            <button type="button" class="batch-download-all-btn" title={t("全部清除")} aria-label={t("全部清除")} data-danger onClick={props.onClear}>
-              <Icon name="trash" size={14} />
-            </button>
-          )}
+          {/* 「全部下載」「全部清除」不放在這欄標頭：只留「＋」（Chat 和 Editor 一致）。 */}
           </div>
         </div>
         {/* 篩的是底下的列表，就貼在列表上面、不跟著捲；只有一種狀態時沒得篩，不出現。 */}
@@ -4541,19 +4553,19 @@ const GRID_GAP = 8;
 const DRAWER_MEDIA = "(max-width: 900px), (max-width: 1200px) and (orientation: portrait)";
 
 // 手機上沒有「我的照片」可以點：跑完的結果直接放在訊息裡，點圖放大。
-function BatchResultStrip({ items }: { items: { thumb: string; full: string }[] }) {
-  const [viewing, setViewing] = useState<number | null>(null);
+function BatchResultStrip({ items, batch, live }: { items: { thumb: string; full: string; source: Source }[]; batch: Source[]; live: Record<string, Photo> }) {
+  // 點哪張就放大哪張的 After；大圖是整批（每張「Before + After」一組），跟左邊預覽點開的是同一個畫面。
+  const [viewing, setViewing] = useState<Source | null>(null);
   if (!items.length) return null;
   return (
     <div class="batch-result-strip">
-      {items.map((x, i) => (
-        <button key={x.full} type="button" class="batch-result-thumb" aria-label={t("看大圖")} onClick={() => setViewing(i)}>
+      {items.map((x) => (
+        <button key={x.full} type="button" class="batch-result-thumb" aria-label={t("看大圖")} onClick={() => setViewing(x.source)}>
           <img src={x.thumb} alt="" loading="lazy" />
         </button>
       ))}
       <PhotoViewer
-        items={viewing === null ? undefined : items.map((x) => ({ src: x.full, thumb: x.thumb }))}
-        index={viewing ?? 0}
+        {...(viewing ? overviewViewerProps(viewing, batch, live, true) : { src: null as string | null })}
         onClose={() => setViewing(null)}
       />
     </div>
@@ -4644,12 +4656,6 @@ function BatchOverviewGrid(props: {
   const tools = (
     <div class="batch-sidebar-actions batch-grid-tools">
       {props.onAdd && <BatchAddButton full={items.length >= MAX_BATCH} onAdd={props.onAdd} onSamples={props.onSamples} onBefore={() => setOpen(false)} end />}
-      <BatchDownloadButton plan={sourcesDownload(props.sources, props.runs, props.live, props.failed)} busy={downloading} onDownload={download} />
-      {props.onClear && (
-        <button type="button" class="batch-download-all-btn" title={t("全部清除")} aria-label={t("全部清除")} data-danger onClick={props.onClear}>
-          <Icon name="trash" size={14} />
-        </button>
-      )}
     </div>
   );
   const filters = (
@@ -5074,7 +5080,6 @@ export function BatchSidebar(props: {
         </button>
         <div class="batch-sidebar-header">
           <h2 class="batch-sidebar-title">{t("我的照片")}</h2>
-          <BatchDownloadButton plan={downloadOf(photos.filter((p) => photoState(p).key === "done"), photos.length)} busy={downloading} onDownload={download} />
         </div>
         {todo.length && photos.length > 1 ? (
           <div class="batch-sidebar-all chat-actions is-yco">
@@ -5720,6 +5725,7 @@ function revertPlanPatch(start: Dict, plan: Plan, keys: string[]): Plan {
 }
 
 export function SessionView(props: {
+  onNewChat?: () => void;
   caps: Capabilities;
   debugUi: boolean;
   session: Session;
@@ -7699,6 +7705,7 @@ export function SessionView(props: {
                 {panelMode && <ModeSwitch mode={panelMode} class="sheet-mode-switch" />}
                 <ChatPanel
                   sub={sub}
+                  onNewChat={props.onNewChat}
                   panelMode={panelMode}
                   toBottom={toBottom}
                   toStart={lastDone}

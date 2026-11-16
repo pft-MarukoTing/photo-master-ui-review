@@ -734,9 +734,8 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   );
 }
 
-// 手機和直拿的平板沒有左邊那張比較卡，點照片列或對話裡的成品就開這個：整頁深色、
-// 只有照片。按住「按住看原圖」換成原圖、放開回來；底下一排是美化紀錄，點了就切到
-// 那一版（跟桌機點紀錄一樣，會記成目前這版）。看原圖時下載收起來，跟比較卡同一個道理。
+// 手機和直拿的平板點照片列或對話裡的成品開的大圖：跟 Editor 同一個共用大圖（frontend/photo-lightbox.js），
+// 一排縮圖是「原圖 + 各版」，點縮圖或左右箭頭就切到那一版（跟桌機點美化紀錄一樣，會記成目前這版）。
 export function VersionViewer({ photo, versions, current, open, onClose, onSelect, onOrigin }: {
   photo: Photo;
   versions: Version[];
@@ -746,128 +745,51 @@ export function VersionViewer({ photo, versions, current, open, onClose, onSelec
   onSelect: (v: Version) => void;
   onOrigin?: () => void;
 }) {
-  const [originPicked, setOriginPicked] = useState(false);
-  const [holding, setHolding] = useState(false);
-  const [download, downloadNotice] = useDownload();
-  const trackRef = useRef<HTMLDivElement>(null);
-
+  const latest = useRef({ onClose, onSelect, onOrigin });
+  latest.current = { onClose, onSelect, onOrigin };
   useEffect(() => {
     if (!open) return;
-    setOriginPicked(!current);
-    setHolding(false);
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    addEventListener("keydown", esc);
-    return () => removeEventListener("keydown", esc);
+    const items = [
+      {
+        src: urls.sourceImage(photo.analyze_job_id),
+        thumb: urls.sourceThumb(photo.analyze_job_id),
+        tag: t("原圖"),
+        label: t("原圖"),
+        group: "p",
+        version: null as Version | null,
+      },
+      ...versions.map((v) => {
+        const job = versionJob(v);
+        return {
+          src: urls.resultImage(job),
+          thumb: urls.resultThumb(job),
+          tag: t("第 {ordinal} 版", { ordinal: v.ordinal }),
+          label: t("第 {ordinal} 版", { ordinal: v.ordinal }),
+          group: "p",
+          version: v as Version | null,
+          download: { href: urls.resultImage(job), name: `photomaster_${photo.photo_id}_v${v.ordinal}.jpg` },
+        };
+      }),
+    ];
+    let at = current ? items.findIndex((x) => x.version?.version_id === current.version_id) : 0;
+    if (at < 0) at = 0;
+    let last = at;
+    window.PMLightbox?.open({
+      items,
+      index: at,
+      label: t("照片大圖"),
+      onClose: () => latest.current.onClose(),
+      onIndex: (i: number) => {
+        if (i === last) return;
+        last = i;
+        const it = items[i];
+        if (!it.version) latest.current.onOrigin?.();
+        else latest.current.onSelect(it.version);
+      },
+    });
+    return () => window.PMLightbox?.close();
   }, [open]);
-
-  // 目前這一格捲進畫面裡：版本一多，最新的那格會在右邊看不到的地方。
-  useLayoutEffect(() => {
-    if (!open) return;
-    const track = trackRef.current;
-    const on = track?.querySelector<HTMLElement>(".version-viewer-tile.is-current");
-    if (!track || !on) return;
-    const left = on.offsetLeft - (track.clientWidth - on.offsetWidth) / 2;
-    track.scrollLeft = Math.max(0, left);
-  }, [open, current?.version_id, originPicked]);
-
-  if (!open) return null;
-  const source = urls.sourceImage(photo.analyze_job_id);
-  const job = current && !originPicked ? versionJob(current) : null;
-  const title = job ? t("第 {ordinal} 版", { ordinal: current!.ordinal }) : t("原圖");
-  const release = () => setHolding(false);
-
-  return (
-    <div class="version-viewer" role="dialog" aria-modal="true" aria-label={t("{title}大圖", { title })}>
-      <div class="version-viewer-head">
-        <span class="version-viewer-title">
-          {holding ? t("原圖") : title}
-          {versions.length > 0 && <small>{t("共 {n} 版", { n: versions.length })}</small>}
-        </span>
-        <button type="button" class="version-viewer-btn" aria-label={t("關閉")} onClick={onClose}>
-          <Icon name="x" size={18} />
-        </button>
-      </div>
-      <div class="version-viewer-stage" onClick={(e) => e.target === e.currentTarget && onClose()}>
-        <img src={source} alt={t("原始照片")} hidden={!!job && !holding} />
-        {job && <img src={urls.resultImage(job)} alt={t("{title}美化結果", { title })} hidden={holding} />}
-      </div>
-      <div class="version-viewer-foot">
-        {job && (
-          <div class="version-viewer-actions">
-            <button
-              type="button"
-              class={`version-viewer-hold${holding ? " is-on" : ""}`}
-              aria-pressed={holding}
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                setHolding(true);
-              }}
-              onPointerUp={release}
-              onPointerCancel={release}
-              onLostPointerCapture={release}
-              onKeyDown={(e) => (e.key === " " || e.key === "Enter") && setHolding(true)}
-              onKeyUp={release}
-              onBlur={release}
-              onContextMenu={(e) => e.preventDefault()}
-            >
-              {t("按住看原圖")}
-            </button>
-            <a
-              class="version-viewer-btn"
-              href={urls.resultImage(job)}
-              download={`photomaster_${photo.photo_id}_v${current!.ordinal}.jpg`}
-              onClick={(e) => {
-                e.preventDefault();
-                download(job, `photomaster_${photo.photo_id}_v${current!.ordinal}`);
-              }}
-              aria-label={t("下載{title}", { title })}
-              title={t("下載")}
-            >
-              <Icon name="down" size={18} />
-            </a>
-          </div>
-        )}
-        {versions.length > 0 && (
-          <div class="version-viewer-track" ref={trackRef} role="tablist" aria-label={t("這張照片的美化紀錄")}>
-            <button
-              type="button"
-              class={`version-viewer-tile${!job ? " is-current" : ""}`}
-              role="tab"
-              aria-selected={!job}
-              onClick={() => {
-                setOriginPicked(true);
-                onOrigin?.();
-              }}
-            >
-              <img src={urls.sourceThumb(photo.analyze_job_id)} alt="" />
-              <span>{t("原圖")}</span>
-            </button>
-            {versions.map((v) => {
-              const on = !!job && v.version_id === current?.version_id;
-              return (
-                <button
-                  type="button"
-                  class={`version-viewer-tile${on ? " is-current" : ""}`}
-                  role="tab"
-                  aria-selected={on}
-                  onClick={() => {
-                    setOriginPicked(false);
-                    if (v.version_id !== current?.version_id) onSelect(v);
-                  }}
-                >
-                  <img src={urls.resultThumb(versionJob(v))} alt="" />
-                  <span>{t("第 {n} 版", { n: v.ordinal })}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      {downloadNotice}
-    </div>
-  );
+  return null;
 }
 
 // 手機和直拿的平板：照片在上、對話在下，中間這條把手拖動調整比例。放開會吸到最近的
