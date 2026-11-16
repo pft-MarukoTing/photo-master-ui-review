@@ -1531,8 +1531,11 @@ export function Composer(props: {
   // 按鈕的提示字，預設依 onSample 是「換一張照片」或「上傳照片」。
   attachTitle?: string;
   disabled?: boolean;
-  // Without onSend the field is a placeholder (before a photo is picked).
+  // Without onSend nothing can be sent yet (before a photo is picked). The field is a real,
+  // typeable input only with typeAhead: what is typed waits in the field (and in onText's draft)
+  // for the photo; Send stays off until onSend arrives.
   onSend?: (text: string, subjectIndices: number[]) => Promise<boolean>;
+  typeAhead?: boolean;
   people?: (FaceRef & { subjectIndex: number })[];
   pointed?: number[];
   onPoint?: (subjectIndices: number[]) => void;
@@ -1604,7 +1607,8 @@ export function Composer(props: {
   }, [props.clearKey]);
 
   // 有沒有 onSend 決定量的是 <input> 還是那個假框，換了要重新掛。
-  const fits = useFits([field, still], !!onSend);
+  const live = !!onSend || !!props.typeAhead;
+  const fits = useFits([field, still], live);
 
   const sendable = !!text.trim() || (!!props.sendPicked && who.length > 0);
 
@@ -1685,7 +1689,7 @@ export function Composer(props: {
             />
           </div>
         )}
-        {onSend ? (
+        {live ? (
           <label class={`chat-composer-field is-live${hinting ? " is-hint" : ""}`}>
             {who.length > 0 && (
               <span class="chat-composer-who">

@@ -60,6 +60,7 @@ window.PHOTOAGENT_CATALOGS.en = {
   "幫我分析": "Analyze for Me",
   "尚未上傳照片": "No photo uploaded yet",
   "還沒有照片": "No photos yet",
+  "上傳照片或挑一張範例，選好的照片會放在這裡。": "Upload a photo or pick a sample; the photos you choose appear here.",
   "上傳的照片會放在這裡。": "Photos you upload appear here.",
   "點選上傳照片": "Click to upload a photo",
   "也可以把照片拖到這裡": "Or drag photos here",

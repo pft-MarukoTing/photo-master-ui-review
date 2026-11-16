@@ -3357,6 +3357,8 @@ export function App() {
             // 多張頁上這顆是「再加幾張」，一樣問要上傳還是挑範例照片。
             onSample={source ? showSamples : undefined}
             onText={(t) => (preDraft.current = t)}
+            // 還沒選照片也能先打字（字留在框裡，選好照片後再送出）；送出鈕要等有照片。
+            typeAhead={!source && !batch}
             disabled={busy || !!preAsk || preHeld || batchActive || loadingPhotos}
             // Live once a photo is picked: what is typed here is the
             // 個人化需求 the session starts with.
@@ -3382,7 +3384,9 @@ export function App() {
             // unless the pick is the answer, and then it says so.
             // 由長到短，Composer 挑輸入框放得下的那句。
             placeholder={
-              (preDisplayPeople.length ? prePointed.length : 0) && preWhoAsk
+              !source && !batch
+                ? [t("想怎麼美化？可以先打字，選好照片再送出"), t("想怎麼美化？先打字也可以")]
+                : (preDisplayPeople.length ? prePointed.length : 0) && preWhoAsk
                 ? [t("選好了就直接送出，也可以再打字補充"), t("選好就送出，或再打字補充")]
                 : !source || (preDisplayPeople.length ? prePointed.length : 0) || preScanning
                 ? undefined
@@ -4395,7 +4399,12 @@ export function BatchPreSidebar(props: {
           {!sources.length && !props.loading && (
             <div class="gallery-empty batch-sidebar-empty">
               <span class="gallery-empty-icon" aria-hidden="true">
-                <Icon name="photos" size={20} />
+                {/* Lucide「upload」（ISC，lucide.dev/icons/upload），跟最近照片的空狀態同一顆。 */}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3v12" />
+                  <path d="m17 8-5-5-5 5" />
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                </svg>
               </span>
               <p class="gallery-empty-title">{t("還沒有照片")}</p>
               <p class="gallery-empty-sub">{t("上傳照片或挑一張範例，選好的照片會放在這裡。")}</p>

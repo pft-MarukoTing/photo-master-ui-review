@@ -16022,6 +16022,8 @@
       tmp.click();
     };
     if (btn) btn.addEventListener("click", pick);
+    // 左邊「我的照片」空狀態的「＋」和「上傳照片」：跟中間的上傳鈕同一個選檔流程。
+    ['pm-empty-side-add', 'pm-empty-side-upload'].forEach((id) => { const b = document.getElementById(id); if (b) b.addEventListener("click", pick); });
     ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("is-over"); }));
     ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("is-over"); }));
     drop.addEventListener("drop", (e) => { if (e.dataTransfer && e.dataTransfer.files.length) startFromEmpty(e.dataTransfer.files); });

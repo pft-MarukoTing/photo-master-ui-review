@@ -5900,13 +5900,29 @@
       }
       .pm-panel #pm-empty .pm-empty-side-head {
         flex: none; display: flex; align-items: center; height: var(--pm-shell-head-h); box-sizing: border-box;
-        padding: 0 var(--spacing-16); background: var(--n04);
+        padding: 0 var(--spacing-16); background: var(--n04); border-bottom: 1px solid var(--border);
       }
       .pm-panel #pm-empty .pm-empty-side-title { margin: 0; font-size: 18px; line-height: 1.3; font-weight: 700; color: var(--text-strong); }
+      .pm-panel #pm-empty .pm-empty-side-head .batch-sidebar-actions { display: flex; gap: 4px; margin-inline-start: auto; flex: none; }
+      .pm-panel #pm-empty .pm-empty-side-head .batch-download-all-btn { width: 26px; height: 26px; }
+      .pm-panel #pm-empty .pm-empty-side-head .batch-download-all-btn:disabled { opacity: .45; cursor: not-allowed; }
+      /* 空狀態內容：照對話模式 .gallery-empty 的尺寸和 token。 */
       .pm-panel #pm-empty .pm-empty-side-body {
-        flex: 1; display: flex; align-items: center; justify-content: center; padding: var(--spacing-16);
-        font-size: var(--font-size-small); font-weight: var(--font-weight-strong); color: var(--text-strong);
+        flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--spacing-8);
+        padding: var(--spacing-32) var(--spacing-16); text-align: center;
       }
+      .pm-panel #pm-empty .pm-gallery-empty-icon {
+        display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; margin-bottom: var(--spacing-8);
+        border-radius: var(--corner-radius-12); background: var(--fill-brand-weak); color: var(--icon-brand);
+      }
+      .pm-panel #pm-empty .pm-gallery-empty-title { margin: 0; font-size: var(--font-size-heading-5); line-height: var(--line-height-heading-5); font-weight: var(--font-weight-strong); color: var(--text-strong); }
+      .pm-panel #pm-empty .pm-gallery-empty-sub { margin: 0; font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); color: var(--text-weak); }
+      .pm-panel #pm-empty .pm-gallery-empty-btn {
+        margin-top: var(--spacing-8); height: 36px; padding: 0 var(--spacing-16); border: 1px solid var(--stroke-strong); border-radius: var(--corner-radius-32);
+        background: transparent; color: var(--text-strong); font: inherit; font-size: var(--font-size-small); font-weight: 600; cursor: pointer;
+      }
+      .pm-panel #pm-empty .pm-gallery-empty-btn:hover { background: var(--fill-hover); }
+      .pm-panel #pm-empty .pm-gallery-empty-btn:focus-visible { outline: 2px solid var(--stroke-brand-strong); outline-offset: 2px; }
       .pm-panel #pm-empty .pm-empty-card {
         flex: 1 1 0%; min-width: 0; display: flex; gap: var(--pm-shell-gap); box-sizing: border-box;
         height: calc(100vh - var(--header-h) - var(--step-indicator-h) - var(--pm-shell-bottom));
@@ -5924,7 +5940,7 @@
       .pm-panel #pm-empty .pm-empty-tool-card.is-grow { flex: 1; }
       .pm-panel #pm-empty .pm-empty-tool-head {
         flex: none; display: flex; align-items: center; height: var(--pm-shell-head-h); box-sizing: border-box;
-        padding: 0 var(--spacing-16); background: var(--n04); font-size: var(--font-size-small); font-weight: var(--font-weight-strong); color: var(--text-strong);
+        padding: 0 var(--spacing-16); background: var(--n04); border-bottom: 1px solid var(--stroke-weak); font-size: var(--font-size-small); font-weight: var(--font-weight-strong); color: var(--text-strong);
       }
       .pm-panel #pm-empty .pm-empty-tool-text { margin: 0; padding: var(--spacing-12) var(--spacing-16); font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); color: var(--text-weak); }
     }
@@ -6757,8 +6773,27 @@
     <div class="container pm-empty-wrap">
       <!-- 空狀態的版面跟有照片時一樣：左 20「我的照片」，右 80 一張卡（50 上傳區＋30 工具設定）。 -->
       <aside class="pm-empty-side" aria-label="我的照片">
-        <div class="pm-empty-side-head"><h2 class="pm-empty-side-title">我的照片</h2></div>
-        <div class="pm-empty-side-body">還沒有照片</div>
+        <div class="pm-empty-side-head">
+          <h2 class="pm-empty-side-title">我的照片</h2>
+          <!-- 跟有照片時（#batch-sidebar）、對話模式那欄同一組：新增、全部下載（還沒有照片，下載先停用）。 -->
+          <div class="batch-sidebar-actions">
+            <button type="button" class="batch-download-all-btn" id="pm-empty-side-add" title="新增照片" aria-label="新增照片">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <button type="button" class="batch-download-all-btn" title="全部下載" aria-label="全部下載" disabled>
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <!-- 空狀態：跟對話模式「我的照片」那欄同一個樣子（圖示、標題、說明、上傳鈕）。 -->
+        <div class="pm-empty-side-body">
+          <span class="pm-gallery-empty-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
+          </span>
+          <p class="pm-gallery-empty-title">還沒有照片</p>
+          <p class="pm-gallery-empty-sub">上傳照片或挑一張範例，選好的照片會放在這裡。</p>
+          <button type="button" class="pm-gallery-empty-btn" id="pm-empty-side-upload">上傳照片</button>
+        </div>
       </aside>
       <div class="pm-empty-card">
       <div class="pm-empty-drop" id="pm-empty-drop">

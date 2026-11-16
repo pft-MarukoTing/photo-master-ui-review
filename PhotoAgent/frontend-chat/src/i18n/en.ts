@@ -363,6 +363,8 @@ export const EN: Record<string, string> = {
   "想調整什麼？點頭像可以指定要改誰": "What would you like to change? Tap a face to choose who",
   "想調整什麼？點頭像指定人": "What would you like to change? Tap a face to choose",
   "想調整什麼？": "What would you like to change?",
+  "想怎麼美化？可以先打字，選好照片再送出": "How would you like it retouched? You can type now and send after choosing a photo",
+  "想怎麼美化？先打字也可以": "How would you like it retouched? Type first if you like",
   "選好照片後就可以用文字告訴我想怎麼調整": "Once you've chosen a photo, tell me how you'd like it adjusted",
   "選好照片就可以打字告訴我": "Choose a photo, then tell me what you'd like",
   "送出": "Send",
