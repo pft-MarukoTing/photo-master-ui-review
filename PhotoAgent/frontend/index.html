@@ -5331,6 +5331,10 @@
     .pm-panel .ap-photo-summary .ap-photo-secondary-sections > * { border-inline-start: 0; border-inline-end: 0; }
     /* 兩欄時（容器 ≥560px）「待改善」左邊那條直線：原本的規則帶一長串 :has() 選擇器，優先權很高，這裡要用 !important 才蓋得掉。 */
     .pm-panel .ap-photo-secondary-sections > .ap-photo-issues { border-inline-start: 0 !important; }
+    /* 單欄時（容器 <560px，手機）「待改善」和上面綠色亮點框之間留 16px；兩欄並排時不用（兩欄頂端要對齊）。 */
+    @container options-card-inline (max-width: 559.98px) {
+      .pm-panel .ap-photo-secondary-sections > .ap-photo-highlights:not([hidden]) + .ap-photo-issues { margin-top: var(--spacing-16); }
+    }
     /* 「待改善」右上角的「3 items」拿掉。 */
     .pm-panel #ap-photo-summary-badge { display: none !important; }
     /* Style 分頁：還沒選的卡片只讓照片一直換，不要下面的小圓點和「Choose one」；選了才在照片下面寫選的名字。 */
@@ -5965,6 +5969,17 @@
     }
     /* 畫布（照片卡）不加陰影。全螢幕本來就沒有，這裡只管一般狀態。 */
     .pm-panel #compare-card:not(.is-fullscreen) { box-shadow: none !important; }
+    /* 手機（≤600px）編輯器也要能切回對話：流程列（Upload→Done）在手機放不下，但「對話｜編輯器」切換要留著
+       （上面 @media 把整個 #step-indicator-slot 藏掉，header 的「對話」按鈕在這列存在時也是藏的，
+       結果手機編輯器沒有任何入口回對話）。只留切換，置中在 header 下面，跟對話模式那顆同一個位置。 */
+    @media (max-width: 600px) {
+      .pm-panel #step-indicator-slot:not([hidden]) {
+        display: flex !important; justify-content: center; align-items: center;
+        height: auto; padding: var(--spacing-12) var(--spacing-16) 0; gap: 0;
+      }
+      .pm-panel #step-indicator-slot > .ap-step-indicator { display: none; }
+      .pm-panel #step-indicator-slot > .mode-switch { order: 0; align-self: center; margin: 0; }
+    }
   </style>
 </head>
 <!-- pm-panel：面板模式專用的樣式掛勾。index.html 的 <style> 也會被帶進對話模式的 build，新加的面板樣式都掛在 .pm-panel 底下，才不會影響對話模式。 -->

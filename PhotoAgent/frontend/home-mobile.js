@@ -28,7 +28,9 @@
     "  .hm-start-btn:active{transform:translateY(1px)}",
     "  .hm-start-btn:focus-visible{outline:2px solid var(--stroke-brand-strong,#1a8fd6);outline-offset:3px}",
     "  .hm-start-btn svg{flex:none}",
-    "  .hm-start-count{font-weight:600;opacity:.95}",
+    /* 張數：跟桌機（ab-home.js 的 .abg-count）一樣，一顆圓形徽章放在字後面；底色用 fill-overlay-weak（比 fill-overlay 淺）。 */
+    "  .hm-start-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;border-radius:999px;",
+    "    background:var(--fill-overlay-weak,rgba(0,0,0,.45));color:#fff;font:700 13px/1 Roboto,var(--cjk-sans,'Noto Sans TC'),system-ui,sans-serif}",
     "  .hm-start-hint{margin:0;text-align:center;font:400 13px/1.4 Roboto,var(--cjk-sans,'Noto Sans TC'),system-ui,sans-serif;color:var(--text-weak,#5b6a6e)}",
     "  .hm-start-btn:disabled{background:var(--fill-disabled,#d5dbdd);color:var(--text-disabled,#fff);box-shadow:none;cursor:default}",
     /* 首頁的「全部」範例照片面板：底部同樣只留一顆「開始對話（N 張）」。
@@ -48,8 +50,10 @@
     try { var v = localStorage.getItem("photoagent.lang"); if (v) return /^en/i.test(v); } catch (e) {}
     return /^en/i.test(document.documentElement.lang || "");
   }
-  var ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="M4 12a8 8 0 1 1 3.2 6.4L4 19.5l1.1-3.2A7.9 7.9 0 0 1 4 12z"/></svg>';
+  // 跟桌機「開始對話」同一顆圖（Lucide messages-circle，兩個對話框），不是原本單一個圓框。
+  var ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M19.95 10.05a7 7 0 0 1 1.412 7.872 1 1 0 0 0-.058.787l.675 2.089a1 1 0 0 1-1.236 1.168l-2.155-.631a1 1 0 0 0-.745.06 7 7 0 0 1-7.793-1.445"/>' +
+    '<path d="M2.696 12.708a1 1 0 0 0-.058-.785 7 7 0 1 1 3.518 3.473 1 1 0 0 0-.744-.061l-2.155.63a1 1 0 0 1-1.236-1.167z"/></svg>';
 
   function origStart() { return document.querySelector(".home-start .home-start-btn"); }
   function origUse() { return document.querySelector(".gallery-confirm-btn"); }
@@ -104,7 +108,7 @@
     var label = base + "|" + n + "|" + EN;
     if (label === lastLabel && box.querySelector(".hm-start-btn").childNodes.length) return;
     lastLabel = label;
-    var countText = n > 0 ? (EN ? " (" + n + ")" : "（" + n + " 張）") : "";
+    var countText = n > 0 ? String(n) : "";
     box.querySelector(".hm-start-btn").innerHTML = ICON + "<span>" + base + "</span>" +
       (countText ? '<span class="hm-start-count">' + countText + "</span>" : "");
     var meta = document.querySelector(".home-start .chat-meta");
@@ -133,7 +137,7 @@
     var n = ok.disabled || !m ? 0 : +m[1];
     var EN = isEn();
     var base = EN ? "Start a Chat" : "開始對話";
-    var countText = n > 0 ? (EN ? " (" + n + ")" : "（" + n + " 張）") : "";
+    var countText = n > 0 ? String(n) : "";
     var html = ICON + "<span>" + base + "</span>" + (countText ? '<span class="hm-start-count">' + countText + "</span>" : "");
     // 用自己記的 key 比，不比 innerHTML（瀏覽器會重排 SVG 的寫法，比了永遠不同 → 無限觸發 MutationObserver）。
     var key = base + "|" + n;

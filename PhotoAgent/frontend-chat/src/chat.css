@@ -2451,12 +2451,12 @@ html[data-theme="dark"] .home-compare-knob{background:var(--background-raised);c
 .chat-action-btn{display:flex;width:max-content;min-width:0;height:32px;min-height:32px;padding:0 var(--spacing-12,12px);justify-content:center;align-items:center;gap:var(--spacing-4,4px);
   border-radius:var(--corner-radius-32,32px);background:var(--fill-strong);font-size:14px;line-height:20px}
 .chat-action-btn .buttonIcon,.chat-action-btn .buttonIcon svg{width:16px;height:16px}
-/* 按鈕寬度跟著內容，不固定、也不被壓縮：一排放不下就整顆換到下一行，不要把按鈕壓窄、文字擠成兩行。
-   真的比整行還寬（極窄螢幕）才用 max-width:100% 加省略號。 */
-.chat-actions-main{min-width:0}
+/* 按鈕寬度跟著內容，不固定、也不被壓縮、不用省略號：一排放不下就整顆換到下一行（先換設定鈕，再換按鈕本身）。
+   main（一鍵美化那幾顆）不能縮：它縮了，裡面的按鈕就跟著被擠窄、字被截掉，而不是讓設定鈕先換行。 */
+.chat-actions-main{flex:0 0 auto;max-width:100%;min-width:0}
 .chat-action-choice{flex:0 0 auto;max-width:100%}
-.chat-action-btn{flex:0 0 auto;max-width:100%;white-space:nowrap}
-.chat-action-btn .label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-action-btn{flex:0 0 auto;white-space:nowrap}
+.chat-action-btn .label{white-space:nowrap}
 .chat-action-btn.is-static{cursor:default;pointer-events:none}
 .chat-action-choice:not(.is-picked) .chat-action-btn.is-static{color:var(--text-weaker);border-color:var(--stroke-weak)}
 
