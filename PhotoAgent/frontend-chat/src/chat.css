@@ -2536,7 +2536,6 @@ html[data-theme="dark"] body{--n84:var(--text-strong);--n74:var(--text-weak);--n
 .chat-panel-new:hover{background-image:linear-gradient(var(--fill-hover,rgba(17,24,26,.06)),var(--fill-hover,rgba(17,24,26,.06)))}
 .chat-panel-new:focus-visible{outline:2px solid var(--stroke-focus,#1a8fd6);outline-offset:2px}
 .chat-panel-head:has(.chat-panel-new) .mode-switch{margin-inline-start:0}
-@media (max-width:900px),(max-width:1200px) and (orientation:portrait){.chat-panel-new{display:none}}
 /* 深色模式：軌道和選中那段原本都對到同一階灰（--card / --n14），看不出選了哪個；選中那段改用浮層色、軌道用 fill-weak。 */
 html[data-theme="dark"] .mode-switch{background:var(--fill-weak)}
 html[data-theme="dark"] .mode-switch-opt.is-active{background:var(--background-overlay);color:var(--text-brand)}
@@ -2753,7 +2752,9 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   #upload-section .upload-content-row:has(>.batch-drawer-trigger) .chat-panel>:is(.chat-panel-head,.chat-panel-photo){padding-inline-start:var(--spacing-16)}
   /* 對話面板的標題列：「對話」圖示、標題、副標（新對話…）都不要，只留 對話｜編輯器 切換。 */
   .chat-panel-head>svg,.chat-panel-head .chat-panel-title,.chat-panel-head .chat-panel-sub{display:none !important}
-  .chat-panel-head .mode-switch{margin-inline:auto}
+  /* 手機：New Chat 在左邊（原本切換的位置），Chat｜Editor 切換移到最右邊 */
+  .chat-panel-head .chat-panel-new{margin-inline-start:0}
+  .chat-panel-head .mode-switch,.chat-panel-head:has(.chat-panel-new) .mode-switch{margin-inline:auto 0}
 }
 
 /* 手機：批次結果直接放在訊息裡（BatchResultStrip），點圖放大 */

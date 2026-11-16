@@ -29,7 +29,7 @@
     ".pmlb-img{display:block;width:min(calc(100vw - 48px),calc((100vh - 48px) * var(--ar,1)),calc((100dvh - 48px) * var(--ar,1)));height:auto;aspect-ratio:var(--ar,1);max-width:100%;object-fit:contain;border-radius:var(--corner-radius-20,20px);background:none;border:0;box-shadow:none}",
     ".pmlb-tag{position:absolute;left:16px;top:16px;padding:4px 10px;border-radius:999px;background:var(--fill-overlay,rgba(0,0,0,.6));color:#fff;font:500 13px/1.2 Roboto,var(--cjk-sans,'Noto Sans TC'),system-ui,sans-serif;pointer-events:none}",
     ".pmlb-btn{position:absolute;display:flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border-radius:50%;cursor:pointer;text-decoration:none;color:#fff;border:0}",
-    ".pmlb-close{top:16px;right:16px;background:#fff;color:var(--text-strong,#11181a);box-shadow:inset 0 0 0 1px rgba(17,24,26,.2)}",
+    ".pmlb-close{position:fixed;top:24px;right:40px;z-index:3;background:#fff;color:var(--text-strong,#11181a);box-shadow:inset 0 0 0 1px rgba(17,24,26,.2)}",
     ".pmlb-act{right:16px;bottom:16px;background:var(--fill-overlay,rgba(0,0,0,.6));box-shadow:0 2px 8px rgba(0,0,0,.24)}",
     ".pmlb-btn:hover{filter:brightness(.94)}.pmlb-act:hover{filter:brightness(1.25)}",
     ".pmlb-btn:focus-visible,.pmlb-arrow:focus-visible,.pmlb-thumb:focus-visible{outline:2px solid #fff;outline-offset:2px}",
@@ -51,12 +51,13 @@
     ".pmlb-thumb.is-current img{height:80px;width:auto}",
     ".pmlb-thumb.is-current::after{content:'';position:absolute;inset:0;border-radius:12px;box-shadow:inset 0 0 0 3px rgba(255,255,255,.6)}",
     "@media (max-width:900px),(max-width:1200px) and (orientation:portrait){",
-    "  .pmlb{padding:0;gap:0;justify-content:center;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}",
-    "  .pmlb-stage{flex:0 1 auto;width:100%;max-height:calc(100% - 112px)}",
-    "  .pmlb-frame{width:100%}",
+    "  .pmlb{-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}",
+    /* 手機的版型跟 Editor 全螢幕一樣：照片四邊留 24px、依比例撐滿，縮圖列固定在底部；標籤和下載在照片裡，X 在右上角照片外，箭頭在照片左右邊裡面 */
+    "  .pmlb--multi .pmlb-img{width:min(calc(100vw - 48px),calc((100vh - 144px) * var(--ar,1)),calc((100dvh - 144px) * var(--ar,1)))}",
+    "  .pmlb-img{width:min(calc(100vw - 48px),calc((100vh - 48px) * var(--ar,1)),calc((100dvh - 48px) * var(--ar,1)))}",
     "  .pmlb-arrow{width:36px;height:36px;border-width:1px}.pmlb-arrow svg{width:20px;height:20px}",
-    "  .pmlb-prev{left:16px}.pmlb-next{right:16px}",
-    "  .pmlb-strip{justify-content:flex-start;width:100%;box-sizing:border-box;padding:16px;height:112px}",
+    "  .pmlb-prev{left:16px}.pmlb-next{right:16px}.pmlb-close{top:16px;right:16px}",
+    "  .pmlb-strip{justify-content:flex-start;width:100%}",
     "  .pmlb-strip.is-short{justify-content:center}",
     "}",
     "@media (prefers-reduced-motion:reduce){.pmlb{animation:none}.pmlb-thumb,.pmlb-thumb img,.pmlb-img{transition:none}}"
@@ -136,6 +137,33 @@
     built.strip.classList.toggle("is-short", built.strip.scrollWidth <= built.strip.clientWidth);
   }
 
+  // 左右滑（手指）或左右拖（滑鼠）：往左 onStep(+1)＝下一張，往右 onStep(-1)＝上一張。
+  // 用 pointer 事件，手指、滑鼠、觸控筆同一套；水平移動夠多、而且比直向明顯才算，上下捲動不會誤觸；
+  // 拖完放開那一下的 click 會被吃掉，不會被當成點背景。
+  function attachSwipe(el, onStep, opts) {
+    var ignore = (opts && opts.ignore) || "button, a, input, label";
+    el.style.touchAction = "pan-y";
+    var down = null, moved = false;
+    el.addEventListener("pointerdown", function (e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      if (e.target.closest && e.target.closest(ignore)) { down = null; return; }
+      down = { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId };
+      moved = false;
+    });
+    el.addEventListener("pointermove", function (e) {
+      if (down && Math.abs(e.clientX - down.x) > 8) moved = true;
+    });
+    el.addEventListener("pointerup", function (e) {
+      if (!down || e.pointerId !== down.id) return;
+      var dx = e.clientX - down.x, dy = e.clientY - down.y, dt = Date.now() - down.t;
+      down = null;
+      if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.5 || dt > 900) { moved = false; return; }
+      onStep(dx < 0 ? 1 : -1);
+    });
+    el.addEventListener("pointercancel", function () { down = null; });
+    el.addEventListener("click", function (e) { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+  }
+
   function close(silent) {
     if (!state) return;
     var s = state;
@@ -213,7 +241,7 @@
     dl.title = L("下載", "Download");
     // 圖放在 frame 裡，按鈕和標籤貼著 frame 的四角（frame 會縮到照片大小）
     frame.appendChild(tag);
-    frame.appendChild(closeBtn);
+    root.appendChild(closeBtn);
     frame.appendChild(dl);
 
     var multi = items.length > 1;
@@ -241,20 +269,10 @@
       root.appendChild(built.strip);
     }
 
-    // 手機、平板：在照片上左右滑切換上一張／下一張（箭頭一直都在，滑動是另一種做法）
+    // 在照片上左右滑（手指）或左右拖（滑鼠）切換上一張／下一張；箭頭一直都在，這是另一種做法。
     if (multi) {
-      var sx = null, sy = 0, st = 0;
-      stage.addEventListener("touchstart", function (e) {
-        if (e.touches.length !== 1) { sx = null; return; }
-        sx = e.touches[0].clientX; sy = e.touches[0].clientY; st = Date.now();
-      }, { passive: true });
-      stage.addEventListener("touchend", function (e) {
-        if (sx === null) return;
-        var t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
-        sx = null;
-        if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - st > 700) return;
-        show(s.index + (dx < 0 ? 1 : -1));
-      }, { passive: true });
+      img.draggable = false;
+      attachSwipe(stage, function (d) { show(s.index + d); }, { ignore: ".pmlb-btn, .pmlb-arrow" });
     }
 
     // 點照片、按鈕、箭頭、縮圖以外的地方關閉
@@ -283,5 +301,5 @@
     closeBtn.focus({ preventScroll: true });
   }
 
-  window.PMLightbox = { open: open, buildStrip: buildStrip, markCurrent: markCurrent, close: function () { close(); }, isOpen: function () { return !!state; } };
+  window.PMLightbox = { open: open, buildStrip: buildStrip, attachSwipe: attachSwipe, markCurrent: markCurrent, close: function () { close(); }, isOpen: function () { return !!state; } };
 })();

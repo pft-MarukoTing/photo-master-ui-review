@@ -15967,6 +15967,9 @@
   // /sessions/from-case).
   // Both ways there -- the header's #chat-ui-btn and the 對話 half of the
   // step row's 對話｜面板 switch -- behave the same.
+  // 手機標頭的「開新對話」：開一個全新的對話，不帶目前這張的 case。
+  const pmNewChat = document.getElementById("pm-new-chat");
+  if (pmNewChat) pmNewChat.setAttribute("href", `chat/${location.search}#new`);
   for (const chatUiLink of [
     document.getElementById("chat-ui-btn"),
     document.getElementById("chat-mode-switch-link"),
@@ -16279,6 +16282,16 @@
   // compare 切 Before/After 的地方很多（按鈕、renderResult、挑原圖），直接看 class 變化。
   if (els.compareCard) {
     new MutationObserver(syncPhotoViewer).observe(els.compareCard, { attributes: true, attributeFilter: ["class"] });
+  }
+  // 全螢幕裡左右拖（桌機滑鼠）／滑（手機）換上一張、下一張，跟共用大圖一樣。
+  if (els.photoFrameWrap && window.PMLightbox?.attachSwipe) {
+    window.PMLightbox.attachSwipe(els.photoFrameWrap, (d) => {
+      if (!isCompareFullscreen()) return;
+      const data = photoViewerItems();
+      const n = data.items.length;
+      if (n < 2) return;
+      pickPhotoViewerItem(data.items[(data.at + d + n) % n]);
+    }, { ignore: "button, a, input, label, .analysis-box" });
   }
   // 換張照片時比例不同：圖載入後重算全螢幕卡片的大小（不然會沿用上一張的比例，把照片裁掉）
   [els.originalImg, els.generatedImg].forEach((img) => img && img.addEventListener("load", () => { if (isCompareFullscreen()) sizeCompareFullscreen(); }));

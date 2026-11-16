@@ -4221,6 +4221,17 @@ function PreStage({ source, url, tag, onOpen, all, live, onStep }: { source?: So
     sync();
     return () => { img.removeEventListener("load", sync); ro.disconnect(); };
   }, [src]);
+  // 預覽上左右拖／滑換上一張、下一張（有 onStep 才有）
+  const stepRef = useRef(onStep);
+  stepRef.current = onStep;
+  const swipeOn = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const box = shot.current;
+    // 同一個元素只掛一次（src 換了元素還是同一個，重複掛會一次切兩張）
+    if (!box || swipeOn.current === box || !window.PMLightbox?.attachSwipe) return;
+    swipeOn.current = box;
+    window.PMLightbox.attachSwipe(box, (d: number) => stepRef.current?.(d), { ignore: ".prechat-tool, .prechat-arrow" });
+  }, [src]);
   if (!src) return <div class="prechat-stage is-empty" />;
   return (
     <div class="prechat-stage">

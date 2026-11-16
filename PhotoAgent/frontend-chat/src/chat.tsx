@@ -558,7 +558,7 @@ export function BatchUploadBubble({ srcs, text, fullSrcs }: { srcs: string[]; te
 // Chat 和 Editor 共用同一份。單張給 src；多張給 items + index（箭頭、縮圖列、←／→ 都由它處理）。
 declare global {
   interface Window {
-    PMLightbox?: { open(o: unknown): void; close(): void; isOpen(): boolean };
+    PMLightbox?: { open(o: unknown): void; close(): void; isOpen(): boolean; attachSwipe(el: HTMLElement, onStep: (d: number) => void, opts?: { ignore?: string }): void };
   }
 }
 export function PhotoViewer({ src, items, index = 0, tag, onClose }: {

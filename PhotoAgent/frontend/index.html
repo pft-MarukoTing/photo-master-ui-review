@@ -474,6 +474,7 @@
     /* 「對話｜面板」跟對話模式右上角那組一模一樣（styles.css 的 .mode-switch 膠囊：灰軌道、選中那段白底＋陰影），
        位置也對齊：對話模式那組在對話卡片標頭裡，離畫面右緣多 16px、往下 5px，這裡補同樣的距離，切換模式時不會跳。 */
     .step-indicator-slot > .mode-switch { margin: 2px 16px 0 0; }
+    .step-indicator-slot > .pm-new-chat { display: none; }
     /* 這列在的時候開關就是回對話的入口，header 不用再放一顆一樣的。 */
     body:has(#step-indicator-slot:not([hidden])) #chat-ui-btn { display: none; }
     .ap-step {
@@ -5518,6 +5519,11 @@
     /* My Photos 標頭只留「＋」：全部下載、全部清除（任何狀態）都不出現，跟 Chat 一致 */
     #batch-sidebar .batch-sidebar-actions :is(#batch-download-all-btn, [data-danger]),
     #pm-empty .pm-empty-side-head .batch-sidebar-actions button:not(#pm-empty-side-add) { display: none !important; }
+    /* 關閉（×）固定在視窗右上角、照片外面（桌機離右邊 40px 跟箭頭對齊，手機 16px），跟共用大圖同一個位置，照片大小變了它也不動 */
+    .pm-panel #compare-card.is-fullscreen .pm-fullscreen-exit { position: fixed; top: 24px; right: 40px; width: 36px; height: 36px; z-index: 50; }
+    @media (max-width: 900px), (max-width: 1200px) and (orientation: portrait) {
+      .pm-panel #compare-card.is-fullscreen .pm-fullscreen-exit { top: 16px; right: 16px; }
+    }
     /* 全螢幕的底：跟共用大圖同一個（黑 80% + 模糊），手機模糊更重，縮圖列疊在文字上才不會互相干擾 */
     #compare-fullscreen-backdrop { background: rgba(0,0,0,.8); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
     @media (max-width: 900px), (max-width: 1200px) and (orientation: portrait) {
@@ -6046,21 +6052,26 @@
     .pm-panel #compare-card:not(.is-fullscreen) { box-shadow: none !important; }
     /* 手機（≤600px）編輯器也要能切回對話：流程列（Upload→Done）在手機放不下，但「對話｜編輯器」切換要留著
        （上面 @media 把整個 #step-indicator-slot 藏掉，header 的「對話」按鈕在這列存在時也是藏的，
-       結果手機編輯器沒有任何入口回對話）。只留切換，置中在 header 下面，跟對話模式那顆同一個位置。 */
+       結果手機編輯器沒有任何入口回對話）。只留切換，靠右放在 header 下面，跟對話模式那顆同一個位置。 */
     @media (max-width: 600px) {
       .pm-panel #step-indicator-slot:not([hidden]) {
-        display: flex !important; justify-content: center; align-items: center;
+        display: flex !important; flex-direction: row; justify-content: space-between; align-items: center;
         height: auto; padding: var(--spacing-12) var(--spacing-16) 0; gap: 0;
       }
+      .pm-panel #step-indicator-slot > .pm-new-chat {
+        display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px 0 10px; border-radius: 15px; box-sizing: border-box;
+        border: 1px solid var(--stroke-strong); background: var(--background-raised); color: var(--text-strong);
+        font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap; text-decoration: none;
+      }
       .pm-panel #step-indicator-slot > .ap-step-indicator { display: none; }
-      .pm-panel #step-indicator-slot > .mode-switch { order: 0; align-self: center; margin: 0; }
+      .pm-panel #step-indicator-slot > .mode-switch { order: 0; align-self: center; margin: 0 0 0 auto; }
     }
     /* 手機（≤768px）的編輯器上傳了兩張以上時：要有進「我的照片」的入口，不然只看得到一張。
-       左上角那顆邊緣抽屜鈕（上面 @media 藏掉的）太突兀，改成跟「對話｜編輯器」切換同一排、靠右的一顆圓鈕，
+       左上角那顆邊緣抽屜鈕（上面 @media 藏掉的）太突兀，改成跟「對話｜編輯器」切換同一排、靠左（切換在最右）的一顆圓鈕，
        點開的還是原本的抽屜（openBatchDrawer）；只有「我的照片」列了兩張以上才出現。 */
     @media (max-width: 768px) {
       .pm-panel .results-body.batch-mode:has(#batch-sidebar-list .batch-sidebar-item:nth-child(2)) #batch-drawer-trigger {
-        display: inline-flex !important; position: fixed; top: calc(var(--header-h) + var(--spacing-12)); inset-inline-start: auto; inset-inline-end: var(--spacing-16);
+        display: inline-flex !important; position: fixed; top: calc(var(--header-h) + var(--spacing-12)); inset-inline-start: calc(var(--spacing-16) + 107px + var(--spacing-8)); inset-inline-end: auto;
         width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px; box-shadow: none;
         background: var(--fill-weak); color: var(--text-strong);
       }
@@ -6467,6 +6478,11 @@
          照片交接跟 #chat-ui-btn 走同一套（app.js）；分析或美化中也能切換。
          只在這列出現時才有它，上傳畫面沒有這列，就交給 header 的
          #chat-ui-btn。 -->
+    <!-- 手機版標頭：左邊「開新對話」，右邊「對話｜編輯器」，跟 Chat 頁一樣；其他寬度不顯示。 -->
+    <a class="pm-new-chat" id="pm-new-chat" href="chat/#new">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      <span>開新對話</span>
+    </a>
     <nav class="mode-switch" aria-label="檢視方式">
       <a id="chat-mode-switch-link" class="mode-switch-opt" href="chat/" title="切換到對話模式">
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
