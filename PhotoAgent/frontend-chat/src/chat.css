@@ -2779,3 +2779,12 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   body #results-body.batch-mode #batch-sidebar{flex:0 0 280px !important;max-width:280px !important;width:280px !important;padding-top:0 !important;border-top-width:0}
   #results-body.batch-mode{gap:16px !important}
 }
+
+/* 對話模式還沒選照片時，「我的照片」和對話卡片的位置跟編輯器（index.html 的 --pm-shell-*）一樣：
+   上緣離 header 10px、下緣離視窗底 58px，兩個都從上面開始排，不再垂直置中（置中會讓卡片比編輯器低 26px）。
+   選了照片以後本來就是這個位置，所以兩種狀態、兩個模式切換時外框都不會跳。 */
+@media (min-width:901px) and (orientation:landscape){
+  #upload-section .upload-content-row.is-chat{align-items:flex-start}
+  #upload-section .upload-content-row.is-chat>#batch-sidebar,
+  #upload-section .upload-content-row.is-chat>.home-chat{height:calc(100dvh - var(--header-h,64px) - 68px);max-height:none;min-height:0;align-self:flex-start}
+}
