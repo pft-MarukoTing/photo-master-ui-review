@@ -5996,6 +5996,34 @@
       .pm-panel #step-indicator-slot > .ap-step-indicator { display: none; }
       .pm-panel #step-indicator-slot > .mode-switch { order: 0; align-self: center; margin: 0; }
     }
+    /* 手機（≤768px）的編輯器上傳了兩張以上時：要有進「我的照片」的入口，不然只看得到一張。
+       左上角那顆邊緣抽屜鈕（上面 @media 藏掉的）太突兀，改成跟「對話｜編輯器」切換同一排、靠右的一顆圓鈕，
+       點開的還是原本的抽屜（openBatchDrawer）；只有「我的照片」列了兩張以上才出現。 */
+    @media (max-width: 768px) {
+      .pm-panel .results-body.batch-mode:has(#batch-sidebar-list .batch-sidebar-item:nth-child(2)) #batch-drawer-trigger {
+        display: inline-flex !important; position: fixed; top: calc(var(--header-h) + var(--spacing-12)); inset-inline-start: auto; inset-inline-end: var(--spacing-16);
+        width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px; box-shadow: none;
+        background: var(--fill-weak); color: var(--text-strong);
+      }
+      .pm-panel #batch-drawer-trigger:hover { background: var(--fill-press); }
+      .pm-panel #batch-drawer-trigger:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--stroke-focus); }
+    }
+    /* 「See more」提示（#page-scroll-hint）：小一點，黑色半透明底（--fill-overlay）＋白字＋背景模糊，不用毛玻璃白底。 */
+    .pm-panel .page-scroll-hint {
+      gap: var(--spacing-4); padding: var(--spacing-4) var(--spacing-12) var(--spacing-4) var(--spacing-8); border: 0; border-radius: 999px; box-shadow: none;
+      background: var(--fill-overlay); color: var(--text-inverse-strong);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); font-weight: var(--font-weight-strong);
+    }
+    .pm-panel .page-scroll-hint svg { width: 16px; height: 16px; }
+    /* 手機（≤900px）的「我的照片」抽屜：貼著畫面左緣的滿高面板，不要圓角；
+       標題列的左右負外距要等於抽屜自己的內距（12px，桌機是 14px），不然標題列和底下那條線比抽屜寬 2px（對不齊）；
+       關閉鈕跟標題列（53px）垂直置中。 */
+    @media (max-width: 900px) {
+      .pm-panel #batch-sidebar { border-radius: 0 !important; }
+      .pm-panel #batch-sidebar > .batch-sidebar-header { margin-inline: -12px; border-radius: 0 !important; }
+      .pm-panel #batch-sidebar .batch-sidebar-close-btn { top: 11px; }
+    }
   </style>
 </head>
 <!-- pm-panel：面板模式專用的樣式掛勾。index.html 的 <style> 也會被帶進對話模式的 build，新加的面板樣式都掛在 .pm-panel 底下，才不會影響對話模式。 -->
