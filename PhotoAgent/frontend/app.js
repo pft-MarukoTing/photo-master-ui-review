@@ -12791,11 +12791,11 @@
   // otherwise collapse the parent and visibly shift the options panel below
   // it up, then back down on close) so nothing around it moves.
   const COMPARE_FULLSCREEN_EXPAND_ICON = `<svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-    <path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"
+    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"
       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
   const COMPARE_FULLSCREEN_RESTORE_ICON = `<svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-    <path d="M9 3v4a2 2 0 0 1-2 2H3M15 3v4a2 2 0 0 0 2 2h4M9 21v-4a2 2 0 0 0-2-2H3M15 21v-4a2 2 0 0 1 2-2h4"
+    <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"
       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
 

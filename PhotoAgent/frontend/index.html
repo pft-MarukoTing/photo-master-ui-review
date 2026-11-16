@@ -5427,7 +5427,7 @@
     .pm-panel .pm-loading-tools .canvas-btn:disabled { opacity: .55; cursor: default; pointer-events: none; }
     /* 「我的照片」卡片跟對話模式完全一樣：白底（--n09）、沒有邊框、上緣貼齊；Editor 的工作區比對話頁擠，寬度縮小成 200px。 */
     .pm-panel #batch-sidebar { background: var(--n09) !important; padding-top: 0 !important; border: 0 !important; }
-    @media (min-width: 901px) { .pm-panel #results-body #batch-sidebar { flex: 0 0 280px !important; max-width: 280px !important; width: 280px !important; min-width: 280px !important; } }
+    @media (min-width: 901px) { .pm-panel #results-body #batch-sidebar { flex: 0 0 var(--pm-shell-side, min(280px, calc((100% - 16px) * .16))) !important; max-width: none !important; width: auto !important; min-width: 0 !important; } }
     /* 面板的「我的照片」跟對話模式同一個樣子：新增、下載、每張的 ×；沒有「全部美化 / Retouch All」。 */
     .pm-panel #batch-sidebar .batch-sidebar-all { display: none !important; }
     .pm-panel #batch-sidebar .batch-sidebar-actions { display: flex; gap: 4px; margin-inline-start: auto; flex: none; }
@@ -5699,7 +5699,32 @@
     .pm-panel #ap-analysis-shell .ap-toggle-card-body { padding-inline: var(--spacing-14, 14px); padding-bottom: var(--spacing-14, 14px); }
     /* 編輯器的「我的照片」欄寬跟對話頁一樣是 280（空狀態和有照片都是），兩邊切換時欄位不跳。 */
     @media (min-width: 901px) {
-      .pm-panel #pm-empty .pm-empty-side { flex: 0 0 280px !important; width: 280px; min-width: 280px; max-width: 280px; }
+      .pm-panel #pm-empty .pm-empty-side { flex: 0 0 var(--pm-shell-side, min(280px, calc((100% - 16px) * .16))) !important; width: auto; min-width: 0; max-width: none; }
+    }
+    /* 空狀態的「我的照片」不放「＋」：旁邊已經有「上傳照片」。 */
+    .pm-panel #pm-empty-side-add { display: none; }
+    /* 右邊兩張卡（Photo Overview／Analysis & Adjustments）的標題列灰底跟著卡片的圓角（12 − 1px 外框 = 11），不要在上面兩個角溢出外框。 */
+    .pm-panel #ap-analysis-shell > summary,
+    .pm-panel #ap-photo-summary > .ap-photo-summary-header { border-radius: 11px 11px 0 0; }
+    /* 預覽工具鈕的 tooltip：對話頁另外有一條 [data-tip] 的規則（left:50% 置中），跟這裡的 right:0 疊在一起會把提示框壓成 22px 寬、文字被切；
+       這裡明講 left:auto，只用 right 對齊。 */
+    .pm-panel #compare-card .canvas-actions .canvas-btn::after { left: auto; }
+    /* 下載鈕：黑底白色圖示（Secondary 的深色版），Editor 和對話頁一樣；hover 疊一層淺色疊層，不換色。 */
+    :is(.pm-panel, body) #compare-card .canvas-header-row #download-link,
+    :is(.pm-panel, body) #compare-card .canvas-header-row #download-link.canvas-btn {
+      background: var(--fill-strong) !important; background-image: none !important; color: var(--text-inverse-strong) !important; box-shadow: none !important;
+    }
+    :is(.pm-panel, body) #compare-card .canvas-header-row #download-link:hover {
+      background-image: linear-gradient(var(--fill-inverse-hover), var(--fill-inverse-hover)) !important;
+    }
+    /* 平板、手機（≤900）：右邊「Analysis & Adjustments」跟上面的 Photo Overview 一樣撐滿整欄，不要停在固定的欄寬。 */
+    @media (max-width: 900px) {
+      .pm-panel #ap-options-card-inline { width: 100%; max-width: none; }
+      .pm-panel #ap-options-card-inline > #ap-analysis-shell,
+      .pm-panel #ap-options-card-inline > .ap-photo-summary { width: 100%; max-width: none; flex: 0 0 auto !important; box-sizing: border-box; }
+      /* 這個寬度一定要看得到預覽照片：卡片高度貼著照片比例（--img-ar 由 app.js 設），不要縮成 0。 */
+      .pm-panel #compare-card:not(.is-fullscreen) { height: auto; min-height: 0; aspect-ratio: var(--img-ar, 4 / 3); }
+      .pm-panel #results-canvas-col, .pm-panel #results-canvas-top { height: auto; display: block; }
     }
     /* 全螢幕時按鈕在右下角：tooltip 往上彈（往下會被卡片邊緣裁掉），箭頭改朝下。 */
     :is(.pm-panel, body) #compare-card.is-fullscreen .canvas-actions .canvas-btn::before { top: auto; bottom: calc(100% + 4px); border-bottom: 0; border-top: 6px solid var(--fill-strong); transform: translateY(2px); }
@@ -5813,7 +5838,7 @@
         --pm-shell-bottom: 58px;   /* 卡片下緣到視窗底 */
         --pm-shell-head-h: 53px;   /* .chat-panel-head 的高度 */
         --pm-switch-gap: 40px;     /* 流程列 ↔ 「對話｜編輯器」切換 */
-        --pm-shell-side: 280px;     /* 「我的照片」欄寬：跟對話頁一樣固定 280；流程列的欄、空狀態、有照片的側欄都吃這個值，才會對齊 */
+        --pm-shell-side: min(280px, calc((100% - 16px) * .16));     /* 「我的照片」欄寬：最多 280、再寬也不超過 16%（扣掉 16px 欄間距）；跟對話頁同一個算法；流程列的欄、空狀態、有照片的側欄都吃這個值，才會對齊 */
         --pm-shell-shadow: 0 10px 30px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
         --step-indicator-h: calc(var(--pm-shell-top) + var(--pm-shell-head-h));
       }
@@ -5882,8 +5907,8 @@
         clip-path: inset(0 -40px -40px -40px);
       }
       .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) #results-body.batch-mode .results-canvas-row.showing-analysis { gap: var(--pm-shell-gap); }
-      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) #results-body.batch-mode .results-canvas-row.showing-analysis .results-canvas-col { flex: 50 1 0%; }
-      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) #results-body.batch-mode .results-canvas-row.showing-analysis .results-analysis-slot { flex: 30 1 0%; }
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) #results-body.batch-mode .results-canvas-row.showing-analysis .results-canvas-col { flex: 46 1 0%; }
+      .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) #results-body.batch-mode .results-canvas-row.showing-analysis .results-analysis-slot { flex: 34 1 0%; }
     }
     @media (min-width: 901px) and (max-width: 1279px) {
       .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) { --pm-switch-gap: 32px; }
@@ -5936,9 +5961,9 @@
         border-radius: 0 0 20px 20px; box-shadow: var(--pm-shell-shadow); clip-path: inset(0 -40px -40px -40px);
       }
       .pm-panel #pm-empty .pm-empty-card > .pm-empty-drop {
-        flex: 50 1 0%; width: auto; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent;
+        flex: 46 1 0%; width: auto; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent;
       }
-      .pm-panel #pm-empty .pm-empty-tools { flex: 30 1 0%; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+      .pm-panel #pm-empty .pm-empty-tools { flex: 34 1 0%; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
       .pm-panel #pm-empty .pm-empty-tool-card {
         display: flex; flex-direction: column; overflow: hidden; background: var(--n09);
         border: 1px solid var(--stroke-weak); border-radius: 12px;
@@ -6037,7 +6062,8 @@
       .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) #batch-sidebar.is-panel { box-shadow: var(--pm-shell-shadow) !important; }
     }
     /* 桌機畫布（照片灰底區）：下面兩個角也要跟上面一樣 12px 圓角，並拿掉它和下面縮圖列之間那條線。 */
-    .pm-panel #compare-card:not(.is-fullscreen) #photo-frame-wrap { border-radius: 12px; overflow: hidden; }
+    /* 預覽的灰底卡片加跟右邊「Photo Overview／Analysis & Adjustments」同一條 1px 外框（--border）。 */
+    .pm-panel #compare-card:not(.is-fullscreen) #photo-frame-wrap { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-sizing: border-box; }
     .pm-panel #compare-card .version-strip { border-top: 0; }
     /* 切到編輯器（或換一張照片）沒有進場動畫：畫布、右邊工具欄不再滑入／長出來，直接就位；
        只有畫布裡的照片用透明度（0→1）淡入。 */
@@ -7444,7 +7470,7 @@
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M12.11 2H12C11.43 2 10.98 2.49 10.98 3.07V20.91C10.98 21.49 11.42 21.99 12 21.99H12.11C12.63 21.93 13.02 21.46 13.02 20.91V3.08C13.02 2.53 12.63 2.06 12.11 2.01V2ZM4.36 7.11H8.68C9.11 7.11 9.44 6.76 9.48 6.34V6.25C9.48 5.79 9.13 5.4 8.68 5.4H4.08C2.92 5.4 2 6.41 2 7.62V16.59C2.12 17.7 2.99 18.59 4.08 18.59H8.68C9.11 18.59 9.44 18.24 9.48 17.82V17.74C9.48 17.28 9.13 16.89 8.68 16.89H4.36C4 16.89 3.69 16.59 3.65 16.19V16.11V7.89C3.65 7.45 3.98 7.11 4.36 7.11ZM18.98 7.11H19.78C20.05 7.14 20.29 7.37 20.34 7.67V7.81L20.35 8.46L20.36 8.62C20.43 9.02 20.76 9.33 21.17 9.33H21.32C21.66 9.25 21.91 8.97 21.98 8.63V8.62V8.47L21.99 7.63C21.99 6.56 21.28 5.66 20.32 5.45L20.12 5.42L19.92 5.41H18.97C18.51 5.41 18.16 5.8 18.16 6.26V6.35C18.2 6.77 18.54 7.12 18.97 7.12L18.98 7.11ZM21.26 10.35H21.17C20.7 10.35 20.35 10.75 20.35 11.22V13.02V13.03V13.18L20.37 13.19C20.44 13.58 20.77 13.89 21.18 13.89H21.33C21.67 13.81 21.92 13.53 21.99 13.19L22 13.03V11.21C22 10.77 21.69 10.39 21.26 10.34V10.35ZM16.64 16.89H15.31C14.85 16.89 14.5 17.28 14.5 17.74V17.82C14.54 18.24 14.88 18.59 15.31 18.59H16.64C17.07 18.59 17.4 18.24 17.44 17.82V17.74C17.44 17.28 17.09 16.89 16.64 16.89ZM21.26 14.64H21.17C20.7 14.64 20.35 15.04 20.35 15.51V16.19C20.35 16.54 20.12 16.81 19.84 16.87H19.71L18.97 16.88C18.51 16.88 18.16 17.27 18.16 17.73V17.81C18.2 18.23 18.54 18.58 18.97 18.58H20.11C21.11 18.47 21.88 17.63 21.98 16.58V16.36V15.49C21.98 15.05 21.67 14.67 21.24 14.62L21.26 14.64ZM16.64 5.41H15.31C14.85 5.41 14.5 5.8 14.5 6.26V6.35C14.54 6.77 14.88 7.12 15.31 7.12H16.64C17.07 7.12 17.4 6.77 17.44 6.35V6.26C17.44 5.8 17.09 5.41 16.64 5.41Z" fill="currentColor"/></svg>
           </button>
           <button type="button" class="canvas-btn" tabindex="-1" disabled>
-            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
           <button type="button" class="canvas-btn" tabindex="-1" disabled>
             <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M12 15V3M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -7540,7 +7566,7 @@
                   </button>
                   <button id="compare-fullscreen-btn" class="canvas-btn" type="button" title="全螢幕檢視比較" aria-label="全螢幕檢視比較">
                     <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                      <path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"
+                      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                   </button>

@@ -1669,7 +1669,7 @@ div.chat-proposal-row{cursor:default}
   #upload-section .home-compare{order:3;max-width:none;width:100%;aspect-ratio:auto;height:clamp(180px,calc(100vh - 540px),380px);height:clamp(180px,calc(100svh - 540px),380px);margin-top:16px;justify-self:auto;box-shadow:0 10px 28px rgba(0,0,0,.12)}
   .home-compare-range{touch-action:pan-y}
 
-  /* 一排磚：108×108 正方形（比 4:5 矮 27px，讓給底部的開始對話），頭尾貼齊螢幕邊，可以橫向滑。 */
+  /* 一排磚：92×92 正方形（原本 108，縮小 15%），頭尾貼齊螢幕邊，可以橫向滑。 */
   #upload-section .upload-gallery-scroll-frame{order:5;width:100%;min-width:0}
   #demo-images-empty{order:6}
   #chat-use-selected-btn{order:7}
@@ -1680,7 +1680,7 @@ div.chat-proposal-row{cursor:default}
     overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scroll-padding-inline:16px;scrollbar-width:none}
   #upload-section .upload-gallery-col .demo-images-grid::-webkit-scrollbar{display:none}
   #upload-section .upload-gallery-col .history-day-heading{display:none}
-  #upload-section .upload-gallery-col .demo-image-tile{flex:0 0 108px;height:auto;padding-top:0;aspect-ratio:1/1;margin-top:12px;
+  #upload-section .upload-gallery-col .demo-image-tile{flex:0 0 92px;height:auto;padding-top:0;aspect-ratio:1/1;margin-top:12px;
     border-radius:14px;overflow:visible;scroll-snap-align:start}
   #upload-section .upload-gallery-col .demo-image-tile img:not(.demo-image-tile-bg){border-radius:inherit;object-fit:cover}
   #upload-section .upload-gallery-col .demo-image-tile .demo-image-tile-bg{display:none}
@@ -2133,13 +2133,13 @@ button.mode-switch-opt:disabled:not(.is-active){opacity:.45}
 /* 這一條上的頭像大小：桌機 40px（跟其他地方一樣），手機縮成 28px，整條人物頭像、收合
    的「更多」、換底鍵都是 36px 高。FacePicker（chat.tsx）讀這個變數算擺不擺得下。
    展開的人物面板裡維持大頭像，不受影響。 */
-.chat-footbar{--footbar-face:40px}
+.chat-footbar{--footbar-face:32px}  /* 輸入框上面的人臉縮圖：40 → 32 */
 .chat-footbar .chat-face-track .chat-face-chip.is-avatar img,
 .chat-footbar .chat-face-track .chat-face-chip.is-avatar .chat-face-blank,
 .chat-footbar .chat-face-fold .chat-face-chip.is-avatar img,
 .chat-footbar .chat-face-fold .chat-face-chip.is-avatar .chat-face-blank{width:var(--footbar-face);height:var(--footbar-face)}
 @media (max-width:900px){
-  .chat-footbar{--footbar-face:28px}
+  .chat-footbar{--footbar-face:24px}
   .chat-footbar .chat-continue-pick .chat-continue-shot{width:28px;height:28px}
   .chat-footbar .chat-face-fold-faces>.chat-face-chip+.chat-face-chip{margin-inline-start:-9px}
   /* 頭像縮小後撐不起整條的高度了，上下留跟換底鍵一樣的空，只有人物時也不會貼著邊。 */
@@ -2774,7 +2774,7 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
 /* 桌機結果頁的左右欄：跟上傳頁同一組尺寸（我的照片 280、對話欄之間 16、側欄不多留內距），
    兩頁切換時標題列和卡片位置才不會跳。 */
 @media (min-width:1201px),(min-width:901px) and (orientation:landscape){
-  body #results-body.batch-mode #batch-sidebar{flex:0 0 280px !important;max-width:280px !important;width:280px !important;padding-top:0 !important;border-top-width:0}
+  body #results-body.batch-mode #batch-sidebar{flex:0 0 min(280px, calc((100% - 16px) * .16)) !important;max-width:none !important;width:auto !important;padding-top:0 !important;border-top-width:0}
   #results-body.batch-mode{gap:16px !important}
   #results-canvas-row.showing-analysis{gap:0 40px !important}
   #results-canvas-row.showing-analysis #results-canvas-col{flex:1 1 0 !important;min-width:0}
@@ -2851,7 +2851,7 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
 /* 「我的照片」欄寬固定 280：預覽區出現、對話卡片變窄時也不縮。 */
 @media (min-width:1201px),(min-width:901px) and (orientation:landscape){
   #upload-section .upload-content-row.is-chat>#batch-sidebar,
-  body #results-body.batch-mode #batch-sidebar{flex:0 0 280px !important;width:280px !important;min-width:280px !important;max-width:280px !important}
+  body #results-body.batch-mode #batch-sidebar{flex:0 0 min(280px, calc((100% - 16px) * .16)) !important;width:auto !important;min-width:0 !important;max-width:none !important}
 }
 
 
@@ -2859,7 +2859,7 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
    左上 Before 標籤（深色半透明），右上全螢幕、下載兩顆白色圓鈕。 */
 @media (min-width:1201px),(min-width:901px) and (orientation:landscape){
   .chat-panel.has-stage>.chat-panel-stage .prechat-stage{
-    position:relative;background:var(--fill-weak) !important;background-image:none !important;border:0 !important;border-radius:12px !important;box-shadow:none !important;padding:0 !important}
+    position:relative;background:var(--fill-weak) !important;background-image:none !important;border:1px solid var(--border) !important;box-sizing:border-box;border-radius:12px !important;box-shadow:none !important;padding:0 !important}
   .prechat-stage .prechat-shot{flex:1 1 auto;width:100%;min-height:0;display:flex;align-items:center;justify-content:center}
   .prechat-shot-box{position:relative;display:inline-flex;max-width:100%;max-height:100%}
   .prechat-stage .prechat-shot img{max-width:100%;max-height:100%;object-fit:contain;border-radius:0;box-shadow:none;display:block}
@@ -2876,7 +2876,7 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
    照片依原始比例完整出現（contain），所以上下或左右會露出灰底。 */
 @media (min-width:1201px),(min-width:901px) and (orientation:landscape){
   #results-canvas-row.showing-analysis #compare-card:not(.is-fullscreen){background:transparent !important;border:0 !important;box-shadow:none !important;border-radius:12px !important}
-  #results-canvas-row.showing-analysis #photo-frame-wrap{background:var(--fill-weak) !important;border-radius:12px !important;overflow:hidden;border:0 !important}
+  #results-canvas-row.showing-analysis #photo-frame-wrap{background:var(--fill-weak) !important;border-radius:12px !important;overflow:hidden;border:1px solid var(--border) !important;box-sizing:border-box}
   #results-canvas-row.showing-analysis #compare-card .photo-frame{border:0 !important;border-bottom:0 !important;box-shadow:none !important}
   #results-canvas-row.showing-analysis #compare-card .compare-img{object-fit:contain !important;border-radius:0 !important}
   #results-canvas-row.showing-analysis #version-strip{border-top:0 !important;box-shadow:none !important}
@@ -2896,3 +2896,20 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   #results-canvas-row.showing-analysis .sheet-mode-switch{top:var(--sp-2) !important;inset-inline:0 !important;margin-inline:auto;width:max-content}
   .chat-result-shot{width:min(100%,280px) !important}
 }
+
+/* 首頁不放「使用所選照片」：選好照片直接按「開始對話」（startFromSelection 會帶著選的照片，多張也照常），所有寬度都一樣。 */
+#upload-section:has(.home-intro) .gallery-confirm-btn{display:none !important}
+
+/* 預覽照片：框撐滿、照片 contain（寬或高哪邊先頂到就停在那邊），標籤跟著照片的左上角（--img-x／--img-y）。 */
+@media (min-width:1201px),(min-width:901px) and (orientation:landscape){
+  .chat-panel.has-stage>.chat-panel-stage .prechat-shot{position:relative;display:block;flex:1 1 auto;width:100%;height:100%;min-height:0}
+  .chat-panel.has-stage>.chat-panel-stage .prechat-shot img{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;object-fit:contain}
+  .chat-panel.has-stage>.chat-panel-stage .prechat-tag{top:calc(var(--img-y,0px) + var(--spacing-12));inset-inline-start:calc(var(--img-x,0px) + var(--spacing-12))}
+  /* 預覽和對話之間的間距：40 → 30（減 10px），預覽前的對話頁和結果頁一起 */
+  .chat-panel.has-stage{column-gap:30px !important}
+  #results-canvas-row.showing-analysis{gap:0 30px !important}
+}
+
+/* 對話頁預覽的下載鈕（修圖前那顆）：黑底白色圖示，跟 Editor 一樣。 */
+.prechat-tool.is-download{background:var(--fill-strong) !important;color:var(--text-inverse-strong) !important;box-shadow:none}
+.prechat-tool.is-download:hover{background-image:linear-gradient(var(--fill-inverse-hover),var(--fill-inverse-hover)) !important}

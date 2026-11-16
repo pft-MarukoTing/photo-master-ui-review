@@ -11,7 +11,8 @@
  */
 (function () {
   // 跟 chat.css 裡手機／直拿平板那段 @media 同一條（側欄變成橫向一排的寬度）。
-  var MOBILE = "(max-width:900px),(max-width:1200px) and (orientation:portrait)";
+  // 只有手機（≤600）換成這顆在照片列上方的「開始對話」；平板（601 起）照桌機的做法，用頁面原本放在文案正下方的那顆。
+  var MOBILE = "(max-width:600px)";
   var HOME = "#upload-section:has(.home-intro)";
 
   var css = [
@@ -97,11 +98,7 @@
       if (use && use.parentElement === col) use.insertAdjacentElement("afterend", box);
       else col.appendChild(box);
     }
-    var useNow = origUse();
-    if (useNow) {
-      var o = getComputedStyle(useNow).order;
-      if (o && o !== "0" && box.style.order !== o) box.style.order = o;
-    }
+    // 位置（order）由上面的 CSS 定，不再照抄原本「使用所選照片」那顆的 order（那顆在照片列下面，會把這顆拉回去）。
     var start = origStart();
     var n = count();
     var base = (start && start.textContent.trim()) || (isEn() ? "Start a Chat" : "開始對話");

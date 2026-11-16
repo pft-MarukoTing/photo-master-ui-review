@@ -525,7 +525,9 @@ function HeroCompare() {
   // A 版停在正中間（各半），B 版（橫向海岸照）停在人臉上（67%）；切換 A／B 時重播。
   // 使用者一碰滑桿就停下來，不跟他搶。減少動態效果（prefers-reduced-motion）就直接停在停點。
   const isB = () => document.documentElement.classList.contains("ab-home-b");
-  const restPos = () => (isB() ? 67 : 50);
+  // 桌機（跟 ab-home.js 的桌機斷點同一組）B 版停在人臉上（67%）；手機、平板的框比較窄、人物已經置中，一律停在正中間。
+  const DESKTOP = "(min-width:1201px),(min-width:901px) and (max-width:1200px) and (orientation:landscape)";
+  const restPos = () => (isB() && window.matchMedia(DESKTOP).matches ? 67 : 50);
   const SWEEP_MS = 1000;
   const [pos, setPos] = useState(100);
   const frame = useRef(0);
@@ -552,7 +554,11 @@ function HeroCompare() {
       if (next !== last) { last = next; play(); }
     });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => { mo.disconnect(); stopSweep(); };
+    // 視窗跨過桌機／平板的斷點（轉向、拉寬）停點也要換，重播一次。
+    const mq = window.matchMedia(DESKTOP);
+    const onMq = () => play();
+    mq.addEventListener?.("change", onMq);
+    return () => { mo.disconnect(); mq.removeEventListener?.("change", onMq); stopSweep(); };
   }, []);
   // 拉到某一邊、那一邊的標籤會被蓋住時把它藏起來：Before 標籤在左，左邊剩下的寬度（pos）放不下它就藏；
   // After 同理看右邊。拉到底時只剩對的那一個（整張都是 After 就只剩 After）。

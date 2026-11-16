@@ -386,7 +386,7 @@ export function ChatPanel(props: {
       <div class="chat-panel-head">
         <Icon name="messages-circle" size={14} />
         <span class="chat-panel-title">{t("對話")}</span>
-        {props.sub && <span class="chat-panel-sub">{props.sub}</span>}
+        {/* 標題旁的副標（New Chat／日期·張數／第 N 張…）沒有實際用處，不顯示。 */}
         <ModeSwitch mode={props.panelMode} />
       </div>
       {props.photo && (

@@ -236,7 +236,8 @@ const ICONS: Record<string, { sw: number; body: JSX.Element; mirror?: boolean }>
     ),
   },
   caret: { sw: 2, body: <path d="M6 9l6 6 6-6" /> },
-  expand: { sw: 2, body: <path d="M14 4h6v6M10 20H4v-6M20 4l-6 6M4 20l6-6" /> },
+  // 全螢幕／放大：右上箭頭＋左下箭頭（兩個模式、所有放大／全螢幕的地方都用這個）。
+  expand: { sw: 2, body: <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /> },
 };
 
 export function Icon({ name, size }: { name: keyof typeof ICONS | string; size?: number }) {

@@ -59,8 +59,8 @@ export function StepIndicator({ step, state, pre }: { step: number; state: StepS
   );
 }
 
-const EXPAND = "M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4";
-const RESTORE = "M9 3v4a2 2 0 0 1-2 2H3M15 3v4a2 2 0 0 0 2 2h4M9 21v-4a2 2 0 0 0-2-2H3M15 21v-4a2 2 0 0 1 2-2h4";
+const EXPAND = "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7";
+const RESTORE = "M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7";
 
 // 手機和直拿的平板（跟 chat.css 那段 @media 同一個條件）：點照片開大圖檢視。
 const SPLIT_LAYOUT = "(max-width:600px),(max-width:1200px) and (orientation:portrait)";

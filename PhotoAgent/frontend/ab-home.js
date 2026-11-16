@@ -128,10 +128,11 @@
     "  html.ab-home-b #upload-section:has(.home-intro) .gallery-confirm-btn{display:none !important}",
     "  html.ab-home-b .home-start-btn .abg-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;margin-inline-start:8px;padding:0 6px;box-sizing:border-box;",
     "    border-radius:999px;background:var(--fill-overlay-weak,rgba(0,0,0,.45));color:var(--text-inverse-strong,#fff);font-size:13px;font-weight:700;line-height:1}",
-    /* 「使用所選照片」：右下角（固定在視窗角落，浮在照片列上） */
-    "  html.ab-home-b #upload-section:has(.home-intro) .gallery-confirm-btn{position:fixed !important;top:auto !important;bottom:24px;right:var(--abg-gutter);z-index:5;width:auto !important;",
-    "    min-width:180px;margin:0 !important;box-shadow:0 8px 24px rgba(0,0,0,.16)}",
     "}",
+    /* B 版的主視覺圖是寬圖（1860×846），人物在右邊約 68% 的位置；手機、平板的框比較窄，預設置中裁切會把人物切在邊上。
+       object-position 用「讓人物落在框正中間」算出來的值：手機框接近 1.2:1 → 89%，平板框約 0.8:1 → 78%。 */
+    "@media (max-width:600px){html.ab-home-b .home-compare-img{object-position:89% 30%}}",
+    "@media (min-width:601px) and (max-width:900px),(min-width:601px) and (max-width:1200px) and (orientation:portrait){html.ab-home-b .home-compare-img{object-position:78% 30%}}",
 
     /* ── C 版：置中大輸入框 ── */
     ".abc-hero{display:none}",

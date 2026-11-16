@@ -4160,20 +4160,37 @@ export function App() {
 // halves, so until then the conversation holds the page on its own.
 function PreStage({ source, url, tag, onOpen }: { source?: Source | null; url?: string; tag?: string; onOpen?: () => void }) {
   const [big, setBig] = useState(false);
+  const shot = useRef<HTMLDivElement>(null);
   const src = url || (source ? fullSrc(source) : "");
+  // 照片放到「寬或高哪一邊先頂到框就停在那邊」（小圖也會放大）；Before／After 標籤貼在照片本身的左上角，
+  // 所以要算照片在框裡的位置（--img-x／--img-y），跟編輯器預覽做法一樣。
+  useEffect(() => {
+    const box = shot.current;
+    const img = box?.querySelector("img");
+    if (!box || !img) return;
+    const sync = () => {
+      if (!img.naturalWidth) return;
+      const fw = box.clientWidth, fh = box.clientHeight;
+      const k = Math.min(fw / img.naturalWidth, fh / img.naturalHeight);
+      box.style.setProperty("--img-x", `${Math.max(0, Math.round((fw - img.naturalWidth * k) / 2))}px`);
+      box.style.setProperty("--img-y", `${Math.max(0, Math.round((fh - img.naturalHeight * k) / 2))}px`);
+    };
+    img.addEventListener("load", sync);
+    const ro = new ResizeObserver(sync);
+    ro.observe(box);
+    sync();
+    return () => { img.removeEventListener("load", sync); ro.disconnect(); };
+  }, [src]);
   if (!src) return <div class="prechat-stage is-empty" />;
-  // 預覽區跟編輯器的預覽一樣：灰底、照片依比例完整顯示，左上 Before／After 標籤，右上全螢幕和下載兩顆白色圓鈕。
   return (
     <div class="prechat-stage">
-      <div class="prechat-shot">
-        <span class="prechat-shot-box">
-          <img src={src} alt={t("待美化的照片")} />
-          <span class="prechat-tag">{tag || "Before"}</span>
-        </span>
+      <div class="prechat-shot" ref={shot}>
+        <img src={src} alt={t("待美化的照片")} />
+        <span class="prechat-tag">{tag || "Before"}</span>
       </div>
       <div class="prechat-tools">
         <button type="button" class="prechat-tool" aria-label={t("看大圖")} onClick={onOpen || (() => setBig(true))}><Icon name="expand" size={20} /></button>
-        <a class="prechat-tool" aria-label={t("下載")} href={src} download><Icon name="down" size={20} /></a>
+        <a class="prechat-tool is-download" aria-label={t("下載")} href={src} download><Icon name="down" size={20} /></a>
       </div>
       {!onOpen && <PhotoViewer src={big ? src : null} onClose={() => setBig(false)} />}
     </div>
@@ -4350,7 +4367,8 @@ export function BatchPreSidebar(props: {
         <div class="batch-sidebar-header">
           <h2 class="batch-sidebar-title">{t("我的照片")}</h2>
           <div class="batch-sidebar-actions">
-          {props.onAdd && <BatchAddButton full={full} onAdd={props.onAdd} onSamples={props.onSamples} onBefore={() => setOpen(false)} />}
+          {/* 還沒有照片（空狀態）時不放「＋」：空狀態裡已經有「上傳照片」。 */}
+          {props.onAdd && sources.length > 0 && <BatchAddButton full={full} onAdd={props.onAdd} onSamples={props.onSamples} onBefore={() => setOpen(false)} />}
           <BatchDownloadButton plan={sourcesDownload(sources, runs, live, props.failed)} busy={downloading} onDownload={download} />
           {props.onClear && (
             <button type="button" class="batch-download-all-btn" title={t("全部清除")} aria-label={t("全部清除")} data-danger onClick={props.onClear}>
