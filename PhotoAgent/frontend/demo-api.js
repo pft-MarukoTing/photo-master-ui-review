@@ -588,18 +588,25 @@
       } catch (e) { reject(e); }
     });
   }
-  var ready = openDb().then(function (db) {
-    return new Promise(function (resolve) {
-      var get = db.transaction("kv").objectStore("kv").get(DB_KEY);
-      get.onsuccess = function () {
-        var saved = get.result;
-        if (saved) KEYS.forEach(function (k) { if (saved[k]) S[k] = saved[k]; });
-        loaded = true;
-        resolve(db);
-      };
-      get.onerror = function () { resolve(db); };
-    });
-  }).catch(function () { return null; });
+  // IndexedDB 在有些環境（iPhone Safari 的無痕、剛開機、被擋的內嵌瀏覽器）會一直開不起來、也不報錯；
+  // 所有 /api 都在等 ready，等不到整頁就是空白。所以最多等 1.5 秒，等不到就放棄保存、照舊只活在這一頁，
+  // 之後才讀到的資料也不再套用（免得蓋掉這一頁已經在用的）。
+  var gaveUp = false;
+  var ready = Promise.race([
+    openDb().then(function (db) {
+      return new Promise(function (resolve) {
+        var get = db.transaction("kv").objectStore("kv").get(DB_KEY);
+        get.onsuccess = function () {
+          if (gaveUp) return resolve(null);
+          var saved = get.result;
+          if (saved) KEYS.forEach(function (k) { if (saved[k]) S[k] = saved[k]; });
+          resolve(db);
+        };
+        get.onerror = function () { resolve(gaveUp ? null : db); };
+      });
+    }),
+    new Promise(function (resolve) { setTimeout(function () { gaveUp = true; resolve(null); }, 1500); }),
+  ]).catch(function () { return null; });
   ready.then(function () {
     loaded = true;
     repairImages();

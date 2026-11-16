@@ -20,8 +20,9 @@
     "  " + HOME + " .gallery-confirm-btn{display:none !important}",
     "  " + HOME + " .home-start{display:none !important}",
     "  " + HOME + " .hm-start{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;margin:16px 0 8px}",
-    /* 手機首頁是 display:contents 加 order 排的：放在「使用所選照片」原本那格 */
-    "  " + HOME + " .upload-gallery-col>.hm-start{order:7}",
+    /* 手機首頁是 display:contents 加 order 排的：放在前後對照圖（order 3）正下方、「最近／範例」分頁（order 4）上面，
+       不用捲到照片列下面才看得到。同樣是 order 3，DOM 上它在後面，所以排在對照圖後面。 */
+    "  " + HOME + " .upload-gallery-col>.hm-start{order:3}",
     "  .hm-start-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:52px;padding:0 20px;border:0;border-radius:999px;",
     "    background:var(--mv-grad,linear-gradient(90deg,#16a6d9,#4cd07d));color:#fff;font:700 17px/1 Roboto,var(--cjk-sans,'Noto Sans TC'),system-ui,sans-serif;",
     "    box-shadow:0 8px 20px rgba(22,166,217,.28);cursor:pointer}",
