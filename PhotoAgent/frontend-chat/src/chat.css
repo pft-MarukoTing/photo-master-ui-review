@@ -2952,3 +2952,76 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   .chat-settings-fields>.chat-field{flex:1 1 100%}
   .chat-settings-fields .chat-field select,.chat-settings-fields .chat-ar-trigger{width:100%}
 }
+
+/* 手機／平板（抽屜版面）標題下那一列：跟編輯器（index.html ≤900 那一列）同一個元件——
+   左邊「我的照片」圓鈕（36px、fill-weak 底、無框，張數徽章掛右上角）、右邊「對話｜編輯器」切換，
+   左右內距 24px（跟底下的內容同一條邊）。對話模式多一顆「New Chat」，緊接在圓鈕後面（手機只有這裡能開新對話）；
+   「對話」圖示和標題不放（手機本來就沒有，平板跟著一樣）。 */
+@media (max-width:900px),(max-width:1200px) and (orientation:portrait){
+  #upload-section .upload-content-row>.batch-drawer-trigger{display:inline-flex !important;inset-inline-start:24px;top:calc(var(--header-h) + 8px);
+    width:36px;height:36px;padding:0;border:0;border-radius:999px;box-shadow:none;background:var(--fill-weak);color:var(--text-strong)}
+  #upload-section .upload-content-row>.batch-drawer-trigger:hover{background:var(--fill-press)}
+  #upload-section .upload-content-row>.batch-drawer-trigger:active{background:var(--fill-press)}
+  #upload-section .upload-content-row>.batch-drawer-trigger:focus-visible{outline:0;box-shadow:0 0 0 3px var(--stroke-focus)}
+  #upload-section .upload-content-row>.batch-drawer-trigger>.batch-drawer-trigger-count{top:-8px;inset-inline-end:-8px}
+  /* 選了照片、標題列換成 64px 的照片列時，圓鈕跟著垂直置中。 */
+  #upload-section .upload-content-row:has(.chat-panel.has-photo)>.batch-drawer-trigger{top:calc(var(--header-h) + 14px)}
+  /* 左邊讓出 24＋36＋8 給圓鈕，右邊 24。 */
+  #upload-section .upload-content-row:has(>.batch-drawer-trigger) .chat-panel>:is(.chat-panel-head,.chat-panel-photo){padding-inline:68px 24px}
+  .chat-panel-head>svg,.chat-panel-head .chat-panel-title,.chat-panel-head .chat-panel-sub{display:none !important}
+  .chat-panel-head .chat-panel-new{margin-inline-start:0}
+  .chat-panel-head .mode-switch,.chat-panel-head:has(.chat-panel-new) .mode-switch{margin-inline:auto 0}
+  /* 最下面的輸入框和它上面那條（Choose People…）也對齊同一條 24px 的邊：
+     不再用「最寬 800、置中」（平板上會變成離邊 30px）和手機的 16px。 */
+  .chat-panel>.chat-composer{width:auto !important;max-width:none;margin-inline:24px !important}
+  .chat-panel>.chat-footbar{padding-inline:24px}
+}
+
+/* 桌機：頂部標頭底邊到兩張卡片（我的照片、對話）上緣 20px，卡片下緣到視窗底 28px；
+   編輯器那邊是 index.html 的 --pm-shell-top，兩邊同一個值。 */
+@media (min-width:1201px),(min-width:901px) and (orientation:landscape){
+  /* 上 20、下 28：容器撐到視窗底（不再扣步驟列的高度）。 */
+  #upload-section .upload-container.has-flow{height:calc(100vh - var(--header-h));padding-top:20px;padding-bottom:28px}
+  .results-container{padding-top:20px}
+  /* 結果頁（已分析的單張）：整頁撐到視窗底（不再扣步驟列的高度），對話卡片上 20、下 28；
+     左邊「我的照片」上方外距 20、高度＝視窗 − 標頭 − 20 − 28，下緣跟對話卡片同一條線。 */
+  #results-body.showing-analysis,#results-body.showing-analysis>#results-detail{height:calc(100vh - var(--header-h)) !important}
+  #results-body.showing-analysis>#results-detail{padding-bottom:28px}
+  #results-body.batch-mode>.batch-sidebar{margin-top:20px}
+  #results-body.batch-mode>#batch-sidebar{height:calc(100vh - var(--header-h) - 48px)}
+}
+
+/* 手機／平板的「我的照片」抽屜：關閉鈕搬到抽屜外面（右緣再過去 12px——抽屜有 1px 右框，所以 -49——、跟標題列垂直置中），
+   白色圓鈕浮在暗背景上；不再壓在標題列右上角、擋到「＋ 新增照片」。標題列右邊也不用再讓 36px 給它。 */
+@media (max-width:900px),(max-width:1200px) and (orientation:portrait){
+  #upload-section .upload-content-row>#batch-sidebar>.batch-sidebar-close-btn,
+  #results-body.batch-mode>#batch-sidebar>.batch-sidebar-close-btn{top:calc(var(--sb-head-top,0px) + 8.5px);inset-inline-end:-49px;width:36px;height:36px;
+    background:var(--background-raised,#fff);color:var(--text-strong);box-shadow:0 2px 8px rgba(0,0,0,.16)}
+  #upload-section .upload-content-row>#batch-sidebar>.batch-sidebar-close-btn:hover,
+  #results-body.batch-mode>#batch-sidebar>.batch-sidebar-close-btn:hover{background:linear-gradient(var(--fill-hover),var(--fill-hover)),var(--background-raised,#fff)}
+  #results-body.batch-mode>#batch-sidebar{--sb-head-top:7px}
+  /* 單張結果頁（分析過的一張）在手機／平板沒有標題下那一列可以放「我的照片」圓鈕；舊的貼左邊緣分頁會浮在畫面外緣，
+     跟手機（≤768 本來就藏）一樣不顯示。 */
+  #results-body.batch-mode>.batch-drawer-trigger{display:none !important}
+  /* 單張結果頁的抽屜收起來時只是滑到畫面外（沒有藏起來），抽屜外的關閉鈕會露回畫面：收起來就藏（滑出去之後）。 */
+  #results-body.batch-mode>#batch-sidebar:not(.drawer-open)>.batch-sidebar-close-btn{visibility:hidden;transition:visibility 0s linear .25s}
+  #results-body.batch-mode>#batch-sidebar.drawer-open>.batch-sidebar-close-btn{visibility:visible;transition:visibility 0s}
+  #upload-section .upload-content-row>#batch-sidebar>.batch-sidebar-header,
+  #results-body.batch-mode>#batch-sidebar>.batch-sidebar-header{padding-inline-end:var(--spacing-16)}
+}
+
+/* 橫拿、601–900px 的視窗：對話也要跟手機／直拿平板一樣撐滿整個寬度（標題下那一列從左到右），
+   「我的照片」圓鈕才會落在那一列裡。原本這段只有 ≤600 和直拿才有，橫拿 601–900 會變成桌機那種
+   置中的圓角卡片（左邊空一塊），圓鈕卻照手機的位置固定在畫面左上，跑到卡片外面。 */
+@media (min-width:601px) and (max-width:900px) and (orientation:landscape){
+  #upload-section .upload-container:has(.home-chat){height:calc(100dvh - var(--header-h));min-height:0;max-width:none;margin:0;padding:0;overflow:hidden}
+  #upload-section .upload-grid:has(.home-chat){flex:1 1 auto;min-height:0;margin:0;padding:0}
+  #upload-section .upload-content-row:has(>.home-chat){height:100%;min-height:0;padding:0;gap:0;align-items:stretch}
+  #upload-section .upload-content-row>.home-chat,
+  #upload-section .upload-content-row>.home-chat.is-solo{flex:1 1 auto;width:100%;max-width:none;height:100%;max-height:none;min-height:0;
+    border-radius:0;box-shadow:none}
+}
+
+/* 頁面最底層（<html>）不自己上色：主題變數是掛在 <body> 上的，<html> 讀到的是預設（深色）的 --bg，
+   頁面出現直向捲軸時，捲軸那條會露出黑色。<html> 透明時瀏覽器會改用 <body> 的背景鋪滿整個畫布，跟著主題走。 */
+html{background:transparent}
