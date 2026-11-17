@@ -3670,7 +3670,8 @@ export function App() {
     // 不用把視線移過去找。最新那一則的鍵照現在能按的給；之後有新的對話，鍵留在原處定格成紀錄。
     // 手機的照片格就在對話上面，不另外放。
     const chipRow = (c: OverviewChips | null | undefined, live: boolean) => {
-      if (!c) return null;
+      // 用過、定格成紀錄的那排（灰掉按不了）不放：只留現在按得了的那一排。
+      if (!c || !live) return null;
       const has: OverviewChips = live
         ? { pending: !finished && !!pending, renderable: !finished && !!renderable, finished, redo: !!redoAll, labels } : c;
       const lb = has.labels || { analyze: "全部分析", render: "全部一鍵美化" };

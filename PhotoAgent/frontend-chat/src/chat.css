@@ -3191,3 +3191,11 @@ html{background:transparent}
     transition:transform .25s ease,visibility 0s linear .25s,box-shadow 0s linear .25s}
   #results-body.batch-mode>#batch-sidebar.drawer-open{visibility:visible}
 }
+
+/* 用過的鍵不放之後，那排可能整排空掉：空的就不佔位置（不留一段空白間距）。 */
+.chat-actions-main:empty,.chat-actions-aux:empty{display:none}
+.chat-choices.chat-actions:not(:has(button)){display:none}
+
+/* 使用者按的那則（「全部分析」「全部美化」…）和緊接的回話包在同一個區塊裡，吃不到對話列的間距，
+   兩則黏在一起：中間補 20px。 */
+.chat-timeline>:not(.chat-msg)>.chat-msg.is-user+.chat-msg{margin-top:20px}

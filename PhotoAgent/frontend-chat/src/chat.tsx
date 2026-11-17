@@ -631,6 +631,8 @@ export function ActionChoice(props: {
   disabled?: boolean;
   onClick?: () => void;
 }) {
+  // 用過／按不了的不再留在對話裡當灰掉的紀錄：只放現在按得了的鍵（按了哪個，使用者那則訊息已經寫著）。
+  if (props.settled) return null;
   const dim = props.settled && !props.picked;
   const cls = `ycoButton ${dim ? "variant_secondary tone_neutral" : "variant_primary tone_neutral"} size_small chat-action-btn${props.settled ? " is-static" : ""}`;
   const inner = (
