@@ -1370,6 +1370,12 @@
         "chat"
       ]
     },
+    "chat_all_photos": {
+      "zh": "所有照片",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_all_photos_are_retouched_select": {
       "zh": "每張都美化好了，從{where}選取照片就能看結果。",
       "where": [
@@ -1774,6 +1780,12 @@
         "chat"
       ]
     },
+    "chat_click_the_photo_to_enlarge": {
+      "zh": "點照片可以放大，按住不放可以看原圖。",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_compare": {
       "zh": "比較",
       "where": [
@@ -1981,6 +1993,12 @@
     },
     "chat_editing_the_photo_based_on": {
       "zh": "正在照你的需求調整照片…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_em_with_photo_master_em": {
+      "zh": "交給 <em>Photo Master</em>",
       "where": [
         "chat"
       ]
@@ -2263,6 +2281,18 @@
     },
     "chat_how_should_the_rest_be_2": {
       "zh": "還沒美化的這幾張想怎麼修？會套用到每一張",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_would_you_like_it": {
+      "zh": "想怎麼美化？先打字也可以",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_how_would_you_like_it_2": {
+      "zh": "想怎麼美化？可以先打字，選好照片再送出",
       "where": [
         "chat"
       ]
@@ -2991,12 +3021,6 @@
         "chat"
       ]
     },
-    "chat_one_photo": {
-      "zh": "一張照片，",
-      "where": [
-        "chat"
-      ]
-    },
     "chat_open_another": {
       "zh": "打開另一張",
       "where": [
@@ -3216,8 +3240,8 @@
         "chat"
       ]
     },
-    "chat_pick_a_photo_then_just": {
-      "zh": "選一張照片，剩下的用聊的",
+    "chat_pick_your_photos_then_just": {
+      "zh": "選好照片，剩下的用聊的",
       "where": [
         "chat"
       ]
@@ -3407,6 +3431,12 @@
         "chat"
       ]
     },
+    "chat_retouch_all_your_photos": {
+      "zh": "所有照片，",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_retouch_engine_set_to": {
       "zh": "美化引擎換成 {v1}",
       "where": [
@@ -3451,12 +3481,6 @@
     },
     "chat_retouched": {
       "zh": "{n} 張美化好了",
-      "where": [
-        "chat"
-      ]
-    },
-    "chat_retouched_em_just_for_you": {
-      "zh": "開啟<em>專屬</em>美化體驗",
       "where": [
         "chat"
       ]
@@ -3883,6 +3907,12 @@
     },
     "chat_tap_a_face_or_type": {
       "zh": "點頭像或打字回答",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_tap_a_photo_to_enlarge": {
+      "zh": "點圖可以放大看。",
       "where": [
         "chat"
       ]
@@ -4521,6 +4551,7 @@
     "chat_upload_a_photo_or_pick": {
       "zh": "上傳照片或挑一張範例，選好的照片會放在這裡。",
       "where": [
+        "panel",
         "chat"
       ]
     },
@@ -4907,6 +4938,12 @@
     },
     "chat_your_photo_has_also_been": {
       "zh": "照片也美化完成了，以下是這次的結果：",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_your_photo_will_preview_here": {
+      "zh": "選好照片後會在這裡預覽",
       "where": [
         "chat"
       ]
@@ -8489,6 +8526,18 @@
     },
     "panel_once_you_upload_a_photo_2": {
       "zh": "上傳照片後，AI 的修圖建議會在這裡，也能在這裡微調。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_once_you_upload_a_photo_3": {
+      "zh": "上傳照片後，AI 對這張照片的分析摘要會出現在這裡。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_once_you_upload_a_photo_4": {
+      "zh": "上傳照片後，AI 的建議和可以微調的美化項目會出現在這裡。",
       "where": [
         "panel"
       ]

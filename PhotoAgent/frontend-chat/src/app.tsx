@@ -3631,9 +3631,11 @@ export function App() {
     } else if (!untouched) {
       // 剛報完「跑完了」，分析好、失敗幾張那句已經講過，這裡只補它沒提到的、還沒開始的那幾張。
       const afterDone = lastTurn?.kind === "done";
-      const next = notYet
+      // 只講現在按得到的鍵：失敗的那幾張算在 notYet 裡，但「全部…」不會重送它們；只剩失敗的時候兩顆鍵都是 0、
+      // 也不會出現，句子就不叫人去按（失敗那句另外講選取那張看原因）。
+      const next = notYet && pending && renderable
         ? t("按{btn}的{render}會把還沒美化的都美化好；只想先看分析，按{btn}的{analyze}。", { btn, render: qr, analyze: qa })
-        : t("要接著美化，按{btn}的{render}。", { btn, render: qr });
+        : renderable ? t("要接著美化，按{btn}的{render}。", { btn, render: qr }) : "";
       if (afterDone) {
         statusHint = !todo && !analyzed && !failed ? "" : `${todo ? t("另外還有 {n} 張還沒分析。", { n: todo }) : ""}${next}`;
       } else {

@@ -2317,15 +2317,17 @@ body[data-theme-mode] .site-header.yco-header{box-shadow:none}
 .home-eyebrow{width:fit-content}
 .home-eyebrow::before,.home-eyebrow::after{background:var(--yco-gradient);opacity:1}
 
-/* 首頁標題：全大寫。桌機上第一行（One photo, retouched／一張照片，）固定一行，字級跟著文字欄寬（cqw）算，
+/* 首頁標題：全大寫。桌機上第一行（Retouch all your photos／所有照片，）固定一行，字級跟著文字欄寬（cqw）算，
    最長的那行剛好放得下；第二行是漸層強調字。 */
 .home-headline{text-transform:uppercase}
 @media (min-width:1201px){
   .home-headline{white-space:nowrap;font-size:clamp(28px,10.5cqw,76px)}
   .home-headline span{white-space:nowrap}
   /* 英文兩個 span 接在一起，但不能強制單行：文字寬度碰到右側照片前要在左欄內自然換行。
-     JUST FOR YOU 仍由 em 自己另起一行。 */
-  :lang(en) .home-headline{max-width:100%;white-space:normal;font-size:clamp(36px,9.9cqw,102px)}
+     強調行（WITH PHOTO MASTER）仍由 em 自己另起一行，而且不換行：品牌名不能拆成兩行。字級 8.6cqw 是讓這行
+     剛好放得進文字欄（約 8.9cqw 就滿），最小值不能比 8.6cqw 在最窄文字欄時還大，不然會擠出去。 */
+  :lang(en) .home-headline{max-width:100%;white-space:normal;font-size:clamp(30px,8.6cqw,88px);text-wrap:balance}
+  :lang(en) .home-headline em{white-space:nowrap}
   :lang(en) .home-headline span{display:inline;white-space:normal}
   :lang(en) .home-headline span:first-child::after{content:" "}
   :lang(en) .home-headline em{display:block}
