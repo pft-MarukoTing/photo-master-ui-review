@@ -6196,6 +6196,9 @@
       .pm-panel #batch-sidebar:not(.drawer-open) .batch-sidebar-close-btn { visibility: hidden; opacity: 0; transition: opacity .15s ease, visibility 0s linear .25s; }
       .pm-panel #batch-sidebar.drawer-open .batch-sidebar-close-btn { visibility: visible; opacity: 1; transition: opacity .3s ease, visibility 0s; }
       @media (prefers-reduced-motion: reduce) { .pm-panel #batch-sidebar .batch-sidebar-close-btn { transition: none !important; } }
+      /* 抽屜收起來時整個藏起來（等滑出去 .25s 之後），不然推到畫面外的抽屜，陰影還會從左邊露出一條。 */
+      .pm-panel #batch-sidebar:not(.drawer-open) { visibility: hidden; box-shadow: none; transition: transform .25s ease, visibility 0s linear .25s, box-shadow 0s linear .25s; }
+      .pm-panel #batch-sidebar.drawer-open { visibility: visible; }
     }
     /* 四塊白底卡片（編輯器、對話模式各一欄「我的照片」＋一張大卡）用同一組陰影：
        0 10px 30px rgba(0,0,0,.06)＋0 1px 2px rgba(0,0,0,.04)（--pm-shell-shadow，對話模式 chat.css 照抄同樣的值）。

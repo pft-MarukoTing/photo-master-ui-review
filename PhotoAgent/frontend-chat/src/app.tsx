@@ -4102,7 +4102,7 @@ export function App() {
                   hop={hopTrigger}
                   onHopped={() => setHopTrigger(false)}
                 />
-              ) : (session.photos.length > 1 || !drawerLayout) && (
+              ) : (
                 <BatchSidebar
                   photos={session.photos}
                   messages={session.messages || []}

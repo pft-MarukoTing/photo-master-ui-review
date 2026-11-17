@@ -3181,3 +3181,13 @@ html{background:transparent}
    箭頭翻上；有值又展開時底色換成較深的 accent 色。 */
 .chat-opt-drop.is-open:not(.is-picked){background:var(--fill-press);border-color:var(--n100);box-shadow:inset 0 0 0 .5px var(--n100);color:var(--n100)}
 .chat-opt-drop.is-open.is-picked{background:var(--tonal);box-shadow:inset 0 0 0 .5px var(--accent)}
+
+/* 結果頁（分析／美化過那張）的抽屜，跟上傳頁那個一樣處理：
+   1. 標題列的負邊距跟抽屜內距 12px 一樣（共用那條是桌機欄 14px，抽屜裡會寬出 3px）。
+   2. 收起時藏起來（等滑出去的動畫跑完才藏），不然推到畫面外的抽屜，陰影還會從左邊露出一條。 */
+@media (max-width:900px),(max-width:1200px) and (orientation:portrait){
+  #results-body.batch-mode>#batch-sidebar>.batch-sidebar-header{margin-inline:-12px}
+  #results-body.batch-mode>#batch-sidebar:not(.drawer-open){visibility:hidden;box-shadow:none;
+    transition:transform .25s ease,visibility 0s linear .25s,box-shadow 0s linear .25s}
+  #results-body.batch-mode>#batch-sidebar.drawer-open{visibility:visible}
+}
