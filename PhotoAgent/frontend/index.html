@@ -3966,6 +3966,22 @@
       opacity: 1;
       pointer-events: auto;
     }
+    /* A closed drawer is hidden outright, not just moved off screen. The
+       drawer is a right-side panel above 1200px and a centered modal at
+       1200px and below; without this, resizing across 1200px animated the
+       closed drawer between the two positions and it flew across the page.
+       visibility switches off only after the close animation (.25s), and
+       switches on at once when the drawer opens. */
+    .history-drawer:not(.drawer-open),
+    #history-drawer:not(.drawer-open) {
+      visibility: hidden;
+      transition: transform .25s ease, opacity .2s ease, visibility 0s linear .25s;
+    }
+    .history-drawer.drawer-open,
+    #history-drawer.drawer-open {
+      visibility: visible;
+      transition: transform .25s ease, opacity .2s ease, visibility 0s;
+    }
     #history-drawer .history-header {
       position: sticky;
       top: 0;
@@ -5998,10 +6014,12 @@
       .pm-panel #pm-empty .pm-gallery-empty-title { margin: 0; font-size: var(--font-size-heading-5); line-height: var(--line-height-heading-5); font-weight: var(--font-weight-strong); color: var(--text-strong); }
       .pm-panel #pm-empty .pm-gallery-empty-sub { margin: 0; font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); color: var(--text-weak); }
       .pm-panel #pm-empty .pm-gallery-empty-btn {
-        margin-top: var(--spacing-8); height: 36px; padding: 0 var(--spacing-16); border: 1px solid var(--stroke-strong); border-radius: var(--corner-radius-32);
-        background: transparent; color: var(--text-strong); font: inherit; font-size: var(--font-size-small); font-weight: 600; cursor: pointer;
+        margin-top: var(--spacing-8); height: 36px; padding: 0 var(--spacing-16); border: 0; border-radius: var(--corner-radius-32);
+        /* Same colour as the home page gallery column's Upload button (yco primary/brand): solid brand blue, white text. */
+        background: var(--fill-brand-strong); color: var(--text-inverse-strong); font: inherit; font-size: var(--font-size-small); font-weight: 600; cursor: pointer;
       }
-      .pm-panel #pm-empty .pm-gallery-empty-btn:hover { background: var(--fill-hover); }
+      .pm-panel #pm-empty .pm-gallery-empty-btn:hover { background: linear-gradient(var(--fill-hover), var(--fill-hover)), var(--fill-brand-strong); }
+      .pm-panel #pm-empty .pm-gallery-empty-btn:active { background: linear-gradient(var(--fill-press), var(--fill-press)), var(--fill-brand-strong); }
       .pm-panel #pm-empty .pm-gallery-empty-btn:focus-visible { outline: 2px solid var(--stroke-brand-strong); outline-offset: 2px; }
       .pm-panel #pm-empty .pm-empty-card {
         flex: 1 1 0%; min-width: 0; display: flex; gap: var(--pm-shell-gap); box-sizing: border-box;
