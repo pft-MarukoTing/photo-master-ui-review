@@ -3025,3 +3025,9 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
 /* 頁面最底層（<html>）不自己上色：主題變數是掛在 <body> 上的，<html> 讀到的是預設（深色）的 --bg，
    頁面出現直向捲軸時，捲軸那條會露出黑色。<html> 透明時瀏覽器會改用 <body> 的背景鋪滿整個畫布，跟著主題走。 */
 html{background:transparent}
+
+/* 人像修正的開關（設定卡、分析計畫裡那一組）：跟編輯器 Analysis & Adjustments 的開關（.ap-face-issue-toggle）一樣大——
+   34×20，圓點 14px、離邊 3px，打開時滑到 17px。設定視窗裡其他的開關不動。 */
+.chat-switch-row .ios-switch{width:34px;height:20px;flex-shrink:0}
+.chat-switch-row .ios-thumb{width:14px;height:14px;top:3px;inset-inline-start:3px}
+.chat-switch-row .ios-switch input:checked+.ios-track .ios-thumb{inset-inline-start:17px}
