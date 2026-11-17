@@ -8655,7 +8655,17 @@
   function updateBatchSidebarItem(record) {
     const existing = els.batchSidebarList.querySelector(`[data-id="${record.localId}"]`);
     if (!existing) return;
-    existing.replaceWith(buildBatchSidebarItem(record));
+    const fresh = buildBatchSidebarItem(record);
+    // 換掉的是整顆新做的方塊，直接放上去選取框會一下子出現／消失。選取狀態有變時，新的那顆先照舊的
+    // 狀態放上去、讓瀏覽器算一次樣式，再換成新的狀態，選取框才會淡入／淡出（跟對話模式一樣，見 index.html）。
+    const wasSelected = existing.classList.contains("selected");
+    const isSelected = fresh.classList.contains("selected");
+    if (wasSelected !== isSelected) fresh.classList.toggle("selected", wasSelected);
+    existing.replaceWith(fresh);
+    if (wasSelected !== isSelected) {
+      void getComputedStyle(fresh, "::after").opacity;
+      fresh.classList.toggle("selected", isSelected);
+    }
     renderBatchSidebarFilters();
   }
 

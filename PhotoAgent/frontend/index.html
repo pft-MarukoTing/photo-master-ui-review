@@ -13,6 +13,8 @@
   <!-- YCO Button（yco-collab-space platform/ui/button/Button.module.css，原檔照抄）。 -->
   <link rel="stylesheet" href="assets/yco/yco-button.css">
   <link rel="stylesheet" href="styles.css">
+  <!-- 圖片載不出來時換成灰底＋圖庫圖示的佔位圖，要比其他東西先載入才接得到每一張。 -->
+  <script src="img-fallback.js"></script>
   <style>
     [hidden] { display: none !important; }
 
@@ -4599,7 +4601,8 @@
         transform: translateX(-100%);
         transition: transform .25s ease;
       }
-      .batch-sidebar.drawer-open { transform: translateX(0); }
+      /* 打開：0.4s 減速曲線（跟對話模式同一條），一出來就有速度、慢慢停到位；收起照上面 .25s ease。 */
+      .batch-sidebar.drawer-open { transform: translateX(0); transition: transform .4s cubic-bezier(.05, .7, .1, 1); }
       :where([dir="rtl"]) .batch-sidebar { transform: translateX(100%); }
       .results-body.batch-mode .batch-drawer-trigger { display: inline-flex; }
       .batch-sidebar-close-btn { display: flex; }
@@ -4656,6 +4659,21 @@
     /* Chat renders each tile as a <button> (this page uses a <div>). */
     .batch-sidebar-list > button.history-cube { border: 0; font: inherit; color: inherit; }
     .batch-sidebar-list > .history-cube .rc-media { display: block; }
+    /* 選取框一直都在、沒選時看不到：選取時淡入（.2s）、取消時淡出，對話模式和編輯器一樣。
+       系統要求減少動態時直接切換。 */
+    .batch-sidebar-list > .history-cube::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      border-radius: inherit;
+      box-shadow: inset 0 0 0 4px var(--accent), inset 0 0 0 7px var(--n09);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .2s ease;
+    }
+    .batch-sidebar-list > .history-cube.selected::after { opacity: 1; }
+    @media (prefers-reduced-motion: reduce) { .batch-sidebar-list > .history-cube::after { transition: none; } }
     /* The photo covers .selected's own inset ring, so the ring is drawn
        again on a layer above it. */
     .batch-sidebar-list > .history-cube.selected::after {
@@ -5341,7 +5359,7 @@
     /* 「我的照片」標題列跟 Chat 標題列同款：粗體標題、下面一條分隔線（面板模式）。 */
     .pm-panel #batch-sidebar > .batch-sidebar-header { display: flex; align-items: center; gap: var(--spacing-8); box-sizing: border-box; min-height: 53px;
       margin: 0 -14px var(--spacing-12); padding: 0 var(--spacing-16); border-bottom: 1px solid var(--stroke-weak); }
-    .pm-panel #batch-sidebar > .batch-sidebar-header .batch-sidebar-title { margin: 0; font-family: Roboto, var(--cjk-sans, "Noto Sans TC"), system-ui, sans-serif; font-size: 20px; font-weight: 600; line-height: 1.3; letter-spacing: .02em; text-transform: none; color: var(--n100); }
+    .pm-panel #batch-sidebar > .batch-sidebar-header .batch-sidebar-title { margin: 0; font-family: Roboto, var(--cjk-sans, "Noto Sans TC"), system-ui, sans-serif; font-size: 17.5px; font-weight: 600; line-height: 1.3; letter-spacing: .02em; text-transform: none; color: var(--n100); }
     /* 美化旁邊的設定鈕：中性色（透明底＋灰色邊框，不是藍色），跟美化鈕間距 4px。
        尺寸跟美化鈕（#inline-analysis-continue-btn）一樣：高 42px、左右內距 24px、32px 圓角。 */
     .pm-panel .ap-actions-row .ap-settings-run-row { gap: var(--spacing-4); }
@@ -5841,6 +5859,19 @@
       display: flex; flex-direction: column; box-sizing: border-box; margin: 0; width: 100%; padding: var(--spacing-12) var(--spacing-16);
       background: var(--n04); border-start-start-radius: inherit; border-start-end-radius: inherit; }
     .pm-panel #ap-analysis-shell .ap-analysis-shell-summary-inner > .ap-analysis-shell-title { display: flex; align-items: center; gap: var(--spacing-8); }
+    /* 面板標題同一個樣式：跟 My Photos、對話模式的 Chat 標題一樣 -- Roboto 17.5px / 600、行高 1.3、字距 .02em、最深的字色。 */
+    .pm-panel #batch-sidebar > .batch-sidebar-header .batch-sidebar-title,
+    .pm-panel .ap-photo-summary-label,
+    .pm-panel #ap-analysis-shell .ap-analysis-shell-title,
+    .pm-panel #ap-analysis-shell .ap-analysis-shell-title #ap-analysis-shell-title-text {
+      font-family: Roboto, var(--cjk-sans, "Noto Sans TC"), system-ui, sans-serif;
+      font-size: 17.5px; font-weight: 600; line-height: 1.3; letter-spacing: .02em; text-transform: none; color: var(--n100);
+    }
+    /* 收合成直條時那行直排標題：字體字重一樣，大小和字距維持直排用的。 */
+    body.side-panel-layout #ap-analysis-shell:not([open]) .ap-analysis-shell-title,
+    body.side-panel-layout #ap-analysis-shell:not([open]) .ap-analysis-shell-title #ap-analysis-shell-title-text {
+      font-family: Roboto, var(--cjk-sans, "Noto Sans TC"), system-ui, sans-serif; font-weight: 600; font-size: 16px; letter-spacing: 2px; line-height: normal;
+    }
     .pm-panel #ap-analysis-shell .ap-analysis-shell-desc { display: block; margin-top: var(--spacing-4); }
     .pm-panel #batch-sidebar .history-cube-remove:hover { background: rgba(220,60,60,.9); }
     /* 步驟列：文字和圖示都縮小（文字 13px、圓圈 22px、勾勾／轉圈 11px）。 */
@@ -6161,8 +6192,10 @@
       .pm-panel #batch-sidebar > .batch-sidebar-header { padding-inline-end: var(--spacing-16); }
       /* 抽屜收起來時只是滑到畫面左邊外（沒有藏起來），按鈕在抽屜外 48px，會露回畫面左上角：收起來就藏，
          等滑出去（.25s）之後才藏，收起的動畫看得到。 */
-      .pm-panel #batch-sidebar:not(.drawer-open) .batch-sidebar-close-btn { visibility: hidden; transition: visibility 0s linear .25s; }
-      .pm-panel #batch-sidebar.drawer-open .batch-sidebar-close-btn { visibility: visible; transition: visibility 0s; }
+      /* 打開時跟抽屜一起淡入（.3s）；收起時跟抽屜同時淡出（.15s）。減少動態時直接顯示／隱藏。 */
+      .pm-panel #batch-sidebar:not(.drawer-open) .batch-sidebar-close-btn { visibility: hidden; opacity: 0; transition: opacity .15s ease, visibility 0s linear .25s; }
+      .pm-panel #batch-sidebar.drawer-open .batch-sidebar-close-btn { visibility: visible; opacity: 1; transition: opacity .3s ease, visibility 0s; }
+      @media (prefers-reduced-motion: reduce) { .pm-panel #batch-sidebar .batch-sidebar-close-btn { transition: none !important; } }
     }
     /* 四塊白底卡片（編輯器、對話模式各一欄「我的照片」＋一張大卡）用同一組陰影：
        0 10px 30px rgba(0,0,0,.06)＋0 1px 2px rgba(0,0,0,.04)（--pm-shell-shadow，對話模式 chat.css 照抄同樣的值）。

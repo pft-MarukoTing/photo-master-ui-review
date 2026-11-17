@@ -19,7 +19,7 @@
   --chat-fs-sm:12px;   /* captions, secondary rows */
   --chat-fs-md:14px;   /* body: messages, options, inputs */
   --chat-fs-lg:16px;   /* card titles */
-  --chat-fs-xl:20px;   /* panel title */
+  --chat-fs-xl:17.5px; /* panel title -- same as Editor's Analysis & Adjustments */
 
   /* 4pt spacing grid. The only values off it are optical: hairline borders,
      the 2px vertical inside pill paddings, and the -2px label nudge. */
@@ -867,7 +867,7 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
   #results-body.batch-mode>#batch-sidebar{position:fixed;top:var(--header-h);inset-inline-start:0;bottom:0;margin:0;
     width:min(204px,64vw);height:auto;max-width:none;padding:12px;flex-basis:auto;border-radius:0;border-block-width:0;border-inline-width:0 1px;z-index:1001;
     transform:translateX(-100%);transition:transform .25s ease}
-  #results-body.batch-mode>#batch-sidebar.drawer-open{transform:translateX(0)}
+  #results-body.batch-mode>#batch-sidebar.drawer-open{transform:translateX(0);transition:transform .4s cubic-bezier(.05,.7,.1,1)}
   :where([dir="rtl"]) #results-body.batch-mode>#batch-sidebar{transform:translateX(100%)}
   #results-body.batch-mode>.batch-drawer-trigger{display:inline-flex;border-start-start-radius:0;border-start-end-radius:12px;border-end-end-radius:12px;border-end-start-radius:0}
   /* 從最近照片打開一批時跟總覽一樣跳幾下（is-hop 由 App 控制，跳完就拿掉，同一批裡換張不會再跳）。 */
@@ -904,9 +904,10 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
        收起的動畫看得到；跨過斷點時也不會有一片東西從畫面上滑過去。 */
     transform:translateX(-100%);visibility:hidden;pointer-events:none;
     transition:transform .3s cubic-bezier(.4,0,.2,1),visibility 0s linear .3s}
-  /* 打開：0.4s、ease-in。收起維持上面那條 .3s。 */
+  /* 打開：0.4s、先快後慢的減速曲線（emphasized decelerate），一出來就有速度、慢慢停到位；
+     原本的 ease-in 是越滑越快、到位時急停，看起來接近等速。收起維持上面那條 .3s。 */
   #upload-section .upload-content-row>#batch-sidebar.drawer-open{transform:translateX(0);visibility:visible;pointer-events:auto;
-    transition:transform .4s ease-in,visibility 0s}
+    transition:transform .4s cubic-bezier(.05,.7,.1,1),visibility 0s}
   :where([dir="rtl"]) #upload-section .upload-content-row>#batch-sidebar:not(.drawer-open){transform:translateX(100%)}
   #upload-section .upload-content-row>.batch-drawer-trigger{display:inline-flex;border-start-start-radius:0;border-start-end-radius:12px;border-end-end-radius:12px;border-end-start-radius:0}
   #upload-section .upload-content-row .batch-sidebar-close-btn{display:flex;top:7px;inset-inline-end:8px}
@@ -2544,7 +2545,8 @@ html[data-theme="dark"] .mode-switch-opt.is-active{background:var(--background-o
   background:var(--fill-weak);color:var(--text-strong);font-family:var(--font-family-body);font-size:var(--font-size-tiny);font-weight:var(--font-weight-strong)}
 .chat-panel>.chat-composer .chat-attach:hover:not(:disabled){background:var(--fill-hover)}
 .chat-attach-label{white-space:nowrap}
-.chat-panel>.chat-composer .chat-attach-menu{bottom:auto;top:calc(100% + 6px)}
+/* 輸入框在畫面最底下，選單往上開（開在「新增照片」／「換一張照片」上面），不會被視窗底邊切掉。 */
+.chat-panel>.chat-composer .chat-attach-menu{top:auto;bottom:calc(100% + 6px)}
 /* 送出鍵照 YCO Button：可以送時是品牌色實心（Primary · Brand），不能送時是 YCO 的停用樣式——
    一整塊 --fill-disabled 灰底＋淺色箭頭（不是把原本的樣子調淡）。 */
 .chat-composer .chat-send{border:0;box-shadow:none;background:var(--fill-brand-strong);color:var(--text-inverse-strong);opacity:1}
@@ -2965,7 +2967,6 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   #upload-section .upload-content-row>.batch-drawer-trigger:focus-visible{outline:0;box-shadow:0 0 0 3px var(--stroke-focus)}
   #upload-section .upload-content-row>.batch-drawer-trigger>.batch-drawer-trigger-count{top:-8px;inset-inline-end:-8px}
   /* 選了照片、標題列換成 64px 的照片列時，圓鈕跟著垂直置中。 */
-  #upload-section .upload-content-row:has(.chat-panel.has-photo)>.batch-drawer-trigger{top:calc(var(--header-h) + 14px)}
   /* 左邊讓出 24＋36＋8 給圓鈕，右邊 24。 */
   #upload-section .upload-content-row:has(>.batch-drawer-trigger) .chat-panel>:is(.chat-panel-head,.chat-panel-photo){padding-inline:68px 24px}
   .chat-panel-head>svg,.chat-panel-head .chat-panel-title,.chat-panel-head .chat-panel-sub{display:none !important}
@@ -3000,9 +3001,6 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   #upload-section .upload-content-row>#batch-sidebar>.batch-sidebar-close-btn:hover,
   #results-body.batch-mode>#batch-sidebar>.batch-sidebar-close-btn:hover{background:linear-gradient(var(--fill-hover),var(--fill-hover)),var(--background-raised,#fff)}
   #results-body.batch-mode>#batch-sidebar{--sb-head-top:7px}
-  /* 單張結果頁（分析過的一張）在手機／平板沒有標題下那一列可以放「我的照片」圓鈕；舊的貼左邊緣分頁會浮在畫面外緣，
-     跟手機（≤768 本來就藏）一樣不顯示。 */
-  #results-body.batch-mode>.batch-drawer-trigger{display:none !important}
   /* 單張結果頁的抽屜收起來時只是滑到畫面外（沒有藏起來），抽屜外的關閉鈕會露回畫面：收起來就藏（滑出去之後）。 */
   #results-body.batch-mode>#batch-sidebar:not(.drawer-open)>.batch-sidebar-close-btn{visibility:hidden;transition:visibility 0s linear .25s}
   #results-body.batch-mode>#batch-sidebar.drawer-open>.batch-sidebar-close-btn{visibility:visible;transition:visibility 0s}
@@ -3031,3 +3029,155 @@ html{background:transparent}
 .chat-switch-row .ios-switch{width:34px;height:20px;flex-shrink:0}
 .chat-switch-row .ios-thumb{width:14px;height:14px;top:3px;inset-inline-start:3px}
 .chat-switch-row .ios-switch input:checked+.ios-track .ios-thumb{inset-inline-start:17px}
+
+/* 預覽框（灰底、12px 圓角）要把照片裁進圓角裡：照片幾乎填滿框的時候（例如方形照片），
+   照片本身的直角會從圓角底下露出來。框裡只有照片和角落的按鈕，沒有要伸出去的東西。 */
+.prechat-stage{overflow:hidden}
+
+/* 輸入框上面那排：單張時「＋（新增照片）」和「換一張照片」並排，間距 8px；＋ 是 36px 的圓鈕、只有圖示，
+   跟「換一張照片」同一個底色。整排放在原本那顆的位置（格線的 attach 區）。 */
+.chat-attach-row{display:flex;align-items:center;gap:var(--spacing-8,8px);flex-shrink:0}
+.chat-panel>.chat-composer .chat-attach-row{grid-area:attach;justify-self:start}
+.chat-panel>.chat-composer .chat-attach.chat-attach-add{width:36px;min-width:36px;padding:0;justify-content:center;border-radius:999px}
+
+/* 「我的照片」最上面的「所有照片」：整批一起看的那一格。白底圓角卡片，左邊三張縮圖疊成扇形，
+   右邊標題和張數；選著時跟選著的照片同一種藍框（2px 品牌藍＋淡藍底），下面放「全部美化」「設定」。 */
+.batch-all-card{flex:none;display:flex;flex-direction:column;gap:10px;margin:0 0 12px;padding:8px;box-sizing:border-box;
+  border:1px solid var(--stroke-weak);border-radius:16px;background:var(--background-raised,#fff);box-shadow:0 1px 2px rgba(0,0,0,.04);
+  transition:border-color .15s,box-shadow .15s,background-color .15s}
+.batch-all-card:not(.is-on):hover{border-color:var(--stroke-strong);box-shadow:0 4px 12px rgba(0,0,0,.06)}
+.batch-all-card.is-on{border-color:var(--fill-brand-strong);box-shadow:0 0 0 1px var(--fill-brand-strong);
+  background:color-mix(in srgb,var(--fill-brand-strong) 6%,var(--background-raised,#fff))}
+.batch-all-entry{display:flex;align-items:center;gap:12px;width:100%;margin:0;padding:4px 4px 4px 2px;border:0;border-radius:10px;
+  background:none;color:inherit;font:inherit;text-align:start;cursor:pointer}
+.batch-all-card.is-on .batch-all-entry{cursor:default}
+.batch-all-entry:disabled{cursor:default;opacity:.55}
+.batch-all-entry:focus-visible{outline:2px solid var(--stroke-brand-strong);outline-offset:2px}
+.batch-all-entry>svg{flex:none;margin-inline-start:auto;color:var(--icon-weak,var(--text-weak))}
+/* 三張縮圖疊成扇形（白邊＋陰影），兩張就疊兩張。 */
+.batch-all-stack{position:relative;flex:none;width:56px;height:44px}
+.batch-all-stack img{position:absolute;top:4px;width:36px;height:36px;box-sizing:border-box;object-fit:cover;
+  border:2px solid var(--background-raised,#fff);border-radius:9px;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+.batch-all-stack img:nth-child(1){left:0;transform:rotate(-8deg);z-index:1}
+.batch-all-stack img:nth-child(2){left:9px;z-index:2}
+.batch-all-stack img:nth-child(3){left:18px;transform:rotate(8deg);z-index:3}
+.batch-all-stack.is-2 img:nth-child(2){left:16px;transform:rotate(6deg)}
+.batch-all-text{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.batch-all-text b{font-size:15px;font-weight:600;color:var(--text-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.batch-all-text small{font-size:12px;color:var(--text-weak)}
+.batch-all-card.is-on .batch-all-text b{color:var(--text-brand,var(--fill-brand-strong))}
+/* 兩顆鍵各佔一整排（側欄窄，「全部再美化」放不下並排），主要動作在上。 */
+.batch-all-actions{display:flex;flex-direction:column;gap:6px}
+.batch-all-btn{width:100%;height:36px;min-height:36px;justify-content:center;gap:6px;border-radius:999px;font-size:14px;line-height:20px;white-space:nowrap}
+/* 「所有照片」選著時跟選著的照片方塊同一種框：圓角 18px（兩種狀態都一樣），
+   外圈 4px 品牌藍、裡面再一圈 3px 白，都畫在卡片裡面、大小不變；不加淡藍底（照片方塊也沒有）。 */
+.batch-all-card{position:relative;border-radius:18px}
+.batch-all-card.is-on{border-color:transparent;box-shadow:none;background:var(--background-raised,#fff)}
+.batch-all-card.is-on::after{content:"";position:absolute;inset:-1px;z-index:2;border-radius:18px;pointer-events:none;
+  box-shadow:inset 0 0 0 4px var(--accent),inset 0 0 0 7px var(--n09)}
+
+/* 狀態篩選（我的照片、總覽的照片格）：字＋數字標籤。膠囊 28px 高、白底細框；數字是右邊一顆小圓標籤，
+   平常淺灰底；選著時整顆換成淡品牌藍、字變藍，數字標籤變實心品牌藍、白字。處理中的轉圈照樣在字前面。 */
+.batch-grid-filters .batch-grid-filter,
+.batch-sidebar-filters .batch-grid-filter{display:inline-flex;align-items:center;gap:6px;box-sizing:border-box;height:28px;
+  padding:0 4px 0 10px;border:1px solid var(--stroke-weak);border-radius:999px;background:var(--background-raised,#fff);
+  color:var(--text-strong);font-size:12.5px;font-weight:500;line-height:1;white-space:nowrap;
+  transition:background-color .15s,border-color .15s,color .15s}
+.batch-grid-filters .batch-grid-filter:hover{border-color:var(--stroke-strong)}
+.batch-grid-filters .batch-grid-filter:focus-visible{outline:2px solid var(--stroke-brand-strong);outline-offset:2px}
+.batch-grid-filter-count{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:20px;height:20px;
+  padding:0 6px;border-radius:999px;background:var(--fill-weak,rgba(17,24,26,.06));color:var(--text-strong);
+  font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+.batch-grid-filters .batch-grid-filter.is-on{border-color:transparent;background:color-mix(in srgb,var(--fill-brand-strong) 12%,var(--background-raised,#fff));
+  color:var(--text-brand,var(--fill-brand-strong));font-weight:600}
+.batch-grid-filters .batch-grid-filter.is-on .batch-grid-filter-count{background:var(--fill-brand-strong);color:var(--text-inverse-strong,#fff)}
+.batch-grid-filters .batch-grid-filter.is-running::before{width:9px;height:9px;margin-inline-end:-2px}
+
+/* 選取／取消選取的過場（我的照片）：
+   「所有照片」卡和照片方塊的藍＋白框一直都在、只是沒選時看不到，選取時淡入（.2s）、取消時淡出；
+   「所有照片」底下那幾顆鍵沒選時收起來（高度 0＋淡出），選著時展開（.25s）。系統要求減少動態時直接切換。 */
+.batch-all-card{gap:0;transition:border-color .2s,box-shadow .2s,background-color .2s}
+.batch-all-card::after{content:"";position:absolute;inset:-1px;z-index:2;border-radius:18px;pointer-events:none;
+  box-shadow:inset 0 0 0 4px var(--accent),inset 0 0 0 7px var(--n09);opacity:0;transition:opacity .2s ease}
+.batch-all-card.is-on::after{opacity:1}
+.batch-all-collapse{display:grid;grid-template-rows:0fr;opacity:0;
+  transition:grid-template-rows .25s cubic-bezier(.2,.8,.2,1),opacity .2s ease}
+.batch-all-card.is-on .batch-all-collapse{grid-template-rows:1fr;opacity:1}
+/* 收合時裁掉；四周多留 4px，鍵的焦點框不會被裁到。 */
+.batch-all-collapse-inner{min-height:0;overflow:hidden;margin:0 -4px -4px;padding:0 4px 4px}
+.batch-all-collapse .batch-all-actions{padding-top:10px}
+.batch-sidebar-list>.history-cube::after{content:"";position:absolute;inset:0;z-index:2;border-radius:inherit;pointer-events:none;
+  box-shadow:inset 0 0 0 4px var(--accent),inset 0 0 0 7px var(--n09);opacity:0;transition:opacity .2s ease}
+.batch-sidebar-list>.history-cube.selected::after{opacity:1}
+@media (prefers-reduced-motion:reduce){
+  .batch-all-card,.batch-all-card::after,.batch-all-collapse,.batch-sidebar-list>.history-cube::after{transition:none}
+}
+
+/* 抽屜外的關閉鈕：抽屜打開時跟著一起淡入（.3s，不等抽屜滑完）；收起時跟抽屜同時淡出（.15s），不會留在原地等抽屜滑走。
+   系統要求減少動態時直接顯示／隱藏。 */
+@media (max-width:900px),(max-width:1200px) and (orientation:portrait){
+  #upload-section .upload-content-row>#batch-sidebar:not(.drawer-open)>.batch-sidebar-close-btn,
+  #results-body.batch-mode>#batch-sidebar:not(.drawer-open)>.batch-sidebar-close-btn{opacity:0;transition:opacity .15s ease,visibility 0s linear .3s}
+  #upload-section .upload-content-row>#batch-sidebar.drawer-open>.batch-sidebar-close-btn,
+  #results-body.batch-mode>#batch-sidebar.drawer-open>.batch-sidebar-close-btn{opacity:1;transition:opacity .3s ease,visibility 0s}
+}
+@media (prefers-reduced-motion:reduce){
+  #upload-section .upload-content-row>#batch-sidebar>.batch-sidebar-close-btn,
+  #results-body.batch-mode>#batch-sidebar>.batch-sidebar-close-btn{transition:none !important}
+}
+
+/* 手機／平板標題下那一列，每個畫面都一樣（53px、單行、左邊「我的照片」圓鈕＋New Chat、右邊「對話｜編輯器」、左右 24px）：
+   1. 選了一張照片（has-photo）時不再長成 64px、換行（New Chat 和切換會被擠成兩行、壓到照片），捲走後換上來的照片列也是 53px；
+   2. 分析／美化過的單張結果頁原本把這一列藏起來、只在上面放一顆置中的小切換，連「我的照片」圓鈕和 New Chat 都不見了：
+      改成跟其他畫面同一列（用對話面板自己的標頭），拿掉那顆小切換和讓給它的 48px。 */
+@media (max-width:900px),(max-width:1200px) and (orientation:portrait){
+  .chat-panel.has-photo>.chat-panel-head{height:53px;padding-block:8px;flex-wrap:nowrap;align-items:center;align-content:normal}
+  .chat-panel.is-photo-out>.chat-panel-photo{height:53px}
+  .chat-panel.is-photo-out>.chat-panel-photo img{width:34px;height:42px}
+  /* 這一列不再是 64px，圓鈕回到跟其他畫面同一個位置（舊的那條把它往下推 16px）。 */
+  #upload-section .upload-content-row:has(.chat-panel.has-photo)>.batch-drawer-trigger{top:calc(var(--header-h) + 8px)}
+  #results-canvas-row.showing-analysis .sheet-mode-switch{display:none !important}
+  #results-canvas-row.showing-analysis #results-analysis-slot{padding-top:0 !important}
+  .results-analysis-slot>.chat-panel>.chat-panel-head{display:flex !important;flex:none;align-items:center;flex-wrap:nowrap;gap:12px;height:53px;box-sizing:border-box;
+    padding:8px 24px;border-bottom:1px solid var(--border);background:var(--n04)}
+  #results-body:has(>.batch-drawer-trigger) .results-analysis-slot>.chat-panel>.chat-panel-head{padding-inline-start:68px}
+  #results-body.batch-mode>.batch-drawer-trigger{display:inline-flex !important;position:fixed;top:calc(var(--header-h) + 8px);inset-inline-start:24px;
+    width:36px;height:36px;padding:0;border:0;border-radius:999px;box-shadow:none;background:var(--fill-weak);color:var(--text-strong);animation:none !important}
+  #results-body.batch-mode>.batch-drawer-trigger:hover{background:var(--fill-press)}
+  #results-body.batch-mode>.batch-drawer-trigger>.batch-drawer-trigger-count{top:-8px;inset-inline-end:-8px}
+}
+
+/* 下拉藥丸一致化：風格（Camera Angle / Lighting…）跟有程度的項目（Smile…）同一種長相 --
+   有值就是勾＋accent 底、寫成「名稱: 值」，值不另外加粗；箭頭同一顆、靠右，跟文字的距離一樣。
+   打開中只靠箭頭翻上去和外框加深來表示，不再借用「選了」的 accent。 */
+.chat-opt-chip{gap:6px}
+.chat-opt-chip .chat-opt-caret{flex-shrink:0;margin-inline-start:2px}
+.chat-opt-drop{padding-inline-end:var(--sp-3)}
+.chat-opt-drop.is-open:not(.is-picked){border-color:var(--n64);color:var(--n100)}
+.chat-opt-split.is-split>.chat-opt-chip{border-inline-end:1px solid rgba(var(--accent-rgb),.35)}
+.chat-opt-split-more{min-width:32px;padding-inline:var(--sp-2) var(--sp-3)}
+.chat-opt-split-more .chat-opt-caret{margin:0}
+/* 不指定：跟縮圖一樣 64×64 的方塊（圓角 8），外框跟縮圖同一圈 2px，選了一樣變 accent。 */
+.chat-opt-style-none{width:auto;height:auto;justify-content:flex-start;border:2px solid transparent}
+.chat-opt-style-none-box{display:flex;align-items:center;justify-content:center;width:64px;height:64px;box-sizing:border-box;
+  border:1.5px dashed var(--n34);border-radius:8px;text-align:center;line-height:1.2;padding:4px}
+.chat-opt-style-none.is-picked .chat-opt-style-none-box{border-color:transparent;background:var(--tonal-lo)}
+
+/* 風格縮圖：選取的外框只圍住縮圖（跟 My Photos 的縮圖一樣，accent 一圈＋中間留一道白縫），
+   不再框住整顆按鈕連同底下的字；字只換成 accent。列本身多 4px 內距給外框，不被捲動區切掉。 */
+.chat-opt-style-row{padding:4px;margin:-4px}
+.chat-opt-style-none,.chat-opt-style-btn{border:0;padding:0;border-radius:0}
+.chat-opt-style-btn img,.chat-opt-style-none-box{transition:box-shadow .2s ease}
+.chat-opt-style-btn.is-picked img,.chat-opt-style-none.is-picked .chat-opt-style-none-box{
+  box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--accent)}
+.chat-opt-style-none.is-picked .chat-opt-style-none-box{border-color:transparent;background:var(--tonal-lo);color:var(--accent-text)}
+.chat-opt-style-btn:not([disabled]):hover img{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--n24)}
+.chat-opt-style-none:not([disabled]):hover .chat-opt-style-none-box{border-color:var(--n64)}
+.chat-opt-style-btn.is-picked:hover img{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--accent)}
+.chat-opt-style-btn:focus-visible,.chat-opt-style-none:focus-visible{outline-offset:6px}
+@media (prefers-reduced-motion:reduce){.chat-opt-style-btn img,.chat-opt-style-none-box{transition:none}}
+
+/* 展開中的下拉：不能只靠外框顏色。改成實心的淺灰底＋深色 1.5px 外框（用 inset 陰影，不改尺寸），
+   箭頭翻上；有值又展開時底色換成較深的 accent 色。 */
+.chat-opt-drop.is-open:not(.is-picked){background:var(--fill-press);border-color:var(--n100);box-shadow:inset 0 0 0 .5px var(--n100);color:var(--n100)}
+.chat-opt-drop.is-open.is-picked{background:var(--tonal);box-shadow:inset 0 0 0 .5px var(--accent)}
