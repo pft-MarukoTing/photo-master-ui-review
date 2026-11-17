@@ -154,6 +154,7 @@ export const EN: Record<string, string> = {
   "收起照片列表": "Hide the photo list",
   "我的照片": "My Photos",
   "{n} 張": "{n} {n, plural, one{photo} other{photos}}",
+  "所有照片": "All Photos",
   "正在讀取 {n} 張照片…": "Reading {n} {n, plural, one{photo} other{photos}}…",
   "已經選滿 {MAX_BATCH} 張了": "Limit of {MAX_BATCH} reached",
   "全部清除": "Clear All",

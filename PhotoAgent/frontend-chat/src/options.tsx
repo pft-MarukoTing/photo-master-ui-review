@@ -646,11 +646,12 @@ function StyleOptions({ analysis, plan, caps, busy, hot, onPatch, plain }: Pick<
           return (
             <button
               type="button"
-              class={`chat-chip chat-opt-chip${open === g.id ? " is-picked" : ""}${hot.has(`style_options.${g.id}`) ? " is-ai-hot" : ""}`}
+              class={`chat-chip chat-opt-chip chat-opt-drop${picked ? " is-picked" : ""}${open === g.id ? " is-open" : ""}${hot.has(`style_options.${g.id}`) ? " is-ai-hot" : ""}`}
+              aria-expanded={open === g.id}
               onClick={() => setOpen(open === g.id ? null : g.id)}
             >
-              {g.label}
-              {picked && <span class="chat-opt-value">{t("：")}{picked}</span>}
+              {picked && <Icon name="check" size={12} />}
+              {picked ? t("{label}：{v2}", { label: g.label, v2: picked }) : g.label}
               <span class={`chat-opt-caret${open === g.id ? " is-open" : ""}`} />
             </button>
           );
@@ -659,7 +660,7 @@ function StyleOptions({ analysis, plan, caps, busy, hot, onPatch, plain }: Pick<
       {group && (
         <div class="chat-opt-style-row">
           <button type="button" class={`chat-opt-style-none${valueOf(group) === group.default ? " is-picked" : ""}`} disabled={busy} onClick={() => pick(group.default)}>
-            {t("不指定")}
+            <span class="chat-opt-style-none-box">{t("不指定")}</span>
           </button>
           {group.choices
             .filter((c) => c.value !== group.default)

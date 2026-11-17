@@ -1635,6 +1635,12 @@ export function App() {
   // 範例照片彈窗送出來的：一張照單張走（換掉上傳頁上的照片），兩張以上跟上傳多張一樣開多張頁。
   function pickSamples(names: string[]) {
     if (batch) return appendSamples(names);
+    if (growSamples.current && sessionSeed()) {
+      growSamples.current = false;
+      setSamplesOpen(false);
+      void growSessionSamples(names);
+      return;
+    }
     if (growSamples.current && source) {
       growSamples.current = false;
       setSamplesOpen(false);
@@ -1769,6 +1775,42 @@ export function App() {
     if (pick !== lastPick.current) return dropSource(first);
     const entry = await startBatch([kept, first], "", 1 + taken.length);
     if (entry !== null) await addAsLoaded(taken.slice(1), entry);
+  }
+
+  // 單張已經開始過（分析或美化過）的對話，側欄的「＋」：跟 Editor 一樣可以再加照片。這張留著、
+  // 它的對話接得回去（跟從最近照片打開一批時一樣，記成已經送進 session 的那張），加進來的接在後面，變成多張頁。
+  function sessionSeed() {
+    if (phase !== "session" || !session || !photo || session.photos.length !== 1 || batch) return null;
+    const src: Source = { kind: "remote", job: photo.analyze_job_id };
+    const run: BatchRun = { mode: photo.active_version ? "render" : "analyze", since: 0, lines: [], sessionId: session.session_id, photoId: photo.photo_id, done: true };
+    return { src, key: sourceSrc(src), run, live: photo, failed: renderFailedIn(session, photo.photo_id) };
+  }
+  type Seed = NonNullable<ReturnType<typeof sessionSeed>>;
+  function plantSeed(seed: Seed) {
+    setBatchRuns({ [seed.key]: seed.run });
+    setBatchLive({ [seed.key]: seed.live });
+    setBatchFailed({ [seed.key]: seed.failed });
+  }
+  async function growSession(files: File[]) {
+    const seed = sessionSeed();
+    if (!seed) return;
+    const images = files.filter((f) => f.type.startsWith("image/") || isHeic(f));
+    if (!images.length) return;
+    const taken = images.slice(0, MAX_BATCH - 1);
+    const pick = ++lastPick.current;
+    const first = await readFirst(taken, pick);
+    if (pick !== lastPick.current) return dropSource(first);
+    const entry = await startBatch([seed.src, first], "", 1 + taken.length);
+    if (entry === null) return;
+    plantSeed(seed);
+    await addAsLoaded(taken.slice(1), entry);
+  }
+  async function growSessionSamples(names: string[]) {
+    const seed = sessionSeed();
+    if (!seed) return;
+    const added: Source[] = names.map((name): Source => ({ kind: "demo", name })).slice(0, MAX_BATCH - 1);
+    if (!added.length) return;
+    if ((await startBatch([seed.src, ...added], "")) !== null) plantSeed(seed);
   }
 
   // 單張時側欄那張的 ×：拿掉就回到還沒選照片的空狀態。
@@ -3338,7 +3380,9 @@ export function App() {
       open={samplesOpen}
       demos={demos}
       // 進了 session 就只換一張，多張只在上傳頁開。多張頁上是再加幾張，上限算剩下的。
-      max={phase === "session" ? 1 : batch ? Math.max(1, MAX_BATCH - batch.length) : MAX_BATCH}
+      // 單張時從「換一張照片」打開的是取代這張：只挑一張、點了就換（新增照片走旁邊的 ＋，或側欄的
+      // 「從範例照片挑選」，那兩條 growSamples 是 true，照樣可以多選、接在原本那張後面）。
+      max={batch ? Math.max(1, MAX_BATCH - batch.length) : (phase === "session" || source) && !growSamples.current ? 1 : MAX_BATCH}
       picked={batch ? null : source?.kind === "demo" ? source.name : null}
       taken={batch ? batch.flatMap((s) => (s.kind === "demo" ? [s.name] : [])) : undefined}
       onPick={pickSamples}
@@ -3383,6 +3427,10 @@ export function App() {
             onFile={batch ? (f) => appendFiles([f]) : pickFile}
             onFiles={batch ? appendFiles : pickFiles}
             attachTitle={batch ? t("新增照片") : undefined}
+            // 單張時「換一張照片」左邊多一顆 ＋：新增照片（原本那張加上新的變成多張，跟側欄的 ＋ 同一套），
+            // 「換一張照片」照舊是取代這張。多張頁本來就是「新增照片」，不再多放。
+            onAddFiles={source && !batch && !busy && !loadingPhotos ? (fs) => void growSingle(fs) : undefined}
+            onAddSamples={source && !batch && !busy && !loadingPhotos ? showSamplesToAdd : undefined}
             // Only once there is a photo to replace; before that the
             // greeting's two chips are the choice, right above.
             // 多張頁上這顆是「再加幾張」，一樣問要上傳還是挑範例照片。
@@ -3622,7 +3670,8 @@ export function App() {
     // 不用把視線移過去找。最新那一則的鍵照現在能按的給；之後有新的對話，鍵留在原處定格成紀錄。
     // 手機的照片格就在對話上面，不另外放。
     const chipRow = (c: OverviewChips | null | undefined, live: boolean) => {
-      if (!c) return null;
+      // 用過、定格成紀錄的那排（灰掉按不了）不放：只留現在按得了的那一排。
+      if (!c || !live) return null;
       const has: OverviewChips = live
         ? { pending: !finished && !!pending, renderable: !finished && !!renderable, finished, redo: !!redoAll, labels } : c;
       const lb = has.labels || { analyze: "全部分析", render: "全部一鍵美化" };
@@ -4048,10 +4097,13 @@ export function App() {
                   onPick={(s) => (batchRuns[sourceSrc(s)]?.sessionId ? openBatchResult(sourceSrc(s)) : backToBatch(s))}
                   onOverview={openOverview}
                   onStartAll={startAllBatch}
+                  // 打開其中一張時也能再加照片（跟 Editor 一樣），加的接在這批後面。
+                  onAdd={busy || loadingPhotos ? undefined : appendFiles}
+                  onSamples={busy || loadingPhotos ? undefined : showSamples}
                   hop={hopTrigger}
                   onHopped={() => setHopTrigger(false)}
                 />
-              ) : (session.photos.length > 1 || !drawerLayout) && (
+              ) : (
                 <BatchSidebar
                   photos={session.photos}
                   messages={session.messages || []}
@@ -4064,6 +4116,8 @@ export function App() {
                   }}
                   busy={busy}
                   onRenderAll={renderAll}
+                  onAdd={!busy && session.photos.length === 1 ? (fs) => void growSession(fs) : undefined}
+                  onSamples={!busy && session.photos.length === 1 ? showSamplesToAdd : undefined}
                 />
               )
             }
@@ -4398,6 +4452,24 @@ export function BatchPreSidebar(props: {
   const progress = GRID_GROUPS.map((g) => ({ g, n: sources.filter((x) => stage(x) === g.key).length })).filter((x) => x.n);
   const [picked, setFilter] = useState<BatchProgress | "all">("all");
   const filter = progress.some((x) => x.g.key === picked) ? picked : "all";
+  // 「所有照片」那格：整批一起看（左邊沒有選哪一張時就是它，永遠有一格是選著的）。
+  const allOn = !!props.overview;
+  const held = props.disabled || !!props.actionsHeld;
+  const goAll = () => {
+    close();
+    props.onOverview?.();
+  };
+  // 選著「所有照片」時的鍵，順序跟總覽對話裡那排一樣：「全部分析」「全部美化」「設定」。
+  // 有幾張做過了（例如美化完又新增了照片）就變成「分析其餘 N」「美化其餘 N」；每張都美化過了，
+  // 改過才有「全部再美化」，沒改過只剩「設定」。
+  const analyzeAll = !props.finished && props.pending
+    ? { label: shownLabel(allLabel("analyze", props.pending, sources.length)), title: t("還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送"), run: () => { close(); props.onStartAll("analyze"); } }
+    : null;
+  const retouchAll = props.finished
+    ? (props.redo && props.onRedo ? { label: shownLabel(props.redoLabel || "全部再美化"), icon: "redo", title: props.redoTitle, run: () => { close(); props.onRedo!(); } } : null)
+    : props.renderable
+      ? { label: shownLabel(allLabel("render", props.renderable, sources.length)), icon: "spark", title: t("還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"), run: () => { close(); props.onStartAll("render"); } }
+      : null;
   return (
     <>
       {downloadUi}
@@ -4414,11 +4486,63 @@ export function BatchPreSidebar(props: {
           {/* 「全部下載」「全部清除」不放在這欄標頭：只留「＋」（Chat 和 Editor 一致）。 */}
           </div>
         </div>
+        {/* 「所有照片」：整批一起看的那一格，放在照片列表上面（不是一張照片，所以不做成方塊混在裡面）。
+            沒有打開哪一張時就是選著它（右邊是整批的對話）；選著時下面放「全部美化」和「設定」兩顆。 */}
+        {props.onOverview && sources.length > 1 && (
+          <div class={`batch-all-card${allOn ? " is-on" : ""}`}>
+            <button
+              type="button"
+              class="batch-all-entry"
+              aria-current={allOn ? "page" : undefined}
+              title={allOn ? undefined : t("回到總覽，全部一起分析、美化或調整設定")}
+              disabled={props.disabled && !allOn}
+              onClick={allOn ? undefined : goAll}
+            >
+              <span class={`batch-all-stack is-${Math.min(sources.length, 3)}`} aria-hidden="true">
+                {sources.slice(0, 3).map((s) => <img key={sourceSrc(s)} src={thumbSrc(s)} alt="" />)}
+              </span>
+              <span class="batch-all-text">
+                <b>{t("所有照片")}</b>
+                <small>{t("{n} 張", { n: sources.length })}</small>
+              </span>
+              {!allOn && <Icon name="next" size={16} />}
+            </button>
+            {/* 鍵一直放著，沒選著時收起來（高度 0、淡出、inert 不吃焦點），選著時展開：切換選取有過場，不會一下跳出來。 */}
+            {(analyzeAll || retouchAll || props.onSettings) && (
+              <div class="batch-all-collapse" inert={!allOn} aria-hidden={!allOn}>
+              <div class="batch-all-collapse-inner">
+              <div class="batch-all-actions">
+                {analyzeAll && (
+                  <button type="button" class="ycoButton variant_primary tone_neutral size_small batch-all-btn" title={analyzeAll.title} disabled={held} onClick={analyzeAll.run}>
+                    <span class="buttonIcon"><Icon name="search" size={16} /></span>
+                    <span>{analyzeAll.label}</span>
+                  </button>
+                )}
+                {/* 只有排第一顆的是黑色主按鈕，其他都是白底外框（第一顆是誰看當下有哪幾顆）。 */}
+                {retouchAll && (
+                  <button type="button" class={`ycoButton ${analyzeAll ? "variant_secondary" : "variant_primary"} tone_neutral size_small batch-all-btn`} title={retouchAll.title} disabled={held} onClick={retouchAll.run}>
+                    <span class="buttonIcon"><Icon name={retouchAll.icon} size={16} /></span>
+                    <span>{retouchAll.label}</span>
+                  </button>
+                )}
+                {props.onSettings && (
+                  <button type="button" class={`ycoButton ${analyzeAll || retouchAll ? "variant_secondary" : "variant_primary"} tone_neutral size_small batch-all-btn`} disabled={held} onClick={() => { close(); props.onSettings!(); }}>
+                    <span class="buttonIcon"><Icon name="tune" size={16} /></span>
+                    <span>{t("設定")}</span>
+                  </button>
+                )}
+              </div>
+              </div>
+              </div>
+            )}
+          </div>
+        )}
         {/* 篩的是底下的列表，就貼在列表上面、不跟著捲；只有一種狀態時沒得篩，不出現。 */}
         {progress.length > 1 && (
           <div class="batch-grid-filters batch-sidebar-filters" role="group" aria-label={t("依狀態篩選")}>
             <button type="button" class={`batch-grid-filter${filter === "all" ? " is-on" : ""}`} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
-              {t("全部 {n}", { n: sources.length })}
+              <span class="batch-grid-filter-label">{t("全部")}</span>
+              <span class="batch-grid-filter-count">{sources.length}</span>
             </button>
             {progress.map((x) => (
               <button
@@ -4428,7 +4552,8 @@ export function BatchPreSidebar(props: {
                 aria-pressed={filter === x.g.key}
                 onClick={() => setFilter(filter === x.g.key ? "all" : x.g.key)}
               >
-                {x.g.label} {x.n}
+                <span class="batch-grid-filter-label">{x.g.label}</span>
+                <span class="batch-grid-filter-count">{x.n}</span>
               </button>
             ))}
           </div>
@@ -4657,7 +4782,8 @@ function BatchOverviewGrid(props: {
   const filters = (
     <div class="batch-grid-filters" role="group" aria-label={t("依狀態篩選")}>
       <button type="button" class={`batch-grid-filter${filter === "all" ? " is-on" : ""}`} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
-        {t("全部 {n}", { n: items.length })}
+        <span class="batch-grid-filter-label">{t("全部")}</span>
+        <span class="batch-grid-filter-count">{items.length}</span>
       </button>
       {GRID_GROUPS.filter((g) => count(g.key)).map((g) => (
         <button
@@ -4667,7 +4793,8 @@ function BatchOverviewGrid(props: {
           aria-pressed={filter === g.key}
           onClick={() => setFilter(filter === g.key ? "all" : g.key)}
         >
-          {g.label} {count(g.key)}
+          <span class="batch-grid-filter-label">{g.label}</span>
+          <span class="batch-grid-filter-count">{count(g.key)}</span>
         </button>
       ))}
     </div>
@@ -5047,6 +5174,8 @@ export function BatchSidebar(props: {
   onRenderAll: () => void;
   hop?: boolean;
   onHopped?: () => void;
+  onAdd?: (files: File[]) => void;
+  onSamples?: () => void;
 }) {
   const { photos, current } = props;
   const [open, setOpen] = useState(false);
@@ -5077,6 +5206,12 @@ export function BatchSidebar(props: {
         </button>
         <div class="batch-sidebar-header">
           <h2 class="batch-sidebar-title">{t("我的照片")}</h2>
+          {/* 單張的對話也能再加照片（跟 Editor 一樣有「＋」）。 */}
+          {props.onAdd && (
+            <div class="batch-sidebar-actions">
+              <BatchAddButton full={false} onAdd={props.onAdd} onSamples={props.onSamples} onBefore={() => setOpen(false)} />
+            </div>
+          )}
         </div>
         {todo.length && photos.length > 1 ? (
           <div class="batch-sidebar-all chat-actions is-yco">

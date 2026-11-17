@@ -631,6 +631,8 @@ export function ActionChoice(props: {
   disabled?: boolean;
   onClick?: () => void;
 }) {
+  // 用過／按不了的不再留在對話裡當灰掉的紀錄：只放現在按得了的鍵（按了哪個，使用者那則訊息已經寫著）。
+  if (props.settled) return null;
   const dim = props.settled && !props.picked;
   const cls = `ycoButton ${dim ? "variant_secondary tone_neutral" : "variant_primary tone_neutral"} size_small chat-action-btn${props.settled ? " is-static" : ""}`;
   const inner = (
@@ -1550,6 +1552,10 @@ export function Composer(props: {
   onSample?: () => void;
   // 按鈕的提示字，預設依 onSample 是「換一張照片」或「上傳照片」。
   attachTitle?: string;
+  // 單張時「換一張照片」左邊的 ＋（只有圖示）：新增照片，不取代這張——原本那張加上新的變成多張。
+  // 給了 onAddFiles 才出現；再給 onAddSamples 就跟多張頁的「新增照片」一樣，問要上傳還是挑範例照片。
+  onAddFiles?: (fs: File[]) => void;
+  onAddSamples?: () => void;
   disabled?: boolean;
   // Without onSend nothing can be sent yet (before a photo is picked). The field is a real,
   // typeable input only with typeAhead: what is typed waits in the field (and in onText's draft)
@@ -1580,6 +1586,9 @@ export function Composer(props: {
   const still = useRef<HTMLDivElement>(null);
   const attach = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState(false);
+  const addInput = useRef<HTMLInputElement>(null);
+  const addWrap = useRef<HTMLDivElement>(null);
+  const [addMenu, setAddMenu] = useState(false);
   const [text, setText] = useState("");
   const people = props.people || [];
   const who = (props.pointed || []).flatMap((i) => people.filter((p) => p.subjectIndex === i));
@@ -1606,6 +1615,21 @@ export function Composer(props: {
       document.removeEventListener("keydown", esc);
     };
   }, [menu]);
+
+  // ＋ 的選單：點外面或按 Esc 收起來（跟上面那個一樣）。
+  useEffect(() => {
+    if (!addMenu) return;
+    const away = (e: MouseEvent) => {
+      if (!addWrap.current?.contains(e.target as Node)) setAddMenu(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setAddMenu(false);
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [addMenu]);
 
   const [hinting, setHinting] = useState(false);
   useEffect(() => {
@@ -1653,6 +1677,62 @@ export function Composer(props: {
         {/* 換照片只在還沒開始對話的上傳頁出現。對話中這顆按鈕指向的是「重開一
             個新對話」，跟它長得像個附加檔案的樣子對不起來，所以那裡不給。 */}
         {onFile && (
+          <div class="chat-attach-row">
+          {/* 單張時的 ＋：新增照片（原本那張留著，加上新的變成多張），跟右邊「換一張照片」（取代這張）分開。 */}
+          {props.onAddFiles && (
+            <div class="chat-attach-wrap is-add" ref={addWrap}>
+              <button
+                type="button"
+                class="chat-attach chat-attach-add"
+                title={t("新增照片")}
+                aria-label={t("新增照片")}
+                aria-haspopup={props.onAddSamples ? "menu" : undefined}
+                aria-expanded={props.onAddSamples ? addMenu : undefined}
+                disabled={disabled}
+                onClick={() => (props.onAddSamples ? setAddMenu((v) => !v) : addInput.current?.click())}
+              >
+                <Icon name="plus" size={18} />
+              </button>
+              {addMenu && props.onAddSamples && (
+                <div class="chat-attach-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAddMenu(false);
+                      addInput.current?.click();
+                    }}
+                  >
+                    <Icon name="up" size={16} />
+                    {t("自行上傳照片")}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAddMenu(false);
+                      props.onAddSamples!();
+                    }}
+                  >
+                    <Icon name="image" size={16} />
+                    {t("從範例照片挑選")}
+                  </button>
+                </div>
+              )}
+              <input
+                ref={addInput}
+                type="file"
+                accept="image/*,.heic,.heif"
+                multiple
+                hidden
+                onChange={(e) => {
+                  const fs = Array.from(e.currentTarget.files || []);
+                  e.currentTarget.value = "";
+                  if (fs.length) props.onAddFiles!(fs);
+                }}
+              />
+            </div>
+          )}
           <div class="chat-attach-wrap" ref={attach}>
             <button
               type="button"
@@ -1707,6 +1787,7 @@ export function Composer(props: {
                 } else if (fs[0] && onFile) onFile(fs[0]);
               }}
             />
+          </div>
           </div>
         )}
         {live ? (
