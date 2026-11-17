@@ -37,6 +37,7 @@ import {
   BatchUploadBubble,
   UserMsg,
   WorkingCard,
+  useAnchoredPopup,
   useWorkLog,
   type Change,
   type FaceRef,
@@ -3631,9 +3632,11 @@ export function App() {
     } else if (!untouched) {
       // 剛報完「跑完了」，分析好、失敗幾張那句已經講過，這裡只補它沒提到的、還沒開始的那幾張。
       const afterDone = lastTurn?.kind === "done";
-      const next = notYet
+      // 只講現在按得到的鍵：失敗的那幾張算在 notYet 裡，但「全部…」不會重送它們；只剩失敗的時候兩顆鍵都是 0、
+      // 也不會出現，句子就不叫人去按（失敗那句另外講選取那張看原因）。
+      const next = notYet && pending && renderable
         ? t("按{btn}的{render}會把還沒美化的都美化好；只想先看分析，按{btn}的{analyze}。", { btn, render: qr, analyze: qa })
-        : t("要接著美化，按{btn}的{render}。", { btn, render: qr });
+        : renderable ? t("要接著美化，按{btn}的{render}。", { btn, render: qr }) : "";
       if (afterDone) {
         statusHint = !todo && !analyzed && !failed ? "" : `${todo ? t("另外還有 {n} 張還沒分析。", { n: todo }) : ""}${next}`;
       } else {
@@ -8135,6 +8138,9 @@ function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
 }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLSpanElement>(null);
+  const pickBtn = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  useAnchoredPopup(open, pickBtn, menu);
   // 點到別處、按 Esc 就收，跟美化項目裡的程度選單一樣。
   useEffect(() => {
     if (!open) return;
@@ -8162,7 +8168,7 @@ function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
       {lead.trim() && <span class="chat-continue-text">{lead.trim()}</span>}
       <span class="chat-continue-control">
       <span class="chat-composer-who chat-continue-from">
-        <button type="button" class="chat-continue-pick" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
+        <button type="button" ref={pickBtn} class="chat-continue-pick" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
           title={t("換一張當底")} onClick={() => setOpen((o) => !o)}>
           <img class="chat-continue-shot" src={from ? urls.resultThumb(versionJob(from)) : original} alt="" />
           {from ? t("第 {n} 版", { n: from.ordinal }) : t("原圖")}
@@ -8175,7 +8181,7 @@ function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
         )}
       </span>
       {open && (
-        <div class="chat-opt-menu is-up chat-continue-menu" role="menu">
+        <div class="chat-opt-menu is-up chat-continue-menu" ref={menu} role="menu">
           <button type="button" role="menuitemradio" aria-checked={!from} class={!from ? "is-picked" : undefined} onClick={() => pick(null)}>
             <span class="chat-opt-menu-tick">{!from && <Icon name="check" size={14} />}</span>
             <img class="chat-continue-shot" src={original} alt="" />

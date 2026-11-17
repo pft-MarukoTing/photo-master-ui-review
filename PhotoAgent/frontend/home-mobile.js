@@ -58,6 +58,11 @@
     '<path d="M2.696 12.708a1 1 0 0 0-.058-.785 7 7 0 1 1 3.518 3.473 1 1 0 0 0-.744-.061l-2.155.63a1 1 0 0 1-1.236-1.167z"/></svg>';
 
   function origStart() { return document.querySelector(".home-start .home-start-btn"); }
+  function startLabel(btn) {
+    var text = "";
+    btn.childNodes.forEach(function (node) { if (node.nodeType === 3) text += node.textContent; });
+    return text.trim();
+  }
   function origUse() { return document.querySelector(".gallery-confirm-btn"); }
 
   // 選了幾張：從原本「使用所選照片（N 張）」的字讀；讀不到就數選取中的照片。
@@ -101,7 +106,8 @@
     // 位置（order）由上面的 CSS 定，不再照抄原本「使用所選照片」那顆的 order（那顆在照片列下面，會把這顆拉回去）。
     var start = origStart();
     var n = count();
-    var base = (start && start.textContent.trim()) || (isEn() ? "Start a Chat" : "開始對話");
+    // 只取按鈕本身的字：home-pick-count.js 會把張數徽章（.abg-count）塞進原按鈕，整顆 textContent 會變成「Start a Chat3」。
+    var base = (start && startLabel(start)) || (isEn() ? "Start a Chat" : "開始對話");
     var EN = isEn();
     var label = base + "|" + n + "|" + EN;
     if (label === lastLabel && box.querySelector(".hm-start-btn").childNodes.length) return;

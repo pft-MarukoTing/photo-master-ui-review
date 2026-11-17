@@ -1204,12 +1204,25 @@ window.PhotoAgentResults = (() => {
   // CSS as --personalize-tail-x. Kept as an offset from the panel's own left
   // edge, and clamped away from both ends so the tail can never hang off a
   // rounded corner with nothing behind its root.
-  const PERSONALIZE_TAIL_EDGE_INSET = 18;
+  // 尾巴（寬 22px，尖端在左邊 16px 處）整個要落在框的直邊上，不能壓到 16px 的圓角：尖端離左邊至少 32、離右邊至少 22。
+  const PERSONALIZE_TAIL_EDGE_INSET = 32;
+  const PERSONALIZE_EDGE_GAP = 8;
   let personalizeAnchor = null;
 
   function positionPersonalizeTail() {
     const panel = els.personalizePopover;
     if (!panel || panel.hidden || !personalizeAnchor || !personalizeAnchor.isConnected) return;
+    // 編輯器：框不再固定在照片正中間，而是往點開它的那顆 tag 靠（以 tag 為中心，留在照片範圍內、離邊 8px）。
+    // 固定置中時最左／最右那顆 tag 在框外面，尾巴只能擠到框的圓角上，看起來是壞的。
+    if (document.body.classList.contains("pm-panel") && panel.offsetParent) {
+      const box = panel.offsetParent.getBoundingClientRect();
+      const width = panel.offsetWidth;
+      const anchorBox = personalizeAnchor.getBoundingClientRect();
+      const center = anchorBox.left + anchorBox.width / 2 - box.left;
+      const left = Math.min(Math.max(center - width / 2, PERSONALIZE_EDGE_GAP), Math.max(PERSONALIZE_EDGE_GAP, box.width - width - PERSONALIZE_EDGE_GAP));
+      panel.style.left = `${Math.round(left)}px`;
+      panel.style.transform = "none";
+    }
     const panelRect = panel.getBoundingClientRect();
     if (!panelRect.width) return;
     const anchorRect = personalizeAnchor.getBoundingClientRect();
@@ -1257,6 +1270,8 @@ window.PhotoAgentResults = (() => {
     // row (or a different record), and a stale inline value would win over
     // the CSS fallback if that open can't measure its own pill.
     els.personalizePopover.style.removeProperty("--personalize-tail-x");
+    els.personalizePopover.style.removeProperty("left");
+    els.personalizePopover.style.removeProperty("transform");
     document.removeEventListener("mousedown", handlePersonalizePopoverOutsideClick);
   }
 
@@ -3226,7 +3241,7 @@ window.PhotoAgentResults = (() => {
           event.preventDefault();
           if (personalizeAnchor === button && !els.personalizePopover.hidden) closePersonalizePopover();
           else openPersonalizePopover(
-            tabId === "ap-review-tab-face" ? buildPortraitAdjustmentList(content) : content,
+            tabId === "ap-review-tab-face" && Array.isArray(content) ? buildPortraitAdjustmentList(content) : content,
             button, tabId === "ap-review-tab-prompt" ? tr("個人化需求") : label);
         });
         els.recipeTags.appendChild(button);
@@ -3235,22 +3250,23 @@ window.PhotoAgentResults = (() => {
       if (recipeItems.length) addControl(tr("畫面調整"), "ap-review-tab-recipe", recipeItems);
       if (styleItems.length) addControl(tr("美化風格"), "ap-review-tab-style", styleItems);
       if (!pending && personalization) addControl(tr("個人化"), "ap-review-tab-prompt", personalization);
-      // 編輯器：這份資料沒有「實際執行」的證據（或還在 mock）時，先放四顆示意 tags（之後接真實資料就會自動換成上面那些）。
+      // 編輯器：這份資料沒有「實際執行」的證據（例如本機 mock）時，照樣放四顆 tags，而且點得開：
+      // 內容改用分析裡「打算做」的項目（人像、畫面調整、挑的風格、需求原文），那一類沒有東西就說沒有。
+      // 之後有實際執行的資料，上面那些（只列真的做了的）會自動取代這四顆。
       if (document.body.classList.contains("pm-panel") && !pending && !els.recipeTags.querySelector(".recipe-tag-personalize")) {
-        [["ap-review-tab-face", tr("人像")], ["ap-review-tab-recipe", tr("場景")], ["ap-review-tab-style", tr("美化風格")], ["ap-review-tab-prompt", tr("個人化需求")]].forEach(([tabId, label]) => {
-          const tag = document.createElement("button");
-          tag.type = "button";
-          tag.className = "portrait-check-toggle result-detail-toggle recipe-tag-personalize is-placeholder";
-          tag.tabIndex = -1;
-          tag.setAttribute("aria-hidden", "true");
-          const icon = document.querySelector(`#${tabId} svg`);
-          if (icon) { const copy = icon.cloneNode(true); copy.setAttribute("aria-hidden", "true"); tag.appendChild(copy); }
-          const caption = document.createElement("b");
-          caption.className = "result-detail-label";
-          caption.textContent = label;
-          tag.appendChild(caption);
-          els.recipeTags.appendChild(tag);
-        });
+        const plan = Array.isArray(analysis?.correction_plan) ? analysis.correction_plan : [];
+        const recipes = Array.isArray(analysis?.retouch_recipe) ? analysis.retouch_recipe : [];
+        const plannedRecipes = [...new Set(plan.flatMap((command, index) => {
+          if (typeof command !== "string" || !command.trim()) return [];
+          const label = recipes[index];
+          return [typeof label === "string" && label.trim() ? shownRecipe(label.trim()) : command.trim()];
+        }))];
+        const plannedPortraits = buildPortraitInspectionEntries(analysis, false).filter((entry) => entry.thumbnailBox);
+        const plannedStyles = buildStyleOptionTagLabels(analysis.style_options);
+        addControl(tr("人像"), "ap-review-tab-face", plannedPortraits.length ? plannedPortraits : tr("這張照片沒有要調整的人像。"));
+        addControl(tr("場景"), "ap-review-tab-recipe", plannedRecipes.length ? plannedRecipes : tr("沒有畫面調整。"));
+        addControl(tr("美化風格"), "ap-review-tab-style", plannedStyles.length ? plannedStyles : tr("沒有另外挑風格，照 AI 建議的美化。"));
+        addControl(tr("個人化需求"), "ap-review-tab-prompt", personalization || tr("這次沒有寫需求。"));
       }
       fitRecipeTagsRow(els.recipeTags);
     }

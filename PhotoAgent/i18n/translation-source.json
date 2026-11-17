@@ -99,7 +99,7 @@
       ]
     },
     "AI 先判讀人物、光線、構圖與畫面細節，給你幾個美化方向，表情、姿勢、視角也能幫你調；你也可以直接說想怎麼修，它就照你的意思來。": {
-      "en": "Our AI looks at the people, lighting, composition and details, then suggests a few ways to make your photo shine. It can even fix expressions, poses and angles. Or just tell it what you want, and it'll take it from there.",
+      "en": "Our AI looks at the people, lighting, composition and details, then suggests a few ways to make your photos shine. It can even fix expressions, poses and angles. Or just tell it what you want, and it'll take it from there.",
       "where": [
         "chat"
       ]
@@ -764,13 +764,6 @@
         "chat"
       ]
     },
-    "一張照片，": {
-      "en": "One photo, ",
-      "where": [
-        "chat"
-      ],
-      "note": "First half of the home-page headline; the next line completes the sentence."
-    },
     "一張照片，開啟專屬美化體驗": {
       "en": "One photo, retouched just for you",
       "where": [
@@ -873,6 +866,12 @@
         "chat"
       ]
     },
+    "上傳照片後，AI 對這張照片的分析摘要會出現在這裡。": {
+      "en": "Once you upload a photo, the AI's summary of it will show up here.",
+      "where": [
+        "panel"
+      ]
+    },
     "上傳照片後，AI 會在這裡說明照片的內容。": {
       "en": "Once you upload a photo, the AI describes it here.",
       "where": [
@@ -885,9 +884,16 @@
         "panel"
       ]
     },
+    "上傳照片後，AI 的建議和可以微調的美化項目會出現在這裡。": {
+      "en": "Once you upload a photo, the AI's suggestions and the settings you can fine-tune will show up here.",
+      "where": [
+        "panel"
+      ]
+    },
     "上傳照片或挑一張範例，選好的照片會放在這裡。": {
       "en": "Upload a photo or pick a sample; the photos you choose appear here.",
       "where": [
+        "panel",
         "chat"
       ]
     },
@@ -1290,6 +1296,12 @@
       "en": "Hair: reset to the original setting",
       "where": [
         "panel"
+      ]
+    },
+    "交給 <em>Photo Master</em>": {
+      "en": "<em>with Photo Master</em>",
+      "where": [
+        "chat"
       ]
     },
     "交給 AI 判斷": {
@@ -4668,6 +4680,18 @@
         "chat"
       ]
     },
+    "想怎麼美化？先打字也可以": {
+      "en": "How would you like it retouched? Type first if you like",
+      "where": [
+        "chat"
+      ]
+    },
+    "想怎麼美化？可以先打字，選好照片再送出": {
+      "en": "How would you like it retouched? You can type now and send after choosing a photo",
+      "where": [
+        "chat"
+      ]
+    },
     "想怎麼美化？留空也可以直接開始": {
       "en": "How should I retouch it? Or leave blank to start",
       "where": [
@@ -4853,6 +4877,18 @@
       ],
       "note": "Fills a slot naming who a portrait fix applies to: all people in the photo."
     },
+    "所有照片": {
+      "en": "All Photos",
+      "where": [
+        "chat"
+      ]
+    },
+    "所有照片，": {
+      "en": "Retouch all your photos ",
+      "where": [
+        "chat"
+      ]
+    },
     "手機": {
       "en": "Phone",
       "where": [
@@ -5031,7 +5067,7 @@
       ]
     },
     "按{btn}的{render}會把還沒美化的都美化好；只想先看分析，按{btn}的{analyze}。": {
-      "en": "Tap {render} {btn} to retouch every photo that isn't retouched yet, or {analyze} to see the analysis first.",
+      "en": "Tap {render} {btn} to retouch every photo that isn't retouched yet, or {analyze} to see the analysis first. ",
       "where": [
         "chat"
       ]
@@ -6427,6 +6463,18 @@
       "en": "Any that failed are marked “Failed” above. Tap one to see why.",
       "where": [
         "chat"
+      ]
+    },
+    "沒有另外挑風格，照 AI 建議的美化。": {
+      "en": "No style picked, so it follows the AI's suggestions.",
+      "where": [
+        "panel"
+      ]
+    },
+    "沒有畫面調整。": {
+      "en": "No scene adjustments.",
+      "where": [
+        "panel"
       ]
     },
     "注意": {
@@ -8178,7 +8226,7 @@
       ]
     },
     "要接著美化，按{btn}的{render}。": {
-      "en": "To retouch them next, tap {render} {btn}.",
+      "en": "To retouch them next, tap {render} {btn}. ",
       "where": [
         "chat"
       ]
@@ -8928,6 +8976,12 @@
         "panel"
       ]
     },
+    "這張照片沒有要調整的人像。": {
+      "en": "No portrait adjustments for this photo.",
+      "where": [
+        "panel"
+      ]
+    },
     "這張照片的美化紀錄": {
       "en": "This photo's version history",
       "where": [
@@ -9083,6 +9137,12 @@
       "en": "The analysis failed: {error}",
       "where": [
         "chat"
+      ]
+    },
+    "這次沒有寫需求。": {
+      "en": "No requests this time.",
+      "where": [
+        "panel"
       ]
     },
     "這次美化沒有成功：{error}。": {
@@ -9244,12 +9304,6 @@
       ],
       "note": "Framing option: a wide/long shot that shows the subject small within the surroundings."
     },
-    "選一張照片，剩下的用聊的": {
-      "en": "Pick a photo, then just chat about the rest",
-      "where": [
-        "chat"
-      ]
-    },
     "選了 {ratio} 就一定要重新構圖，想取消的話把比例改成「{original}」。": {
       "en": "Choosing {ratio} requires reframing the photo. To undo this, change the ratio back to “{original}”.",
       "where": [
@@ -9307,6 +9361,18 @@
     },
     "選好照片後就能切換": {
       "en": "Available once you pick a photo",
+      "where": [
+        "chat"
+      ]
+    },
+    "選好照片後會在這裡預覽": {
+      "en": "Your photo will preview here once chosen",
+      "where": [
+        "chat"
+      ]
+    },
+    "選好照片，剩下的用聊的": {
+      "en": "Pick your photos, then just chat about the rest",
       "where": [
         "chat"
       ]
@@ -9728,12 +9794,6 @@
       ],
       "note": "A switch is on, in a settings summary."
     },
-    "開啟<em>專屬</em>美化體驗": {
-      "en": "retouched <em>just for you</em>",
-      "where": [
-        "chat"
-      ]
-    },
     "開啟@@狀態": {
       "en": "On",
       "where": [
@@ -10120,6 +10180,12 @@
         "chat"
       ]
     },
+    "點圖可以放大看。": {
+      "en": "Tap a photo to enlarge it.",
+      "where": [
+        "chat"
+      ]
+    },
     "點擊切換主題": {
       "en": "Click to switch themes",
       "where": [
@@ -10131,6 +10197,12 @@
       "en": "Click to change the photo",
       "where": [
         "panel"
+      ]
+    },
+    "點照片可以放大，按住不放可以看原圖。": {
+      "en": "Click the photo to enlarge it; press and hold to see the original.",
+      "where": [
+        "chat"
       ]
     },
     "點選上傳照片": {

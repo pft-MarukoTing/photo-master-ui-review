@@ -581,7 +581,7 @@ function HeroCompare() {
 }
 
 // The headline's middle words are emphasised: the translation marks them with <em>.
-const heroLine = t("開啟<em>專屬</em>美化體驗").split(/<\/?em>/);
+const heroLine = t("交給 <em>Photo Master</em>").split(/<\/?em>/);
 
 export function HomeIntro({ onStart }: { onStart: () => void }) {
   return (
@@ -590,7 +590,7 @@ export function HomeIntro({ onStart }: { onStart: () => void }) {
         <div class="home-hero-copy">
           <p class="home-eyebrow">{t("AI 個人化美化分析")}</p>
           <h1 class="home-headline">
-            <span>{t("一張照片，")}</span>
+            <span>{t("所有照片，")}</span>
             <span>
               {heroLine[0]}<em>{heroLine[1]}</em>{heroLine[2]}
             </span>
@@ -603,7 +603,7 @@ export function HomeIntro({ onStart }: { onStart: () => void }) {
               <Icon name="messages-circle" />
               {t("開始對話")}
             </button>
-            <span class="chat-meta">{t("選一張照片，剩下的用聊的")}</span>
+            <span class="chat-meta">{t("選好照片，剩下的用聊的")}</span>
           </div>
         </div>
         <HeroCompare />
