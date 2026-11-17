@@ -3649,8 +3649,9 @@ export function App() {
           </div>
           {live && (
             <div class="chat-actions-aux">
-              <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" aria-label={t("設定")} title={t("設定")} disabled={overviewHeld} onClick={overviewEditSettings}>
-                <span class="buttonIcon"><Icon name="tune" size={18} /></span>
+              <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={overviewHeld} onClick={overviewEditSettings}>
+                <span class="buttonIcon"><Icon name="tune" size={16} /></span>
+                <span>{t("設定")}</span>
               </button>
             </div>
           )}
@@ -4350,8 +4351,7 @@ export function BatchPreSidebar(props: {
   // 抽屜收起來時那顆按鈕跳一下（從最近照片打開時），跳完呼叫 onHopped。
   hop?: boolean;
   onHopped?: () => void;
-  // 每加一就從外面把抽屜打開一次（總覽照片格的「顯示全部」）：那顆先亮一下再從它展開，
-  // 收起來時那顆再跳幾下，讓人知道照片收在這裡、之後從這顆開闔。
+  // 每加一就從外面把抽屜打開一次（總覽照片格的「顯示全部」）：抽屜直接從左邊滑出來。
   reveal?: number;
   // 還沒有照片時，列表那塊顯示空狀態，這顆打開選照片。
   onUpload?: () => void;
@@ -4360,29 +4360,14 @@ export function BatchPreSidebar(props: {
   const [download, downloading, downloadUi] = useBatchDownload();
   const isFresh = useFreshTiles();
   const [open, setOpen] = useState(false);
-  const [ping, setPing] = useState(false);
-  const [home, setHome] = useState(false);
-  const revealed = useRef(false);
   // 重掛時（例如從結果頁回來）不要因為帶著舊的數字又自己打開。
   const seenReveal = useRef(props.reveal);
   useEffect(() => {
     if (props.reveal === seenReveal.current) return;
     seenReveal.current = props.reveal;
-    revealed.current = true;
-    setHome(false);
-    setPing(true);
-    const t = setTimeout(() => {
-      setPing(false);
-      setOpen(true);
-    }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 220);
-    return () => clearTimeout(t);
+    setOpen(true);
   }, [props.reveal]);
-  const close = () => {
-    setOpen(false);
-    if (!revealed.current) return;
-    revealed.current = false;
-    setHome(true);
-  };
+  const close = () => setOpen(false);
   const list = useRef<HTMLDivElement>(null);
   const batchKey = sources.length ? sourceSrc(sources[0]) : "";
   // 重掛時在畫出來之前捲回原本的位置，不會先閃一下最上面。
@@ -4511,7 +4496,7 @@ export function BatchPreSidebar(props: {
       </aside>
       <button
         type="button"
-        class={`batch-drawer-trigger${props.hop ? " is-hop" : ""}${ping ? " is-ping" : ""}${home ? " is-home" : ""}`}
+        class={`batch-drawer-trigger${props.hop ? " is-hop" : ""}`}
         aria-label={t("我的照片（{length} 張）", { length: sources.length })}
         onClick={() => setOpen(true)}
         onAnimationEnd={() => props.onHopped?.()}
@@ -4769,8 +4754,9 @@ function BatchOverviewGrid(props: {
           ) : null}
           </div>
           <div class="chat-actions-aux">
-            <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" aria-label={t("設定")} title={t("設定")} disabled={props.actionsHeld} onClick={props.onSettings}>
-              <span class="buttonIcon"><Icon name="tune" size={18} /></span>
+            <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={props.actionsHeld} onClick={props.onSettings}>
+              <span class="buttonIcon"><Icon name="tune" size={16} /></span>
+              <span>{t("設定")}</span>
             </button>
           </div>
         </div>
@@ -5366,8 +5352,9 @@ function PreChat(props: {
       {!asking && !went && (step === "picked" || step === "settings" || hasWishes) && (
         <div class="chat-actions-aux">
           {(step === "picked" || step === "settings") && (
-            <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" aria-label={t("設定")} title={t("設定")} disabled={held} onClick={props.onEdit}>
-              <span class="buttonIcon"><Icon name="tune" size={18} /></span>
+            <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={held} onClick={props.onEdit}>
+              <span class="buttonIcon"><Icon name="tune" size={16} /></span>
+              <span>{t("設定")}</span>
             </button>
           )}
           {/* 清掉的是需求，不是對話：上面那幾句連同 AI 的回覆都還在，只是不再算

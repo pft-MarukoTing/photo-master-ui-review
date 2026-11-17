@@ -5,7 +5,7 @@
  *   有選照片 → 按原本的「使用所選照片」（多張的流程照舊）
  *   沒選照片 → 按原本的「開始對話」
  * 不搬動頁面自己的按鈕（那些是 Preact 管的），只藏起來再代按，拿掉這支就回到原狀。
- * 跟 ab-home.js 無關：A／B／C 哪一版都適用，只在手機版面、只在首頁生效。
+ * 只在手機版面、只在首頁生效。
  * 掛法：frontend-chat/index.html 加 <script src="../home-mobile.js" defer></script>
  * 之後要正式做進 frontend-chat（home.tsx）時，照這裡的行為改，然後拿掉這支。
  */
@@ -30,7 +30,7 @@
     "  .hm-start-btn:active{transform:translateY(1px)}",
     "  .hm-start-btn:focus-visible{outline:2px solid var(--stroke-brand-strong,#1a8fd6);outline-offset:3px}",
     "  .hm-start-btn svg{flex:none}",
-    /* 張數：跟桌機（ab-home.js 的 .abg-count）一樣，一顆圓形徽章放在字後面；底色用 fill-overlay-weak（比 fill-overlay 淺）。 */
+    /* 張數：跟桌機（home-pick-count.js 的 .abg-count）一樣，一顆圓形徽章放在字後面；底色用 fill-overlay-weak（比 fill-overlay 淺）。 */
     "  .hm-start-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;border-radius:999px;",
     "    background:var(--fill-overlay-weak,rgba(0,0,0,.45));color:#fff;font:700 13px/1 Roboto,var(--cjk-sans,'Noto Sans TC'),system-ui,sans-serif}",
     "  .hm-start-hint{margin:0;text-align:center;font:400 13px/1.4 Roboto,var(--cjk-sans,'Noto Sans TC'),system-ui,sans-serif;color:var(--text-weak,#5b6a6e)}",

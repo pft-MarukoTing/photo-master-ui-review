@@ -443,11 +443,7 @@ export function Header(props: {
             <Icon name="plus" size={22} />
           </button>
         )}
-        {props.showHistory && (
-          <button type="button" class="chat-header-icon" aria-label={t("最近照片")} title={t("最近照片")} onClick={props.onHistory}>
-            <Icon name="clock" size={22} />
-          </button>
-        )}
+        {/* 最近照片不放在 header 上（從頭像選單開）。 */}
         {/* header 上不放換語言、換色彩模式（EN／月亮）。 */}
         {/* YCO 的頭像：深色圓底＋白色人像。每個寬度都用它開選單（取代原本只在手機出現的 ⋯）。 */}
         <button
@@ -521,20 +517,16 @@ export function Header(props: {
 // result, aligned and cropped to the same 4:5 frame so the slider lines up.
 // H02：分隔線預設停在臉中間（鼻樑約在 48%），兩邊各露出半張臉，不用拖就看得出差別。
 function HeroCompare() {
-  // 進場（A、B 一樣）：先整張都是 Before（分隔線在最右），1 秒內滑到停點；
-  // A 版停在正中間（各半），B 版（橫向海岸照）停在人臉上（67%）；切換 A／B 時重播。
-  // 使用者一碰滑桿就停下來，不跟他搶。減少動態效果（prefers-reduced-motion）就直接停在停點。
-  const isB = () => document.documentElement.classList.contains("ab-home-b");
-  // 桌機（跟 ab-home.js 的桌機斷點同一組）B 版停在人臉上（67%）；手機、平板的框比較窄、人物已經置中，一律停在正中間。
-  const DESKTOP = "(min-width:1201px),(min-width:901px) and (max-width:1200px) and (orientation:landscape)";
-  const restPos = () => (isB() && window.matchMedia(DESKTOP).matches ? 67 : 50);
+  // 進場：先整張都是 Before（分隔線在最右），1 秒內滑到正中間（各半）。
+  // 使用者一碰滑桿就停下來，不跟他搶。減少動態效果（prefers-reduced-motion）就直接停在正中間。
+  const REST_POS = 50;
   const SWEEP_MS = 1000;
   const [pos, setPos] = useState(100);
   const frame = useRef(0);
   const stopSweep = () => cancelAnimationFrame(frame.current);
   const play = () => {
     stopSweep();
-    const rest = restPos();
+    const rest = REST_POS;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setPos(rest); return; }
     const t0 = performance.now();
     setPos(100);
@@ -547,18 +539,8 @@ function HeroCompare() {
     frame.current = requestAnimationFrame(step);
   };
   useEffect(() => {
-    let last = isB();
     play();
-    const mo = new MutationObserver(() => {
-      const next = isB();
-      if (next !== last) { last = next; play(); }
-    });
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    // 視窗跨過桌機／平板的斷點（轉向、拉寬）停點也要換，重播一次。
-    const mq = window.matchMedia(DESKTOP);
-    const onMq = () => play();
-    mq.addEventListener?.("change", onMq);
-    return () => { mo.disconnect(); mq.removeEventListener?.("change", onMq); stopSweep(); };
+    return stopSweep;
   }, []);
   // 拉到某一邊、那一邊的標籤會被蓋住時把它藏起來：Before 標籤在左，左邊剩下的寬度（pos）放不下它就藏；
   // After 同理看右邊。拉到底時只剩對的那一個（整張都是 After 就只剩 After）。

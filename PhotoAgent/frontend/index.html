@@ -3966,6 +3966,22 @@
       opacity: 1;
       pointer-events: auto;
     }
+    /* A closed drawer is hidden outright, not just moved off screen. The
+       drawer is a right-side panel above 1200px and a centered modal at
+       1200px and below; without this, resizing across 1200px animated the
+       closed drawer between the two positions and it flew across the page.
+       visibility switches off only after the close animation (.25s), and
+       switches on at once when the drawer opens. */
+    .history-drawer:not(.drawer-open),
+    #history-drawer:not(.drawer-open) {
+      visibility: hidden;
+      transition: transform .25s ease, opacity .2s ease, visibility 0s linear .25s;
+    }
+    .history-drawer.drawer-open,
+    #history-drawer.drawer-open {
+      visibility: visible;
+      transition: transform .25s ease, opacity .2s ease, visibility 0s;
+    }
     #history-drawer .history-header {
       position: sticky;
       top: 0;
@@ -4617,6 +4633,23 @@
        Each photo is a full-width square .history-cube with its badge over
        the corner; the column narrows to fit them. */
     .batch-sidebar-list { scrollbar-width: thin; overscroll-behavior: contain; scroll-padding: 4px 0; }
+    /* 捲動時上下出血：捲動範圍一路撐到標題列（或篩選列）底邊、和卡片下緣，捲上去／捲下去的照片
+       會滑到邊緣才被切掉，不會在離邊 12px 的地方留一條白邊。撐出去多少就用內距補回來，
+       沒捲的時候第一張、最後一張的位置跟原本一樣（上 12px＝標題列的 margin-bottom、
+       篩選列下 8px；最後一張離卡片下緣 10px）。Chat 頁建置時會複製這段，兩邊一起生效。 */
+    @media (min-width: 1201px), (min-width: 901px) and (orientation: landscape) {
+      .batch-sidebar-header + .batch-sidebar-list { margin-top: -12px; padding-top: 12px; }
+      .batch-sidebar-filters + .batch-sidebar-list { margin-top: -8px; padding-top: 8px; }
+      /* 編輯器這欄的篩選列一直藏著（display:none，元素還在），列表其實直接接在標題列下面。 */
+      .pm-panel .batch-sidebar-filters + .batch-sidebar-list { margin-top: -12px; padding-top: 12px; }
+      .batch-sidebar-list { margin-bottom: -14px; padding-bottom: 10px; }
+      /* 捲軸出現時照片不縮：列表往右撐進這欄 14px 的右內距，捲軸（細的約 11px）就畫在那段內距裡；
+         照片寬度固定成這欄的內容寬度（100cqw，以 .batch-sidebar 為容器），有沒有捲軸都一樣大。
+         這欄裡沒有 position:fixed 的子元素，設成 container 不影響別的東西。 */
+      .batch-sidebar { container-type: inline-size; }
+      .batch-sidebar-list { margin-inline-end: -14px; padding-inline-end: 0; overflow-x: hidden; }
+      .batch-sidebar .batch-sidebar-list > .history-cube { width: 100cqw; }
+    }
     /* flex:none -- the list is a scrolling flex column, which would
        otherwise squash the squares. */
     .batch-sidebar-list > .history-cube { flex: none; width: 100%; padding: 0; }
@@ -5309,11 +5342,12 @@
     .pm-panel #batch-sidebar > .batch-sidebar-header { display: flex; align-items: center; gap: var(--spacing-8); box-sizing: border-box; min-height: 53px;
       margin: 0 -14px var(--spacing-12); padding: 0 var(--spacing-16); border-bottom: 1px solid var(--stroke-weak); }
     .pm-panel #batch-sidebar > .batch-sidebar-header .batch-sidebar-title { margin: 0; font-family: Roboto, var(--cjk-sans, "Noto Sans TC"), system-ui, sans-serif; font-size: 20px; font-weight: 600; line-height: 1.3; letter-spacing: .02em; text-transform: none; color: var(--n100); }
-    /* 美化旁邊的設定鈕：中性色（透明底＋灰色邊框，不是藍色），跟美化鈕間距 4px。 */
+    /* 美化旁邊的設定鈕：中性色（透明底＋灰色邊框，不是藍色），跟美化鈕間距 4px。
+       尺寸跟美化鈕（#inline-analysis-continue-btn）一樣：高 42px、左右內距 24px、32px 圓角。 */
     .pm-panel .ap-actions-row .ap-settings-run-row { gap: var(--spacing-4); }
     .pm-panel .ap-case-settings-trigger,
     .pm-panel .ap-case-settings-trigger:has(.ap-case-settings-dirty:not([hidden])) {
-      width: auto; height: 40px; padding: 0 var(--spacing-16); gap: var(--spacing-8); border-radius: 999px; background: var(--n09); border: 1px solid var(--stroke-strong); color: var(--text-strong); box-shadow: none; }
+      width: auto; height: 42px; min-height: 42px; padding: 0 var(--spacing-24); gap: var(--spacing-8); border-radius: var(--corner-radius-32); background: var(--n09); border: 1px solid var(--stroke-strong); color: var(--text-strong); box-shadow: none; }
     .pm-panel .ap-case-settings-label { font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small); font-weight: var(--font-weight-strong); }
     .pm-panel .ap-case-settings-trigger:hover { background: var(--n09) linear-gradient(var(--fill-hover), var(--fill-hover)); border-color: var(--stroke-strong); color: var(--text-strong); box-shadow: none; transform: none; }
     .pm-panel .ap-case-settings-trigger:focus-visible { outline: 0; box-shadow: 0 0 0 4px var(--stroke-focus); }
@@ -5883,8 +5917,8 @@
     @media (min-width: 901px) {
       .pm-panel:is(:has(#results-section.visible), :has(#upload-section.visible)) {
         --pm-shell-gap: var(--spacing-16);
-        --pm-shell-top: 10px;      /* header 底到卡片上緣，跟對話模式（已選照片時）一樣 */
-        --pm-shell-bottom: 58px;   /* 卡片下緣到視窗底 */
+        --pm-shell-top: 20px;      /* header 底到卡片上緣，跟對話模式（已選照片時）一樣：20px */
+        --pm-shell-bottom: 28px;   /* 卡片下緣到視窗底：28px，跟上方、左右一樣 */
         --pm-shell-head-h: 53px;   /* .chat-panel-head 的高度 */
         --pm-switch-gap: 40px;     /* 流程列 ↔ 「對話｜編輯器」切換 */
         --pm-shell-side: min(280px, calc((100% - 16px) * .16));     /* 「我的照片」欄寬：最多 280、再寬也不超過 16%（扣掉 16px 欄間距）；跟對話頁同一個算法；流程列的欄、空狀態、有照片的側欄都吃這個值，才會對齊 */
@@ -5998,10 +6032,12 @@
       .pm-panel #pm-empty .pm-gallery-empty-title { margin: 0; font-size: var(--font-size-heading-5); line-height: var(--line-height-heading-5); font-weight: var(--font-weight-strong); color: var(--text-strong); }
       .pm-panel #pm-empty .pm-gallery-empty-sub { margin: 0; font-size: var(--font-size-tiny); line-height: var(--line-height-tiny); color: var(--text-weak); }
       .pm-panel #pm-empty .pm-gallery-empty-btn {
-        margin-top: var(--spacing-8); height: 36px; padding: 0 var(--spacing-16); border: 1px solid var(--stroke-strong); border-radius: var(--corner-radius-32);
-        background: transparent; color: var(--text-strong); font: inherit; font-size: var(--font-size-small); font-weight: 600; cursor: pointer;
+        margin-top: var(--spacing-8); height: 36px; padding: 0 var(--spacing-16); border: 0; border-radius: var(--corner-radius-32);
+        /* Same colour as the home page gallery column's Upload button (yco primary/brand): solid brand blue, white text. */
+        background: var(--fill-brand-strong); color: var(--text-inverse-strong); font: inherit; font-size: var(--font-size-small); font-weight: 600; cursor: pointer;
       }
-      .pm-panel #pm-empty .pm-gallery-empty-btn:hover { background: var(--fill-hover); }
+      .pm-panel #pm-empty .pm-gallery-empty-btn:hover { background: linear-gradient(var(--fill-hover), var(--fill-hover)), var(--fill-brand-strong); }
+      .pm-panel #pm-empty .pm-gallery-empty-btn:active { background: linear-gradient(var(--fill-press), var(--fill-press)), var(--fill-brand-strong); }
       .pm-panel #pm-empty .pm-gallery-empty-btn:focus-visible { outline: 2px solid var(--stroke-brand-strong); outline-offset: 2px; }
       .pm-panel #pm-empty .pm-empty-card {
         flex: 1 1 0%; min-width: 0; display: flex; gap: var(--pm-shell-gap); box-sizing: border-box;
@@ -6065,26 +6101,36 @@
     }
     /* 畫布（照片卡）不加陰影。全螢幕本來就沒有，這裡只管一般狀態。 */
     .pm-panel #compare-card:not(.is-fullscreen) { box-shadow: none !important; }
-    /* 手機（≤600px）編輯器也要能切回對話：流程列（Upload→Done）在手機放不下，但「對話｜編輯器」切換要留著
-       （上面 @media 把整個 #step-indicator-slot 藏掉，header 的「對話」按鈕在這列存在時也是藏的，
-       結果手機編輯器沒有任何入口回對話）。只留切換，靠右放在 header 下面，跟對話模式那顆同一個位置。 */
-    @media (max-width: 600px) {
+    /* 手機和平板（≤900px）的編輯器：標題下面一列跟手機一樣——左邊「我的照片」圓鈕、右邊「對話｜編輯器」切換，
+       流程列（Upload→Done）不放（放不下；≤768 時上面 @media 本來就把整個 #step-indicator-slot 藏掉，這裡只留切換）。
+       原本只寫到 600：601–768 沒有這一列，「我的照片」鈕卻照這一列的位置擺，結果切換不見、那顆鈕浮在照片上；
+       769–900 是流程列＋貼左邊緣的抽屜分頁，分頁蓋住流程列的「Upload」。現在整段 ≤900 都跟手機一樣
+       （≥901 是桌機版面，「我的照片」直接是左邊那一欄）。 */
+    @media (max-width: 900px) {
       .pm-panel #step-indicator-slot:not([hidden]) {
         display: flex !important; flex-direction: row; justify-content: space-between; align-items: center;
         /* 跟 Chat 頁手機標頭一模一樣：同樣的總高（64px header + 53px 這一列）、底色、底線，切換 Chat／Editor 時不會跳 */
-        height: 53px; box-sizing: border-box; padding: 8px var(--spacing-16); gap: 0;
+        height: 53px; box-sizing: border-box; padding: 8px var(--spacing-24); gap: 0;
         background: var(--n04); border-bottom: 1px solid var(--border);
       }
       html:root:has(.pm-panel) { --header-h: 64px; }
+      /* 這一列和底下的內容（照片卡、Photo Overview…）左右都是 24px，跟對話模式同一條邊。 */
+      .pm-panel #results-body { padding-inline: var(--spacing-24); }
+      /* 照片卡到下面「Photo Overview」卡的距離，跟 Photo Overview 到「Analysis & Adjustments」一樣 18px
+         （原本是欄距 24 再加上工具欄的上外距 16，共 40）。 */
+      .pm-panel #results-canvas-row { row-gap: 18px; }
+      .pm-panel #ap-options-card-inline { margin-top: 0; }
       .pm-panel #step-indicator-slot > .ap-step-indicator { display: none; }
       .pm-panel #step-indicator-slot > .mode-switch { order: 0; align-self: center; margin: 0 0 0 auto; }
     }
-    /* 手機（≤768px）的編輯器上傳了兩張以上時：要有進「我的照片」的入口，不然只看得到一張。
-       左上角那顆邊緣抽屜鈕（上面 @media 藏掉的）太突兀，改成跟「對話｜編輯器」切換同一排、靠左（切換在最右）的一顆圓鈕，
+    /* 手機和平板（≤900px）的編輯器上傳了兩張以上時：要有進「我的照片」的入口，不然只看得到一張。
+       左上角那顆邊緣抽屜鈕太突兀（769–900 還會蓋住流程列），改成跟「對話｜編輯器」切換同一排、靠左（切換在最右）的一顆圓鈕，
        點開的還是原本的抽屜（openBatchDrawer）；只有「我的照片」列了兩張以上才出現。 */
-    @media (max-width: 768px) {
+    @media (max-width: 900px) {
+      /* 預設藏起來（≤768 上面已經藏了；769–900 原本會出現貼邊的分頁）；兩張以上時下一條（選擇器比較重）再打開。 */
+      .pm-panel #batch-drawer-trigger { display: none !important; }
       .pm-panel .results-body.batch-mode:has(#batch-sidebar-list .batch-sidebar-item:nth-child(2)) #batch-drawer-trigger {
-        display: inline-flex !important; position: fixed; top: calc(var(--header-h) + 8px); inset-inline-start: var(--spacing-16); inset-inline-end: auto;
+        display: inline-flex !important; position: fixed; top: calc(var(--header-h) + 8px); inset-inline-start: var(--spacing-24); inset-inline-end: auto;
         width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px; box-shadow: none;
         background: var(--fill-weak); color: var(--text-strong);
       }
@@ -6105,7 +6151,18 @@
     @media (max-width: 900px) {
       .pm-panel #batch-sidebar { border-radius: 0 !important; }
       .pm-panel #batch-sidebar > .batch-sidebar-header { margin-inline: -12px; border-radius: 0 !important; }
-      .pm-panel #batch-sidebar .batch-sidebar-close-btn { top: 11px; }
+      /* 關閉鈕搬到抽屜外面（右緣再過去 12px、跟 53px 標題列垂直置中）：白色圓鈕浮在暗背景上，
+         不再壓在標題列右上角、擋到「＋ 新增照片」；標題列右邊也不用再讓位給它。跟對話模式同一個樣子。 */
+      .pm-panel #batch-sidebar .batch-sidebar-close-btn {
+        top: 8.5px; inset-inline-end: -48px; width: 36px; height: 36px;
+        background: var(--background-raised, #fff); color: var(--text-strong); box-shadow: 0 2px 8px rgba(0, 0, 0, .16);
+      }
+      .pm-panel #batch-sidebar .batch-sidebar-close-btn:hover { background: linear-gradient(var(--fill-hover), var(--fill-hover)), var(--background-raised, #fff); }
+      .pm-panel #batch-sidebar > .batch-sidebar-header { padding-inline-end: var(--spacing-16); }
+      /* 抽屜收起來時只是滑到畫面左邊外（沒有藏起來），按鈕在抽屜外 48px，會露回畫面左上角：收起來就藏，
+         等滑出去（.25s）之後才藏，收起的動畫看得到。 */
+      .pm-panel #batch-sidebar:not(.drawer-open) .batch-sidebar-close-btn { visibility: hidden; transition: visibility 0s linear .25s; }
+      .pm-panel #batch-sidebar.drawer-open .batch-sidebar-close-btn { visibility: visible; transition: visibility 0s; }
     }
     /* 四塊白底卡片（編輯器、對話模式各一欄「我的照片」＋一張大卡）用同一組陰影：
        0 10px 30px rgba(0,0,0,.06)＋0 1px 2px rgba(0,0,0,.04)（--pm-shell-shadow，對話模式 chat.css 照抄同樣的值）。
@@ -6128,6 +6185,9 @@
     /* 「我的照片」大磚：狀態標籤和右上角 × 標籤離邊緣 15px、× 離邊緣 12px（選中的磚有一圈外框，原本 6px／4px 會壓到框、超出照片）。跟對話模式同一組。 */
     #batch-sidebar .history-cube .rc-badge { inset-inline-start: 15px; bottom: 15px; max-width: calc(100% - 30px); }
     #batch-sidebar .history-cube .history-cube-remove { top: 12px; inset-inline-end: 12px; }
+    /* 頁面最底層（<html>）不自己上色：主題變數掛在 <body> 上，<html> 讀到的是預設（深色）的 --bg，
+       出現直向捲軸時那條會露出黑色。<html> 透明時瀏覽器改用 <body> 的背景鋪滿畫布，跟著主題走。 */
+    html { background: transparent; }
   </style>
 </head>
 <!-- pm-panel：面板模式專用的樣式掛勾。index.html 的 <style> 也會被帶進對話模式的 build，新加的面板樣式都掛在 .pm-panel 底下，才不會影響對話模式。 -->

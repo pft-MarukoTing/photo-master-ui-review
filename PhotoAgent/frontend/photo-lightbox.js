@@ -46,6 +46,9 @@
     ".pmlb-thumb{transition:height .24s cubic-bezier(.3,.7,.2,1),opacity .24s ease,box-shadow .24s ease}",
     ".pmlb-thumb img{transition:height .24s cubic-bezier(.3,.7,.2,1)}",
     ".pmlb-img{transition:opacity .2s ease}.pmlb-img.is-swapping{opacity:0}",
+    /* 多張時照片可以左右拖：游標是手，拖的時候整張（含標籤、下載鈕）跟著手走。 */
+    ".pmlb--multi .pmlb-frame{cursor:grab;touch-action:pan-y;will-change:transform}.pmlb--multi .pmlb-frame.is-dragging{cursor:grabbing}",
+    ".pmlb--multi .pmlb-frame .pmlb-btn{cursor:pointer}",
     ".pmlb-thumb:hover{opacity:.8}",
     ".pmlb-thumb.is-current{height:80px;opacity:1;box-shadow:inset 0 0 0 3px rgba(255,255,255,.6)}",
     ".pmlb-thumb.is-current img{height:80px;width:auto}",
@@ -140,27 +143,69 @@
   // 左右滑（手指）或左右拖（滑鼠）：往左 onStep(+1)＝下一張，往右 onStep(-1)＝上一張。
   // 用 pointer 事件，手指、滑鼠、觸控筆同一套；水平移動夠多、而且比直向明顯才算，上下捲動不會誤觸；
   // 拖完放開那一下的 click 會被吃掉，不會被當成點背景。
+  // opts.follow：拖的時候跟著手左右移動的元素（大圖用照片那張卡）。放開時拖得夠遠就換張——
+  // 新的那張從拖過來的那一側滑回中間（slideIn）；不夠遠就彈回原位。不限拖多久（慢慢拖也算），
+  // 確定是水平拖曳後就抓住指標，拖出範圍外才放開也照算。
+
+  // 換張時新的那張從旁邊滑回中間：dir +1（下一張）從右邊進來，-1（上一張）從左邊進來。
+  // 拖曳、上一張／下一張鈕、鍵盤左右鍵都用這一個，看起來一樣。減少動態效果時不滑。
+  function slideIn(follow, dir) {
+    if (!follow) return;
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    follow.style.transition = "none";
+    follow.style.transform = reduce ? "" : "translateX(" + dir * 60 + "px)";
+    if (reduce) return;
+    void follow.offsetWidth;
+    follow.style.transition = "transform .22s cubic-bezier(.2,.8,.2,1)";
+    follow.style.transform = "";
+  }
+
   function attachSwipe(el, onStep, opts) {
     var ignore = (opts && opts.ignore) || "button, a, input, label";
+    var follow = (opts && opts.follow) || null;
     el.style.touchAction = "pan-y";
     var down = null, moved = false;
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function setX(x, animate) {
+      if (!follow) return;
+      follow.style.transition = animate && !reduce ? "transform .22s cubic-bezier(.2,.8,.2,1)" : "none";
+      follow.style.transform = x ? "translateX(" + x + "px)" : "";
+    }
     el.addEventListener("pointerdown", function (e) {
       if (e.button !== undefined && e.button !== 0) return;
       if (e.target.closest && e.target.closest(ignore)) { down = null; return; }
-      down = { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId };
+      down = { x: e.clientX, y: e.clientY, id: e.pointerId };
       moved = false;
     });
     el.addEventListener("pointermove", function (e) {
-      if (down && Math.abs(e.clientX - down.x) > 8) moved = true;
-    });
-    el.addEventListener("pointerup", function (e) {
       if (!down || e.pointerId !== down.id) return;
-      var dx = e.clientX - down.x, dy = e.clientY - down.y, dt = Date.now() - down.t;
-      down = null;
-      if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.5 || dt > 900) { moved = false; return; }
-      onStep(dx < 0 ? 1 : -1);
+      var dx = e.clientX - down.x, dy = e.clientY - down.y;
+      if (!moved && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+        moved = true;
+        if (follow) follow.classList.add("is-dragging");
+        // 確定是在拖了才抓住指標（拖出範圍外放開也照算）。一按下就抓的話，單純點照片的 click
+        // 也會變成點在 el 上，被當成點背景而關掉大圖。
+        try { el.setPointerCapture(e.pointerId); } catch (err) { /* old browsers */ }
+      }
+      if (moved) setX(dx, false);
     });
-    el.addEventListener("pointercancel", function () { down = null; });
+    function end(e, cancelled) {
+      if (!down || (e && e.pointerId !== down.id)) return;
+      var dx = cancelled ? 0 : e.clientX - down.x, dy = cancelled ? 0 : e.clientY - down.y;
+      down = null;
+      if (follow) follow.classList.remove("is-dragging");
+      var far = Math.max(48, follow ? follow.offsetWidth * 0.12 : 48);
+      if (!moved || Math.abs(dx) < far || Math.abs(dx) < Math.abs(dy) * 1.5) {
+        setX(0, true);
+        return;
+      }
+      var dir = dx < 0 ? 1 : -1;
+      onStep(dir);
+      // 新的那張從拖的方向那一側進來：往左拖（下一張）就從右邊滑回中間。
+      slideIn(follow, dir);
+    }
+    el.addEventListener("pointerup", function (e) { end(e, false); });
+    el.addEventListener("pointercancel", function (e) { end(e, true); });
     el.addEventListener("click", function (e) { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
   }
 
@@ -254,8 +299,9 @@
       var next = el("button", "pmlb-arrow pmlb-next", ICON.next);
       next.type = "button";
       next.setAttribute("aria-label", L("下一張", "Next"));
-      prev.addEventListener("click", function (e) { e.stopPropagation(); show(s.index - 1); });
-      next.addEventListener("click", function (e) { e.stopPropagation(); show(s.index + 1); });
+      // 上一張／下一張鈕：跟拖曳一樣，新的那張從旁邊滑回中間。
+      prev.addEventListener("click", function (e) { e.stopPropagation(); show(s.index - 1); slideIn(frame, -1); });
+      next.addEventListener("click", function (e) { e.stopPropagation(); show(s.index + 1); slideIn(frame, 1); });
       stage.appendChild(prev);
       stage.appendChild(next);
     }
@@ -272,7 +318,7 @@
     // 在照片上左右滑（手指）或左右拖（滑鼠）切換上一張／下一張；箭頭一直都在，這是另一種做法。
     if (multi) {
       img.draggable = false;
-      attachSwipe(stage, function (d) { show(s.index + d); }, { ignore: ".pmlb-btn, .pmlb-arrow" });
+      attachSwipe(stage, function (d) { show(s.index + d); }, { ignore: ".pmlb-btn, .pmlb-arrow", follow: frame });
     }
 
     // 點照片、按鈕、箭頭、縮圖以外的地方關閉
@@ -289,8 +335,8 @@
 
     s.onKey = function (e) {
       if (e.key === "Escape") { e.stopPropagation(); close(); }
-      else if (multi && e.key === "ArrowLeft") { e.preventDefault(); show(s.index - 1); }
-      else if (multi && e.key === "ArrowRight") { e.preventDefault(); show(s.index + 1); }
+      else if (multi && e.key === "ArrowLeft") { e.preventDefault(); show(s.index - 1); slideIn(frame, -1); }
+      else if (multi && e.key === "ArrowRight") { e.preventDefault(); show(s.index + 1); slideIn(frame, 1); }
     };
     document.addEventListener("keydown", s.onKey, true);
 
