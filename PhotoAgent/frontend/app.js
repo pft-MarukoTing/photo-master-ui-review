@@ -12858,7 +12858,10 @@
     });
     const desktopArrows = card.classList.contains("has-fs-strip") && window.matchMedia("(min-width:1201px),(min-width:901px) and (orientation:landscape)").matches;
     const availW = window.innerWidth - 48 - (desktopArrows ? 176 : 0);
-    const availH = window.innerHeight - 48 - (card.classList.contains("has-fs-strip") ? 96 : 0);
+    // 編輯器全螢幕時「人像／場景…」那排 tag 在照片下面（index.html），照片要讓出那一排：12px 間距＋32px 高，
+    // 再多留一點，卡片置中後 tag 跟底下縮圖列之間還有約 8px（只扣 44 的話高的照片 tag 會貼著縮圖列）。
+    const tagsBelow = document.body.classList.contains("pm-panel") && card.querySelector("#recipe-tags .recipe-tag-personalize") ? 72 : 0;
+    const availH = window.innerHeight - 48 - (card.classList.contains("has-fs-strip") ? 96 : 0) - tagsBelow;
     if (!ar) { card.style.removeProperty("--fs-w"); card.style.removeProperty("--fs-h"); return; }
     const w = Math.min(availW, availH * ar);
     card.style.setProperty("--fs-w", `${Math.round(w)}px`);
@@ -14027,6 +14030,25 @@
     });
   }
 
+  // 全螢幕裡換張（左右鍵、縮圖、拖曳）：跟 Chat 的共用大圖一樣——照片先淡出，換好的那張載入後淡入；
+  // dir（+1 下一張、-1 上一張）不是 0 時，照片從那一側滑回中間（拖曳那次 attachSwipe 自己會滑，傳 0）。
+  // 換的圖不一定會觸發 load（同一張、已經在快取），最多等 400ms 就淡回來。
+  function swapCompareFs(item, dir) {
+    const wrap = els.photoFrameWrap;
+    if (!wrap) { pickPhotoViewerItem(item); return; }
+    clearTimeout(wrap._fsSwapTimer);
+    const done = () => {
+      clearTimeout(wrap._fsSwapTimer);
+      wrap.removeEventListener("load", done, true);
+      wrap.classList.remove("is-fs-swapping");
+    };
+    wrap.classList.add("is-fs-swapping");
+    wrap.addEventListener("load", done, true);
+    wrap._fsSwapTimer = setTimeout(done, 400);
+    pickPhotoViewerItem(item);
+    if (dir && window.PMLightbox?.slideIn) window.PMLightbox.slideIn(wrap, dir);
+  }
+
   // 全螢幕（Enlarge）底下的縮圖列：跟共用大圖同一個元件，一排「原圖 + 各版」，點了就切到那一版。
   let fsStripSeparators = false;
   function syncCompareFsStrip() {
@@ -14050,7 +14072,7 @@
     box.dataset.key = key;
     // 分隔線一旦出現（有張照片有了各版）就留到關掉全螢幕，切到沒有版本的那張也不消失。
     if (data.items.some((x, k) => k > 0 && x.group === data.items[k - 1].group)) fsStripSeparators = true;
-    const built = window.PMLightbox.buildStrip(data.items, (k) => pickPhotoViewerItem(data.items[k]), { separators: fsStripSeparators });
+    const built = window.PMLightbox.buildStrip(data.items, (k) => swapCompareFs(data.items[k], Math.sign(k - data.at)), { separators: fsStripSeparators });
     box.appendChild(built.strip);
     card.appendChild(box);
     // 前後箭頭：貼在照片左右邊，循環切換（跟共用大圖一樣）
@@ -14063,7 +14085,7 @@
       b.addEventListener("click", (e) => {
         e.stopPropagation();
         const n = data.items.length;
-        pickPhotoViewerItem(data.items[(data.at + d + n) % n]);
+        swapCompareFs(data.items[(data.at + d + n) % n], d);
       });
       card.appendChild(b);
     });
@@ -16326,13 +16348,18 @@
   }
   // 全螢幕裡左右拖（桌機滑鼠）／滑（手機）換上一張、下一張，跟共用大圖一樣。
   if (els.photoFrameWrap && window.PMLightbox?.attachSwipe) {
+    // 照片跟著手左右移（follow），放開時拖得夠遠就換張、從那一側滑回來，跟 Chat 的大圖一樣；
+    // 只有全螢幕而且有兩張以上才拖得動，平常的照片不會跟著手走。
     window.PMLightbox.attachSwipe(els.photoFrameWrap, (d) => {
-      if (!isCompareFullscreen()) return;
       const data = photoViewerItems();
       const n = data.items.length;
       if (n < 2) return;
-      pickPhotoViewerItem(data.items[(data.at + d + n) % n]);
-    }, { ignore: "button, a, input, label, .analysis-box" });
+      swapCompareFs(data.items[(data.at + d + n) % n], 0);
+    }, {
+      ignore: "button, a, input, label, .analysis-box",
+      follow: els.photoFrameWrap,
+      enabled: () => isCompareFullscreen() && photoViewerItems().items.length > 1,
+    });
   }
   // 換張照片時比例不同：圖載入後重算全螢幕卡片的大小（不然會沿用上一張的比例，把照片裁掉）
   [els.originalImg, els.generatedImg].forEach((img) => img && img.addEventListener("load", () => { if (isCompareFullscreen()) sizeCompareFullscreen(); }));
@@ -16418,6 +16445,7 @@
   })();
   // 照片依比例完整顯示（contain）時框裡有留白：算出照片本身在框裡的左上角位置，
   // 給 #compare-hint（Before／After 標籤）貼在照片左上角用（--img-x / --img-y）。
+  const PHOTO_FRAME_AR = "3 / 2";
   (function setupPhotoImgBox() {
     const wrap = els.photoFrameWrap;
     if (!wrap) return;
@@ -16425,8 +16453,9 @@
       if (!document.body.classList.contains("pm-panel")) return;
       const img = [...wrap.querySelectorAll(".compare-img")].find((i) => i.offsetParent && i.naturalWidth);
       if (!img) return;
-      // 手機：卡片高度貼著照片比例（index.html 的 aspect-ratio: var(--img-ar)）。
-      if (els.compareCard) els.compareCard.style.setProperty("--img-ar", `${img.naturalWidth} / ${img.naturalHeight}`);
+      // 手機、平板（≤900）：照片框固定 3:2（寬:高，index.html 的 aspect-ratio: var(--img-ar)），每張照片框都一樣高；
+      // 照片在框裡等比縮到放得下（contain）：比 3:2 直的左右留白，比 3:2 寬的（16:9）上下留白。
+      if (els.compareCard) els.compareCard.style.setProperty("--img-ar", PHOTO_FRAME_AR);
       const fw = wrap.clientWidth;
       const fh = wrap.clientHeight;
       if (!fw || !fh) return;
@@ -16441,6 +16470,9 @@
     if (window.ResizeObserver) new ResizeObserver(sync).observe(wrap);
     window.addEventListener("resize", sync);
     if (els.compareCard) new MutationObserver(sync).observe(els.compareCard, { attributes: true, attributeFilter: ["class"] });
+    // sync 在 body 還沒有 pm-panel 時直接跳過；照片可能在那之前就載好了，pm-panel 加上去時要再算一次，
+    // 不然第一張會停在 CSS 預設的 4:3（比 3:2 高）。
+    new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ["class"] });
   })();
   // 轉成橫向或視窗拉寬，超過手機寬度就收起來，回到原本的版面。
   photoViewerMedia.addEventListener("change", (e) => {
@@ -16842,6 +16874,25 @@
     });
   })();
   if (els.batchDrawerTrigger) els.batchDrawerTrigger.addEventListener("click", openBatchDrawer);
+  // 手機、平板（≤900）：「我的照片」鈕放進「對話｜編輯器」那一排（#step-indicator-slot）最前面，
+  // 跟著那排一起捲，不再 fixed 浮在畫面上（捲動時會跟那排錯開、壓在照片上）。更寬的螢幕放回原位。
+  (function placeBatchDrawerTrigger() {
+    const btn = els.batchDrawerTrigger;
+    const slot = document.getElementById("step-indicator-slot");
+    if (!btn || !slot) return;
+    const home = btn.parentElement;
+    const homeNext = btn.nextSibling;
+    const narrow = window.matchMedia("(max-width: 900px)");
+    const place = () => {
+      if (narrow.matches) {
+        if (btn.parentElement !== slot) slot.prepend(btn);
+      } else if (btn.parentElement !== home) {
+        home.insertBefore(btn, homeNext && homeNext.parentNode === home ? homeNext : null);
+      }
+    };
+    place();
+    narrow.addEventListener("change", place);
+  })();
   if (els.batchSidebarCloseBtn) els.batchSidebarCloseBtn.addEventListener("click", closeBatchDrawer);
   if (els.batchSidebarBackdrop) els.batchSidebarBackdrop.addEventListener("click", closeBatchDrawer);
 

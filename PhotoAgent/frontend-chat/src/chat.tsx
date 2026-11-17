@@ -661,6 +661,46 @@ export function FootBar({ faces }: { faces?: ComponentChildren }) {
   return <div class="chat-footbar">{faces}</div>;
 }
 
+// 輸入框上面那條放不下時會橫向捲動，捲動的框會把往上掀開的面板切掉；所以那條上的面板
+// （指定對象、換底選單）改用 fixed，照按下的那顆鍵擺在它正上方，靠左對齊（RTL 靠右），
+// 超出畫面就往內推，離邊至少 8px。捲動或改視窗大小時跟著鍵重擺。
+const POPUP_EDGE = 8;
+const POPUP_GAP = 8;
+export function useAnchoredPopup(
+  open: boolean,
+  anchor: { current: HTMLElement | null },
+  popup: { current: HTMLElement | null },
+) {
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const a = anchor.current;
+      const p = popup.current;
+      if (!a || !p) return;
+      const r = a.getBoundingClientRect();
+      const vw = document.documentElement.clientWidth;
+      const w = Math.min(p.offsetWidth, vw - 2 * POPUP_EDGE);
+      const start = rtl ? r.right - w : r.left;
+      const left = Math.max(POPUP_EDGE, Math.min(start, vw - w - POPUP_EDGE));
+      Object.assign(p.style, {
+        position: "fixed",
+        left: `${left}px`,
+        right: "auto",
+        top: "auto",
+        bottom: `${window.innerHeight - r.top + POPUP_GAP}px`,
+        maxWidth: `${vw - 2 * POPUP_EDGE}px`,
+      });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+}
+
 // The faces sit in a row while they fit. When they do not, the row folds into
 // one button -- a couple of faces and +N -- that opens every face upward in a
 // grid: a scroller hid the rest without a hint and left the last face cut in
@@ -680,6 +720,8 @@ export function FacePicker(props: {
   const { people } = props;
   const box = useRef<HTMLDivElement>(null);
   const label = useRef<HTMLSpanElement>(null);
+  const foldBtn = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const [folded, setFolded] = useState(false);
   const [open, setOpen] = useState(false);
   // The pick when the panel opened. Closing it on purpose (X, the button, Esc)
@@ -712,6 +754,7 @@ export function FacePicker(props: {
   useEffect(() => {
     if (!folded) setOpen(false);
   }, [folded]);
+  useAnchoredPopup(open, foldBtn, panel);
 
   useEffect(() => {
     if (!open) return;
@@ -755,6 +798,7 @@ export function FacePicker(props: {
         <>
           <button
             type="button"
+            ref={foldBtn}
             class={`chat-face-fold${open ? " is-open" : ""}`}
             aria-haspopup="dialog"
             aria-expanded={open}
@@ -774,7 +818,7 @@ export function FacePicker(props: {
             <Icon name="chevron-up" size={14} />
           </button>
           {open && (
-            <div class="chat-face-panel" role="dialog" aria-label={t("指定對象")}>
+            <div class="chat-face-panel" ref={panel} role="dialog" aria-label={t("指定對象")}>
               <div class="chat-face-panel-head">
                 <span>{t("指定對象")}</span>
                 <button type="button" class="chat-face-panel-x" aria-label={t("關閉")} onClick={() => close(true)}>
@@ -1085,6 +1129,9 @@ export function faceText(text: string, refs: { ref: string; face: FaceRef }[], p
 const PREVIEW_HOVER_MS = 250;
 const PREVIEW_LEAVE_MS = 80;
 const PREVIEW_MARGIN = 8;
+// 觸控上點一下選了某人，放大的臉停 2 秒讓人看清楚選了誰，然後自己淡出（淡出的時間跟 chat.css 的 .is-leaving 一致）。
+const PREVIEW_PICK_MS = 2000;
+const PREVIEW_FADE_MS = 200;
 const mouseQuery = typeof matchMedia === "function" ? matchMedia("(hover:hover) and (pointer:fine)") : null;
 const usesMouse = () => !!mouseQuery?.matches;
 
@@ -1114,8 +1161,16 @@ function hideFacePreview() {
   previewHiddenAt = Date.now();
 }
 
+// The preview a pick opened fades out on its own; another preview or a tap elsewhere replaces it sooner.
+function fadeFacePreview() {
+  if (!previewEl) return;
+  previewEl.classList.add("is-leaving");
+  previewTimer = window.setTimeout(hideFacePreview, PREVIEW_FADE_MS);
+}
+
 // `go` turns the preview into a confirmation: its button runs the tap's action.
-function showFacePreview(anchor: HTMLElement, face: FaceRef, go?: { label: string; run: () => void }) {
+// `autoHide` fades it out after PREVIEW_PICK_MS (a touch pick, not a hover).
+function showFacePreview(anchor: HTMLElement, face: FaceRef, go?: { label: string; run: () => void }, autoHide = false) {
   hideFacePreview();
   if (!face.thumb) return;
   const el = document.createElement("div");
@@ -1147,6 +1202,7 @@ function showFacePreview(anchor: HTMLElement, face: FaceRef, go?: { label: strin
   previewEl = el;
   previewAnchor = anchor;
   placeFacePreview();
+  if (autoHide) previewTimer = window.setTimeout(fadeFacePreview, PREVIEW_PICK_MS);
 }
 
 function hoverFacePreview(anchor: HTMLElement, face: FaceRef) {
@@ -1246,7 +1302,7 @@ export function FaceChip(props: {
       return showFacePreview(el, face, { label: props.title || faceLabel(face), run });
     }
     run();
-    if (el && previews && !props.picked && !usesMouse()) showFacePreview(el, face);
+    if (el && previews && !props.picked && !usesMouse()) showFacePreview(el, face, undefined, true);
   };
   return (
     <button

@@ -5075,10 +5075,18 @@
     .pm-panel .ap-review-tabs { margin: 0; gap: 0; align-items: stretch; box-shadow: inset 0 -4px 0 0 var(--stroke-weak); }
     .pm-panel .ap-review-tab,
     .pm-panel .ap-review-tab.is-active {
-      flex: 1 1 0; justify-content: center; gap: 0; min-width: 0; padding: 9px var(--spacing-16);
+      /* 寬度先照字（auto），剩下的空間再平分：等寬（1 1 0）的話「My Requests」這種長字會超出自己那格、貼到邊。 */
+      flex: 1 1 auto; justify-content: center; gap: 0; min-width: 0; padding: 9px var(--spacing-16);
       border: 0; border-radius: 0; background: transparent; box-shadow: none;
       font-family: var(--font-family-body); font-size: var(--font-size-small); line-height: var(--line-height-small);
       font-weight: var(--font-weight-strong); color: var(--text-strong);
+    }
+    /* 手機：左右內距 16 → 12；更窄的手機（360、320）再縮到 6，四個字才不會貼到卡片邊。 */
+    @media (max-width: 600px) {
+      .pm-panel .ap-review-tab, .pm-panel .ap-review-tab.is-active { padding-inline: var(--spacing-12, 12px); }
+    }
+    @media (max-width: 380px) {
+      .pm-panel .ap-review-tab, .pm-panel .ap-review-tab.is-active { padding-inline: 6px; }
     }
     .pm-panel .ap-review-tab .ic { display: none; }
     .pm-panel .ap-review-tab:hover { background: linear-gradient(var(--fill-hover), var(--fill-hover)) top / 100% calc(100% - 4px) no-repeat; }
@@ -5608,6 +5616,13 @@
     :is(.pm-panel, body) #compare-card.is-fullscreen.has-fs-strip { inset: calc(24px + (100vh - 144px - var(--fs-h, 100vh)) / 2) 0 auto 0; inset: calc(24px + (100dvh - 144px - var(--fs-h, 100dvh)) / 2) 0 auto 0; }
     #compare-card #pm-fs-strip { display: none; }
     #compare-card.is-fullscreen #pm-fs-strip { display: block; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); width: min(100vw - 48px, 720px); }
+    /* 全螢幕換張跟 Chat 的大圖一樣（app.js 的 swapCompareFs、photo-lightbox.js 的 attachSwipe／slideIn）：
+       照片可以左右拖（游標是手），換張時先淡出、新的那張載入後淡入。 */
+    #compare-card.is-fullscreen.has-fs-strip #photo-frame-wrap { cursor: grab; will-change: transform; }
+    #compare-card.is-fullscreen.has-fs-strip #photo-frame-wrap.is-dragging { cursor: grabbing; }
+    #compare-card.is-fullscreen #photo-frame-wrap .compare-img { transition: opacity .2s ease; }
+    #compare-card.is-fullscreen #photo-frame-wrap.is-fs-swapping .compare-img { opacity: 0; }
+    @media (prefers-reduced-motion: reduce) { #compare-card.is-fullscreen #photo-frame-wrap .compare-img { transition: none; } }
     #compare-card .pm-fs-arrow { display: none; }
     #compare-card.is-fullscreen .pm-fs-arrow { display: flex; z-index: 40; }
     #compare-card.is-fullscreen .pm-fs-arrow.pmlb-prev { left: 16px; }
@@ -6103,6 +6118,13 @@
       .pm-panel #pm-empty .pm-empty-side, .pm-panel #pm-empty .pm-empty-tools { display: none; }
       .pm-panel #pm-empty .pm-empty-card { display: contents; }
     }
+    /* 手機（≤600px）：上傳區不撐滿整個螢幕高，白卡固定 2:3（寬:高），虛線框撐滿卡片、內容置中；
+       頁面左右留 16px（跟其他頁一樣），白卡內距 28 → 12。內容比 2:3 還高時（很窄的螢幕）卡片跟著長。 */
+    @media (max-width: 600px) {
+      .pm-panel #pm-empty .pm-empty-wrap { padding: var(--spacing-12, 12px) var(--spacing-16, 16px); height: auto; min-height: 0; }
+      .pm-panel #pm-empty .pm-empty-drop { padding: var(--spacing-12, 12px); border-radius: var(--corner-radius-20, 20px); aspect-ratio: 2 / 3; height: auto; }
+      .pm-panel #pm-empty .pm-empty-inner { flex: 1 1 auto; padding: 40px var(--spacing-16, 16px); }
+    }
     /* 工具設定欄底部的 Settings / Retouch 列（桌機）：白底（--n09），見上面 min-width:601px 那條。 */
     /* 手機／窄螢幕（≤900px）單張流程的重試中畫面（#canvas-loading）：跟上面 #batch-main-loading 同一個問題、同一個解法——
        桌機是固定高度的卡片，手機外層（.compare-card）高度跟著內容，照片區 flex:1 1 0 會被壓成 0 高，
@@ -6137,6 +6159,68 @@
       /* 全螢幕：分類小標籤（Portrait／Scene…）原本貼在照片底部，會壓到右下角的比較／下載鈕，往上抬到鈕上面。 */
       .pm-panel #compare-card.is-fullscreen #recipe-tags { bottom: calc(var(--spacing-12) + 40px + var(--spacing-8)); }
     }
+    /* 平板（601–900px）：跟手機一樣，3:2 比例（--img-ar，app.js 設）放在照片區本身、不是整張卡片。
+       放在卡片上的話，美化後下面多出「Original / Version 1」那排縮圖，會吃掉照片的高度（720×480 → 720×370）；
+       放在照片區，縮圖排在照片下面另外長，照片框高度美化前後都一樣。卡片的白底、框線維持平板原本的樣子。 */
+    @media (min-width: 601px) and (max-width: 900px) {
+      .pm-panel #compare-card:not(.is-fullscreen) { height: auto; min-height: 0; aspect-ratio: auto; }
+      .pm-panel #compare-card:not(.is-fullscreen) #photo-frame-wrap { flex: none; width: 100%; height: auto; aspect-ratio: var(--img-ar, 3 / 2); }
+    }
+    /* 照片上「人像／場景／風格／需求」tag 點開的說明框（#personalize-popover）：
+       原本是很透的毛玻璃，花一點的照片上字很難讀；左右切換箭頭會壓在標題上，全螢幕時右下的比較／下載鈕也會蓋到框底。
+       改成幾乎不透的卡片（頁面本身的底色、細框線、柔和陰影），字 13px、清單行距收緊、項目符號用品牌色；
+       疊在照片上的按鈕上面，開著的時候左右箭頭先收起來。尾巴跟卡片同色。 */
+    body.pm-panel #personalize-popover {
+      bottom: 52px; z-index: 45; width: min(360px, calc(100% - 24px)); box-sizing: border-box;
+      gap: var(--spacing-8, 8px); padding: var(--spacing-12, 12px) var(--spacing-8, 8px) var(--spacing-12, 12px) var(--spacing-16, 16px);
+      border-radius: 16px; border: 1px solid var(--stroke-weak, rgba(17,24,26,.1));
+      background: color-mix(in srgb, var(--background-raised, var(--card, #fff)) 94%, transparent);
+      -webkit-backdrop-filter: blur(20px) saturate(1.2); backdrop-filter: blur(20px) saturate(1.2);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, .18), 0 2px 6px rgba(0, 0, 0, .08);
+    }
+    /* 照片框不高時（手機 3:2 只有 218px、全螢幕的橫圖）：框最高到照片上緣下 8px，標題一定看得到，清單在框裡捲。 */
+    body.pm-panel #personalize-popover { max-height: calc(100% - 52px - 8px); }
+    body.pm-panel #personalize-popover .personalize-popover-head { flex: none; }
+    body.pm-panel #personalize-popover .personalize-popover-text { flex: 1 1 auto; min-height: 0; }
+    @media (max-width: 560px) { body.pm-panel #personalize-popover { max-height: calc(100% - 48px - 8px); } }
+    body.pm-panel #personalize-popover::after {
+      background: color-mix(in srgb, var(--background-raised, var(--card, #fff)) 94%, transparent);
+      -webkit-backdrop-filter: none; backdrop-filter: none;
+    }
+    body.pm-panel #personalize-popover .personalize-popover-head { gap: var(--spacing-8, 8px); }
+    body.pm-panel #personalize-popover .personalize-popover-title {
+      font-size: 13px; line-height: 18px; font-weight: var(--font-weight-strong, 600);
+      letter-spacing: 0; color: var(--text-strong);
+    }
+    body.pm-panel #personalize-popover .personalize-popover-close {
+      width: 28px; height: 28px; border: 0; border-radius: 999px; background: transparent; color: var(--text-weak, var(--text-2));
+    }
+    body.pm-panel #personalize-popover .personalize-popover-close:hover { background: var(--fill-hover, rgba(17,24,26,.06)); color: var(--text-strong); }
+    body.pm-panel #personalize-popover .personalize-popover-text {
+      padding-inline-end: var(--spacing-8, 8px); font-size: 13px; line-height: 1.5; color: var(--text-strong);
+      max-height: min(200px, 40vh); white-space: normal;
+    }
+    body.pm-panel #personalize-popover .result-detail-list { padding-inline-start: 18px; }
+    body.pm-panel #personalize-popover .result-detail-list li + li { margin-top: var(--spacing-4, 4px); }
+    body.pm-panel #personalize-popover .result-detail-list li::marker { color: var(--text-brand, var(--accent)); }
+    @media (max-width: 560px) {
+      body.pm-panel #personalize-popover { bottom: 48px; width: calc(100% - 20px); padding: var(--spacing-12, 12px) var(--spacing-4, 4px) var(--spacing-12, 12px) var(--spacing-12, 12px); }
+      body.pm-panel #personalize-popover .personalize-popover-text { font-size: 13px; max-height: min(180px, 34vh); }
+    }
+    .pm-panel #compare-card:has(#personalize-popover:not([hidden])) :is(.photo-switch-arrow, .pm-pv-arrow, .pm-fs-arrow) {
+      opacity: 0; pointer-events: none;
+    }
+    /* 全螢幕：「人像／場景／風格／需求」那排 tag 放在照片正下方（不壓在照片上），說明框開在 tag 上方（見下面）。照片外框原本 overflow:hidden 會把框外的東西切掉，
+       改成圓角裁在照片本身（.photo-frame）。全螢幕卡片的高度（app.js sizeCompareFullscreen）會扣掉這排 tag 的高度。 */
+    body.pm-panel #compare-card.is-fullscreen #photo-frame-wrap { overflow: visible; }
+    body.pm-panel #compare-card.is-fullscreen #photo-frame-wrap > .photo-frame { border-radius: 12px; overflow: hidden; }
+    body.pm-panel #compare-card.is-fullscreen #recipe-tags { top: calc(100% + 12px); bottom: auto; }
+    /* 說明框開在 tag 那排的正上方（尾巴朝下指著那顆 tag），往上疊在照片下半部；不放在 tag 下面，
+       那裡是縮圖列，會被蓋住、也會蓋到縮圖。tag 在照片下緣下 12px：框底在照片下緣下 2px，跟 tag 之間留 10px 給尾巴。
+       最高到照片上緣下 8px，再多就在框裡捲。 */
+    body.pm-panel #compare-card.is-fullscreen #personalize-popover {
+      top: auto; bottom: -2px; max-height: min(260px, calc(100% - 10px));
+    }
     /* 畫布（照片卡）不加陰影。全螢幕本來就沒有，這裡只管一般狀態。 */
     .pm-panel #compare-card:not(.is-fullscreen) { box-shadow: none !important; }
     /* 手機和平板（≤900px）的編輯器：標題下面一列跟手機一樣——左邊「我的照片」圓鈕、右邊「對話｜編輯器」切換，
@@ -6167,8 +6251,10 @@
     @media (max-width: 900px) {
       /* 預設藏起來（≤768 上面已經藏了；769–900 原本會出現貼邊的分頁）；兩張以上時下一條（選擇器比較重）再打開。 */
       .pm-panel #batch-drawer-trigger { display: none !important; }
-      .pm-panel .results-body.batch-mode:has(#batch-sidebar-list .batch-sidebar-item:nth-child(2)) #batch-drawer-trigger {
-        display: inline-flex !important; position: fixed; top: calc(var(--header-h) + 8px); inset-inline-start: var(--spacing-24); inset-inline-end: auto;
+      /* 鈕本身由 app.js（placeBatchDrawerTrigger）搬進 #step-indicator-slot 最前面，跟切換同一排、一起捲；
+         這裡不再 fixed。切換那顆有 margin-inline-start:auto，自己靠右。 */
+      .pm-panel:has(.results-body.batch-mode #batch-sidebar-list .batch-sidebar-item:nth-child(2)) #step-indicator-slot > #batch-drawer-trigger {
+        display: inline-flex !important; position: relative; top: auto; inset: auto; flex: none; margin: 0; z-index: auto;
         width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px; box-shadow: none;
         background: var(--fill-weak); color: var(--text-strong);
       }

@@ -6465,6 +6465,18 @@
         "chat"
       ]
     },
+    "沒有另外挑風格，照 AI 建議的美化。": {
+      "en": "No style picked, so it follows the AI's suggestions.",
+      "where": [
+        "panel"
+      ]
+    },
+    "沒有畫面調整。": {
+      "en": "No scene adjustments.",
+      "where": [
+        "panel"
+      ]
+    },
     "注意": {
       "en": "Caution",
       "where": [
@@ -8964,6 +8976,12 @@
         "panel"
       ]
     },
+    "這張照片沒有要調整的人像。": {
+      "en": "No portrait adjustments for this photo.",
+      "where": [
+        "panel"
+      ]
+    },
     "這張照片的美化紀錄": {
       "en": "This photo's version history",
       "where": [
@@ -9119,6 +9137,12 @@
       "en": "The analysis failed: {error}",
       "where": [
         "chat"
+      ]
+    },
+    "這次沒有寫需求。": {
+      "en": "No requests this time.",
+      "where": [
+        "panel"
       ]
     },
     "這次美化沒有成功：{error}。": {

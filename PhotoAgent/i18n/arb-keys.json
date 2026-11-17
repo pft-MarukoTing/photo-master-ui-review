@@ -8398,6 +8398,12 @@
         "chat"
       ]
     },
+    "panel_no_portrait_adjustments_for_this": {
+      "zh": "這張照片沒有要調整的人像。",
+      "where": [
+        "panel"
+      ]
+    },
     "panel_no_qa_result_yet": {
       "zh": "尚未取得 QA 檢查結果。",
       "where": [
@@ -8406,6 +8412,12 @@
     },
     "panel_no_reports_yet": {
       "zh": "目前尚無回報紀錄。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_requests_this_time": {
+      "zh": "這次沒有寫需求。",
       "where": [
         "panel"
       ]
@@ -8422,8 +8434,20 @@
         "panel"
       ]
     },
+    "panel_no_scene_adjustments": {
+      "zh": "沒有畫面調整。",
+      "where": [
+        "panel"
+      ]
+    },
     "panel_no_scene_suggestions_yet": {
       "zh": "尚未取得畫面建議。",
+      "where": [
+        "panel"
+      ]
+    },
+    "panel_no_style_picked_so_it": {
+      "zh": "沒有另外挑風格，照 AI 建議的美化。",
       "where": [
         "panel"
       ]

@@ -37,6 +37,7 @@ import {
   BatchUploadBubble,
   UserMsg,
   WorkingCard,
+  useAnchoredPopup,
   useWorkLog,
   type Change,
   type FaceRef,
@@ -8137,6 +8138,9 @@ function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
 }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLSpanElement>(null);
+  const pickBtn = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  useAnchoredPopup(open, pickBtn, menu);
   // 點到別處、按 Esc 就收，跟美化項目裡的程度選單一樣。
   useEffect(() => {
     if (!open) return;
@@ -8164,7 +8168,7 @@ function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
       {lead.trim() && <span class="chat-continue-text">{lead.trim()}</span>}
       <span class="chat-continue-control">
       <span class="chat-composer-who chat-continue-from">
-        <button type="button" class="chat-continue-pick" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
+        <button type="button" ref={pickBtn} class="chat-continue-pick" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
           title={t("換一張當底")} onClick={() => setOpen((o) => !o)}>
           <img class="chat-continue-shot" src={from ? urls.resultThumb(versionJob(from)) : original} alt="" />
           {from ? t("第 {n} 版", { n: from.ordinal }) : t("原圖")}
@@ -8177,7 +8181,7 @@ function ContinueBase({ versions, from, original, disabled, onPick, onClose }: {
         )}
       </span>
       {open && (
-        <div class="chat-opt-menu is-up chat-continue-menu" role="menu">
+        <div class="chat-opt-menu is-up chat-continue-menu" ref={menu} role="menu">
           <button type="button" role="menuitemradio" aria-checked={!from} class={!from ? "is-picked" : undefined} onClick={() => pick(null)}>
             <span class="chat-opt-menu-tick">{!from && <Icon name="check" size={14} />}</span>
             <img class="chat-continue-shot" src={original} alt="" />

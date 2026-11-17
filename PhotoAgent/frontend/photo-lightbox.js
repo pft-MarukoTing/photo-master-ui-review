@@ -160,9 +160,11 @@
     follow.style.transform = "";
   }
 
+  // opts.enabled()：回傳 false 時不理這次按下（例如 Editor 只有全螢幕時才拖得動，平常照片不跟著手走）。
   function attachSwipe(el, onStep, opts) {
     var ignore = (opts && opts.ignore) || "button, a, input, label";
     var follow = (opts && opts.follow) || null;
+    var enabled = (opts && opts.enabled) || null;
     el.style.touchAction = "pan-y";
     var down = null, moved = false;
     var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -173,6 +175,7 @@
     }
     el.addEventListener("pointerdown", function (e) {
       if (e.button !== undefined && e.button !== 0) return;
+      if (enabled && !enabled()) { down = null; return; }
       if (e.target.closest && e.target.closest(ignore)) { down = null; return; }
       down = { x: e.clientX, y: e.clientY, id: e.pointerId };
       moved = false;
@@ -347,5 +350,5 @@
     closeBtn.focus({ preventScroll: true });
   }
 
-  window.PMLightbox = { open: open, buildStrip: buildStrip, attachSwipe: attachSwipe, markCurrent: markCurrent, close: function () { close(); }, isOpen: function () { return !!state; } };
+  window.PMLightbox = { open: open, buildStrip: buildStrip, attachSwipe: attachSwipe, markCurrent: markCurrent, slideIn: slideIn, close: function () { close(); }, isOpen: function () { return !!state; } };
 })();
