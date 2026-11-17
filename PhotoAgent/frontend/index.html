@@ -2858,7 +2858,14 @@
     .batch-sidebar-item.analyzing .rc-badge::before,
     .batch-sidebar-item.processing .rc-badge::before { content: "◌"; }
     .batch-sidebar-item.analyzed .rc-badge::before { content: "✦"; }
-    .batch-sidebar-item.done .rc-badge::before { content: "✓"; }
+    /* 美化好了：Lucide「check」圖示（https://lucide.dev/icons/check），白色跟徽章的字同色。
+       用圖片（不是遮罩）畫，才吃得到跟字一樣的陰影（遮罩會把陰影一起切掉）；徽章改成 flex，圖示和字垂直置中對齊。 */
+    .batch-sidebar-item.done .rc-badge { display: inline-flex; align-items: center; justify-content: center; }
+    .batch-sidebar-item.done .rc-badge::before {
+      content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+      display: block; width: 12px; height: 12px; line-height: 0;
+      filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6));
+    }
     .batch-sidebar-item.error .rc-badge::before { content: "!"; }
     /* A translucent color wash directly over a photo thumbnail (these
        badges aren't only shown on a plain card -- .history-cube .rc-badge,
