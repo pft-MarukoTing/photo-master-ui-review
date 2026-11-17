@@ -4633,6 +4633,23 @@
        Each photo is a full-width square .history-cube with its badge over
        the corner; the column narrows to fit them. */
     .batch-sidebar-list { scrollbar-width: thin; overscroll-behavior: contain; scroll-padding: 4px 0; }
+    /* 捲動時上下出血：捲動範圍一路撐到標題列（或篩選列）底邊、和卡片下緣，捲上去／捲下去的照片
+       會滑到邊緣才被切掉，不會在離邊 12px 的地方留一條白邊。撐出去多少就用內距補回來，
+       沒捲的時候第一張、最後一張的位置跟原本一樣（上 12px＝標題列的 margin-bottom、
+       篩選列下 8px；最後一張離卡片下緣 10px）。Chat 頁建置時會複製這段，兩邊一起生效。 */
+    @media (min-width: 1201px), (min-width: 901px) and (orientation: landscape) {
+      .batch-sidebar-header + .batch-sidebar-list { margin-top: -12px; padding-top: 12px; }
+      .batch-sidebar-filters + .batch-sidebar-list { margin-top: -8px; padding-top: 8px; }
+      /* 編輯器這欄的篩選列一直藏著（display:none，元素還在），列表其實直接接在標題列下面。 */
+      .pm-panel .batch-sidebar-filters + .batch-sidebar-list { margin-top: -12px; padding-top: 12px; }
+      .batch-sidebar-list { margin-bottom: -14px; padding-bottom: 10px; }
+      /* 捲軸出現時照片不縮：列表往右撐進這欄 14px 的右內距，捲軸（細的約 11px）就畫在那段內距裡；
+         照片寬度固定成這欄的內容寬度（100cqw，以 .batch-sidebar 為容器），有沒有捲軸都一樣大。
+         這欄裡沒有 position:fixed 的子元素，設成 container 不影響別的東西。 */
+      .batch-sidebar { container-type: inline-size; }
+      .batch-sidebar-list { margin-inline-end: -14px; padding-inline-end: 0; overflow-x: hidden; }
+      .batch-sidebar .batch-sidebar-list > .history-cube { width: 100cqw; }
+    }
     /* flex:none -- the list is a scrolling flex column, which would
        otherwise squash the squares. */
     .batch-sidebar-list > .history-cube { flex: none; width: 100%; padding: 0; }

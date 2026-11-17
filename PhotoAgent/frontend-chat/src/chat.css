@@ -2815,10 +2815,12 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   .chat-panel.has-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);column-gap:40px;
     padding-inline:0}
   .chat-panel.has-stage>.chat-panel-head{grid-column:1/-1;grid-row:1}
-  .chat-panel.has-stage>.chat-panel-stage{display:flex;grid-column:1;grid-row:2/span 6;min-width:0;min-height:0;padding:var(--spacing-20,20px) 0 var(--spacing-20,20px) var(--spacing-20,20px)}
+  /* 卡片四邊 16px：跟編輯器（#results-detail 的 16px）一樣——標題列下面到預覽、到對話第一則，預覽到卡片左、下緣，
+     對話和輸入框到卡片右緣，都是 16px。 */
+  .chat-panel.has-stage>.chat-panel-stage{display:flex;grid-column:1;grid-row:2/span 6;min-width:0;min-height:0;padding:var(--spacing-16,16px) 0 var(--spacing-16,16px) var(--spacing-16,16px)}
   .chat-panel.has-stage>.chat-panel-stage .prechat-stage{flex:1 1 auto;width:100%;height:100%;max-height:none;min-height:0;box-shadow:none}
   .chat-panel.has-stage>:not(.chat-panel-head):not(.chat-panel-stage){grid-column:2}
-  .chat-panel.has-stage>.chat-timeline{grid-row:2;min-height:0}
+  .chat-panel.has-stage>.chat-timeline{grid-row:2;min-height:0;padding-top:var(--spacing-16,16px);padding-inline:var(--spacing-16,16px)}
   /* 對話欄在卡片右半邊，不再用「放在卡片中間」的置中寬度 */
   .chat-panel.has-stage>.chat-composer,.chat-panel.has-stage>.chat-footbar{width:auto;max-width:none;margin-inline:0}
 }
@@ -2834,8 +2836,8 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   #results-canvas-row.showing-analysis #results-analysis-slot>.chat-panel{display:contents !important}
   #results-canvas-row.showing-analysis .chat-panel-head{grid-column:1/-1;grid-row:1}
   #results-canvas-row.showing-analysis #results-canvas-col{grid-column:1;grid-row:2/span 4;min-width:0;min-height:0;
-    padding:var(--spacing-20,20px) 0 var(--spacing-20,20px) var(--spacing-20,20px) !important;box-sizing:border-box;flex:none !important}
-  #results-canvas-row.showing-analysis .chat-timeline{grid-column:2;grid-row:2;min-height:0;padding:var(--sp-5) var(--sp-5) var(--sp-3) 0}
+    padding:var(--spacing-16,16px) 0 var(--spacing-16,16px) var(--spacing-16,16px) !important;box-sizing:border-box;flex:none !important}
+  #results-canvas-row.showing-analysis .chat-timeline{grid-column:2;grid-row:2;min-height:0;padding:var(--spacing-16,16px) var(--spacing-16,16px) var(--sp-3) 0}
   #results-canvas-row.showing-analysis .chat-footbar,
   #results-canvas-row.showing-analysis .chat-composer{grid-column:2;width:auto;max-width:none;margin-inline:0}
   #results-canvas-row.showing-analysis .split-grip,
@@ -2846,10 +2848,13 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
 /* 輸入框上面那一條（Choose People、Next retouch from）不要底色，跟輸入框同一片白。 */
 .chat-panel .chat-footbar{background:transparent}
 
-/* 預覽在左、對話在右時：輸入框和上面那條跟時間軸（內距 24）左右對齊，不貼卡片右邊。 */
+/* 預覽在左、對話在右時：輸入框、上面那條、時間軸左右都是 16（跟編輯器一樣），三者左緣對齊。 */
 @media (min-width:1201px),(min-width:901px) and (orientation:landscape){
-  .chat-panel.has-stage>.chat-footbar,#results-canvas-row.showing-analysis .chat-footbar{padding-inline:var(--sp-5,24px)}
-  .chat-panel.has-stage>.chat-composer,#results-canvas-row.showing-analysis .chat-composer{margin-inline:var(--sp-5,24px) !important;width:auto !important}
+  .chat-panel.has-stage>.chat-footbar,#results-canvas-row.showing-analysis .chat-footbar{padding-inline:var(--spacing-16,16px)}
+  .chat-panel.has-stage>.chat-composer,#results-canvas-row.showing-analysis .chat-composer{margin-inline:var(--spacing-16,16px) !important;width:auto !important}
+  /* 單張結果頁的時間軸左邊沒有內距（訊息貼著這欄的起點），輸入框和上面那條也從起點開始，三者左緣對齊。 */
+  #results-canvas-row.showing-analysis .chat-footbar{padding-inline-start:0}
+  #results-canvas-row.showing-analysis .chat-composer{margin-inline-start:0 !important}
 }
 
 /* 「我的照片」欄寬固定 280：預覽區出現、對話卡片變窄時也不縮。 */
