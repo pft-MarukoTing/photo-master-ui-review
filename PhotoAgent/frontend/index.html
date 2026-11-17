@@ -6116,6 +6116,10 @@
       html:root:has(.pm-panel) { --header-h: 64px; }
       /* 這一列和底下的內容（照片卡、Photo Overview…）左右都是 24px，跟對話模式同一條邊。 */
       .pm-panel #results-body { padding-inline: var(--spacing-24); }
+      /* 照片卡到下面「Photo Overview」卡的距離，跟 Photo Overview 到「Analysis & Adjustments」一樣 18px
+         （原本是欄距 24 再加上工具欄的上外距 16，共 40）。 */
+      .pm-panel #results-canvas-row { row-gap: 18px; }
+      .pm-panel #ap-options-card-inline { margin-top: 0; }
       .pm-panel #step-indicator-slot > .ap-step-indicator { display: none; }
       .pm-panel #step-indicator-slot > .mode-switch { order: 0; align-self: center; margin: 0 0 0 auto; }
     }
