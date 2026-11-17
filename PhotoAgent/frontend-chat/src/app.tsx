@@ -4338,6 +4338,34 @@ function useMedia(query: string) {
 // 換一批就從頭開始。
 let batchListScroll = { batch: "", top: 0 };
 
+// 側欄選著哪一格（"@all" 是「所有照片」，其他是那張的 key）。總覽和某張的結果頁是兩個不同的頁面，
+// 切過去側欄會整個重畫：新畫的那格一出現就是選著的，沒有「從沒選到選」可以過場，所以分析或美化過、
+// 在總覽和結果之間切換時外框和展開都不會動。記住上一次選的，重畫時先照舊的畫，下一格畫面再換成現在的，
+// 外框淡入淡出、「所有照片」的展開收合就照樣播。
+let lastSidebarSel: string | null = null;
+function useShownSelection(sel: string): string {
+  const [shown, setShown] = useState(() => lastSidebarSel ?? sel);
+  useLayoutEffect(() => {
+    lastSidebarSel = sel;
+    if (shown === sel) return;
+    // 等舊的那個畫上去再換（兩格畫面）；分頁在背景時 rAF 不跑，用 timeout 保底，不會一直停在舊的。
+    let done = false;
+    const go = () => {
+      if (!done) { done = true; setShown(sel); }
+    };
+    let id = requestAnimationFrame(() => {
+      id = requestAnimationFrame(go);
+    });
+    const to = window.setTimeout(go, 80);
+    return () => {
+      done = true;
+      cancelAnimationFrame(id);
+      window.clearTimeout(to);
+    };
+  }, [sel]);
+  return shown;
+}
+
 // 選了很多張、還在一張一張讀的時候，總覽裡回的那則：讀了幾張、百分之多少。讀完換成平常那段。
 function PhotoLoadMsg({ done, total }: { done: number; total: number }) {
   const pct = Math.round((done / total) * 100);
@@ -4454,6 +4482,9 @@ export function BatchPreSidebar(props: {
   const filter = progress.some((x) => x.g.key === picked) ? picked : "all";
   // 「所有照片」那格：整批一起看（左邊沒有選哪一張時就是它，永遠有一格是選著的）。
   const allOn = !!props.overview;
+  // 畫出來的選取（外框、展開）跟著 shown 走，重畫時也有過場；按得了按不了照真正的 allOn / current。
+  const shownSel = useShownSelection(allOn ? "@all" : current || "");
+  const allShown = shownSel === "@all";
   const held = props.disabled || !!props.actionsHeld;
   const goAll = () => {
     close();
@@ -4489,7 +4520,7 @@ export function BatchPreSidebar(props: {
         {/* 「所有照片」：整批一起看的那一格，放在照片列表上面（不是一張照片，所以不做成方塊混在裡面）。
             沒有打開哪一張時就是選著它（右邊是整批的對話）；選著時下面放「全部美化」和「設定」兩顆。 */}
         {props.onOverview && sources.length > 1 && (
-          <div class={`batch-all-card${allOn ? " is-on" : ""}`}>
+          <div class={`batch-all-card${allShown ? " is-on" : ""}`}>
             <button
               type="button"
               class="batch-all-entry"
@@ -4509,7 +4540,7 @@ export function BatchPreSidebar(props: {
             </button>
             {/* 鍵一直放著，沒選著時收起來（高度 0、淡出、inert 不吃焦點），選著時展開：切換選取有過場，不會一下跳出來。 */}
             {(analyzeAll || retouchAll || props.onSettings) && (
-              <div class="batch-all-collapse" inert={!allOn} aria-hidden={!allOn}>
+              <div class={`batch-all-collapse${allShown ? " is-open" : ""}`} inert={!allOn} aria-hidden={!allOn}>
               <div class="batch-all-collapse-inner">
               <div class="batch-all-actions">
                 {analyzeAll && (
@@ -4579,7 +4610,7 @@ export function BatchPreSidebar(props: {
                 role="tab"
                 aria-selected={on}
                 aria-label={t("第 {v1} 張，{text}", { v1: i + 1, text: state.text })}
-                class={`history-cube batch-sidebar-item${state.key ? ` ${state.key}` : ""}${on ? " selected" : ""}${isFresh(key) ? " is-fresh" : ""}`}
+                class={`history-cube batch-sidebar-item${state.key ? ` ${state.key}` : ""}${shownSel === key ? " selected" : ""}${isFresh(key) ? " is-fresh" : ""}`}
                 disabled={props.disabled && !on}
                 onClick={() => pick(s)}
               >
@@ -5178,6 +5209,7 @@ export function BatchSidebar(props: {
   onSamples?: () => void;
 }) {
   const { photos, current } = props;
+  const shownSel = useShownSelection(current);
   const [open, setOpen] = useState(false);
   const [download, downloading, downloadUi] = useBatchDownload();
   const list = useRef<HTMLDivElement>(null);
@@ -5238,7 +5270,7 @@ export function BatchSidebar(props: {
                 role="tab"
                 aria-selected={on}
                 aria-label={t("第 {v1} 張，{text}", { v1: i + 1, text: state.text })}
-                class={`history-cube batch-sidebar-item ${state.key}${on ? " selected" : ""}`}
+                class={`history-cube batch-sidebar-item ${state.key}${shownSel === p.photo_id ? " selected" : ""}`}
                 onClick={() => pick(p.photo_id)}
               >
                 <span class="rc-media">

@@ -3199,3 +3199,6 @@ html{background:transparent}
 /* 使用者按的那則（「全部分析」「全部美化」…）和緊接的回話包在同一個區塊裡，吃不到對話列的間距，
    兩則黏在一起：中間補 20px。 */
 .chat-timeline>:not(.chat-msg)>.chat-msg.is-user+.chat-msg{margin-top:20px}
+
+/* 「我的照片」標頭的「＋」：總覽頁和 Editor 都是 26px，某張的結果頁吃到舊的預設 30px，一切換就變大變小。統一 26px。 */
+#batch-sidebar>.batch-sidebar-header .batch-sidebar-actions .batch-download-all-btn{width:26px;height:26px;min-width:26px}
