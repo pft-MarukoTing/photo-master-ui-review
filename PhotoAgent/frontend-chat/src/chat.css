@@ -1502,14 +1502,6 @@ div.chat-proposal-row{cursor:default}
 @media (min-width:1201px){
   #upload-section .upload-gallery-col .history-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
-/* 桌機（≥1201）：最近照片和範例照片的清單，跟分頁列之間一樣留 20px（清單自己的上內距，捲動時跟著捲走）；
-   最近照片第一個日期標題本身不再多留上面的 20px（不然比範例照片低一截）。清單往下一路長到側欄底邊（出血），
-   側欄本身不留下內距；清單最後留 20px，最後一列捲得到、不會貼死在邊上。 */
-@media (min-width:1201px){
-  #upload-section .upload-content-row:has(>.home-intro)>.upload-gallery-col{gap:0;padding-bottom:0}
-  #upload-section .upload-gallery-col #demo-images-grid{padding-top:20px;padding-bottom:20px;box-sizing:border-box}
-  #upload-section .upload-gallery-col #demo-images-grid>.history-day-group:first-child>.history-day-heading{padding-top:0}
-}
 
 /* Header buttons: same compact pill 面板模式 gives its header row
    (index.html <style>: #changelog-btn.btn/#chat-ui-btn.btn/... ), instead of
@@ -3248,3 +3240,20 @@ html{background:transparent}
 
 /* 「我的照片」標頭的「＋」：總覽頁和 Editor 都是 26px，某張的結果頁吃到舊的預設 30px，一切換就變大變小。統一 26px。 */
 #batch-sidebar>.batch-sidebar-header .batch-sidebar-actions .batch-download-all-btn{width:26px;height:26px;min-width:26px}
+
+/* 首頁側欄（桌機 ≥1201、橫拿平板 901–1200，側欄是直的那兩種版面）：最近照片和範例照片的清單，
+   跟分頁列之間一樣留 20px（清單自己的上內距，捲動時跟著捲走）；最近照片第一個日期標題本身不再多留上面的 20px
+   （不然比範例照片低一截）。清單往下一路長到側欄底邊（出血），側欄本身不留下內距；清單最後留 20px，
+   最後一列捲得到、不會貼死在邊上。放在檔案最後，才蓋得過平板那段給側欄的 padding／gap。
+   手機和直拿平板的最近／範例是橫向一排，沒有上下出血的問題，不套。 */
+@media (min-width:1201px),(min-width:901px) and (max-width:1200px) and (orientation:landscape){
+  #upload-section .upload-content-row:has(>.home-intro)>.upload-gallery-col{gap:0;padding-bottom:0}
+  #upload-section .upload-gallery-col #demo-images-grid{padding-top:20px;padding-bottom:20px;box-sizing:border-box}
+  #upload-section .upload-gallery-col #demo-images-grid>.history-day-group:first-child>.history-day-heading{padding-top:0;margin-top:0}
+}
+/* 手機、直拿平板：最近／範例是橫向一排（左右出血到畫面邊，見各自那段的負 margin），分頁列到第一排縮圖
+   也跟桌機一樣 20px：欄的 gap（手機 8、平板 12）＋ 這裡的上內距 8（縮圖外圈選取框本身佔 4）。
+   下面的內距不動：那是最近照片縮圖底下「Today, 09:36」那行字的位置。 */
+@media (max-width:900px),(max-width:1200px) and (orientation:portrait){
+  #upload-section .upload-gallery-col #demo-images-grid{padding-top:8px}
+}

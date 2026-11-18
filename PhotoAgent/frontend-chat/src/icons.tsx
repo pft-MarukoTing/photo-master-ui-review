@@ -59,6 +59,17 @@ const ICONS: Record<string, { sw: number; body: JSX.Element; mirror?: boolean }>
   pencil: { sw: 2, body: <path d="M4 20h4L19 9a2.83 2.83 0 0 0-4-4L4 16v4zM13.5 6.5l4 4" /> },
   // 下載：跟編輯器畫布上的下載鈕（frontend/index.html #download-link）同一個圖。
   down: { sw: 2, body: <path d="M12 15V3M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5" /> },
+  // 長寬比：Lucide「square-dimensions」（https://lucide.dev/icons/square-dimensions）。
+  dimensions: {
+    sw: 2,
+    body: (
+      <>
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+        <path d="M12 7H7v5" />
+        <path d="M12 17h5v-5" />
+      </>
+    ),
+  },
   image: {
     sw: 2,
     body: (

@@ -4752,6 +4752,18 @@
         "chat"
       ]
     },
+    "想換長寬比，按「比例」。": {
+      "en": "To change the aspect ratio, tap “Ratio”.",
+      "where": [
+        "chat"
+      ]
+    },
+    "想換長寬比，按「比例」；想換引擎，按「設定」。": {
+      "en": "To change the aspect ratio, tap “Ratio”; to change the engine, tap “Settings”.",
+      "where": [
+        "chat"
+      ]
+    },
     "想改什麼？": {
       "en": "What should change?",
       "where": [
@@ -6383,10 +6395,12 @@
     "比例": {
       "en": {
         "panel": "Ratio",
+        "chat": "Ratio",
         "backend text": "Aspect ratio"
       },
       "where": [
         "panel",
+        "chat",
         "backend text"
       ],
       "note": "Aspect ratio."

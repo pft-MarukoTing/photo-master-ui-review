@@ -73,7 +73,7 @@ import {
   type Category,
   type Hot,
 } from "./options";
-import { AspectRatioDialog, defaultSettings, enginesVisible, loadPrefs, PrefsModal, RatioIcon, savePrefs, sameSettings, setEnginesShown, SettingsEditor, settingsChanges, settingsOf, type Prefs, type Settings } from "./settings";
+import { AspectRatioDialog, defaultSettings, enginesVisible, loadPrefs, PrefsModal, savePrefs, sameSettings, setEnginesShown, SettingsEditor, settingsChanges, settingsOf, type Prefs, type Settings } from "./settings";
 import type {
   Analysis,
   Capabilities,
@@ -818,6 +818,12 @@ export function App() {
   const [readingFirst, setReadingFirst] = useState(0);
   const [sourceGeneration, setSourceGeneration] = useState(0);
   const [settings, setSettings] = useState<Settings | null>(null);
+  // 單張上傳頁挑的風格（只留跟預設不一樣的），送出時跟設定一起寫進 plan；換照片就清掉。
+  const [preStyles, setPreStyles] = useState<Record<string, string>>({});
+  const preStylesRef = useRef(preStyles);
+  preStylesRef.current = preStyles;
+  const [preStyleOpen, setPreStyleOpen] = useState(false);
+  const [preRatioOpen, setPreRatioOpen] = useState(false);
   // header 設定裡的對話風格；settings 每次重來都從這裡起跳。
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [prefsOpen, setPrefsOpen] = useState(false);
@@ -1401,6 +1407,8 @@ export function App() {
     setRenderAsk(null);
     setSamplesOpen(false);
     if (caps) setSettings(defaultSettings(caps, prefs || undefined));
+    setPreStyles({});
+    setPreStyleOpen(false);
     drafts.current = {};
     setBatchRuns({});
     setBatchLive({});
@@ -1537,6 +1545,8 @@ export function App() {
     setPreAsk(null);
     setPreClear((n) => n + 1);
     if (caps) setSettings(defaultSettings(caps, prefs || undefined));
+    setPreStyles({});
+    setPreStyleOpen(false);
     choose(s);
   }
 
@@ -2996,9 +3006,12 @@ export function App() {
           if (!id) id = (await api.createSession(undefined, { signal: step(), clientKey })).session_id;
           // The defaults a photo added next starts from, so the upload below picks
           // the 個人化需求 up without a second patch.
-          if (userPrompt || !sameSettings(settings, defaultSettings(caps))) {
+          const styles = preStylesRef.current;
+          const hasStyles = Object.keys(styles).length > 0;
+          if (userPrompt || hasStyles || !sameSettings(settings, defaultSettings(caps))) {
             await api.patchPlan(id, {
               ...settings,
+              ...(hasStyles ? { style_options: styles } : {}),
               ...(userPrompt ? { user_prompt: userPrompt, overwrite_prompt: !!overwrite,
                 literal_texts: noteLiteralTexts(submissionLog, userPrompt) } : {}),
             }, step());
@@ -3584,6 +3597,35 @@ export function App() {
           }
           setSegEdits((e) => ({ ...e, ...Object.fromEntries(edits.map((x) => [x.key, { text: x.text, upTo }])) }));
         }}
+        onStyle={caps?.style_options.length ? () => setPreStyleOpen((o) => !o) : undefined}
+        onRatio={caps ? () => setPreRatioOpen(true) : undefined}
+        styleCard={caps && settings ? (
+          <>
+            {preStyleOpen && caps.style_options.length > 0 && (
+              // 多張裡的其中一張：風格跟總覽共用一份（allStyles）；單張的另外記在 preStyles。
+              <ContinueStyles analysis={{} as Analysis} caps={caps} busy={busy || batchActive}
+                picked={batchIndex >= 0 ? allStyles : preStyles}
+                onPick={(picked) => {
+                  if (batchIndex >= 0) { overviewStyles(picked); return; }
+                  const next = Object.fromEntries(Object.entries(picked)
+                    .filter(([k, v]) => v && v !== caps.style_options.find((g) => g.id === k)?.default));
+                  setPreStyles(next);
+                  preStylesRef.current = next;
+                }} />
+            )}
+            {preRatioOpen && (
+              <AspectRatioDialog caps={caps} value={settings.aspect_ratio}
+                onPick={(v) => {
+                  setPreRatioOpen(false);
+                  const next = { ...settings, aspect_ratio: v };
+                  setSettings(next);
+                  setSettingsEvents(events => events.map((event, i) => i === events.length - 1
+                    ? { ...event, settings: { ...next, advanced_options: { ...next.advanced_options } } } : event));
+                }}
+                onClose={() => setPreRatioOpen(false)} />
+            )}
+          </>
+        ) : undefined}
         onEdit={() => {
           const interaction = Math.max(0, ...notes.map(n => Math.max(n.replyOrder || n.order || 0, n.dropped?.order || 0)));
           if (lastSettingsClick.current === interaction) return;
@@ -3774,8 +3816,8 @@ export function App() {
                 </button>
               )}
               <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={overviewHeld} onClick={() => setRatioOpen(true)}>
-                <span class="buttonIcon"><RatioIcon value={allSettings?.aspect_ratio} size={16} /></span>
-                <span>{t("長寬比")}</span>
+                <span class="buttonIcon"><Icon name="dimensions" size={16} /></span>
+                <span>{t("比例")}</span>
               </button>
               <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={overviewHeld} onClick={overviewEditSettings}>
                 <span class="buttonIcon"><Icon name="tune" size={16} /></span>
@@ -4017,7 +4059,7 @@ export function App() {
           }
           if (ot.kind === "ratio") return (
             <div key={ot.id} class="settings-turn">
-              <UserMsg><ClickBubble icon="layout" label={t("長寬比")} /></UserMsg>
+              <UserMsg><ClickBubble icon="dimensions" label={t("比例")} /></UserMsg>
               <AssistantMsg><p class="chat-text">{caps
                 ? t("長寬比改成 {v}，會套用到每張還沒美化的照片。", { v: aspectLabel(caps, ot.to) })
                 : ""}</p></AssistantMsg>
@@ -4622,7 +4664,7 @@ export function BatchPreSidebar(props: {
   const retouchAll = props.finished
     ? (props.redo && props.onRedo ? { label: shownLabel(props.redoLabel || "全部再美化"), icon: "redo", title: props.redoTitle, run: () => { close(); props.onRedo!(); } } : null)
     : props.renderable
-      ? { label: shownLabel(allLabel("render", props.renderable, sources.length)), icon: "spark", title: t("還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"), run: () => { close(); props.onStartAll("render"); } }
+      ? { label: shownLabel(allLabel("render", props.renderable, sources.length)), icon: "sparkles", title: t("還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"), run: () => { close(); props.onStartAll("render"); } }
       : null;
   // 「全部下載」：有美化好的照片才出現（只存美化好的那幾張，鍵上寫張數），跟在「全部美化」後面。
   const downloadPlan = props.onOverview ? sourcesDownload(sources, runs, live, props.failed) : null;
@@ -4700,8 +4742,8 @@ export function BatchPreSidebar(props: {
                     )}
                     {props.onRatio && (
                       <button type="button" class="ycoButton variant_secondary tone_neutral size_small batch-all-btn" disabled={held} onClick={() => { close(); props.onRatio!(); }}>
-                        <span class="buttonIcon"><RatioIcon value={props.ratio} size={16} /></span>
-                        <span>{t("長寬比")}</span>
+                        <span class="buttonIcon"><Icon name="dimensions" size={16} /></span>
+                        <span>{t("比例")}</span>
                       </button>
                     )}
                   </div>
@@ -5084,8 +5126,8 @@ function BatchOverviewGrid(props: {
             )}
             {props.onRatio && (
               <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={props.actionsHeld} onClick={props.onRatio}>
-                <span class="buttonIcon"><RatioIcon value={props.ratio} size={16} /></span>
-                <span>{t("長寬比")}</span>
+                <span class="buttonIcon"><Icon name="dimensions" size={16} /></span>
+                <span>{t("比例")}</span>
               </button>
             )}
             <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={props.actionsHeld} onClick={props.onSettings}>
@@ -5622,6 +5664,10 @@ function PreChat(props: {
   // `upTo` notes.
   onPrompt: (edits: { key: string; text: string }[], upTo: number) => void;
   onEdit: () => void;
+  // 「風格」「比例」：跟總覽同兩顆。風格選單開著時掛在這排下面（styleCard）。
+  onStyle?: () => void;
+  onRatio?: () => void;
+  styleCard?: ComponentChildren;
   onStart: (mode: "analyze" | "render") => void;
   // 一鍵美化前在問需求怎麼套用；`overwrite` 是已經選了的那個（上傳中）。
   renderAsk: { overwrite?: boolean } | null;
@@ -5708,6 +5754,18 @@ function PreChat(props: {
       </div>
       {!asking && !went && (step === "picked" || step === "settings" || hasWishes) && (
         <div class="chat-actions-aux">
+          {(step === "picked" || step === "settings") && props.onStyle && (
+            <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={held} onClick={props.onStyle}>
+              <span class="buttonIcon"><Icon name="wand" size={16} /></span>
+              <span>{t("風格")}</span>
+            </button>
+          )}
+          {(step === "picked" || step === "settings") && props.onRatio && (
+            <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={held} onClick={props.onRatio}>
+              <span class="buttonIcon"><Icon name="dimensions" size={16} /></span>
+              <span>{t("比例")}</span>
+            </button>
+          )}
           {(step === "picked" || step === "settings") && (
             <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={held} onClick={props.onEdit}>
               <span class="buttonIcon"><Icon name="tune" size={16} /></span>
@@ -5723,6 +5781,7 @@ function PreChat(props: {
           )}
         </div>
       )}
+      {!asking && !went && props.styleCard}
     </div>
   );
   // 歷史需求留在當輪；只有尚未建立快照時，編輯器才暫放在操作鍵前。
@@ -5772,8 +5831,8 @@ function PreChat(props: {
             <p class="chat-text chat-pick-ask">{t("要先看我對這張照片的分析，還是直接幫你美化？")}</p>
             <p class="chat-text chat-pick-help">{keyed(t("「分析」會先讓你看我打算修什麼，「一鍵美化」就直接修完。"))}</p>
             <p class="chat-text chat-pick-help">{keyed(enginesVisible()
-              ? t("想換引擎或長寬比，先按「設定」。")
-              : t("想換長寬比，先按「設定」。"))}</p>
+              ? t("想換長寬比，按「比例」；想換引擎，按「設定」。")
+              : t("想換長寬比，按「比例」。"))}</p>
           </AssistantMsg>
           )}
 
