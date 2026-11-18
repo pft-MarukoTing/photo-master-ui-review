@@ -364,7 +364,11 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 .session-tile-badge::before{flex:0 0 auto;margin-inline-end:5px;font-size:13px;font-weight:800;line-height:1}
 .session-tile-badge.is-analyzing::before,.session-tile-badge.is-rendering::before{content:"\25CC"}
 .session-tile-badge.is-ready::before{content:"\2726"}
-.session-tile-badge.is-done::before{content:"\2713"}
+/* 美化好了：跟「我的照片」那格（index.html .batch-sidebar-item.done .rc-badge）同一個 Lucide「check」圖示，
+   白色、跟字一樣的陰影；用圖片不用遮罩，陰影才不會被切掉。徽章是 inline-block（字太長要能 …），圖示用 vertical-align 對齊字。 */
+.session-tile-badge.is-done::before{
+  content:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+  display:inline-block;width:12px;height:12px;line-height:0;vertical-align:-1px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6))}
 .session-tile-badge.is-failed::before{content:"!"}
 .session-tile-badge.is-ready{background:rgba(var(--accent-rgb),.35);border-color:rgba(var(--accent-soft-rgb),.55)}
 .session-tile-badge.is-done{background:rgba(1,179,123,.35);border-color:rgba(52,211,153,.55)}
@@ -1492,7 +1496,19 @@ div.chat-proposal-row{cursor:default}
 @media (min-width:1201px),(min-width:901px) and (max-width:1200px) and (orientation:landscape){
   #upload-section .upload-gallery-col .history-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:auto;gap:var(--spacing-8);align-content:start}
   #upload-section .upload-gallery-col .history-grid>*{grid-column:auto !important;grid-row:auto !important;
-    width:100%;height:auto;min-height:0;aspect-ratio:1/1;padding-top:0;margin:0;border-radius:var(--corner-radius-4);box-shadow:none}
+    width:100%;height:auto;min-height:0;aspect-ratio:1/1;padding-top:0;margin:0;border-radius:12px;box-shadow:none} /* 最近照片：12px */
+}
+/* 桌機（≥1201）：最近照片一列兩張（磚比較大，看得清楚、標籤不會被截成 Retouc…）；範例照片維持三欄。 */
+@media (min-width:1201px){
+  #upload-section .upload-gallery-col .history-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* 桌機（≥1201）：最近照片和範例照片的清單，跟分頁列之間一樣留 20px（清單自己的上內距，捲動時跟著捲走）；
+   最近照片第一個日期標題本身不再多留上面的 20px（不然比範例照片低一截）。清單往下一路長到側欄底邊（出血），
+   側欄本身不留下內距；清單最後留 20px，最後一列捲得到、不會貼死在邊上。 */
+@media (min-width:1201px){
+  #upload-section .upload-content-row:has(>.home-intro)>.upload-gallery-col{gap:0;padding-bottom:0}
+  #upload-section .upload-gallery-col #demo-images-grid{padding-top:20px;padding-bottom:20px;box-sizing:border-box}
+  #upload-section .upload-gallery-col #demo-images-grid>.history-day-group:first-child>.history-day-heading{padding-top:0}
 }
 
 /* Header buttons: same compact pill 面板模式 gives its header row
@@ -2269,17 +2285,17 @@ body[data-theme-mode] .site-header.yco-header{box-shadow:none}
 @media (min-width:1201px),(min-width:901px) and (max-width:1200px) and (orientation:landscape){
   #upload-section .upload-gallery-col .demo-images-grid:not(:has(.history-day-group)){display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:auto;gap:var(--spacing-8);align-content:start}
   #upload-section .upload-gallery-col .demo-images-grid:not(:has(.history-day-group))>.demo-image-tile{grid-column:auto !important;grid-row:auto !important;
-    width:100%;height:auto;min-height:0;aspect-ratio:1/1;padding-top:0;margin:0;border-radius:var(--corner-radius-4);box-shadow:none}
+    width:100%;height:auto;min-height:0;aspect-ratio:1/1;padding-top:0;margin:0;border-radius:12px;box-shadow:none} /* 範例照片：12px */
   #upload-section .upload-gallery-col .demo-images-grid:not(:has(.history-day-group))>.demo-image-tile img:not(.demo-image-tile-bg){position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%;border-radius:inherit}
   #upload-section .upload-gallery-col .demo-images-grid:not(:has(.history-day-group))>.demo-image-tile .demo-image-tile-bg{display:none}
 }
 
 /* 橫拿平板（901–1200）：側欄那條把日期群組拆成 display:contents、整條排成兩欄，每天的 .history-grid
    就只佔一格，裡面再切三欄，磚縮成 34px。讓每天那塊跨滿整條，磚就跟範例照片一樣是三欄正方、圓角 4px
-   （平板那段給所有磚的 12px 圓角和 4:5 比例，最近照片這裡不要）。 */
+   （平板那段給所有磚 12px 圓角和 4:5 比例；最近照片這裡用 12px 圓角、正方形）。 */
 @media (min-width:901px) and (max-width:1200px) and (orientation:landscape){
   #upload-section .upload-gallery-col .history-grid{grid-column:1/-1}
-  #upload-section .upload-gallery-col .history-grid>.demo-image-tile{border-radius:var(--corner-radius-4);aspect-ratio:1/1}
+  #upload-section .upload-gallery-col .history-grid>.demo-image-tile{border-radius:12px;aspect-ratio:1/1}
 }
 
 /* G03：最近照片空狀態。佔滿清單那塊、置中；按鈕是 YCO 的品牌色主按鈕。 */
@@ -2420,7 +2436,7 @@ html[data-theme="dark"] .home-compare-knob{background:var(--background-raised);c
 
 /* p3 S01 範例選圖：瀑布流改等高格線，最後一列靠左；裁切往上留人物。 */
 .sample-grid{columns:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:var(--spacing-12)}
-.sample-tile{margin:0;aspect-ratio:4/3;overflow:hidden;border-radius:var(--corner-radius-8)}
+.sample-tile{margin:0;aspect-ratio:4/3;overflow:hidden;border-radius:12px} /* 範例選圖視窗的縮圖：12px */
 .sample-tile img{width:100%;height:100%;object-fit:cover;object-position:50% 25%}
 .sample-tile.is-picked{border-color:transparent;box-shadow:inset 0 0 0 2px var(--stroke-selected)}
 .sample-tile.is-picked::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 2px var(--stroke-selected);pointer-events:none}

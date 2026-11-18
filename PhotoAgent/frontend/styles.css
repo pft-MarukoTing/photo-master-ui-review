@@ -1350,7 +1350,8 @@ body[data-theme-mode="light"] .upload-gallery-col .history-cube:hover {
   display: block;
   height: 1px;
   margin: 1px 4px 8px;
-  background: linear-gradient(90deg, rgba(var(--accent-rgb),.45), transparent);
+  /* 日期標題下的分隔線：淺灰實線（跟其他分隔線同一個 --border），不用品牌藍漸層。 */
+  background: var(--border, rgba(17, 24, 26, .1));
 }
 .upload-gallery-col .history-day-group:first-child::before {
   display: none;
@@ -3125,7 +3126,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   width: 64px;
   height: 64px;
   border: 2px solid rgba(var(--on-surface-rgb),.14);
-  border-radius: 9px;
+  border-radius: 12px;
   background: rgba(var(--on-surface-rgb),.06);
   overflow: hidden;
 }
@@ -3184,7 +3185,7 @@ button.version-origin-tile:focus-visible {
   height: 64px;
   padding: 0;
   border: 2px solid transparent;
-  border-radius: 9px;
+  border-radius: 12px; /* 美化紀錄縮圖（原圖／第 N 版）：12px */
   background: rgba(var(--on-surface-rgb),.06);
   cursor: pointer;
   overflow: hidden;
