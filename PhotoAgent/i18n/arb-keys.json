@@ -1606,6 +1606,12 @@
         "chat"
       ]
     },
+    "chat_aspect_ratio_changed_to_it": {
+      "zh": "長寬比改成 {v}，會套用到每張還沒美化的照片。",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_aspect_ratio_set_to": {
       "zh": "長寬比改成 {v1}",
       "where": [
@@ -1921,6 +1927,12 @@
     },
     "chat_download": {
       "zh": "下載{title}",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_download_all": {
+      "zh": "全部下載 ({count})",
       "where": [
         "chat"
       ]
@@ -3815,6 +3827,12 @@
         "chat"
       ]
     },
+    "chat_style_changed_to": {
+      "zh": "風格改成 {v}。",
+      "where": [
+        "chat"
+      ]
+    },
     "chat_style_keep_the_photos_original": {
       "zh": "風格維持照片原本的樣子。",
       "where": [
@@ -3841,6 +3859,18 @@
     },
     "chat_summarizing_the_analysis": {
       "zh": "正在整理分析重點…",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_sure_pick_a_style_below": {
+      "zh": "好，挑下面的風格，會套用到每一張，再美化時生效。",
+      "where": [
+        "chat"
+      ]
+    },
+    "chat_sure_pick_a_style_below_2": {
+      "zh": "好，挑下面的風格，會套用到每張還沒美化的照片。",
       "where": [
         "chat"
       ]
@@ -8450,7 +8480,8 @@
     "panel_no_style_picked_so_it": {
       "zh": "沒有另外挑風格，照 AI 建議的美化。",
       "where": [
-        "panel"
+        "panel",
+        "chat"
       ]
     },
     "panel_no_timing_recorded_yet": {
