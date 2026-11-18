@@ -5489,6 +5489,28 @@
     .pm-panel .batch-main-loading:not(.is-error) .progress-feed-row .progress-feed-text { color: var(--text-weak); }
     .pm-panel .batch-main-loading:not(.is-error) .progress-feed-row.is-latest,
     .pm-panel .batch-main-loading:not(.is-error) .progress-feed-row.is-latest .progress-feed-text { color: var(--text-strong); }
+    /* 手機（≤600）：人像分頁裡「Person in the photo」和每一項（Closed Eyes ✓ No fix needed）的字都改成 12px，
+       狀態圓圈 20 → 16px 跟著縮；名稱那一欄的寬度是 results.js 依字寬量出來的，字變小會自己跟著變窄。 */
+    @media (max-width: 600px) {
+      .pm-panel #ap-face-detail .ap-face-detail-name { font-size: 12px; line-height: 16px; }
+      .pm-panel #ap-face-detail .ap-face-issue-row { min-height: 24px; }
+      .pm-panel #ap-face-detail .ap-face-issue-name,
+      .pm-panel #ap-face-detail .ap-face-issue-row .step-cb-label { font-size: 12px; line-height: 16px; }
+      .pm-panel #ap-face-detail .ap-face-issue-row .adherence-icon { width: 16px; height: 16px; font-size: 10px; line-height: 10px; }
+      /* 場景分頁的建議清單：跟上面 Photo Overview 的內文（#ap-photo-summary-text）同一個字級，14px／21px。 */
+      .pm-panel #ap-recipe-list .step-cb-label { font-size: 14px; line-height: 21px; }
+    }
+    /* 手機、平板（≤900）：美化中的那幾行說明（progress feed）跟上面的標題一樣置中。
+       styles.css 的 .has-progress-feed 是給桌機左右並排用的靠左，這裡整塊是置中排的，靠左看起來就偏一邊。 */
+    @media (max-width: 900px) {
+      .pm-panel .batch-main-loading:not(.is-error) .has-progress-feed,
+      .pm-panel .batch-main-loading:not(.is-error) .progress-feed-row,
+      .pm-panel .canvas-loading .has-progress-feed,
+      .pm-panel .canvas-loading .progress-feed-row { text-align: center; }
+      /* 那一塊本身比外面的 .proc-text（560px）窄，預設靠左擺；左右 auto 讓它跟標題同一條中線。 */
+      .pm-panel .batch-main-loading:not(.is-error) .has-progress-feed,
+      .pm-panel .canvas-loading .has-progress-feed { margin-inline: auto; }
+    }
     .pm-panel .pm-loading-tools { display: none; }
     /* 重試中右上角不放工具鈕（比較／全螢幕／下載）：這時還沒有結果可操作。 */
     .pm-panel .batch-main-loading .pm-loading-tools { display: none !important; }
@@ -6268,13 +6290,14 @@
     }
     /* 手機和平板（≤900px）的編輯器上傳了兩張以上時：要有進「我的照片」的入口，不然只看得到一張。
        左上角那顆邊緣抽屜鈕太突兀（769–900 還會蓋住流程列），改成跟「對話｜編輯器」切換同一排、靠左（切換在最右）的一顆圓鈕，
-       點開的還是原本的抽屜（openBatchDrawer）；只有「我的照片」列了兩張以上才出現。 */
+       點開的還是原本的抽屜（openBatchDrawer）；「我的照片」有照片（一張也算）就出現，抽屜裡的＋可以再加照片。 */
     @media (max-width: 900px) {
-      /* 預設藏起來（≤768 上面已經藏了；769–900 原本會出現貼邊的分頁）；兩張以上時下一條（選擇器比較重）再打開。 */
+      /* 預設藏起來（≤768 上面已經藏了；769–900 原本會出現貼邊的分頁）；有照片時下一條（選擇器比較重）再打開。 */
       .pm-panel #batch-drawer-trigger { display: none !important; }
       /* 鈕本身由 app.js（placeBatchDrawerTrigger）搬進 #step-indicator-slot 最前面，跟切換同一排、一起捲；
          這裡不再 fixed。切換那顆有 margin-inline-start:auto，自己靠右。 */
-      .pm-panel:has(.results-body.batch-mode #batch-sidebar-list .batch-sidebar-item:nth-child(2)) #step-indicator-slot > #batch-drawer-trigger {
+      /* 只有一張照片也給（要從抽屜的＋加照片）；原本兩張以上才出現。 */
+      .pm-panel:has(.results-body.batch-mode #batch-sidebar-list .batch-sidebar-item) #step-indicator-slot > #batch-drawer-trigger {
         display: inline-flex !important; position: relative; top: auto; inset: auto; flex: none; margin: 0; z-index: auto;
         width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px; box-shadow: none;
         background: var(--fill-weak); color: var(--text-strong);
