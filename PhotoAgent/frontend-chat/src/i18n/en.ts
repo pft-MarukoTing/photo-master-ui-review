@@ -437,8 +437,8 @@ export const EN: Record<string, string> = {
   "修圖後": "After",
   "拖曳比較修圖前後": "Drag to compare before and after",
   "AI 個人化美化分析": "Personalized AI photo retouching",
-  "所有照片，": "Retouch all your photos ",
-  "交給 <em>Photo Master</em>": "<em>with Photo Master</em>",
+  "所有照片，": "Retouch all your\u00a0photos\u00a0with ",
+  "交給 <em>Photo Master</em>": "<em>Photo Master</em>",
   "AI 先判讀人物、光線、構圖與畫面細節，給你幾個美化方向，表情、姿勢、視角也能幫你調；你也可以直接說想怎麼修，它就照你的意思來。":
     "Our AI looks at the people, lighting, composition and details, then suggests a few ways to make your photos shine. It can even fix expressions, poses and angles. Or just tell it what you want, and it'll take it from there.",
   "開始對話": "Start a Chat",

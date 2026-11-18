@@ -552,6 +552,12 @@ body{font-family:Inter,var(--cjk-sans),system-ui,-apple-system,'Segoe UI',sans-s
 .batch-add-wrap{position:relative;display:flex}
 .chat-attach-menu.is-down{left:50%;inset-inline-end:auto;bottom:auto;top:calc(100% + var(--sp-1));translate:-50% 0;z-index:30}
 .chat-attach-menu.is-down.is-end{inset-inline-start:auto;inset-inline-end:0;translate:none}
+/* 「我的照片」＋的選單：打開往下淡入、收起往上淡出（跟編輯器 .pm-add-menu 一樣）。輸入框那顆往上開的不動。 */
+.chat-attach-menu.is-down{animation:pm-add-menu-in .14s ease-out}
+.chat-attach-menu.is-down.is-closing{animation:pm-add-menu-out .12s ease-in forwards;pointer-events:none}
+@keyframes pm-add-menu-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@keyframes pm-add-menu-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-4px)}}
+@media (prefers-reduced-motion:reduce){.chat-attach-menu.is-down,.chat-attach-menu.is-down.is-closing{animation:none}}
 .chat-boot-error{padding:var(--sp-7) var(--sp-4);color:var(--danger)}
 
 /* Settings editor */
@@ -2342,13 +2348,13 @@ body[data-theme-mode] .site-header.yco-header{box-shadow:none}
   .home-headline{white-space:nowrap;font-size:clamp(28px,10.5cqw,76px)}
   .home-headline span{white-space:nowrap}
   /* 英文兩個 span 接在一起，但不能強制單行：文字寬度碰到右側照片前要在左欄內自然換行。
-     強調行（WITH PHOTO MASTER）仍由 em 自己另起一行，而且不換行：品牌名不能拆成兩行。字級 8.6cqw 是讓這行
+     第二行（PHOTO MASTER）自己另起一行，而且不換行：品牌名不能拆成兩行。字級 8.6cqw 是讓這行
      剛好放得進文字欄（約 8.9cqw 就滿），最小值不能比 8.6cqw 在最窄文字欄時還大，不然會擠出去。 */
   :lang(en) .home-headline{max-width:100%;white-space:normal;font-size:clamp(30px,8.6cqw,88px);text-wrap:balance}
-  :lang(en) .home-headline em{white-space:nowrap}
   :lang(en) .home-headline span{display:inline;white-space:normal}
   :lang(en) .home-headline span:first-child::after{content:" "}
-  :lang(en) .home-headline em{display:block}
+  /* 第二行（Photo Master，漸層強調字）自己一行、不換行；with 接在第一句後面（YOUR PHOTOS WITH，en.ts 用不換行空白黏住）。 */
+  :lang(en) .home-headline span+span{display:block;white-space:nowrap}
 }
 /* 小標前面不放短線。 */
 .home-eyebrow::before,.home-eyebrow::after{display:none}

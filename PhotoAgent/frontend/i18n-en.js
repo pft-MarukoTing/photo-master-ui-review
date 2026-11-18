@@ -70,6 +70,7 @@ window.PHOTOAGENT_CATALOGS.en = {
   "移除這張照片": "Remove this photo",
   "上傳一張照片開始": "Upload a photo to get started",
   "無法載入範例照片。": "Couldn't load the sample photo.",
+  "自行上傳照片": "Upload a Photo",
   "從範例照片挑選": "Choose a Sample Photo",
   "請確認": "Confirm",
   "我的照片": "My Photos",

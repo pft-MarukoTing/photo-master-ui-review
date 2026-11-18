@@ -8578,8 +8578,9 @@
     item.appendChild(media);
     item.appendChild(badge);
     if (record.status === "error") item.title = record.error || tr("處理失敗");
-    // × 移除這張（跟對話模式「我的照片」一樣）；分析或美化進行中的先不給移除。
-    if (record.status !== "analyzing" && record.status !== "processing" && !runsRunning) {
+    // × 移除這張（跟對話模式「我的照片」一樣）：只有還沒送出去分析／美化的才能移除；
+    // 一旦分析或美化過（包括進行中、失敗、完成），就是一筆紀錄了，不給移除。
+    if (canRemoveWorkspacePhoto(record)) {
       const rm = document.createElement("span");
       rm.className = "history-cube-remove";
       rm.setAttribute("role", "button");
@@ -8600,9 +8601,17 @@
   }
 
   // 工作區「我的照片」的 ×：移掉這張。最後一張移掉就回到空狀態；移掉的是正在看的那張，改看第一張。
+  function canRemoveWorkspacePhoto(record) {
+    const runs = Array.isArray(record._liveRuns) ? record._liveRuns : (Array.isArray(record.runs) ? record.runs : []);
+    if (runs.length || record.jobId || record.result) return false;
+    if (record.status === "pending") return true;
+    // 送出分析就失敗（沒拿到 job），等於沒送出去，可以拿掉。
+    return record.status === "error" && !record.analyzeJobId && !record.analysis;
+  }
+
   async function removeWorkspacePhoto(record) {
     const index = batchRecords.indexOf(record);
-    if (index === -1) return;
+    if (index === -1 || !canRemoveWorkspacePhoto(record)) return;
     if (record === currentBatchRecord && !(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
     batchRecords.splice(index, 1);
     if (record.previewUrl) URL.revokeObjectURL(record.previewUrl);
@@ -16200,6 +16209,9 @@
     if (els.startButton) { els.startButton.disabled = false; els.startButton.click(); }
     setTimeout(() => document.body.classList.remove("pm-from-chat"), 1500);
   }
+  // 範例照片小視窗的開法：傳進去的是挑好之後要做什麼（空狀態：startFromEmpty 開一組新的；
+  // 「我的照片」的＋：addWorkspacePhotos 加進現在這組）。由 setupEmptyWorkspace 設定。
+  let openPmSamplePicker = null;
   (function setupEmptyWorkspace() {
     const drop = document.getElementById("pm-empty-drop");
     const btn = document.getElementById("pm-empty-upload-btn");
@@ -16248,8 +16260,13 @@
       if (label) label.textContent = picked.size ? tr("使用所選照片 ({count})", { count: picked.size }) : tr("使用所選照片");
     };
     const closeModal = () => { if (modal) modal.hidden = true; };
+    let sampleTarget = startFromEmpty;
     if (sampleBtn && modal && grid) {
-      sampleBtn.addEventListener("click", async () => {
+      const openSamples = async (target) => {
+        sampleTarget = target || startFromEmpty;
+        // 小視窗原本放在空狀態（#pm-empty）裡；有照片之後那一段整個藏起來，從「我的照片」的＋打開會看不到。
+        // 它本身是 position:fixed 的全畫面遮罩，搬到 <body> 底下哪裡都能開。
+        if (modal.parentElement !== document.body) document.body.appendChild(modal);
         modal.hidden = false;
         if (!grid.children.length) {
           const names = demoImagesCache || (await getDemoImages().catch(() => [])) || [];
@@ -16272,7 +16289,9 @@
             grid.appendChild(b);
           });
         }
-      });
+      };
+      openPmSamplePicker = openSamples;
+      sampleBtn.addEventListener("click", () => openSamples(startFromEmpty));
       if (confirmBtn) confirmBtn.addEventListener("click", async () => {
         if (!picked.size) return;
         confirmBtn.disabled = true;
@@ -16288,7 +16307,7 @@
           grid.querySelectorAll(".is-picked").forEach((el) => el.classList.remove("is-picked"));
           syncConfirm();
           closeModal();
-          startFromEmpty(files);
+          sampleTarget(files);
         } catch (_) { showError(tr("無法載入範例照片。")); syncConfirm(); }
       });
       document.getElementById("pm-sample-close").addEventListener("click", closeModal);
@@ -16862,15 +16881,68 @@
   });
   if (els.batchContinueAllBtn) els.batchContinueAllBtn.addEventListener("click", batchContinueAll);
   if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.addEventListener("click", handleDownloadAllBatchClick);
+  // 「我的照片」的＋：跟對話模式一樣先掀一個小選單，兩個選項——自行上傳照片、從範例照片挑選；
+  // 挑好的都加進現在這組（addWorkspacePhotos）。點別處、Esc 收起來。
   (function setupWorkspaceAdd() {
     const add = document.getElementById("batch-add-btn");
     if (!add) return;
-    add.addEventListener("click", () => {
+    const pickFiles = () => {
       const tmp = document.createElement("input");
       tmp.type = "file"; tmp.accept = "image/*,.heic,.heif"; tmp.multiple = true; tmp.hidden = true;
       tmp.addEventListener("change", () => { if (tmp.files && tmp.files.length) addWorkspacePhotos(tmp.files); tmp.remove(); });
       document.body.appendChild(tmp);
       tmp.click();
+    };
+    const wrap = document.createElement("span");
+    wrap.className = "pm-add-wrap";
+    add.parentNode.insertBefore(wrap, add);
+    wrap.appendChild(add);
+    add.setAttribute("aria-haspopup", "menu");
+    add.setAttribute("aria-expanded", "false");
+    let menu = null;
+    // 收起來先播淡出（index.html .pm-add-menu.is-closing，120ms），播完才拿掉；跟對話模式那顆一樣。
+    const close = () => {
+      if (!menu) return;
+      const leaving = menu;
+      leaving.classList.add("is-closing");
+      setTimeout(() => leaving.remove(), 120);
+      menu = null;
+      add.setAttribute("aria-expanded", "false");
+      document.removeEventListener("mousedown", away, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+    const away = (e) => { if (!wrap.contains(e.target)) close(); };
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); add.focus(); } };
+    const item = (label, iconPath, run) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute("role", "menuitem");
+      b.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPath}</svg>`;
+      b.append(label);
+      b.addEventListener("click", () => { close(); run(); });
+      return b;
+    };
+    add.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (menu) { close(); return; }
+      menu = document.createElement("div");
+      menu.className = "pm-add-menu";
+      menu.setAttribute("role", "menu");
+      menu.append(
+        item(tr("自行上傳照片"), '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>', pickFiles),
+        item(tr("從範例照片挑選"), '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+          () => (openPmSamplePicker ? openPmSamplePicker(addWorkspacePhotos) : pickFiles())),
+      );
+      wrap.appendChild(menu);
+      // 跟＋置中；靠近畫面邊緣時（窄視窗、手機抽屜）往內推，離邊至少 8px。
+      const box = menu.getBoundingClientRect();
+      const vw = document.documentElement.clientWidth;
+      const shift = box.left < 8 ? 8 - box.left : (box.right > vw - 8 ? vw - 8 - box.right : 0);
+      if (shift) menu.style.translate = `calc(-50% + ${Math.round(shift)}px) 0`;
+      add.setAttribute("aria-expanded", "true");
+      document.addEventListener("mousedown", away, true);
+      document.addEventListener("keydown", onKey, true);
+      menu.querySelector("button")?.focus({ preventScroll: true });
     });
   })();
   if (els.batchDrawerTrigger) els.batchDrawerTrigger.addEventListener("click", openBatchDrawer);
