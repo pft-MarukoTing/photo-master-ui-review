@@ -6662,6 +6662,7 @@
     "common_upload_a_photo": {
       "zh": "自行上傳照片",
       "where": [
+        "panel",
         "chat",
         "backend labels"
       ]

@@ -4943,6 +4943,7 @@ function photoState(p: Photo, renderFailed = false): { key: string; text: string
 
 // 方塊右上角的 ×，跟首頁磚上那顆同一個做法（home.tsx 的 RemoveMark）：方塊本身是
 // <button>，裡面不能再放按鈕，所以用 span 當按鈕，點了不往外傳。
+const ADD_MENU_CLOSE_MS = 120; // chat.css .chat-attach-menu.is-down.is-closing
 // 「我的照片」的 +：跟輸入框那顆一樣先問要自行上傳還是挑範例照片。抽屜標題列和總覽照片格上面共用。
 // onBefore 在真的要加照片前呼叫（抽屜那邊先收起來）；end 是貼在右邊時選單往左對齊，不跑出畫面。
 function BatchAddButton(props: { full: boolean; onAdd: (files: File[]) => void; onSamples?: () => void; onBefore?: () => void; end?: boolean }) {
@@ -4950,12 +4951,25 @@ function BatchAddButton(props: { full: boolean; onAdd: (files: File[]) => void; 
   const addInput = useRef<HTMLInputElement>(null);
   const addWrap = useRef<HTMLDivElement>(null);
   const [addMenu, setAddMenu] = useState(false);
+  // 收起來時先播淡出（往上 4px，跟打開的往下淡入反過來，編輯器那顆同一套），播完才拿掉。
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef(0);
+  const closeMenu = () => {
+    if (closeTimer.current) return;
+    setClosing(true);
+    closeTimer.current = window.setTimeout(() => {
+      closeTimer.current = 0;
+      setClosing(false);
+      setAddMenu(false);
+    }, ADD_MENU_CLOSE_MS);
+  };
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
   useEffect(() => {
     if (!addMenu) return;
     const away = (e: MouseEvent) => {
-      if (!addWrap.current?.contains(e.target as Node)) setAddMenu(false);
+      if (!addWrap.current?.contains(e.target as Node)) closeMenu();
     };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setAddMenu(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && closeMenu();
     document.addEventListener("mousedown", away);
     document.addEventListener("keydown", esc);
     return () => {
@@ -4973,17 +4987,17 @@ function BatchAddButton(props: { full: boolean; onAdd: (files: File[]) => void; 
           aria-haspopup={props.onSamples ? "menu" : undefined}
           aria-expanded={props.onSamples ? addMenu : undefined}
           disabled={full}
-          onClick={() => (props.onSamples ? setAddMenu((v) => !v) : addInput.current?.click())}
+          onClick={() => (props.onSamples ? (addMenu ? closeMenu() : setAddMenu(true)) : addInput.current?.click())}
         >
           <Icon name="plus" size={14} />
         </button>
         {addMenu && props.onSamples && (
-          <div class={`chat-attach-menu is-down${props.end ? " is-end" : ""}`} role="menu">
+          <div class={`chat-attach-menu is-down${props.end ? " is-end" : ""}${closing ? " is-closing" : ""}`} role="menu">
             <button
               type="button"
               role="menuitem"
               onClick={() => {
-                setAddMenu(false);
+                closeMenu();
                 addInput.current?.click();
               }}
             >
@@ -4994,7 +5008,7 @@ function BatchAddButton(props: { full: boolean; onAdd: (files: File[]) => void; 
               type="button"
               role="menuitem"
               onClick={() => {
-                setAddMenu(false);
+                closeMenu();
                 props.onBefore?.();
                 props.onSamples!();
               }}

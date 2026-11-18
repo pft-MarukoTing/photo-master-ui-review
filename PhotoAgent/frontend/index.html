@@ -6221,6 +6221,27 @@
     body.pm-panel #compare-card.is-fullscreen #personalize-popover {
       top: auto; bottom: -2px; max-height: min(260px, calc(100% - 10px));
     }
+    /* 「我的照片」的＋掀開的小選單（app.js setupWorkspaceAdd）：跟對話模式「我的照片」的 .chat-attach-menu.is-down
+       同一個樣子、同一個位置——往下開（按鈕下緣下 4px）、跟＋置中對齊。置中用 translate，進場動畫的 transform 才不會蓋掉它。 */
+    .pm-add-wrap { position: relative; display: inline-flex; }
+    .pm-add-menu {
+      position: absolute; top: calc(100% + 4px); left: 50%; right: auto; translate: -50% 0; z-index: 1100; min-width: 170px;
+      display: flex; flex-direction: column; gap: 2px; padding: 4px; box-sizing: border-box;
+      border: 1px solid var(--stroke-weak, rgba(17,24,26,.1)); border-radius: 12px; background: var(--background-raised, var(--card, #fff));
+      box-shadow: 0 14px 32px rgba(0,0,0,.16), 0 2px 6px rgba(0,0,0,.06);
+      animation: pm-add-menu-in .14s ease-out;
+    }
+    .pm-add-menu button {
+      display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px;
+      background: none; cursor: pointer; white-space: nowrap; text-align: start;
+      font: inherit; font-size: 14px; line-height: normal; color: var(--n84, #293133);
+    }
+    .pm-add-menu button:hover, .pm-add-menu button:focus-visible { outline: 0; background: var(--fill-brand-weak, rgba(3,173,226,.1)); color: var(--text-brand, var(--accent)); }
+    .pm-add-menu svg { flex: none; }
+    .pm-add-menu.is-closing { animation: pm-add-menu-out .12s ease-in forwards; pointer-events: none; }
+    @keyframes pm-add-menu-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+    @keyframes pm-add-menu-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-4px); } }
+    @media (prefers-reduced-motion: reduce) { .pm-add-menu, .pm-add-menu.is-closing { animation: none; } }
     /* 畫布（照片卡）不加陰影。全螢幕本來就沒有，這裡只管一般狀態。 */
     .pm-panel #compare-card:not(.is-fullscreen) { box-shadow: none !important; }
     /* 手機和平板（≤900px）的編輯器：標題下面一列跟手機一樣——左邊「我的照片」圓鈕、右邊「對話｜編輯器」切換，

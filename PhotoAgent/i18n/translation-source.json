@@ -1299,7 +1299,7 @@
       ]
     },
     "交給 <em>Photo Master</em>": {
-      "en": "<em>with Photo Master</em>",
+      "en": "<em>Photo Master</em>",
       "where": [
         "chat"
       ]
@@ -4884,7 +4884,7 @@
       ]
     },
     "所有照片，": {
-      "en": "Retouch all your photos ",
+      "en": "Retouch all your photos with ",
       "where": [
         "chat"
       ]
@@ -8025,6 +8025,7 @@
     "自行上傳照片": {
       "en": "Upload a Photo",
       "where": [
+        "panel",
         "chat",
         "backend labels"
       ]
