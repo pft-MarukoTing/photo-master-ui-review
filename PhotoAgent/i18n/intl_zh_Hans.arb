@@ -704,6 +704,8 @@
   "chat_to_change_just_one_select": "只想改某一张，从{where}选择那张调整。",
   "chat_to_change_just_one_tap": "只想改某一张，点上面那张调整。",
   "chat_to_change_the_aspect_ratio": "想换长宽比，先按“设置”。",
+  "chat_to_change_the_aspect_ratio_2": "想换长宽比，按“比例”。",
+  "chat_to_change_the_aspect_ratio_3": "想换长宽比，按“比例”；想换引擎，按“设置”。",
   "chat_to_change_the_engine_or": "想换引擎或长宽比，先按“设置”。",
   "chat_to_change_the_enhancements_tap": "想调整美化项目，按“看美化项目”；想用一样的设置再产生一版，按“再美化”；想接续某一版修改，在输入框上方把“原图”换成那一版。也可以直接打字跟我说。",
   "chat_to_make_version_again_the": "想照第 {n} 版当初的做法再做一版，按“再美化”。",

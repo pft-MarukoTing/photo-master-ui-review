@@ -4421,6 +4421,25 @@
         "button_common_settings": "common_settings"
       }
     },
+    "chat_to_change_the_aspect_ratio_2": {
+      "zh": "想換長寬比，按「比例」。",
+      "where": [
+        "chat"
+      ],
+      "buttons": {
+        "button_panel_ratio": "panel_ratio"
+      }
+    },
+    "chat_to_change_the_aspect_ratio_3": {
+      "zh": "想換長寬比，按「比例」；想換引擎，按「設定」。",
+      "where": [
+        "chat"
+      ],
+      "buttons": {
+        "button_panel_ratio": "panel_ratio",
+        "button_common_settings": "common_settings"
+      }
+    },
     "chat_to_change_the_engine_or": {
       "zh": "想換引擎或長寬比，先按「設定」。",
       "where": [
@@ -8917,7 +8936,8 @@
     "panel_ratio": {
       "zh": "比例",
       "where": [
-        "panel"
+        "panel",
+        "chat"
       ]
     },
     "panel_ratio_2": {
