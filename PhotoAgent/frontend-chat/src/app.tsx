@@ -73,7 +73,7 @@ import {
   type Category,
   type Hot,
 } from "./options";
-import { defaultSettings, enginesVisible, loadPrefs, PrefsModal, savePrefs, sameSettings, setEnginesShown, SettingsEditor, settingsChanges, settingsOf, type Prefs, type Settings } from "./settings";
+import { AspectRatioDialog, defaultSettings, enginesVisible, loadPrefs, PrefsModal, RatioIcon, savePrefs, sameSettings, setEnginesShown, SettingsEditor, settingsChanges, settingsOf, type Prefs, type Settings } from "./settings";
 import type {
   Analysis,
   Capabilities,
@@ -459,6 +459,10 @@ export type OverviewTurn =
   // from 是打開時的設定，之後跟 settings 比，講這一輪改了什麼。
   | { id: number; kind: "settings"; settings?: Settings; from?: Settings; model?: boolean; redo?: boolean }
   | { id: number; kind: "ask"; overwrite?: boolean; label?: string }
+  // 總覽的「風格」：底下掛風格選單，挑的套到每張還沒美化的照片；這輪過了就只留一句挑了什麼。
+  | { id: number; kind: "styles"; styles: Record<string, string> }
+  // 總覽的「長寬比」：直接開比例視窗，選了照「設定」的路套到每張；對話裡留一句改成什麼。
+  | { id: number; kind: "ratio"; from?: string; to: string }
   | { id: number; kind: "start"; mode: "analyze" | "render"; count: number; keys: string[]; overwrite?: boolean; label?: string; redo?: boolean; same?: boolean };
 // 總覽裡 AI 提議開始時給的兩個答案，點了就是按總覽的那顆鍵。
 // 後端給的是總覽鍵上的名字（「全部分析」「一鍵美化其餘 N」），舊的對話紀錄裡可能還是單張的名字，
@@ -875,6 +879,14 @@ export function App() {
   const drafts = useRef<Record<string, BatchDraft>>({});
   // 「全部」那頁的設定：還沒開過的照片從這裡起跳，改了就套到還沒開始的每一張。
   const [allSettings, setAllSettings] = useState<Settings | null>(null);
+  // 總覽挑的風格：每張還沒開始的送出時寫進它的 plan（批次送出的 closure 讀 ref），分析好還沒美化的直接改它的 plan。
+  const [allStyles, setAllStyles] = useState<Record<string, string>>({});
+  const allStylesRef = useRef(allStyles);
+  allStylesRef.current = allStyles;
+  // 總覽「長寬比」鍵開的比例視窗。
+  const [ratioOpen, setRatioOpen] = useState(false);
+  // 總覽對話裡「處理完成」那則底下的「全部下載」（跟「我的照片」上那顆同一套存檔流程）。
+  const [overviewDownload, overviewDownloading, overviewDownloadUi] = useBatchDownload();
   const [batchRuns, setBatchRuns] = useState<Record<string, BatchRun>>({});
   // 已經開始的那幾張在背景跑到哪：結果頁只盯著正在看的那張，其他張另外定時問。
   const [batchLive, setBatchLive] = useState<Record<string, Photo>>({});
@@ -2072,7 +2084,9 @@ export function App() {
       const userPrompt = notesPrompt(log, p.segEdits).slice(0, PROMPT_MAX);
       const promptFaces = promptSections(kept).flatMap(groupFaces).filter((f) => userPrompt.includes(f.ref));
       // 跟單張一樣：照片從 session 的預設起跳，先換成它自己的需求和設定再傳。
-      await api.patchPlan(id, { ...p.settings, user_prompt: userPrompt, overwrite_prompt: !!p.overwrite && !!userPrompt,
+      const batchStyles = allStylesRef.current;
+      await api.patchPlan(id, { ...p.settings, ...(Object.keys(batchStyles).length ? { style_options: batchStyles } : {}),
+        user_prompt: userPrompt, overwrite_prompt: !!p.overwrite && !!userPrompt,
         literal_texts: noteLiteralTexts(log, userPrompt) }, step());
       const { blob, name } = await sourceBlob(p.source, step());
       const added = await uploadKeyed(id, blob, name, previewIdentity, clientKey, live);
@@ -2591,6 +2605,47 @@ export function App() {
         }
       },
     });
+  }
+  // 總覽的「風格」：在總覽對話裡掛一個風格選單（跟接著某一版改的那個同一個）。
+  function overviewEditStyles() {
+    if (!caps?.style_options.length || overview[overview.length - 1]?.kind === "styles") return;
+    setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "styles", styles: allStylesRef.current }]);
+  }
+  // 挑好的風格：只留跟預設不一樣的。還沒開始的，送出時帶上（allStylesRef）；分析好還沒美化的，寫進它自己的 plan；
+  // 每張都美化過了，寫進每張的 plan，等按「全部再美化」。
+  function overviewStyles(picked: Record<string, string>) {
+    if (!batch || !caps) return;
+    const next = Object.fromEntries(Object.entries(picked)
+      .filter(([k, v]) => v && v !== caps.style_options.find((g) => g.id === k)?.default));
+    setAllStyles(next);
+    allStylesRef.current = next;
+    setOverview((t) => t.map((x, i) => (i === t.length - 1 && x.kind === "styles" ? { ...x, styles: next } : x)));
+    const finishedNow = overviewFinished();
+    const keys = batch.map(sourceSrc).filter((k) => (finishedNow ? !!doneLive(k) : !unstarted(k) && !!renderableLive(k)));
+    for (const key of keys) {
+      const r = batchRuns[key];
+      const p = finishedNow ? doneLive(key) : renderableLive(key);
+      if (!r?.sessionId || !p) continue;
+      const sent = api.patchPhotoPlan(r.sessionId, p.photo_id, { style_options: next })
+        .then(() => api.getSession(r.sessionId!))
+        .then((full) => {
+          if (session?.session_id === r.sessionId) setSession(full);
+          else {
+            const np = full.photos.find((x) => x.photo_id === p.photo_id);
+            if (np) setBatchLive((m) => ({ ...m, [key]: np }));
+          }
+        })
+        .catch((e) => setError(notice(errorText(e))));
+      livePatch(sent);
+    }
+    if (finishedNow && keys.length) markRedo(keys);
+  }
+  // 總覽的「長寬比」：選了就照「設定」改長寬比的路套到每張（在單張頁改過的照樣先問），對話裡留一句。
+  function overviewRatio(value: string) {
+    const prev = allSettings;
+    if (!prev || prev.aspect_ratio === value) return;
+    overviewSettings({ ...prev, aspect_ratio: value });
+    setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "ratio", from: prev.aspect_ratio, to: value }]);
   }
   // 總覽的全部分析／全部一鍵美化。一鍵美化時有需求、還沒選怎麼套用的，先在總覽問一次。
   function overviewStart(mode: "analyze" | "render") {
@@ -3698,9 +3753,30 @@ export function App() {
                 title={redoTitle}
                 onClick={() => void overviewRedo()} />
             ) : null}
+            {/* 「全部下載」接在「全部美化／全部再美化」右邊：有美化好的照片才出現，只存美化好的。 */}
+            {live && (() => {
+              const plan = sourcesDownload(batch, batchRuns, batchLive, batchFailed);
+              return plan.finished > 0 ? (
+                <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon"
+                  title={batchDownloadHint(plan)} disabled={overviewDownloading} aria-busy={overviewDownloading} onClick={() => overviewDownload(plan)}>
+                  <span class="buttonIcon"><Icon name="down" size={16} /></span>
+                  <span>{overviewDownloading ? t("下載中…") : t("全部下載 ({count})", { count: plan.finished })}</span>
+                </button>
+              ) : null;
+            })()}
           </div>
           {live && (
             <div class="chat-actions-aux">
+              {!!caps?.style_options.length && (
+                <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={overviewHeld} onClick={overviewEditStyles}>
+                  <span class="buttonIcon"><Icon name="wand" size={16} /></span>
+                  <span>{t("風格")}</span>
+                </button>
+              )}
+              <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={overviewHeld} onClick={() => setRatioOpen(true)}>
+                <span class="buttonIcon"><RatioIcon value={allSettings?.aspect_ratio} size={16} /></span>
+                <span>{t("長寬比")}</span>
+              </button>
               <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={overviewHeld} onClick={overviewEditSettings}>
                 <span class="buttonIcon"><Icon name="tune" size={16} /></span>
                 <span>{t("設定")}</span>
@@ -3726,6 +3802,10 @@ export function App() {
     };
     // 總覽：沒有中間那格預覽，對話直接佔滿。桌機的照片和「全部…」都在左邊「我的照片」，
     // 對話上面不再擺一份；「我的照片」收成抽屜時，才在對話上面放成果格。
+    const ratioDialog = ratioOpen && caps && allSettings ? (
+      <AspectRatioDialog caps={caps} value={allSettings.aspect_ratio}
+        onPick={(v) => { setRatioOpen(false); overviewRatio(v); }} onClose={() => setRatioOpen(false)} />
+    ) : null;
     const overviewPanel = !source && (
       <ChatPanel
         class="home-chat is-overview"
@@ -3758,6 +3838,9 @@ export function App() {
             onPick={pickBatch}
             onStartAll={overviewStart}
             onSettings={overviewEditSettings}
+            onStyle={caps?.style_options.length ? overviewEditStyles : undefined}
+            onRatio={() => setRatioOpen(true)}
+            ratio={allSettings?.aspect_ratio}
             finished={finished}
             redo={redoAll}
             redoLabel={redoLbl}
@@ -3912,6 +3995,34 @@ export function App() {
               )}
             </div>
           );
+          if (ot.kind === "styles") {
+            const names = caps ? pickedStyles(null, caps, { style_options: ot.styles }) : [];
+            return (
+              <div key={ot.id} class="settings-turn">
+                <UserMsg><ClickBubble icon="wand" label={t("風格")} /></UserMsg>
+                {latest && caps ? (
+                  <AssistantMsg>
+                    <p class="chat-text">{overviewFinished()
+                      ? t("好，挑下面的風格，會套用到每一張，再美化時生效。")
+                      : t("好，挑下面的風格，會套用到每張還沒美化的照片。")}</p>
+                    <ContinueStyles analysis={{} as Analysis} caps={caps} picked={allStyles} busy={!!overviewHeld} onPick={overviewStyles} />
+                  </AssistantMsg>
+                ) : (
+                  <AssistantMsg><p class="chat-text">{names.length
+                    ? t("風格改成 {v}。", { v: names.join(t("、")) })
+                    : t("沒有另外挑風格，照 AI 建議的美化。")}</p></AssistantMsg>
+                )}
+              </div>
+            );
+          }
+          if (ot.kind === "ratio") return (
+            <div key={ot.id} class="settings-turn">
+              <UserMsg><ClickBubble icon="layout" label={t("長寬比")} /></UserMsg>
+              <AssistantMsg><p class="chat-text">{caps
+                ? t("長寬比改成 {v}，會套用到每張還沒美化的照片。", { v: aspectLabel(caps, ot.to) })
+                : ""}</p></AssistantMsg>
+            </div>
+          );
           if (ot.kind === "settings") return (
             <div key={ot.id} class="settings-turn">
               <UserMsg><ClickBubble icon="tune" label={t("設定")} /></UserMsg>
@@ -4012,6 +4123,9 @@ export function App() {
                     // 一鍵美化正在問怎麼套用：先回答那一題，「全部…」等一下。剛按過「全部…」也等一下。
                     actionsHeld={(!source && askOpen) || !!allHold}
                     onSettings={source ? undefined : overviewEditSettings}
+                    onStyle={source || !caps?.style_options.length ? undefined : overviewEditStyles}
+                    onRatio={source ? undefined : () => setRatioOpen(true)}
+                    ratio={allSettings?.aspect_ratio}
                     finished={!source && finished}
                     redo={source ? 0 : redoAll}
                     redoLabel={redoLbl}
@@ -4028,6 +4142,8 @@ export function App() {
                   ) : (
                     overviewPanel
                   )}
+                  {ratioDialog}
+                  {overviewDownloadUi}
                 </div>
               </div>
             </div>
@@ -4417,6 +4533,10 @@ export function BatchPreSidebar(props: {
   onStartAll: (mode: "analyze" | "render") => void;
   // 總覽時「全部…」旁邊那顆「設定」：跟著「全部…」出現，統一換引擎或長寬比。
   onSettings?: () => void;
+  // 「設定」旁邊的「風格」「長寬比」：風格在總覽對話裡掛選單，長寬比直接開比例視窗。ratio 是現在的長寬比（鍵上的圖示）。
+  onStyle?: () => void;
+  onRatio?: () => void;
+  ratio?: string;
   // 「全部…」暫時不能按，但照片還能點（總覽正在問一鍵美化怎麼套用）。
   actionsHeld?: boolean;
   // 總覽時每張都美化過了：「設定」照樣在；總覽改過的那幾張有「全部再美化」。
@@ -4504,6 +4624,9 @@ export function BatchPreSidebar(props: {
     : props.renderable
       ? { label: shownLabel(allLabel("render", props.renderable, sources.length)), icon: "spark", title: t("還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"), run: () => { close(); props.onStartAll("render"); } }
       : null;
+  // 「全部下載」：有美化好的照片才出現（只存美化好的那幾張，鍵上寫張數），跟在「全部美化」後面。
+  const downloadPlan = props.onOverview ? sourcesDownload(sources, runs, live, props.failed) : null;
+  const downloadAll = downloadPlan && downloadPlan.finished > 0 ? downloadPlan : null;
   return (
     <>
       {downloadUi}
@@ -4542,7 +4665,7 @@ export function BatchPreSidebar(props: {
               {!allOn && <Icon name="next" size={16} />}
             </button>
             {/* 鍵一直放著，沒選著時收起來（高度 0、淡出、inert 不吃焦點），選著時展開：切換選取有過場，不會一下跳出來。 */}
-            {(analyzeAll || retouchAll || props.onSettings) && (
+            {(analyzeAll || retouchAll || downloadAll || props.onSettings || props.onStyle || props.onRatio) && (
               <div class={`batch-all-collapse${allShown ? " is-open" : ""}`} inert={!allOn} aria-hidden={!allOn}>
               <div class="batch-all-collapse-inner">
               <div class="batch-all-actions">
@@ -4558,6 +4681,30 @@ export function BatchPreSidebar(props: {
                     <span class="buttonIcon"><Icon name={retouchAll.icon} size={16} /></span>
                     <span>{retouchAll.label}</span>
                   </button>
+                )}
+                {downloadAll && (
+                  <button type="button" class={`ycoButton ${analyzeAll || retouchAll ? "variant_secondary" : "variant_primary"} tone_neutral size_small batch-all-btn`}
+                    title={batchDownloadHint(downloadAll)} disabled={downloading} aria-busy={downloading} onClick={() => download(downloadAll)}>
+                    <span class="buttonIcon"><Icon name="down" size={16} /></span>
+                    <span>{downloading ? t("下載中…") : t("全部下載 ({count})", { count: downloadAll.finished })}</span>
+                  </button>
+                )}
+                {/* 風格、長寬比、設定：白底外框，跟上面的鍵一樣一顆一列。 */}
+                {(props.onStyle || props.onRatio) && (
+                  <div class="batch-all-row">
+                    {props.onStyle && (
+                      <button type="button" class="ycoButton variant_secondary tone_neutral size_small batch-all-btn" disabled={held} onClick={() => { close(); props.onStyle!(); }}>
+                        <span class="buttonIcon"><Icon name="wand" size={16} /></span>
+                        <span>{t("風格")}</span>
+                      </button>
+                    )}
+                    {props.onRatio && (
+                      <button type="button" class="ycoButton variant_secondary tone_neutral size_small batch-all-btn" disabled={held} onClick={() => { close(); props.onRatio!(); }}>
+                        <span class="buttonIcon"><RatioIcon value={props.ratio} size={16} /></span>
+                        <span>{t("長寬比")}</span>
+                      </button>
+                    )}
+                  </div>
                 )}
                 {props.onSettings && (
                   <button type="button" class={`ycoButton ${analyzeAll || retouchAll ? "variant_secondary" : "variant_primary"} tone_neutral size_small batch-all-btn`} disabled={held} onClick={() => { close(); props.onSettings!(); }}>
@@ -4742,6 +4889,9 @@ function BatchOverviewGrid(props: {
   onPick: (s: Source) => void;
   onStartAll: (mode: "analyze" | "render") => void;
   onSettings: () => void;
+  onStyle?: () => void;
+  onRatio?: () => void;
+  ratio?: string;
   // 每張都美化過了：「設定」照樣在；總覽改過的那幾張有「全部再美化」。
   finished?: boolean;
   redo?: number;
@@ -4915,6 +5065,29 @@ function BatchOverviewGrid(props: {
           ) : null}
           </div>
           <div class="chat-actions-aux">
+            {(() => {
+              // 「全部下載」：有美化好的照片才出現，只存美化好的。
+              const plan = sourcesDownload(props.sources, props.runs, props.live, props.failed);
+              return plan.finished > 0 ? (
+                <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon"
+                  title={batchDownloadHint(plan)} disabled={downloading} aria-busy={downloading} onClick={() => download(plan)}>
+                  <span class="buttonIcon"><Icon name="down" size={16} /></span>
+                  <span>{downloading ? t("下載中…") : t("全部下載 ({count})", { count: plan.finished })}</span>
+                </button>
+              ) : null;
+            })()}
+            {props.onStyle && (
+              <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={props.actionsHeld} onClick={props.onStyle}>
+                <span class="buttonIcon"><Icon name="wand" size={16} /></span>
+                <span>{t("風格")}</span>
+              </button>
+            )}
+            {props.onRatio && (
+              <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={props.actionsHeld} onClick={props.onRatio}>
+                <span class="buttonIcon"><RatioIcon value={props.ratio} size={16} /></span>
+                <span>{t("長寬比")}</span>
+              </button>
+            )}
             <button type="button" class="ycoButton variant_secondary tone_neutral size_small chat-settings-icon" disabled={props.actionsHeld} onClick={props.onSettings}>
               <span class="buttonIcon"><Icon name="tune" size={16} /></span>
               <span>{t("設定")}</span>

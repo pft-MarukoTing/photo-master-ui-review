@@ -99,7 +99,7 @@ function ratioParts(label: string): { name: string; hint?: string } {
   return m ? { name: m[1], hint: m[2] } : { name: label };
 }
 
-function RatioIcon({ value, size }: { value?: string; size: number }) {
+export function RatioIcon({ value, size }: { value?: string; size: number }) {
   let body;
   if (value && FIXED_RATIO_RE.test(value)) {
     const [w0, h0] = value.split(":").map(Number);
@@ -184,6 +184,79 @@ export function OutputScaleField({
 
 // 鈕長得跟旁邊的 select 一樣；選單另開視窗（跟 header「設定」同一個外框），
 // 手機上才有足夠的地方讓每個比例都好點。選了就關。
+// 長寬比的選擇視窗（智慧選項一排、固定比例一排）。設定卡裡的欄位和總覽的「長寬比」鍵共用。
+export function AspectRatioDialog({
+  caps,
+  value,
+  noAuto,
+  onPick,
+  onClose,
+}: {
+  caps: Capabilities;
+  value?: string;
+  noAuto?: boolean;
+  onPick: (v: string) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, [onClose]);
+  const choices = caps.render.aspect_ratios.filter((a) => !(noAuto && a.value === "auto"));
+  const current = choices.find((a) => a.value === value) || choices[0];
+  const option = (a: (typeof choices)[number]) => {
+    const fixed = FIXED_RATIO_RE.test(a.value);
+    const { name, hint } = ratioParts(a.label);
+    const note = fixed ? hint : AR_NOTES[a.value] && t(AR_NOTES[a.value]);
+    return (
+      <label class={fixed ? "chat-ar-shape" : "chat-ar-smart"}>
+        <input
+          type="radio"
+          name="chat-aspect-ratio"
+          value={a.value}
+          checked={a.value === current?.value}
+          onChange={() => onPick(a.value)}
+        />
+        <RatioIcon value={a.value} size={fixed ? 30 : 22} />
+        <span class="chat-ar-text">
+          <b>{name}</b>
+          {note && <small>{note}</small>}
+        </span>
+      </label>
+    );
+  };
+  const smart = choices.filter((a) => !FIXED_RATIO_RE.test(a.value));
+  const shapes = choices.filter((a) => FIXED_RATIO_RE.test(a.value));
+  return createPortal(
+    <div class="error-modal" id="chat-aspect-modal">
+      <div class="error-modal-backdrop" onClick={onClose} />
+      <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="chat-aspect-title">
+        <div class="error-modal-hdr">
+          <span id="chat-aspect-title" class="settings-modal-title">{t("長寬比")}</span>
+          <button class="error-modal-close" type="button" aria-label={t("關閉")} onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <div class="chat-ar-panel" role="radiogroup" aria-labelledby="chat-aspect-title">
+          {smart.length > 0 && <div class="chat-ar-smart-row">{smart.map(option)}</div>}
+          {shapes.length > 0 && (
+            <>
+              <div class="chat-ar-scale" aria-hidden="true">
+                <span>{t("← 直式")}</span>
+                <span>{t("方形")}</span>
+                <span>{t("橫式 →")}</span>
+              </div>
+              <div class="chat-ar-shape-row">{shapes.map(option)}</div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export function AspectRatioField({
   caps,
   value,
@@ -202,40 +275,8 @@ export function AspectRatioField({
 }) {
   const [open, setOpen] = useState(false);
   const isOpen = open && !disabled;
-  useEffect(() => {
-    if (!isOpen) return;
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    addEventListener("keydown", esc);
-    return () => removeEventListener("keydown", esc);
-  }, [isOpen]);
   const choices = caps.render.aspect_ratios.filter((a) => !(noAuto && a.value === "auto"));
   const current = choices.find((a) => a.value === value) || choices[0];
-  const option = (a: (typeof choices)[number]) => {
-    const fixed = FIXED_RATIO_RE.test(a.value);
-    const { name, hint } = ratioParts(a.label);
-    const note = fixed ? hint : AR_NOTES[a.value] && t(AR_NOTES[a.value]);
-    return (
-      <label class={fixed ? "chat-ar-shape" : "chat-ar-smart"}>
-        <input
-          type="radio"
-          name="chat-aspect-ratio"
-          value={a.value}
-          checked={a.value === current?.value}
-          onChange={() => {
-            onChange(a.value);
-            setOpen(false);
-          }}
-        />
-        <RatioIcon value={a.value} size={fixed ? 30 : 22} />
-        <span class="chat-ar-text">
-          <b>{name}</b>
-          {note && <small>{note}</small>}
-        </span>
-      </label>
-    );
-  };
-  const smart = choices.filter((a) => !FIXED_RATIO_RE.test(a.value));
-  const shapes = choices.filter((a) => FIXED_RATIO_RE.test(a.value));
   return (
     <>
       <div class={cls || "chat-field"}>
@@ -251,34 +292,18 @@ export function AspectRatioField({
           <span>{current ? ratioParts(current.label).name : ""}</span>
         </button>
       </div>
-      {isOpen &&
-        createPortal(
-          <div class="error-modal" id="chat-aspect-modal">
-            <div class="error-modal-backdrop" onClick={() => setOpen(false)} />
-            <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="chat-aspect-title">
-              <div class="error-modal-hdr">
-                <span id="chat-aspect-title" class="settings-modal-title">{t("長寬比")}</span>
-                <button class="error-modal-close" type="button" aria-label={t("關閉")} onClick={() => setOpen(false)}>
-                  ×
-                </button>
-              </div>
-              <div class="chat-ar-panel" role="radiogroup" aria-labelledby="chat-aspect-title">
-                {smart.length > 0 && <div class="chat-ar-smart-row">{smart.map(option)}</div>}
-                {shapes.length > 0 && (
-                  <>
-                    <div class="chat-ar-scale" aria-hidden="true">
-                      <span>{t("← 直式")}</span>
-                      <span>{t("方形")}</span>
-                      <span>{t("橫式 →")}</span>
-                    </div>
-                    <div class="chat-ar-shape-row">{shapes.map(option)}</div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+      {isOpen && (
+        <AspectRatioDialog
+          caps={caps}
+          value={value}
+          noAuto={noAuto}
+          onPick={(v) => {
+            onChange(v);
+            setOpen(false);
+          }}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </>
   );
 }

@@ -3112,6 +3112,8 @@ html{background:transparent}
 .batch-all-card.is-on .batch-all-text b{color:var(--text-brand,var(--fill-brand-strong))}
 /* 兩顆鍵各佔一整排（側欄窄，「全部再美化」放不下並排），主要動作在上。 */
 .batch-all-actions{display:flex;flex-direction:column;gap:6px}
+/* 「風格」「長寬比」跟其他鍵一樣整列寬、一顆一列（並排的話側欄太窄，「Aspect Ratio」放不下）。 */
+.batch-all-row{display:contents}
 .batch-all-btn{width:100%;height:36px;min-height:36px;justify-content:center;gap:6px;border-radius:999px;font-size:14px;line-height:20px;white-space:nowrap}
 /* 「所有照片」選著時跟選著的照片方塊同一種框：圓角 18px（兩種狀態都一樣），
    外圈 4px 品牌藍、裡面再一圈 3px 白，都畫在卡片裡面、大小不變；不加淡藍底（照片方塊也沒有）。 */
