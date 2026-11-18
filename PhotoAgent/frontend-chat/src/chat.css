@@ -2829,13 +2829,14 @@ aside.batch-sidebar>.batch-sidebar-header{background:var(--n04);border-start-sta
   #results-canvas-row.showing-analysis #results-canvas-col{flex:1 1 0 !important;min-width:0}
 }
 
-/* 對話模式還沒選照片時，「我的照片」和對話卡片的位置跟編輯器（index.html 的 --pm-shell-*）一樣：
-   上緣離 header 10px、下緣離視窗底 58px，兩個都從上面開始排，不再垂直置中（置中會讓卡片比編輯器低 26px）。
-   選了照片以後本來就是這個位置，所以兩種狀態、兩個模式切換時外框都不會跳。 */
+/* 對話模式還沒選照片時，「我的照片」和對話卡片的外框跟選了照片以後（上面 .has-flow：上 20、下 28）一模一樣：
+   上緣離 header 20px、下緣離視窗底 28px，兩個都從上面開始排，不垂直置中。原本是舊的上 10、下 58，
+   空的時候卡片比有照片時高一截、底下多出 30px 空白，一選照片外框就跳。 */
 @media (min-width:901px) and (orientation:landscape){
+  #upload-section .upload-container:has(.upload-content-row.is-chat){padding-top:20px;padding-bottom:28px}
   #upload-section .upload-content-row.is-chat{align-items:flex-start}
   #upload-section .upload-content-row.is-chat>#batch-sidebar,
-  #upload-section .upload-content-row.is-chat>.home-chat{height:calc(100dvh - var(--header-h,64px) - 68px);max-height:none;min-height:0;align-self:flex-start}
+  #upload-section .upload-content-row.is-chat>.home-chat{height:calc(100dvh - var(--header-h,64px) - 48px);max-height:none;min-height:0;align-self:flex-start}
 }
 
 /* 四塊白底卡片（對話模式、編輯器各一欄「我的照片」＋一張大卡）用同一組陰影，值跟 .chat-panel 一樣
